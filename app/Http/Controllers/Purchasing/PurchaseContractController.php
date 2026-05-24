@@ -80,7 +80,29 @@ class PurchaseContractController extends Controller
 
     public function show(PurchaseContract $purchaseContract): Response
     {
-        $purchaseContract->load(['supplier', 'purchaseOrder', 'creator']);
+        $purchaseContract->load(['supplier', 'purchaseOrder', 'creator', 'paymentSchedules']);
+
+        $contractValue = (float) $purchaseContract->value;
+
+        $schedules = $purchaseContract->paymentSchedules->map(fn ($s) => [
+            'id'          => $s->id,
+            'name'        => $s->name,
+            'percentage'  => (float) $s->percentage,
+            'amount'      => round($contractValue * (float) $s->percentage / 100, 0),
+            'due_date'    => $s->due_date?->format('Y-m-d'),
+            'due_date_label' => $s->due_date?->format('d/m/Y'),
+            'status'      => $s->effective_status->value,
+            'status_label'=> $s->effective_status->label(),
+            'status_color'=> $s->effective_status->color(),
+            'paid_date'          => $s->paid_date?->format('d/m/Y'),
+            'payment_method'     => $s->payment_method,
+            'payment_reference'  => $s->payment_reference,
+            'notes'              => $s->notes,
+        ]);
+
+        $totalPercent = $schedules->sum('percentage');
+        $paidPercent  = $schedules->where('status', 'paid')->sum('percentage');
+        $paidAmount   = $schedules->where('status', 'paid')->sum('amount');
 
         return Inertia::render('Purchasing/PurchaseContracts/Show', [
             'contract' => [
@@ -91,7 +113,7 @@ class PurchaseContractController extends Controller
                 'order'        => $purchaseContract->purchaseOrder
                     ? ['id' => $purchaseContract->purchaseOrder->id, 'code' => $purchaseContract->purchaseOrder->code]
                     : null,
-                'value'        => $purchaseContract->value,
+                'value'        => (float) $purchaseContract->value,
                 'start_date'   => $purchaseContract->start_date?->format('d/m/Y'),
                 'end_date'     => $purchaseContract->end_date?->format('d/m/Y'),
                 'status'       => $purchaseContract->status->value,
@@ -102,6 +124,11 @@ class PurchaseContractController extends Controller
                 'notes'        => $purchaseContract->notes,
                 'creator'      => $purchaseContract->creator->name,
                 'created_at'   => $purchaseContract->created_at->format('d/m/Y'),
+                'schedules'       => $schedules,
+                'total_percent'   => round($totalPercent, 2),
+                'paid_percent'    => round($paidPercent, 2),
+                'paid_amount'     => $paidAmount,
+                'remaining_amount'=> (float) $purchaseContract->value - $paidAmount,
             ],
         ]);
     }

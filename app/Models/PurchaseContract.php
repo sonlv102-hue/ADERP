@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\PurchaseContractStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PurchaseContract extends Model
 {
@@ -44,5 +45,10 @@ class PurchaseContract extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function paymentSchedules(): HasMany
+    {
+        return $this->hasMany(PurchaseContractPaymentSchedule::class)->orderBy('id');
     }
 }

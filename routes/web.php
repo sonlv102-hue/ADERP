@@ -39,6 +39,7 @@ use App\Http\Controllers\Purchasing\PurchaseOrderController;
 use App\Http\Controllers\Purchasing\PurchaseInvoiceController;
 use App\Http\Controllers\Purchasing\PurchaseInvoicePaymentController;
 use App\Http\Controllers\Purchasing\PurchaseContractController;
+use App\Http\Controllers\Purchasing\PurchaseContractPaymentScheduleController;
 use App\Http\Controllers\Purchasing\PurchaseReturnController;
 use App\Http\Controllers\Documents\DocumentController;
 use App\Http\Controllers\Documents\DocumentTypeController;
@@ -245,6 +246,13 @@ Route::middleware('auth')->group(function () {
         Route::post('purchase-contracts/{purchaseContract}/terminate', [PurchaseContractController::class, 'terminate'])->name('purchase-contracts.terminate');
         Route::post('purchase-contracts/{purchaseContract}/attachment',   [PurchaseContractController::class, 'uploadAttachment'])->name('purchase-contracts.attachment.upload');
         Route::delete('purchase-contracts/{purchaseContract}/attachment', [PurchaseContractController::class, 'deleteAttachment'])->name('purchase-contracts.attachment.delete');
+
+        // Payment schedules
+        Route::post('purchase-contracts/{purchaseContract}/schedules', [PurchaseContractPaymentScheduleController::class, 'store'])->name('purchase-contracts.schedules.store');
+        Route::put('purchase-contracts/{purchaseContract}/schedules/{schedule}', [PurchaseContractPaymentScheduleController::class, 'update'])->name('purchase-contracts.schedules.update');
+        Route::delete('purchase-contracts/{purchaseContract}/schedules/{schedule}', [PurchaseContractPaymentScheduleController::class, 'destroy'])->name('purchase-contracts.schedules.destroy');
+        Route::post('purchase-contracts/{purchaseContract}/schedules/{schedule}/mark-paid', [PurchaseContractPaymentScheduleController::class, 'markPaid'])->name('purchase-contracts.schedules.mark-paid');
+        Route::post('purchase-contracts/{purchaseContract}/schedules/{schedule}/mark-pending', [PurchaseContractPaymentScheduleController::class, 'markPending'])->name('purchase-contracts.schedules.mark-pending');
 
         Route::get('purchase-returns/po/{purchaseOrder}/items', [PurchaseReturnController::class, 'poItems'])->name('purchase-returns.po-items');
         Route::resource('purchase-returns', PurchaseReturnController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
