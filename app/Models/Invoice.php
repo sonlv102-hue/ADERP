@@ -1,0 +1,72 @@
+<?php
+
+namespace App\Models;
+
+use App\Enums\InvoiceStatus;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Invoice extends Model
+{
+    protected $fillable = [
+        'code', 'customer_id', 'order_id', 'contract_id',
+        'issue_date', 'due_date', 'subtotal', 'tax_amount', 'total',
+        'status', 'notes', 'created_by',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'status'     => InvoiceStatus::class,
+            'issue_date' => 'date',
+            'due_date'   => 'date',
+            'subtotal'   => 'decimal:2',
+            'tax_amount' => 'decimal:2',
+            'total'      => 'decimal:2',
+        ];
+    }
+
+    public static function generateCode(): string
+    {
+        $prefix = 'HĐ-';
+        $last = self::orderByDesc('id')->value('code');
+        $num = $last ? ((int) mb_substr($last, mb_strlen($prefix))) + 1 : 1;
+        return $prefix . str_pad($num, 4, '0', STR_PAD_LEFT);
+    }
+
+    public function amountPaid(): float
+    {
+        return (float) $this->payments()->sum('amount');
+    }
+
+    public function amountDue(): float
+    {
+        return (float) $this->total - $this->amountPaid();
+    }
+
+    public function customer(): BelongsTo
+    {
+        return $this->belongsTo(Customer::class);
+    }
+
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(Order::class);
+    }
+
+    public function contract(): BelongsTo
+    {
+        return $this->belongsTo(Contract::class);
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+}
