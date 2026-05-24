@@ -69,9 +69,13 @@ function save(t) { localStorage.setItem('erp_tabs', JSON.stringify(t)); }
 // Singleton — shared across all component instances
 const tabs = ref(load());
 
+function normalizeUrl(url) {
+  return url.split('?')[0].replace(/\/+$/, '');
+}
+
 export function useTabs() {
   function openTab(url) {
-    const key = url.split('?')[0];
+    const key = normalizeUrl(url);
     if (tabs.value.find(t => t.url === key)) return;
     if (tabs.value.length >= MAX_TABS) tabs.value.shift();
     tabs.value.push({ url: key, title: titleFromUrl(key) });
@@ -83,7 +87,7 @@ export function useTabs() {
     if (idx === -1) return;
     tabs.value.splice(idx, 1);
     save(tabs.value);
-    if (url === currentUrl.split('?')[0] && tabs.value.length > 0) {
+    if (url === normalizeUrl(currentUrl) && tabs.value.length > 0) {
       router.visit(tabs.value[Math.min(idx, tabs.value.length - 1)].url);
     }
   }

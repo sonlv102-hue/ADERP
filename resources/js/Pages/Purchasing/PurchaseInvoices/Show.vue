@@ -156,11 +156,19 @@
 
         <!-- Form thêm thanh toán -->
         <div v-if="showPayForm" class="px-5 py-4 border-b border-gray-100 bg-green-50">
-          <form @submit.prevent="submitPayment" class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <form @submit.prevent="submitPayment" class="grid grid-cols-2 sm:grid-cols-4 gap-3 items-start">
             <div>
               <label class="block text-xs font-medium text-gray-600 mb-1">Số tiền <span class="text-red-500">*</span></label>
-              <input v-model.number="payForm.amount" type="number" min="1" step="1000" :max="invoice.remaining"
+              <input v-model.number="payForm.amount" type="number" min="1" step="1" :max="invoice.remaining"
                 class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+              <p class="text-xs text-green-700 font-medium mt-0.5">{{ formatVnd(payForm.amount || 0) }}</p>
+              <div class="flex gap-1 mt-1.5">
+                <button v-for="pct in [30, 50, 70, 100]" :key="pct" type="button"
+                  @click="payForm.amount = Math.round(invoice.remaining * pct / 100)"
+                  class="px-2 py-0.5 text-xs rounded border border-gray-300 text-gray-500 hover:bg-green-100 hover:border-green-400 hover:text-green-700 transition-colors">
+                  {{ pct }}%
+                </button>
+              </div>
             </div>
             <div>
               <label class="block text-xs font-medium text-gray-600 mb-1">Ngày TT <span class="text-red-500">*</span></label>
@@ -177,7 +185,7 @@
               </select>
             </div>
             <div>
-              <label class="block text-xs font-medium text-gray-600 mb-1">Số tham chiếu</label>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Mã GD / Số CT</label>
               <input v-model="payForm.reference" type="text"
                 class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
             </div>
@@ -205,7 +213,7 @@
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Ngày</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Hình thức</th>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">Tham chiếu</th>
+              <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã GD / Số CT</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">Số tiền</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Người ghi</th>
               <th class="px-5 py-3"></th>

@@ -28,8 +28,12 @@ import { useTabs } from '@/composables/useTabs';
 const page = usePage();
 const { tabs, closeTab } = useTabs();
 
+function normalizeUrl(url) {
+  return url.split('?')[0].replace(/\/+$/, '');
+}
+
 function isActive(url) {
-  const current = page.url.split('?')[0];
+  const current = normalizeUrl(page.url);
   return current === url || current.startsWith(url + '/');
 }
 

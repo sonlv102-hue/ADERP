@@ -267,7 +267,7 @@
                 </select>
               </div>
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Số tham chiếu / mã GD</label>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Mã GD / Số chứng từ</label>
                 <input v-model="markPaidModal.payment_reference" type="text" placeholder="VD: FT26052400123"
                   class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm" />
               </div>

@@ -45,7 +45,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
 import Sidebar from '@/Components/Layout/Sidebar.vue';
 import TopBar from '@/Components/Layout/TopBar.vue';
@@ -58,7 +58,14 @@ const { flash } = useFlash();
 const page = usePage();
 const { openTab } = useTabs();
 
-onMounted(() => openTab(page.url));
+let removeNavigateListener = null;
 
-router.on('navigate', (event) => openTab(event.detail.page.url));
+onMounted(() => {
+  openTab(page.url);
+  removeNavigateListener = router.on('navigate', (event) => openTab(event.detail.page.url));
+});
+
+onBeforeUnmount(() => {
+  if (removeNavigateListener) removeNavigateListener();
+});
 </script>
