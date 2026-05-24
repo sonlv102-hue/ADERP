@@ -269,16 +269,13 @@ class PurchaseInvoiceController extends Controller
                 ['value' => 'cancelled',      'label' => 'Hủy'],
             ],
             'valid'           => [
-                ['value' => 'partial_paid', 'label' => 'TT một phần'],
-                ['value' => 'paid',         'label' => 'Đã thanh toán đủ'],
-                ['value' => 'cancelled',    'label' => 'Hủy'],
+                ['value' => 'cancelled', 'label' => 'Hủy'],
             ],
             'need_supplement' => [
                 ['value' => 'reviewing', 'label' => 'Kiểm tra lại'],
                 ['value' => 'cancelled', 'label' => 'Hủy'],
             ],
             'partial_paid'    => [
-                ['value' => 'paid',      'label' => 'Thanh toán đủ'],
                 ['value' => 'cancelled', 'label' => 'Hủy'],
             ],
         ];

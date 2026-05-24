@@ -12,9 +12,9 @@ class PurchaseInvoiceService
         'pending'        => ['received', 'cancelled'],
         'received'       => ['reviewing', 'cancelled'],
         'reviewing'      => ['valid', 'need_supplement', 'cancelled'],
-        'valid'          => ['partial_paid', 'paid', 'cancelled'],
+        'valid'          => ['cancelled'],
         'need_supplement'=> ['reviewing', 'cancelled'],
-        'partial_paid'   => ['paid', 'cancelled'],
+        'partial_paid'   => ['cancelled'],
         'paid'           => [],
         'cancelled'      => [],
     ];
@@ -57,7 +57,7 @@ class PurchaseInvoiceService
 
         $status = match(true) {
             $invoice->status === PurchaseInvoiceStatus::Cancelled => $invoice->status,
-            $paid <= 0                                             => $invoice->status,
+            $paid <= 0                                             => PurchaseInvoiceStatus::Valid,
             $paid >= $total                                        => PurchaseInvoiceStatus::Paid,
             default                                                => PurchaseInvoiceStatus::PartialPaid,
         };
