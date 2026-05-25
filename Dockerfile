@@ -1,4 +1,11 @@
-# Stage 1: Build frontend assets
+# Stage 1: PHP dependencies (needed by frontend for Ziggy)
+FROM composer:2.7 AS composer-deps
+
+WORKDIR /app
+COPY composer.json composer.lock ./
+RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
+
+# Stage 2: Build frontend assets
 FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app
@@ -7,9 +14,11 @@ COPY package*.json ./
 RUN npm ci
 
 COPY . .
+# Copy vendor so Vite can resolve vendor/tightenco/ziggy
+COPY --from=composer-deps /app/vendor ./vendor
 RUN npm run build
 
-# Stage 2: PHP application
+# Stage 3: PHP application
 FROM php:8.2-fpm-alpine AS app
 
 # Install system dependencies
@@ -47,17 +56,16 @@ COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
 
-# Copy composer files first (cache layer)
-COPY composer.json composer.lock ./
-RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
+# Copy vendor from composer-deps stage
+COPY --from=composer-deps /app/vendor ./vendor
 
 # Copy application source
 COPY . .
 
-# Copy built frontend assets from Stage 1
+# Copy built frontend assets from frontend-builder stage
 COPY --from=frontend-builder /app/public/build ./public/build
 
-# Finish composer install
+# Finish composer autoload
 RUN composer dump-autoload --optimize --no-dev
 
 # Set permissions
