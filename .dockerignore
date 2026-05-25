@@ -19,7 +19,6 @@ public/build
 phpunit.xml
 README.md
 CLAUDE.md
-docker
 scripts
 tests
 .editorconfig
