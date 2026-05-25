@@ -148,6 +148,7 @@ const props = defineProps({
   orders: Array,
   warehouses: Array,
   salesReturn: Object,
+  preSelectedOrderId: { type: Number, default: null },
 });
 
 const availableItems = ref([]);
@@ -155,7 +156,7 @@ const loadingItems = ref(false);
 
 const form = useForm({
   code:         props.salesReturn?.code         ?? props.nextCode,
-  order_id:     props.salesReturn?.order_id     ?? '',
+  order_id:     props.salesReturn?.order_id     ?? props.preSelectedOrderId ?? '',
   warehouse_id: props.salesReturn?.warehouse_id ?? '',
   return_date:  props.salesReturn?.return_date  ?? new Date().toISOString().slice(0, 10),
   reason:       props.salesReturn?.reason       ?? '',
@@ -196,6 +197,8 @@ async function onOrderChange() {
 onMounted(() => {
   if (props.salesReturn) {
     loadOrderItems(props.salesReturn.items);
+  } else if (props.preSelectedOrderId) {
+    loadOrderItems();
   }
 });
 

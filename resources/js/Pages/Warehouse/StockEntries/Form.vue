@@ -340,13 +340,14 @@ const grandTotal = computed(() =>
 const receivingCount = computed(() => form.items.filter(item => item.quantity > 0).length);
 
 const submit = () => {
-  const originalItems = form.items;
-  form.items = form.items.filter(item => item.quantity > 0);
-  const options = { onError: () => { form.items = originalItems; } };
+  form.transform(data => ({
+    ...data,
+    items: data.items.filter(item => item.quantity > 0),
+  }));
   if (props.entry) {
-    form.put(route('warehouse.stock-entries.update', props.entry.id), options);
+    form.put(route('warehouse.stock-entries.update', props.entry.id));
   } else {
-    form.post(route('warehouse.stock-entries.store'), options);
+    form.post(route('warehouse.stock-entries.store'));
   }
 };
 </script>

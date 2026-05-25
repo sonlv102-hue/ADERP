@@ -131,7 +131,7 @@ class StockEntryController extends Controller
             'items.*.quantity'    => ['required', 'integer', 'min:1'],
             'items.*.unit_price'  => ['required', 'numeric', 'min:0'],
             'items.*.serials'     => ['nullable', 'array'],
-            'items.*.serials.*'   => ['nullable', 'string', 'max:100', Rule::unique('product_serials', 'serial_number')],
+            'items.*.serials.*'   => ['nullable', 'string', 'max:100'],
         ]);
 
         // Calculate remaining quantities from already-confirmed entries
@@ -169,6 +169,11 @@ class StockEntryController extends Controller
                 foreach ($serials as $serial) {
                     if (in_array($serial, $allSerials)) {
                         $errors["items.{$idx}.serials"] = "Số serial \"{$serial}\" bị trùng trong phiếu này.";
+                        break;
+                    }
+                    if (ProductSerial::where('serial_number', $serial)->exists()) {
+                        $errors["items.{$idx}.serials"] = "Số serial \"{$serial}\" đã tồn tại trong hệ thống.";
+                        break;
                     }
                     $allSerials[] = $serial;
                 }

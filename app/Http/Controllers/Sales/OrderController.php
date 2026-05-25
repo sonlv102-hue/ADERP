@@ -46,42 +46,58 @@ class OrderController extends Controller
         ]);
     }
 
-    public function create(): Response
+    public function create(Request $request): Response
     {
+        $supplementaryFor = null;
+        if ($request->query('supplementary_for')) {
+            $orig = Order::with('customer')->find($request->query('supplementary_for'));
+            if ($orig) {
+                $supplementaryFor = [
+                    'id'            => $orig->id,
+                    'code'          => $orig->code,
+                    'customer_id'   => $orig->customer_id,
+                    'customer_name' => $orig->customer->name,
+                ];
+            }
+        }
+
         return Inertia::render('Sales/Orders/Form', [
-            'nextCode'   => Order::generateCode(),
-            'customers'  => Customer::orderBy('name')->get(['id', 'code', 'name']),
-            'products'   => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'sell_price']),
-            'services'   => Service::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'price']),
-            'priceLists' => PriceList::select('id', 'code', 'name')->orderBy('name')->get(),
+            'nextCode'        => Order::generateCode(),
+            'customers'       => Customer::orderBy('name')->get(['id', 'code', 'name']),
+            'products'        => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'sell_price']),
+            'services'        => Service::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'price']),
+            'priceLists'      => PriceList::select('id', 'code', 'name')->orderBy('name')->get(),
+            'supplementaryFor' => $supplementaryFor,
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'code'              => ['required', 'string', 'unique:orders,code'],
-            'customer_id'       => ['required', 'exists:customers,id'],
-            'order_date'        => ['required', 'date'],
-            'expected_delivery' => ['nullable', 'date'],
-            'notes'             => ['nullable', 'string'],
-            'items'             => ['required', 'array', 'min:1'],
-            'items.*.product_id'  => ['nullable', 'exists:products,id'],
-            'items.*.service_id'  => ['nullable', 'exists:services,id'],
-            'items.*.name'        => ['required', 'string'],
-            'items.*.unit'        => ['nullable', 'string'],
-            'items.*.quantity'    => ['required', 'numeric', 'min:0.01'],
-            'items.*.unit_price'  => ['required', 'numeric', 'min:0'],
+            'code'                        => ['required', 'string', 'unique:orders,code'],
+            'customer_id'                 => ['required', 'exists:customers,id'],
+            'supplementary_for_order_id'  => ['nullable', 'exists:orders,id'],
+            'order_date'                  => ['required', 'date'],
+            'expected_delivery'           => ['nullable', 'date'],
+            'notes'                       => ['nullable', 'string'],
+            'items'                       => ['required', 'array', 'min:1'],
+            'items.*.product_id'          => ['nullable', 'exists:products,id'],
+            'items.*.service_id'          => ['nullable', 'exists:services,id'],
+            'items.*.name'                => ['required', 'string'],
+            'items.*.unit'                => ['nullable', 'string'],
+            'items.*.quantity'            => ['required', 'integer', 'min:1'],
+            'items.*.unit_price'          => ['required', 'numeric', 'min:0'],
         ]);
 
         $order = Order::create([
-            'code'              => $data['code'],
-            'customer_id'       => $data['customer_id'],
-            'order_date'        => $data['order_date'],
-            'expected_delivery' => $data['expected_delivery'] ?? null,
-            'notes'             => $data['notes'] ?? null,
-            'created_by'        => auth()->id(),
-            'status'            => OrderStatus::Pending,
+            'code'                        => $data['code'],
+            'customer_id'                 => $data['customer_id'],
+            'supplementary_for_order_id'  => $data['supplementary_for_order_id'] ?? null,
+            'order_date'                  => $data['order_date'],
+            'expected_delivery'           => $data['expected_delivery'] ?? null,
+            'notes'                       => $data['notes'] ?? null,
+            'created_by'                  => auth()->id(),
+            'status'                      => OrderStatus::Pending,
         ]);
 
         foreach ($data['items'] as $item) {
@@ -182,7 +198,7 @@ class OrderController extends Controller
             'items.*.service_id'  => ['nullable', 'exists:services,id'],
             'items.*.name'        => ['required', 'string'],
             'items.*.unit'        => ['nullable', 'string'],
-            'items.*.quantity'    => ['required', 'numeric', 'min:0.01'],
+            'items.*.quantity'    => ['required', 'integer', 'min:1'],
             'items.*.unit_price'  => ['required', 'numeric', 'min:0'],
         ]);
 

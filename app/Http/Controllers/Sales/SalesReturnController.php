@@ -43,14 +43,16 @@ class SalesReturnController extends Controller
         ]);
     }
 
-    public function create(): Response
+    public function create(Request $request): Response
     {
+        $allowedStatuses = [
+            OrderStatus::Processing->value,
+            OrderStatus::PartialDelivered->value,
+            OrderStatus::Completed->value,
+        ];
+
         $orders = Order::with('customer')
-            ->whereIn('status', [
-                OrderStatus::Processing->value,
-                OrderStatus::PartialDelivered->value,
-                OrderStatus::Completed->value,
-            ])
+            ->whereIn('status', $allowedStatuses)
             ->orderByDesc('id')
             ->get()
             ->map(fn ($o) => [
@@ -59,11 +61,20 @@ class SalesReturnController extends Controller
                 'customer_name' => $o->customer->name,
             ]);
 
+        $preSelectedOrderId = null;
+        if ($fromOrderId = $request->query('from_order')) {
+            $fromOrder = Order::find($fromOrderId);
+            if ($fromOrder && in_array($fromOrder->status->value, $allowedStatuses)) {
+                $preSelectedOrderId = $fromOrder->id;
+            }
+        }
+
         return Inertia::render('Sales/SalesReturns/Form', [
-            'nextCode'   => SalesReturn::generateCode(),
-            'orders'     => $orders,
-            'warehouses' => Warehouse::orderBy('name')->get(['id', 'name']),
-            'orderItems' => null,
+            'nextCode'           => SalesReturn::generateCode(),
+            'orders'             => $orders,
+            'warehouses'         => Warehouse::orderBy('name')->get(['id', 'name']),
+            'orderItems'         => null,
+            'preSelectedOrderId' => $preSelectedOrderId,
         ]);
     }
 

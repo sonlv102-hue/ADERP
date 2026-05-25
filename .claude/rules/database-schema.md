@@ -40,6 +40,8 @@ Complete schema for 50+ tables, grouped by module.
 | stock_exit_items | Exit line items | id, stock_exit_id, product_id, quantity, unit_price, subtotal |
 | stock_transfers | Warehouse transfers | id, code (CK-), from_warehouse_id, to_warehouse_id, status (draft/confirmed/cancelled), created_by |
 | stock_transfer_items | Transfer line items | id, stock_transfer_id, product_id, quantity, unit_price |
+| inventory_counts | Stocktaking sessions | id, code (IK-), warehouse_id, count_date, status (draft/confirmed/cancelled), counted_by |
+| inventory_count_items | Count line items | id, inventory_count_id, product_id, system_quantity (snapshot), counted_quantity, notes |
 
 ## Sales
 | Table | Purpose | Key columns |
@@ -85,6 +87,8 @@ Complete schema for 50+ tables, grouped by module.
 |---|---|---|
 | invoices | Customer invoices | id, code (HĐ-), order_id, status (draft/sent/paid/overdue), amount_due, created_by |
 | payments | Invoice payments | id, invoice_id, amount, payment_method, payment_date, created_by |
+| fixed_assets | Fixed asset register | id, code, name, category, acquisition_date, acquisition_cost, useful_life_months, accumulated_depreciation, net_book_value, monthly_depreciation, last_depreciation_period, status (active/fully_depreciated/disposed) |
+| fixed_asset_depreciations | Monthly depreciation records | id, fixed_asset_id, period (YYYY-MM), amount, accumulated_before, net_book_value_after |
 
 ## System
 | Table | Purpose | Key columns |

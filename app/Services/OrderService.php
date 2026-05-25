@@ -4,14 +4,15 @@ namespace App\Services;
 
 use App\Enums\OrderStatus;
 use App\Models\Order;
+use App\Models\OrderOverDelivery;
 use App\Models\StockExit;
 use Illuminate\Support\Facades\DB;
 
 class OrderService
 {
     /**
-     * Cập nhật delivered_quantity trên order_items sau khi confirm StockExit.
-     * Trả về danh sách cảnh báo (nếu có sản phẩm giao vượt số lượng đặt).
+     * Cập nhật delivered_quantity sau khi confirm StockExit.
+     * Tạo OrderOverDelivery record nếu vượt số lượng đặt.
      */
     public function syncDelivery(StockExit $exit): array
     {
@@ -45,10 +46,10 @@ class OrderService
                 if ($newDelivered > (float) $orderItem->quantity) {
                     $over = $newDelivered - $orderItem->quantity;
                     $warnings[] = "SP \"{$exitItem->product->name}\": đặt {$orderItem->quantity}, đã giao {$newDelivered} (vượt {$over}).";
+                    $this->recordOverDelivery($order->id, $exitItem->product_id, $exitItem->product->name, $over);
                 }
             }
 
-            // Sync order status
             $order->load('items');
             $allItems = $order->items->whereNotNull('product_id');
 
@@ -68,8 +69,70 @@ class OrderService
             if ($newStatus !== $order->status) {
                 $order->update(['status' => $newStatus]);
             }
+
+            // Khi đơn bổ sung hoàn thành → tự động giải quyết cảnh báo vượt của cùng khách
+            if ($newStatus === OrderStatus::Completed) {
+                $this->resolveOverDeliveriesForOrder($order);
+            }
         });
 
         return $warnings;
+    }
+
+    private function recordOverDelivery(int $orderId, int $productId, string $productName, float $over): void
+    {
+        $existing = OrderOverDelivery::where('order_id', $orderId)
+            ->where('product_id', $productId)
+            ->whereNull('resolved_at')
+            ->first();
+
+        if ($existing) {
+            $existing->update(['over_quantity' => $over, 'product_name' => $productName]);
+        } else {
+            OrderOverDelivery::create([
+                'order_id'     => $orderId,
+                'product_id'   => $productId,
+                'product_name' => $productName,
+                'over_quantity' => $over,
+            ]);
+        }
+    }
+
+    private function resolveOverDeliveriesForOrder(Order $completedOrder): void
+    {
+        $productIds = $completedOrder->items->pluck('product_id')->filter()->unique();
+
+        if ($productIds->isEmpty()) {
+            return;
+        }
+
+        // Explicit link: chỉ resolve alert của đúng đơn gốc
+        if ($completedOrder->supplementary_for_order_id) {
+            OrderOverDelivery::whereNull('resolved_at')
+                ->whereIn('product_id', $productIds)
+                ->where('order_id', $completedOrder->supplementary_for_order_id)
+                ->update([
+                    'resolved_by_order_id' => $completedOrder->id,
+                    'resolved_at'          => now(),
+                ]);
+            return;
+        }
+
+        // Fallback heuristic: cùng khách hàng, cùng sản phẩm
+        $affectedOrderIds = Order::where('customer_id', $completedOrder->customer_id)
+            ->where('id', '!=', $completedOrder->id)
+            ->pluck('id');
+
+        if ($affectedOrderIds->isEmpty()) {
+            return;
+        }
+
+        OrderOverDelivery::whereNull('resolved_at')
+            ->whereIn('product_id', $productIds)
+            ->whereIn('order_id', $affectedOrderIds)
+            ->update([
+                'resolved_by_order_id' => $completedOrder->id,
+                'resolved_at'          => now(),
+            ]);
     }
 }

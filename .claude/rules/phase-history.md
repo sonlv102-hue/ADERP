@@ -12,7 +12,10 @@
 | G7 | 600001–600003 | Purchase orders, suppliers bank |
 | Phase 8 | 700001–800005 | Settings, documents, purchase invoices, commissions, reports |
 | Phase 9 | 900001–900021 | Leads, stock transfers, returns, notifications, price lists, imports |
-| **Next** | **900022** | — |
+| Phase 9+ | 900022–900027 | Funds, CashVouchers, PurchaseContracts, delivery tracking extras |
+| Phase B | 900028–900029 | Fixed asset depreciation (FixedAssetDepreciation, last_depreciation_period) |
+| Phase C | 900030–900031 | Inventory counts (InventoryCount, InventoryCountItem) |
+| **Next** | **900032** | — |
 
 ## Services & FSM
 | Service | Models | Key transitions |
@@ -28,6 +31,8 @@
 | LeadService | Lead | New→Contacted→Qualified→(Lost\|Converted); convertToCustomer() |
 | SalesReturnService | SalesReturn, SalesReturnItem | confirm() reversal stock + serial Sold→InStock |
 | PurchaseReturnService | PurchaseReturn, PurchaseReturnItem | confirm() negative stock movement + serial →ReturnedToSupplier |
+| FixedAssetService | FixedAsset, FixedAssetDepreciation | runMonthlyDepreciation(period) batch; getSchedule() posted+projected |
+| InventoryCountService | InventoryCount, InventoryCountItem | populateItems() snapshot stock; saveItems(); confirm() atomic save+adjust |
 
 ## Completed Modules
 - **G1:** Auth, Users, Admin CRUD
@@ -39,4 +44,6 @@
 - **G7:** PurchaseOrders (MH-), Docker/Deploy
 - **Phase 8:** Settings, Documents (CT-), PurchaseInvoices, PurchaseContracts, Commissions, Reports
 - **Phase 9:** Leads (LD-), StockTransfers (CK-), SalesReturns (TH-), PurchaseReturns (THM-), Notifications, PriceLists, BulkImport, AuditLogUI
+- **Phase B:** FixedAssets — straight-line depreciation, schedule view, batch depreciate action, CLI command
+- **Phase C:** InventoryCounts (IK-) — warehouse snapshot, counted qty input, atomic save+confirm, adjustment StockMovements
 - **Extras:** In-app TabBar (useTabs.js), Delivery tracking (order_items.delivered_quantity), Serial tracking in entries/exits

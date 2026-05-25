@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 
@@ -13,8 +14,14 @@ class FixedAsset extends Model
     protected $fillable = [
         'code', 'name', 'category', 'acquisition_date',
         'acquisition_cost', 'useful_life_months', 'depreciation_method',
-        'accumulated_depreciation', 'location', 'status', 'notes',
+        'accumulated_depreciation', 'last_depreciation_period',
+        'location', 'status', 'notes',
     ];
+
+    public function depreciations(): HasMany
+    {
+        return $this->hasMany(FixedAssetDepreciation::class)->orderBy('period');
+    }
 
     protected $casts = [
         'acquisition_date'        => 'date',

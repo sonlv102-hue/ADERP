@@ -19,12 +19,12 @@
             Sửa
           </Link>
           <button v-if="salesReturn.status === 'draft'"
-            @click="confirm"
+            @click="handleConfirm"
             class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
             Xác nhận
           </button>
           <button v-if="salesReturn.status === 'draft' || salesReturn.status === 'confirmed'"
-            @click="cancel"
+            @click="handleCancel"
             class="bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-lg text-sm font-medium">
             Hủy phiếu
           </button>
@@ -141,14 +141,14 @@ const grandTotal = computed(() =>
   props.salesReturn.items.reduce((sum, i) => sum + i.total, 0)
 );
 
-function confirm() {
-  if (confirm('Xác nhận phiếu trả hàng? Hàng sẽ được nhập vào kho.')) {
+function handleConfirm() {
+  if (window.confirm('Xác nhận phiếu trả hàng? Hàng sẽ được nhập vào kho.')) {
     router.post(route('sales.sales-returns.confirm', props.salesReturn.id));
   }
 }
 
-function cancel() {
-  if (confirm('Hủy phiếu trả hàng? Thao tác này không thể hoàn tác.')) {
+function handleCancel() {
+  if (window.confirm('Hủy phiếu trả hàng? Thao tác này không thể hoàn tác.')) {
     router.post(route('sales.sales-returns.cancel', props.salesReturn.id));
   }
 }

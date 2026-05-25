@@ -22,8 +22,9 @@ class PurchaseContractPaymentScheduleController extends Controller
         ]);
 
         $error = DB::transaction(function () use ($purchaseContract, $data) {
-            // Lock rows to prevent concurrent over-allocation
-            $totalPercent = $purchaseContract->paymentSchedules()->lockForUpdate()->sum('percentage');
+            // Lock parent row to prevent concurrent over-allocation
+            PurchaseContract::where('id', $purchaseContract->id)->lockForUpdate()->first();
+            $totalPercent = $purchaseContract->paymentSchedules()->sum('percentage');
             $remaining = round(100 - $totalPercent, 2);
 
             if ($data['percentage'] > $remaining) {
@@ -63,9 +64,9 @@ class PurchaseContractPaymentScheduleController extends Controller
         ]);
 
         $error = DB::transaction(function () use ($purchaseContract, $schedule, $data) {
+            PurchaseContract::where('id', $purchaseContract->id)->lockForUpdate()->first();
             $otherPercent = $purchaseContract->paymentSchedules()
                 ->where('id', '!=', $schedule->id)
-                ->lockForUpdate()
                 ->sum('percentage');
             $remaining = round(100 - $otherPercent, 2);
 

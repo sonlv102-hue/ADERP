@@ -11,7 +11,7 @@ use App\Models\StockExit;
 class Order extends Model
 {
     protected $fillable = [
-        'code', 'customer_id', 'quotation_id', 'order_date',
+        'code', 'customer_id', 'quotation_id', 'supplementary_for_order_id', 'order_date',
         'expected_delivery', 'status', 'notes', 'created_by',
         'file_path', 'file_name',
     ];
@@ -45,6 +45,11 @@ class Order extends Model
     public function quotation(): BelongsTo
     {
         return $this->belongsTo(Quotation::class);
+    }
+
+    public function supplementaryForOrder(): BelongsTo
+    {
+        return $this->belongsTo(Order::class, 'supplementary_for_order_id');
     }
 
     public function creator(): BelongsTo

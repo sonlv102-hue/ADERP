@@ -143,7 +143,59 @@ class GeneralJournalController extends Controller
             ];
         }
 
-        // 5. Nhập kho (không qua mua hàng) → DR 156 / CR 331
+        // 5. Phiếu thu tiền mặt → DR 111/112 / CR tùy đối tượng
+        $receipts = DB::table('cash_vouchers')
+            ->join('funds', 'funds.id', '=', 'cash_vouchers.fund_id')
+            ->where('cash_vouchers.type', 'receipt')
+            ->where('cash_vouchers.status', 'confirmed')
+            ->whereBetween('cash_vouchers.voucher_date', [$from, $to])
+            ->select('cash_vouchers.voucher_date as date', 'cash_vouchers.code as ref',
+                     'cash_vouchers.description', 'cash_vouchers.counterparty as partner',
+                     'funds.type as fund_type', 'cash_vouchers.amount')
+            ->orderBy('cash_vouchers.voucher_date')
+            ->get();
+
+        foreach ($receipts as $r) {
+            $debitTk = $r->fund_type === 'cash' ? '111' : '112';
+            $entries[] = [
+                'seq'         => $seq++,
+                'date'        => $r->date,
+                'ref'         => $r->ref,
+                'description' => $r->description,
+                'partner'     => $r->partner ?? '',
+                'debit_tk'    => $debitTk,
+                'credit_tk'   => '—',
+                'amount'      => (float) $r->amount,
+            ];
+        }
+
+        // 6. Phiếu chi tiền mặt → CR 111/112 / DR tùy đối tượng
+        $cashPayments = DB::table('cash_vouchers')
+            ->join('funds', 'funds.id', '=', 'cash_vouchers.fund_id')
+            ->where('cash_vouchers.type', 'payment')
+            ->where('cash_vouchers.status', 'confirmed')
+            ->whereBetween('cash_vouchers.voucher_date', [$from, $to])
+            ->select('cash_vouchers.voucher_date as date', 'cash_vouchers.code as ref',
+                     'cash_vouchers.description', 'cash_vouchers.counterparty as partner',
+                     'funds.type as fund_type', 'cash_vouchers.amount')
+            ->orderBy('cash_vouchers.voucher_date')
+            ->get();
+
+        foreach ($cashPayments as $p) {
+            $creditTk = $p->fund_type === 'cash' ? '111' : '112';
+            $entries[] = [
+                'seq'         => $seq++,
+                'date'        => $p->date,
+                'ref'         => $p->ref,
+                'description' => $p->description,
+                'partner'     => $p->partner ?? '',
+                'debit_tk'    => '—',
+                'credit_tk'   => $creditTk,
+                'amount'      => (float) $p->amount,
+            ];
+        }
+
+        // 7. Nhập kho (không qua mua hàng) → DR 156 / CR 331
         $stockIns = DB::table('stock_movements')
             ->join('products', 'products.id', '=', 'stock_movements.product_id')
             ->leftJoin('warehouses', 'warehouses.id', '=', 'stock_movements.warehouse_id')

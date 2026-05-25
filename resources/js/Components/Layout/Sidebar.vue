@@ -45,6 +45,7 @@
           <NavItem :href="route('warehouse.stock-entries.index')" icon="inbox" sub>Nhập kho</NavItem>
           <NavItem :href="route('warehouse.stock-exits.index')" icon="arrow-circle-right" sub>Xuất kho</NavItem>
           <NavItem v-if="can('stock-transfers.view')" :href="route('warehouse.stock-transfers.index')" icon="switch-horizontal" sub>Chuyển kho</NavItem>
+          <NavItem :href="route('warehouse.inventory-counts.index')" icon="clipboard-list" sub>Kiểm kê kho</NavItem>
         </NavGroup>
 
         <NavGroup v-if="can('products.view')"
@@ -77,7 +78,9 @@
 
         <NavGroup v-if="can('accounting.view')"
           label="Kế toán" icon="currency-dollar" prefix="/accounting">
-          <NavItem :href="route('accounting.invoices.index')" icon="document-text" sub>Hóa đơn</NavItem>
+          <NavItem :href="route('accounting.invoices.index')"      icon="document-text" sub>Hóa đơn</NavItem>
+          <NavItem :href="route('accounting.funds.index')"         icon="library"       sub>Quản lý quỹ</NavItem>
+          <NavItem :href="route('accounting.cash-vouchers.index')" icon="cash"          sub>Phiếu thu / chi</NavItem>
         </NavGroup>
 
         <NavGroup v-if="can('documents.view')"
@@ -94,6 +97,7 @@
           <NavItem :href="route('reports.ap.aging')"         icon="truck"           sub>Công nợ phải trả (AP)</NavItem>
           <NavItem :href="route('reports.vat')"              icon="receipt-tax"     sub>Báo cáo VAT</NavItem>
           <NavItem :href="route('reports.inventory')"        icon="cube"            sub>Tồn kho</NavItem>
+          <NavItem :href="route('reports.fund-ledger.index')"  icon="banknotes"       sub>Sổ quỹ</NavItem>
           <NavItem :href="route('reports.cash_flow')"        icon="banknotes"       sub>Thu Chi</NavItem>
           <NavItem :href="route('reports.income_statement')" icon="chart-bar"       sub>Kết quả HĐKD</NavItem>
           <NavItem :href="route('reports.balance_sheet')"    icon="document"        sub>Cân đối kế toán</NavItem>

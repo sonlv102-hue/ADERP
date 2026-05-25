@@ -19,10 +19,40 @@ class BalanceSheetController extends Controller
 
         // ── ASSETS ──────────────────────────────────────────────────────────
 
-        // TK 112 – Tiền: thu từ KH − trả NCC
-        $cashIn  = (float) DB::table('payments')->where('payment_date', '<=', $asOf)->sum('amount');
-        $cashOut = (float) DB::table('purchase_invoice_payments')->where('payment_date', '<=', $asOf)->sum('amount');
-        $cash    = $cashIn - $cashOut;
+        // TK 111 – Tiền mặt tại quỹ
+        $cashFundIds = DB::table('funds')->where('type', 'cash')->pluck('id');
+        $cashOpeningBalance = (float) DB::table('funds')->where('type', 'cash')->sum('opening_balance');
+        $cashReceipts = (float) DB::table('cash_vouchers')
+            ->whereIn('fund_id', $cashFundIds)->where('type', 'receipt')->where('status', 'confirmed')
+            ->where('voucher_date', '<=', $asOf)->sum('amount');
+        $cashPaymentsVoucher = (float) DB::table('cash_vouchers')
+            ->whereIn('fund_id', $cashFundIds)->where('type', 'payment')->where('status', 'confirmed')
+            ->where('voucher_date', '<=', $asOf)->sum('amount');
+        $cashArReceived = (float) DB::table('payments')->whereIn('fund_id', $cashFundIds)
+            ->where('payment_date', '<=', $asOf)->sum('amount');
+        $cashApPaid = (float) DB::table('purchase_invoice_payments')->whereIn('fund_id', $cashFundIds)
+            ->where('payment_date', '<=', $asOf)->sum('amount');
+        $cashOnHand = $cashOpeningBalance + $cashReceipts - $cashPaymentsVoucher + $cashArReceived - $cashApPaid;
+
+        // TK 112 – Tiền gửi ngân hàng
+        $bankFundIds = DB::table('funds')->where('type', 'bank')->pluck('id');
+        $bankOpeningBalance = (float) DB::table('funds')->where('type', 'bank')->sum('opening_balance');
+        $bankReceipts = (float) DB::table('cash_vouchers')
+            ->whereIn('fund_id', $bankFundIds)->where('type', 'receipt')->where('status', 'confirmed')
+            ->where('voucher_date', '<=', $asOf)->sum('amount');
+        $bankPaymentsVoucher = (float) DB::table('cash_vouchers')
+            ->whereIn('fund_id', $bankFundIds)->where('type', 'payment')->where('status', 'confirmed')
+            ->where('voucher_date', '<=', $asOf)->sum('amount');
+        $bankArReceived = (float) DB::table('payments')->whereIn('fund_id', $bankFundIds)
+            ->where('payment_date', '<=', $asOf)->sum('amount');
+        $bankApPaid = (float) DB::table('purchase_invoice_payments')->whereIn('fund_id', $bankFundIds)
+            ->where('payment_date', '<=', $asOf)->sum('amount');
+        // Fallback: payments not assigned to any fund go to bank (backward compat)
+        $cashIn  = (float) DB::table('payments')->whereNull('fund_id')->where('payment_date', '<=', $asOf)->sum('amount');
+        $cashOut = (float) DB::table('purchase_invoice_payments')->whereNull('fund_id')->where('payment_date', '<=', $asOf)->sum('amount');
+        $bankBalance = $bankOpeningBalance + $bankReceipts - $bankPaymentsVoucher + $bankArReceived - $bankApPaid + $cashIn - $cashOut;
+
+        $cash = $cashOnHand + $bankBalance;
 
         // TK 131 – Phải thu KH
         $totalInvoiced  = (float) DB::table('invoices')
@@ -112,7 +142,9 @@ class BalanceSheetController extends Controller
 
         $balanceSheet = [
             ['label' => 'A. TÀI SẢN NGẮN HẠN',                                           'amount' => $totalCurrentAssets,    'bold' => true,  'indent' => 0, 'side' => 'asset'],
-            ['label' => 'I. Tiền và tương đương tiền (TK 112)',                            'amount' => $cash,                  'bold' => false, 'indent' => 1, 'side' => 'asset'],
+            ['label' => 'I. Tiền và tương đương tiền',                                       'amount' => $cash,                  'bold' => false, 'indent' => 1, 'side' => 'asset'],
+            ['label' => '   - Tiền mặt (TK 111)',                                            'amount' => $cashOnHand,            'bold' => false, 'indent' => 2, 'side' => 'asset'],
+            ['label' => '   - Tiền gửi ngân hàng (TK 112)',                                  'amount' => $bankBalance,           'bold' => false, 'indent' => 2, 'side' => 'asset'],
             ['label' => 'II. Phải thu ngắn hạn – Phải thu của KH (TK 131)',               'amount' => $ar,                    'bold' => false, 'indent' => 1, 'side' => 'asset'],
             ['label' => 'III. Hàng tồn kho (TK 156)',                                      'amount' => $inventory,             'bold' => false, 'indent' => 1, 'side' => 'asset'],
             ['label' => 'B. TÀI SẢN DÀI HẠN',                                            'amount' => $totalNonCurrentAssets, 'bold' => true,  'indent' => 0, 'side' => 'asset'],

@@ -39,10 +39,14 @@ Tài liệu: `C:\Mini_erp\Plan.docx` | `C:\Mini_erp\P2.docx`
 - **Phase 9 — Price Lists (Bảng giá):** PriceList/Item (BG-XXXX), auto-fill pricing in Order/Quotation forms ✅
 - **Phase 9 — Bulk Import Excel:** ProductImport, CustomerImport, SupplierImport via maatwebsite/excel, template download ✅
 - **Phase 9 — Audit Log UI:** ActivityLogController, filters by user/type/date ✅
+- **Over-delivery alerts:** `order_over_deliveries` — alert khi xuất vượt đơn, tự resolve khi đơn bổ sung Completed, Dashboard widget đỏ ✅
 - **In-app tab bar:** `useTabs.js` composable (localStorage, max 8 tabs) + `TabBar.vue` — tự động track navigation, click × đóng tab ✅
 - **AR fix:** `InvoiceController.allowedActions()` bỏ `mark_paid` — invoice chỉ auto-Paid khi payment >= total qua `InvoiceService.addPayment()` ✅
 - **Invoice form auto-fill:** Chọn Order → tự tìm Contract liên kết → fill subtotal/total từ `contract.value`; `step="1"` trên inputs ✅
-- **Migration tiếp theo:** `2026_05_23_900022`
+- **Supplementary order link:** `orders.supplementary_for_order_id` — đơn bổ sung biết nó bù cho đơn nào; `OrderService.resolveOverDeliveriesForOrder()` ưu tiên explicit link trước heuristic; Dashboard hiển thị "Đang bổ sung: DH-XXXX" khi đã có đơn chờ ✅
+- **Phase B — Fixed Asset Depreciation:** FixedAsset (900028-29), FixedAssetDepreciation, FixedAssetService (getSchedule/runMonthlyDepreciation), FixedAssetController (show/depreciate), Admin/FixedAssets/Show.vue với schedule table, CLI `assets:depreciate --period=YYYY-MM` ✅
+- **Phase C — Kiểm kê kho:** InventoryCount/Item (IK-YYMMDDXX, 900030-31), InventoryCountService (populateItems/saveItems/confirm atomically), InventoryCountController, Warehouse/InventoryCounts/Index|Form|Show.vue — confirm gửi kèm items để save+confirm 1 lần ✅
+- **Migration tiếp theo:** `2026_05_25_900032`
 
 ## Quy tắc quan trọng
 - `cost_price` trên sản phẩm = giá **đã gồm VAT** (tổng trả NCC)

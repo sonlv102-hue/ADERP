@@ -17,6 +17,7 @@ use App\Http\Controllers\Warehouse\SupplierController;
 use App\Http\Controllers\Warehouse\StockEntryController;
 use App\Http\Controllers\Warehouse\StockExitController;
 use App\Http\Controllers\Warehouse\StockTransferController;
+use App\Http\Controllers\Warehouse\InventoryCountController;
 use App\Http\Controllers\Sales\QuotationController;
 use App\Http\Controllers\Sales\OrderController;
 use App\Http\Controllers\Reports\ProfitController;
@@ -33,8 +34,11 @@ use App\Http\Controllers\Projects\ProjectController;
 use App\Http\Controllers\Projects\TaskController;
 use App\Http\Controllers\Support\TicketController;
 use App\Http\Controllers\Support\WarrantyController;
+use App\Http\Controllers\Accounting\CashVoucherController;
+use App\Http\Controllers\Accounting\FundController;
 use App\Http\Controllers\Accounting\InvoiceController;
 use App\Http\Controllers\Accounting\PaymentController;
+use App\Http\Controllers\Reports\FundLedgerController;
 use App\Http\Controllers\Purchasing\PurchaseOrderController;
 use App\Http\Controllers\Purchasing\PurchaseInvoiceController;
 use App\Http\Controllers\Purchasing\PurchaseInvoicePaymentController;
@@ -72,7 +76,8 @@ Route::middleware('auth')->group(function () {
         Route::delete('settings/logo', [SettingsController::class, 'deleteLogo'])->name('settings.logo.delete');
         Route::get('roles', [RoleController::class, 'index'])->name('roles.index');
         Route::put('roles/{role}', [RoleController::class, 'update'])->name('roles.update');
-        Route::resource('fixed-assets', FixedAssetController::class)->except(['show']);
+        Route::resource('fixed-assets', FixedAssetController::class);
+        Route::post('fixed-assets/depreciate', [FixedAssetController::class, 'depreciate'])->name('fixed-assets.depreciate');
         Route::get('activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
     });
 
@@ -128,6 +133,11 @@ Route::middleware('auth')->group(function () {
         Route::resource('stock-transfers', StockTransferController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
         Route::post('stock-transfers/{stockTransfer}/confirm', [StockTransferController::class, 'confirm'])->name('stock-transfers.confirm');
         Route::post('stock-transfers/{stockTransfer}/cancel', [StockTransferController::class, 'cancel'])->name('stock-transfers.cancel');
+
+        Route::resource('inventory-counts', InventoryCountController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
+        Route::post('inventory-counts/{inventoryCount}/save-items', [InventoryCountController::class, 'saveItems'])->name('inventory-counts.save-items');
+        Route::post('inventory-counts/{inventoryCount}/confirm', [InventoryCountController::class, 'confirm'])->name('inventory-counts.confirm');
+        Route::post('inventory-counts/{inventoryCount}/cancel', [InventoryCountController::class, 'cancel'])->name('inventory-counts.cancel');
     });
 
     // Sales - báo giá, đơn hàng, hợp đồng
@@ -206,13 +216,19 @@ Route::middleware('auth')->group(function () {
     // Accounting - kế toán
     Route::prefix('accounting')->name('accounting.')->middleware('can:accounting.view')->group(function () {
         Route::resource('invoices', InvoiceController::class);
-        Route::post('invoices/{invoice}/mark-sent',  [InvoiceController::class, 'markSent'])->name('invoices.mark-sent');
-        Route::post('invoices/{invoice}/mark-paid',  [InvoiceController::class, 'markPaid'])->name('invoices.mark-paid');
+        Route::post('invoices/{invoice}/mark-sent',    [InvoiceController::class, 'markSent'])->name('invoices.mark-sent');
+        Route::post('invoices/{invoice}/mark-paid',    [InvoiceController::class, 'markPaid'])->name('invoices.mark-paid');
         Route::post('invoices/{invoice}/mark-overdue', [InvoiceController::class, 'markOverdue'])->name('invoices.mark-overdue');
-        Route::get('invoices/{invoice}/pdf',         [InvoiceController::class, 'pdf'])->name('invoices.pdf');
+        Route::get('invoices/{invoice}/pdf',           [InvoiceController::class, 'pdf'])->name('invoices.pdf');
 
-        Route::post('invoices/{invoice}/payments',          [PaymentController::class, 'store'])->name('invoices.payments.store');
+        Route::post('invoices/{invoice}/payments',             [PaymentController::class, 'store'])->name('invoices.payments.store');
         Route::delete('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'destroy'])->name('invoices.payments.destroy');
+
+        // Quỹ và phiếu thu/chi
+        Route::resource('funds', FundController::class)->except(['show']);
+        Route::resource('cash-vouchers', CashVoucherController::class);
+        Route::post('cash-vouchers/{cashVoucher}/confirm', [CashVoucherController::class, 'confirm'])->name('cash-vouchers.confirm');
+        Route::post('cash-vouchers/{cashVoucher}/cancel',  [CashVoucherController::class, 'cancel'])->name('cash-vouchers.cancel');
     });
 
     // Support - ticket kỹ thuật và bảo hành
@@ -290,6 +306,7 @@ Route::middleware('auth')->group(function () {
         Route::get('expense-detail/export',   [ExpenseDetailController::class,   'export'])->name('expense_detail.export');
         Route::get('fixed-assets',            [FixedAssetReportController::class,'index'])->name('fixed_assets');
         Route::get('fixed-assets/export',     [FixedAssetReportController::class,'export'])->name('fixed_assets.export');
+        Route::get('fund-ledger',             [FundLedgerController::class,      'index'])->name('fund-ledger.index');
     });
 
     // Documents - quản lý hồ sơ chứng từ

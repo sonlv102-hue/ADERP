@@ -33,6 +33,57 @@
         </div>
       </div>
 
+      <!-- Over-delivery alerts -->
+      <div v-if="overDeliveryAlerts.length" class="bg-white rounded-xl border border-red-300 overflow-hidden">
+        <div class="px-5 py-4 border-b border-red-200 flex items-center justify-between bg-red-50">
+          <div class="flex items-center gap-2">
+            <svg class="w-5 h-5 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            </svg>
+            <h3 class="text-base font-semibold text-red-800">
+              Xuất kho vượt đơn hàng — cần bổ sung ({{ overDeliveryAlerts.length }})
+            </h3>
+          </div>
+          <span class="text-xs text-red-600 font-medium">Sẽ tự mất khi đơn bổ sung hoàn thành</span>
+        </div>
+        <div class="divide-y divide-gray-100">
+          <div v-for="alert in overDeliveryAlerts" :key="alert.order_id" class="px-5 py-3">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <span class="font-semibold text-gray-900 text-sm">{{ alert.order_code }}</span>
+                <span class="text-xs text-gray-500">{{ alert.customer }}</span>
+              </div>
+              <div class="flex items-center gap-2 flex-wrap justify-end">
+                <span v-if="alert.pending_supplementary"
+                  class="text-xs px-2 py-1 bg-yellow-100 text-yellow-800 rounded-lg font-medium">
+                  Đang bổ sung: {{ alert.pending_supplementary.code }}
+                </span>
+                <a :href="`/sales/sales-returns/create?from_order=${alert.order_id}`"
+                  class="text-xs px-3 py-1.5 bg-orange-500 text-white rounded-lg hover:bg-orange-600 font-medium whitespace-nowrap">
+                  ↩ Trả hàng
+                </a>
+                <a v-if="alert.contract" :href="`/sales/contracts/${alert.contract.id}`"
+                  class="text-xs px-3 py-1.5 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium whitespace-nowrap">
+                  Hợp đồng {{ alert.contract.code }}
+                </a>
+                <a :href="`/sales/orders/create?supplementary_for=${alert.order_id}`"
+                  class="text-xs px-3 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium whitespace-nowrap">
+                  + Đơn bổ sung
+                </a>
+              </div>
+            </div>
+            <div class="space-y-1">
+              <div v-for="p in alert.products" :key="p.name"
+                class="flex items-center justify-between text-xs bg-red-50 rounded px-2 py-1">
+                <span class="text-gray-700">{{ p.name }}</span>
+                <span class="text-red-700 font-semibold">Vượt {{ p.over_quantity }} đơn vị</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Unfulfilled orders warning -->
       <div v-if="unfulfilledOrders.length" class="bg-white rounded-xl border border-orange-200 overflow-hidden">
         <div class="px-5 py-4 border-b border-orange-100 flex items-center gap-2">
@@ -180,7 +231,8 @@ const props = defineProps({
   topCustomers:      { type: Array,  default: () => [] },
   stockOverview:     { type: Array,  default: () => [] },
   ticketStats:       { type: Array,  default: () => [] },
-  unfulfilledOrders: { type: Array,  default: () => [] },
+  unfulfilledOrders:   { type: Array,  default: () => [] },
+  overDeliveryAlerts:  { type: Array,  default: () => [] },
 });
 
 const isLowStock = (p) => p.min_stock > 0 && p.stock <= p.min_stock;

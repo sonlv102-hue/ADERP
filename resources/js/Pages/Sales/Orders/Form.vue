@@ -10,6 +10,17 @@
         <h1 class="text-2xl font-bold text-gray-900">{{ order ? 'Sửa đơn hàng ' + order.code : 'Tạo đơn hàng' }}</h1>
       </div>
 
+      <!-- Banner đơn bổ sung -->
+      <div v-if="supplementaryFor" class="flex items-center gap-3 px-4 py-3 bg-orange-50 border border-orange-200 rounded-xl text-sm">
+        <svg class="w-4 h-4 text-orange-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <span class="text-orange-800">
+          Đây là <strong>đơn bổ sung</strong> cho đơn <strong>{{ supplementaryFor.code }}</strong>
+          ({{ supplementaryFor.customer_name }}). Khi đơn này hoàn thành, cảnh báo xuất kho vượt sẽ tự động được giải quyết.
+        </span>
+      </div>
+
       <form @submit.prevent="submit" class="space-y-5">
         <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -109,7 +120,7 @@
                     class="w-full px-2 py-1.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 outline-none text-xs" />
                 </td>
                 <td class="px-4 py-3">
-                  <input v-model.number="item.quantity" type="number" min="0.01" step="0.01"
+                  <input v-model.number="item.quantity" type="number" min="1" step="1"
                     class="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-xs" />
                 </td>
                 <td class="px-4 py-3">
@@ -168,6 +179,7 @@ const props = defineProps({
   products: Array,
   services: Array,
   priceLists: Array,
+  supplementaryFor: { type: Object, default: null },
 });
 
 const selectedPriceList = ref('');
@@ -192,12 +204,13 @@ const applyPriceList = async () => {
 const today = new Date().toISOString().slice(0, 10);
 
 const form = useForm({
-  code:              props.order?.code ?? props.nextCode ?? '',
-  customer_id:       props.order?.customer_id ?? '',
-  order_date:        props.order?.order_date ?? today,
-  expected_delivery: props.order?.expected_delivery ?? '',
-  notes:             props.order?.notes ?? '',
-  items:             props.order?.items ? props.order.items.map(i => ({ ...i })) : [],
+  code:                       props.order?.code ?? props.nextCode ?? '',
+  customer_id:                props.order?.customer_id ?? props.supplementaryFor?.customer_id ?? '',
+  supplementary_for_order_id: props.order ? null : (props.supplementaryFor?.id ?? null),
+  order_date:                 props.order?.order_date ?? today,
+  expected_delivery:          props.order?.expected_delivery ?? '',
+  notes:                      props.order?.notes ?? '',
+  items:                      props.order?.items ? props.order.items.map(i => ({ ...i })) : [],
 });
 
 const addRow = (type) => {

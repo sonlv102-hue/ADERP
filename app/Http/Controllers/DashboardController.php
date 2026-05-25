@@ -4,8 +4,10 @@ namespace App\Http\Controllers;
 
 use App\Enums\OrderStatus;
 use App\Enums\TicketStatus;
+use App\Models\Contract;
 use App\Models\Customer;
 use App\Models\Order;
+use App\Models\OrderOverDelivery;
 use App\Models\Payment;
 use App\Models\Product;
 use App\Models\Project;
@@ -26,7 +28,8 @@ class DashboardController extends Controller
             'topCustomers'       => Cache::remember('dashboard.top_customers', 600, fn () => $this->topCustomers()),
             'stockOverview'      => Cache::remember('dashboard.stock_overview', 120, fn () => $this->stockOverview()),
             'ticketStats'        => Cache::remember('dashboard.ticket_stats', 300, fn () => $this->ticketStats()),
-            'unfulfilledOrders'  => Cache::remember('dashboard.unfulfilled_orders', 120, fn () => $this->unfulfilledOrders()),
+            'unfulfilledOrders'    => Cache::remember('dashboard.unfulfilled_orders', 120, fn () => $this->unfulfilledOrders()),
+            'overDeliveryAlerts'   => $this->overDeliveryAlerts(),
         ]);
     }
 
@@ -154,6 +157,45 @@ class DashboardController extends Controller
         }
 
         return array_slice($result, 0, 10);
+    }
+
+    private function overDeliveryAlerts(): array
+    {
+        $alerts = OrderOverDelivery::whereNull('resolved_at')
+            ->with(['order.customer'])
+            ->orderByDesc('created_at')
+            ->get();
+
+        $alertOrderIds = $alerts->pluck('order_id')->unique();
+
+        $pendingSupplementaries = Order::whereIn('supplementary_for_order_id', $alertOrderIds)
+            ->whereNotIn('status', [OrderStatus::Cancelled->value, OrderStatus::Completed->value])
+            ->get(['id', 'code', 'supplementary_for_order_id']);
+
+        $contracts = Contract::whereIn('order_id', $alertOrderIds)
+            ->get(['id', 'code', 'order_id']);
+
+        return $alerts
+            ->groupBy('order_id')
+            ->map(function ($group) use ($pendingSupplementaries, $contracts) {
+                $orderId  = $group->first()->order_id;
+                $pending  = $pendingSupplementaries->firstWhere('supplementary_for_order_id', $orderId);
+                $contract = $contracts->firstWhere('order_id', $orderId);
+                return [
+                    'order_id'              => $orderId,
+                    'order_code'            => $group->first()->order->code,
+                    'customer'              => $group->first()->order->customer?->name,
+                    'customer_id'           => $group->first()->order->customer_id,
+                    'pending_supplementary' => $pending  ? ['id' => $pending->id,  'code' => $pending->code]  : null,
+                    'contract'              => $contract ? ['id' => $contract->id, 'code' => $contract->code] : null,
+                    'products'              => $group->map(fn ($a) => [
+                        'name'          => $a->product_name,
+                        'over_quantity' => (float) $a->over_quantity,
+                    ])->values()->all(),
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     private function ticketStats(): array

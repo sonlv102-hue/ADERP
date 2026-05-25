@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\OrderStatus;
 use App\Enums\SalesReturnStatus;
 use App\Enums\SerialStatus;
+use App\Models\OrderOverDelivery;
 use App\Models\SalesReturn;
 use App\Models\SalesReturnItem;
 use App\Models\StockMovement;
@@ -81,9 +82,13 @@ class SalesReturnService
                 }
 
                 // Reduce delivered_quantity on order item
-                $orderItem = $item->orderItem;
+                $orderItem  = $item->orderItem;
+                $orderedQty = (float) $orderItem->quantity;
                 $newDelivered = max(0, (float) $orderItem->delivered_quantity - (float) $item->quantity);
                 $orderItem->update(['delivered_quantity' => $newDelivered]);
+
+                // Resolve or shrink over-delivery alert for this product
+                $this->syncOverDeliveryAlert($return->order_id, $item->product_id, $newDelivered, $orderedQty);
             }
 
             // Sync order status
@@ -128,15 +133,63 @@ class SalesReturnService
                 }
 
                 // Restore delivered_quantity
-                $orderItem = $item->orderItem;
-                $restored  = (float) $orderItem->delivered_quantity + (float) $item->quantity;
+                $orderItem  = $item->orderItem;
+                $orderedQty = (float) $orderItem->quantity;
+                $restored   = (float) $orderItem->delivered_quantity + (float) $item->quantity;
                 $orderItem->update(['delivered_quantity' => $restored]);
+
+                // Re-create over-delivery alert if cancellation pushes qty back above ordered
+                if ($restored > $orderedQty) {
+                    $this->reRecordOverDelivery(
+                        $return->order_id,
+                        $item->product_id,
+                        $item->product->name,
+                        $restored - $orderedQty
+                    );
+                }
             }
 
             $this->syncOrderStatus($return->order_id);
 
             $return->update(['status' => SalesReturnStatus::Cancelled]);
         });
+    }
+
+    private function syncOverDeliveryAlert(int $orderId, int $productId, float $newDelivered, float $orderedQty): void
+    {
+        $alert = OrderOverDelivery::where('order_id', $orderId)
+            ->where('product_id', $productId)
+            ->whereNull('resolved_at')
+            ->first();
+
+        if (! $alert) {
+            return;
+        }
+
+        if ($newDelivered <= $orderedQty) {
+            $alert->update(['resolved_at' => now()]);
+        } else {
+            $alert->update(['over_quantity' => $newDelivered - $orderedQty]);
+        }
+    }
+
+    private function reRecordOverDelivery(int $orderId, int $productId, string $productName, float $over): void
+    {
+        $existing = OrderOverDelivery::where('order_id', $orderId)
+            ->where('product_id', $productId)
+            ->whereNull('resolved_at')
+            ->first();
+
+        if ($existing) {
+            $existing->update(['over_quantity' => $over]);
+        } else {
+            OrderOverDelivery::create([
+                'order_id'      => $orderId,
+                'product_id'    => $productId,
+                'product_name'  => $productName,
+                'over_quantity' => $over,
+            ]);
+        }
     }
 
     private function syncOrderStatus(int $orderId): void
