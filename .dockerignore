@@ -15,7 +15,7 @@ bootstrap/cache/*
 public/hot
 public/build
 *.log
-*.lock
+!composer.lock
 phpunit.xml
 README.md
 CLAUDE.md
