@@ -14,6 +14,7 @@ use RuntimeException;
 
 class SalesReturnService
 {
+    public function __construct(private OrderService $orderService) {}
     public function confirmReturn(SalesReturn $return): void
     {
         if ($return->status !== SalesReturnStatus::Draft) {
@@ -91,8 +92,8 @@ class SalesReturnService
                 $this->syncOverDeliveryAlert($return->order_id, $item->product_id, $newDelivered, $orderedQty);
             }
 
-            // Sync order status
-            $this->syncOrderStatus($return->order_id);
+            // Sync order status via shared OrderService method
+            $this->orderService->syncOrderStatus($return->order_id);
 
             $return->update(['status' => SalesReturnStatus::Confirmed]);
         });
@@ -149,7 +150,7 @@ class SalesReturnService
                 }
             }
 
-            $this->syncOrderStatus($return->order_id);
+            $this->orderService->syncOrderStatus($return->order_id);
 
             $return->update(['status' => SalesReturnStatus::Cancelled]);
         });
@@ -189,32 +190,6 @@ class SalesReturnService
                 'product_name'  => $productName,
                 'over_quantity' => $over,
             ]);
-        }
-    }
-
-    private function syncOrderStatus(int $orderId): void
-    {
-        $order = \App\Models\Order::with('items')->find($orderId);
-        if (! $order) {
-            return;
-        }
-
-        $allItems = $order->items->whereNotNull('product_id');
-        if ($allItems->isEmpty()) {
-            return;
-        }
-
-        $fullyDelivered = $allItems->every(fn ($i) => (float) $i->delivered_quantity >= (float) $i->quantity);
-        $anyDelivered   = $allItems->some(fn ($i) => (float) $i->delivered_quantity > 0);
-
-        $newStatus = match (true) {
-            $fullyDelivered => OrderStatus::Completed,
-            $anyDelivered   => OrderStatus::PartialDelivered,
-            default         => OrderStatus::Processing,
-        };
-
-        if ($newStatus !== $order->status) {
-            $order->update(['status' => $newStatus]);
         }
     }
 }

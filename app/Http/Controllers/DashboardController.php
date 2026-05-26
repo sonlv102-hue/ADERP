@@ -105,8 +105,14 @@ class DashboardController extends Controller
 
     private function unfulfilledOrders(): array
     {
+        // Chỉ lấy đơn hàng trong 90 ngày gần nhất để tránh OOM khi data lớn
+        $since = now()->subDays(90)->startOfDay();
+
         $orders = Order::with(['customer', 'items'])
             ->where('status', '!=', OrderStatus::Cancelled->value)
+            ->where('order_date', '>=', $since)
+            ->latest('order_date')
+            ->limit(200)
             ->get();
 
         if ($orders->isEmpty()) {

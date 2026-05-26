@@ -3,13 +3,18 @@
 namespace App\Models;
 
 use App\Enums\StockExitStatus;
+use App\Models\Concerns\GeneratesCode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use App\Models\Order;
 
 class StockExit extends Model
 {
+    use GeneratesCode;
+
+    protected static string $codePrefix = 'XK-';
+    protected static int    $codePad    = 4;
+
     protected $fillable = [
         'code', 'warehouse_id', 'customer_id', 'order_id', 'created_by', 'exit_date', 'reason', 'status', 'notes',
     ];
@@ -22,11 +27,10 @@ class StockExit extends Model
         ];
     }
 
+    /** @deprecated Dùng nextCode() thay thế — an toàn hơn với concurrent requests */
     public static function generateCode(): string
     {
-        $last = self::orderByDesc('id')->value('code');
-        $num = $last ? ((int) substr($last, 3)) + 1 : 1;
-        return 'XK-' . str_pad($num, 4, '0', STR_PAD_LEFT);
+        return static::nextCode();
     }
 
     public function warehouse(): BelongsTo

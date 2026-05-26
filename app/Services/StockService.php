@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\SerialStatus;
 use App\Enums\StockEntryStatus;
 use App\Enums\StockExitStatus;
+use App\Jobs\NotifyLowStockJob;
 use App\Models\ProductSerial;
 use App\Models\PurchaseOrder;
 use App\Models\StockEntry;
@@ -144,6 +145,13 @@ class StockService
             $exit->load('items.product', 'items.serials');
 
             foreach ($exit->items as $item) {
+                // Lock các movement rows của sản phẩm này trong kho để tránh race condition
+                // khi 2 phiếu xuất cùng sản phẩm được confirm đồng thời
+                StockMovement::where('product_id', $item->product_id)
+                    ->where('warehouse_id', $exit->warehouse_id)
+                    ->lockForUpdate()
+                    ->get();
+
                 $currentStock = StockMovement::where('product_id', $item->product_id)
                     ->where('warehouse_id', $exit->warehouse_id)
                     ->sum('quantity');
@@ -174,14 +182,14 @@ class StockService
             $exit->update(['status' => StockExitStatus::Confirmed]);
         });
 
-        // After transaction: check low stock threshold and notify admins
+        // After transaction: check low stock threshold and dispatch async notification job
+        // Dispatch AFTER transaction commit — đảm bảo job chỉ chạy khi dữ liệu đã được lưu
         $threshold = (int) \App\Models\Setting::where('key', 'low_stock_threshold')->value('value') ?: 5;
         $exit->load('items.product');
         foreach ($exit->items as $item) {
             $currentStock = StockMovement::where('product_id', $item->product_id)->sum('quantity');
             if ($currentStock <= $threshold) {
-                $admins = \App\Models\User::role('admin')->get();
-                \Illuminate\Support\Facades\Notification::send($admins, new \App\Notifications\LowStockNotification($item->product, (int) $currentStock));
+                dispatch(new NotifyLowStockJob($item->product_id, (int) $currentStock));
             }
         }
     }

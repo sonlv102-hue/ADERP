@@ -3,12 +3,18 @@
 namespace App\Models;
 
 use App\Enums\StockEntryStatus;
+use App\Models\Concerns\GeneratesCode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class StockEntry extends Model
 {
+    use GeneratesCode;
+
+    protected static string $codePrefix = 'NK-';
+    protected static int    $codePad    = 4;
+
     protected $fillable = [
         'code', 'warehouse_id', 'supplier_id', 'purchase_order_id', 'created_by', 'entry_date', 'status', 'notes',
     ];
@@ -21,11 +27,10 @@ class StockEntry extends Model
         ];
     }
 
+    /** @deprecated Dùng nextCode() thay thế — an toàn hơn với concurrent requests */
     public static function generateCode(): string
     {
-        $last = self::orderByDesc('id')->value('code');
-        $num = $last ? ((int) substr($last, 3)) + 1 : 1;
-        return 'NK-' . str_pad($num, 4, '0', STR_PAD_LEFT);
+        return static::nextCode();
     }
 
     public function warehouse(): BelongsTo

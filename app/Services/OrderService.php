@@ -98,6 +98,41 @@ class OrderService
         }
     }
 
+    /**
+     * Đồng bộ trạng thái đơn hàng dựa trên delivered_quantity của từng item.
+     * Dùng chung cho OrderService và SalesReturnService.
+     */
+    public function syncOrderStatus(int $orderId): void
+    {
+        $order = Order::with('items')->find($orderId);
+        if (! $order) {
+            return;
+        }
+
+        $allItems = $order->items->whereNotNull('product_id');
+        if ($allItems->isEmpty()) {
+            return;
+        }
+
+        $fullyDelivered = $allItems->every(fn ($i) => (float) $i->delivered_quantity >= (float) $i->quantity);
+        $anyDelivered   = $allItems->some(fn ($i) => (float) $i->delivered_quantity > 0);
+
+        $newStatus = match (true) {
+            $fullyDelivered => OrderStatus::Completed,
+            $anyDelivered   => OrderStatus::PartialDelivered,
+            default         => OrderStatus::Processing,
+        };
+
+        if ($newStatus !== $order->status) {
+            $order->update(['status' => $newStatus]);
+        }
+
+        // Khi đơn bổ sung hoàn thành → tự động giải quyết cảnh báo vượt của cùng khách
+        if ($newStatus === OrderStatus::Completed) {
+            $this->resolveOverDeliveriesForOrder($order->fresh('items'));
+        }
+    }
+
     private function resolveOverDeliveriesForOrder(Order $completedOrder): void
     {
         $productIds = $completedOrder->items->pluck('product_id')->filter()->unique();

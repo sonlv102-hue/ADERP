@@ -3,13 +3,18 @@
 namespace App\Models;
 
 use App\Enums\OrderStatus;
+use App\Models\Concerns\GeneratesCode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use App\Models\StockExit;
 
 class Order extends Model
 {
+    use GeneratesCode;
+
+    protected static string $codePrefix = 'DH-';
+    protected static int    $codePad    = 4;
+
     protected $fillable = [
         'code', 'customer_id', 'quotation_id', 'supplementary_for_order_id', 'order_date',
         'expected_delivery', 'status', 'notes', 'created_by',
@@ -25,11 +30,10 @@ class Order extends Model
         ];
     }
 
+    /** @deprecated Dùng nextCode() thay thế — an toàn hơn với concurrent requests */
     public static function generateCode(): string
     {
-        $last = self::orderByDesc('id')->value('code');
-        $num = $last ? ((int) substr($last, 3)) + 1 : 1;
-        return 'DH-' . str_pad($num, 4, '0', STR_PAD_LEFT);
+        return static::nextCode();
     }
 
     public function total(): float

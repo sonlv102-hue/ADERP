@@ -36,7 +36,7 @@ class PayrollService
                 'total_bonus'       => 0,
                 'total_deductions'  => 0,
                 'total_net_salary'  => 0,
-                'created_by'        => auth()->id() ?? 1,
+                'created_by'        => auth()->id() ?? throw new RuntimeException('Không xác định được người dùng hiện tại.'),
                 'notes'             => $notes,
             ]);
 
@@ -114,7 +114,7 @@ class PayrollService
                 'voucher_date' => now(),
                 'counterparty' => $item->user->name,
                 'description'  => "Chi trả lương nhân viên {$item->user->name} tháng {$payroll->period}",
-                'created_by'   => auth()->id() ?? $payroll->created_by,
+                'created_by'   => auth()->id() ?? throw new RuntimeException('Không xác định được người dùng hiện tại.'),
             ]);
 
             // Confirm via CashVoucherService to deduct fund
@@ -128,7 +128,7 @@ class PayrollService
             ]);
 
             // Check if all items in payroll are paid, then mark payroll as paid
-            $allPaid = $payroll->items()->where('status', '!=', 'paid')->count() === 0;
+            $allPaid = $payroll->items()->where('status', '!=', PayrollItemStatus::Paid->value)->count() === 0;
             if ($allPaid) {
                 $payroll->update(['status' => PayrollStatus::Paid]);
             }
