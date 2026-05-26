@@ -21,6 +21,8 @@ class User extends Authenticatable
         'phone',
         'avatar',
         'is_active',
+        'base_salary',
+        'allowance',
     ];
 
     protected $hidden = [
@@ -34,6 +36,8 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_active' => 'boolean',
+            'base_salary' => 'decimal:2',
+            'allowance' => 'decimal:2',
         ];
     }
 }

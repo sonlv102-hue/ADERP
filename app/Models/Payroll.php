@@ -1,0 +1,52 @@
+<?php
+
+namespace App\Models;
+
+use App\Enums\PayrollStatus;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+
+class Payroll extends Model
+{
+    protected $fillable = [
+        'code',
+        'period',
+        'status',
+        'total_base_salary',
+        'total_allowance',
+        'total_bonus',
+        'total_deductions',
+        'total_net_salary',
+        'created_by',
+        'notes',
+    ];
+
+    protected function casts(): array
+    {
+        return [
+            'status'            => PayrollStatus::class,
+            'total_base_salary' => 'decimal:2',
+            'total_allowance'   => 'decimal:2',
+            'total_bonus'       => 'decimal:2',
+            'total_deductions'  => 'decimal:2',
+            'total_net_salary'  => 'decimal:2',
+        ];
+    }
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(PayrollItem::class);
+    }
+
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public static function generateCode(string $period): string
+    {
+        $cleanPeriod = str_replace('-', '', $period); // YYYY-MM -> YYYYMM
+        return 'BL-' . $cleanPeriod;
+    }
+}

@@ -81,6 +81,8 @@
           <NavItem :href="route('accounting.invoices.index')"      icon="document-text" sub>Hóa đơn</NavItem>
           <NavItem :href="route('accounting.funds.index')"         icon="library"       sub>Quản lý quỹ</NavItem>
           <NavItem :href="route('accounting.cash-vouchers.index')" icon="cash"          sub>Phiếu thu / chi</NavItem>
+          <NavItem :href="route('accounting.payrolls.index')"      icon="clipboard-list" sub>Bảng lương tháng</NavItem>
+          <NavItem :href="route('accounting.taxes.index')"         icon="receipt-tax"   sub>Kê khai thuế VAT</NavItem>
         </NavGroup>
 
         <NavGroup v-if="can('documents.view')"

@@ -38,6 +38,8 @@ use App\Http\Controllers\Accounting\CashVoucherController;
 use App\Http\Controllers\Accounting\FundController;
 use App\Http\Controllers\Accounting\InvoiceController;
 use App\Http\Controllers\Accounting\PaymentController;
+use App\Http\Controllers\Accounting\PayrollController;
+use App\Http\Controllers\Accounting\TaxController;
 use App\Http\Controllers\Reports\FundLedgerController;
 use App\Http\Controllers\Purchasing\PurchaseOrderController;
 use App\Http\Controllers\Purchasing\PurchaseInvoiceController;
@@ -229,6 +231,16 @@ Route::middleware('auth')->group(function () {
         Route::resource('cash-vouchers', CashVoucherController::class);
         Route::post('cash-vouchers/{cashVoucher}/confirm', [CashVoucherController::class, 'confirm'])->name('cash-vouchers.confirm');
         Route::post('cash-vouchers/{cashVoucher}/cancel',  [CashVoucherController::class, 'cancel'])->name('cash-vouchers.cancel');
+
+        // Tiền lương (Payroll)
+        Route::resource('payrolls', PayrollController::class)->except(['edit', 'update']);
+        Route::put('payrolls/{payroll}/items/{item}', [PayrollController::class, 'updateItem'])->name('payrolls.items.update');
+        Route::post('payrolls/{payroll}/confirm', [PayrollController::class, 'confirm'])->name('payrolls.confirm');
+        Route::post('payrolls/{payroll}/items/{item}/pay', [PayrollController::class, 'payEmployee'])->name('payrolls.items.pay');
+
+        // Kê khai thuế (Taxes)
+        Route::get('taxes', [TaxController::class, 'index'])->name('taxes.index');
+        Route::get('taxes/export-xml', [TaxController::class, 'exportXml'])->name('taxes.export-xml');
     });
 
     // Support - ticket kỹ thuật và bảo hành
