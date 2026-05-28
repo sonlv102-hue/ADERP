@@ -40,17 +40,58 @@
             </div>
 
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Chiết khấu tổng</label>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Tổng tiền bán (tính CK tự động)</label>
               <div class="flex gap-2">
-                <select v-model="form.discount_type"
-                  class="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
-                  <option value="percent">%</option>
-                  <option value="fixed">Cố định</option>
-                </select>
-                <input v-model.number="form.discount_value" type="number" min="0"
+                <input v-model.number="desiredTotal" @input="calculateDiscountFromTotal" type="number" min="0"
                   class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                  :class="{ 'border-red-500': form.errors.discount_value }" />
+                  placeholder="Nhập tổng tiền muốn bán, hệ thống sẽ tính % CK" />
+                <select v-model="roundingMode" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm">
+                  <option value="">Không làm tròn</option>
+                  <option value="1000">Làm tròn 1K</option>
+                  <option value="10000">Làm tròn 10K</option>
+                  <option value="100000">Làm tròn 100K</option>
+                  <option value="1000000">Làm tròn 1M</option>
+                </select>
+                <button type="button" @click="roundPrice" v-if="roundingMode"
+                  class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-lg text-sm font-medium">
+                  Làm tròn
+                </button>
               </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Chiết khấu tổng</label>
+              <div class="space-y-2">
+                <div class="flex gap-2">
+                  <select v-model="form.discount_type"
+                    class="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
+                    <option value="percent">% (Phần trăm)</option>
+                    <option value="fixed">Tiền (VND)</option>
+                  </select>
+                  <input v-model.number="form.discount_value" type="number" min="0" step="0.01"
+                    class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                    :class="{ 'border-red-500': form.errors.discount_value }"
+                    @input="updateDiscountType('manual')" />
+                  <span v-if="form.discount_type === 'percent'" class="px-3 py-2 text-gray-600 bg-gray-50 rounded-lg">%</span>
+                </div>
+                <div v-if="form.discount_type === 'fixed'" class="text-xs text-blue-600">
+                  → Tự động tính: <strong>{{ calculatedDiscountPercent.toFixed(2) }}%</strong> chiết khấu
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Hoặc nhập số tiền chiết khấu → Tính % tự động</label>
+              <div class="flex gap-2">
+                <input v-model.number="discountAmountInput" type="number" min="0" step="1"
+                  placeholder="Nhập số tiền chiết khấu (VND), hệ thống sẽ tính %"
+                  @input="calculateDiscountPercent"
+                  class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" />
+                <span class="px-3 py-2 text-gray-600 bg-gray-50 rounded-lg">đ</span>
+              </div>
+              <p v-if="discountAmountInput > 0" class="mt-1 text-xs text-blue-600">
+                💡 Số tiền {{ formatVnd(discountAmountInput) }} = <strong>{{ calculatedDiscountPercent.toFixed(2) }}%</strong> chiết khấu
+              </p>
             </div>
           </div>
 
@@ -197,6 +238,9 @@ const props = defineProps({
 });
 
 const selectedPriceList = ref('');
+const desiredTotal = ref(null);
+const roundingMode = ref('');
+const discountAmountInput = ref(null);
 
 const applyPriceList = async () => {
   if (!selectedPriceList.value) return;
@@ -255,6 +299,9 @@ const onItemChange = (idx) => {
     const s = props.services.find(s => s.id === item.service_id);
     if (s) { item.name = s.name; item.unit = s.unit ?? ''; item.unit_price = s.price ?? 0; }
   }
+  // Xóa tổng tiền mong muốn và số tiền chiết khấu khi thay đổi item vì subtotal thay đổi
+  desiredTotal.value = null;
+  discountAmountInput.value = null;
 };
 
 const subtotal = computed(() =>
@@ -267,6 +314,68 @@ const discountAmount = computed(() => {
 });
 
 const grandTotal = computed(() => subtotal.value - discountAmount.value);
+
+const calculatedDiscountPercent = computed(() => {
+  if (form.discount_type === 'fixed' && discountAmountInput.value > 0) {
+    // Tính % từ số tiền chiết khấu (từ input nhập tiền)
+    const percent = (discountAmountInput.value / subtotal.value) * 100;
+    return percent;
+  } else if (form.discount_type === 'fixed') {
+    // Tính % từ discount_value (khi nhập trực tiếp)
+    const percent = (form.discount_value / subtotal.value) * 100;
+    return percent;
+  } else {
+    // Nếu là phần trăm thì return trực tiếp
+    return form.discount_value;
+  }
+});
+
+const calculateDiscountPercent = () => {
+  if (!discountAmountInput.value || discountAmountInput.value <= 0) {
+    discountAmountInput.value = null;
+    return;
+  }
+
+  // Cập nhật discount_type và discount_value dựa trên số tiền nhập vào
+  form.discount_type = 'fixed';
+  form.discount_value = discountAmountInput.value;
+};
+
+const updateDiscountType = (source) => {
+  // Khi người dùng thay đổi loại chiết khấu từ dropdown
+  if (source === 'manual') {
+    // Reset số tiền chiết khấu input
+    discountAmountInput.value = null;
+  }
+};
+
+const calculateDiscountFromTotal = () => {
+  if (!desiredTotal.value || desiredTotal.value <= 0) {
+    form.discount_value = 0;
+    form.discount_type = 'percent';
+    return;
+  }
+
+  const current = subtotal.value;
+  if (desiredTotal.value >= current) {
+    form.discount_value = 0;
+    form.discount_type = 'percent';
+  } else {
+    // Tính % chiết khấu để đạt được tổng tiền mong muốn
+    const discountPercent = ((current - desiredTotal.value) / current) * 100;
+    form.discount_type = 'percent';
+    form.discount_value = Math.round(discountPercent * 100) / 100; // Làm tròn 2 chữ số thập phân
+  }
+};
+
+const roundPrice = () => {
+  if (!desiredTotal.value || !roundingMode.value) return;
+  
+  const mode = parseInt(roundingMode.value);
+  const rounded = Math.round(desiredTotal.value / mode) * mode;
+  desiredTotal.value = rounded;
+  calculateDiscountFromTotal();
+};
 
 
 const submit = () => {

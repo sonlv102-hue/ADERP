@@ -47,6 +47,19 @@ class Quotation extends Model
         return (float) $this->discount_value;
     }
 
+    public function discountPercent(): float
+    {
+        $sub = $this->subtotal();
+        if ($sub <= 0) return 0;
+        
+        if ($this->discount_type === 'percent') {
+            return (float) $this->discount_value;
+        }
+        
+        // Tính % từ số tiền chiết khấu (discount_value là số tiền)
+        return round(((float) $this->discount_value / $sub) * 100, 2);
+    }
+
     public function total(): float
     {
         return $this->subtotal() - $this->discountAmount();

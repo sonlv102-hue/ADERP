@@ -111,6 +111,7 @@ class QuotationController extends Controller
                 'status_color'    => $quotation->status->color(),
                 'discount_type'   => $quotation->discount_type,
                 'discount_value'  => $quotation->discount_value,
+                'discount_percent' => $quotation->discountPercent(),
                 'notes'           => $quotation->notes,
                 'creator'         => $quotation->creator->name,
                 'created_at'      => $quotation->created_at->format('d/m/Y'),

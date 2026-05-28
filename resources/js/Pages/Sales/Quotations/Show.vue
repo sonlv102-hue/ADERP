@@ -81,7 +81,7 @@
               <td class="px-5 py-2 text-right font-medium text-gray-700">{{ formatVnd(quotation.subtotal) }}</td>
             </tr>
             <tr v-if="quotation.discount_amount > 0">
-              <td colspan="6" class="px-5 py-2 text-right text-sm text-gray-600">Chiết khấu:</td>
+              <td colspan="6" class="px-5 py-2 text-right text-sm text-gray-600">Chiết khấu ({{ quotation.discount_percent }}%):</td>
               <td class="px-5 py-2 text-right font-medium text-red-600">- {{ formatVnd(quotation.discount_amount) }}</td>
             </tr>
             <tr>
