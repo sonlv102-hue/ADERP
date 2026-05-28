@@ -44,5 +44,7 @@ class DatabaseSeeder extends Seeder
             );
             $user->syncRoles([$demo['role']]);
         }
+
+        $this->call(DemoDataSeeder::class);
     }
 }
