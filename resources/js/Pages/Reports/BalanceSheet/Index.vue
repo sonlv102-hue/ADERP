@@ -27,9 +27,37 @@
         </button>
       </div>
 
+      <!-- Hướng dẫn đọc báo cáo -->
+      <div class="bg-blue-50 border border-blue-200 rounded-lg px-5 py-3 text-sm text-blue-800 space-y-1">
+        <p class="font-semibold">📋 Hướng dẫn đọc Bảng cân đối kế toán (BCĐKT):</p>
+        <ul class="list-disc list-inside space-y-0.5 text-blue-700">
+          <li><strong>Tài sản = Nợ phải trả + Vốn chủ sở hữu</strong> — đây là nguyên tắc kép của kế toán.</li>
+          <li><strong>Tài sản ngắn hạn:</strong> Tiền, phải thu, hàng tồn kho — dự kiến thu hồi trong 12 tháng.</li>
+          <li><strong>Vốn chủ:</strong> Vốn góp + Lợi nhuận chưa phân phối (lũy kế từ P&amp;L).</li>
+          <li><strong>Lưu ý:</strong> Báo cáo tại <em>ngày</em> được chọn, không phải khoảng thời gian.</li>
+        </ul>
+      </div>
+
       <!-- Balance check -->
-      <div v-if="!summary.balanced" class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-700">
-        Lưu ý: Tổng tài sản và tổng nguồn vốn chênh lệch do hệ thống chưa theo dõi đầy đủ vốn góp.
+      <div v-if="!summary.balanced" class="bg-red-50 border border-red-300 rounded-lg p-4 flex items-start gap-3">
+        <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        </svg>
+        <div>
+          <p class="font-semibold text-red-800 text-sm">Bảng cân đối không khớp!</p>
+          <p class="text-red-700 text-xs mt-0.5">
+            Tổng tài sản ({{ fmt(summary.total_assets) }}) ≠ Tổng nguồn vốn ({{ fmt(summary.total_liabilities_equity) }}).
+            Chênh lệch: {{ fmt(Math.abs(summary.total_assets - summary.total_liabilities_equity)) }}.
+            Nguyên nhân thường gặp: chưa nhập số dư đầu kỳ vốn góp (TK 411), hoặc có bút toán thiếu cân bằng.
+          </p>
+        </div>
+      </div>
+      <div v-else class="bg-green-50 border border-green-200 rounded-lg px-4 py-2.5 text-sm text-green-700 flex items-center gap-2">
+        <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+        </svg>
+        Bảng cân đối cân bằng — Tài sản = Nguồn vốn = {{ fmt(summary.total_assets) }}
       </div>
 
       <!-- KPI -->

@@ -7,6 +7,7 @@ use App\Exports\TemplateExport;
 use App\Http\Controllers\Controller;
 use App\Imports\CustomerImport;
 use App\Models\Customer;
+use App\Models\PaymentTerm;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -45,25 +46,28 @@ class CustomerController extends Controller
     public function create(): Response
     {
         return Inertia::render('Crm/Customers/Form', [
-            'nextCode' => Customer::generateCode(),
+            'nextCode'      => Customer::generateCode(),
             'lead_statuses' => collect(LeadStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
-            'sales_users' => User::role(['admin', 'sales', 'director'])->orderBy('name')->get(['id', 'name']),
+            'sales_users'   => User::role(['admin', 'sales', 'director'])->orderBy('name')->get(['id', 'name']),
+            'payment_terms' => PaymentTerm::where('is_active', true)->orderBy('days')->get(['id', 'name', 'days']),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'code' => ['required', 'string', 'unique:customers,code'],
-            'name' => ['required', 'string', 'max:255'],
-            'company' => ['nullable', 'string', 'max:255'],
-            'tax_code' => ['nullable', 'string', 'max:50'],
-            'phone' => ['nullable', 'string', 'max:20'],
-            'email' => ['nullable', 'email'],
-            'address' => ['nullable', 'string'],
-            'lead_status' => ['required', 'string'],
-            'assigned_to' => ['nullable', 'exists:users,id'],
-            'notes' => ['nullable', 'string'],
+            'code'            => ['required', 'string', 'unique:customers,code'],
+            'name'            => ['required', 'string', 'max:255'],
+            'company'         => ['nullable', 'string', 'max:255'],
+            'tax_code'        => ['nullable', 'string', 'max:50'],
+            'phone'           => ['nullable', 'string', 'max:20'],
+            'email'           => ['nullable', 'email'],
+            'address'         => ['nullable', 'string'],
+            'lead_status'     => ['required', 'string'],
+            'assigned_to'     => ['nullable', 'exists:users,id'],
+            'notes'           => ['nullable', 'string'],
+            'payment_term_id' => ['nullable', 'exists:payment_terms,id'],
+            'credit_limit'    => ['nullable', 'numeric', 'min:0'],
         ]);
 
         Customer::create($data);
@@ -105,36 +109,41 @@ class CustomerController extends Controller
     {
         return Inertia::render('Crm/Customers/Form', [
             'customer' => [
-                'id' => $customer->id,
-                'code' => $customer->code,
-                'name' => $customer->name,
-                'company' => $customer->company,
-                'tax_code' => $customer->tax_code,
-                'phone' => $customer->phone,
-                'email' => $customer->email,
-                'address' => $customer->address,
-                'lead_status' => $customer->lead_status->value,
-                'assigned_to' => $customer->assigned_to,
-                'notes' => $customer->notes,
+                'id'              => $customer->id,
+                'code'            => $customer->code,
+                'name'            => $customer->name,
+                'company'         => $customer->company,
+                'tax_code'        => $customer->tax_code,
+                'phone'           => $customer->phone,
+                'email'           => $customer->email,
+                'address'         => $customer->address,
+                'lead_status'     => $customer->lead_status->value,
+                'assigned_to'     => $customer->assigned_to,
+                'notes'           => $customer->notes,
+                'payment_term_id' => $customer->payment_term_id,
+                'credit_limit'    => $customer->credit_limit,
             ],
             'lead_statuses' => collect(LeadStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
-            'sales_users' => User::role(['admin', 'sales', 'director'])->orderBy('name')->get(['id', 'name']),
+            'sales_users'   => User::role(['admin', 'sales', 'director'])->orderBy('name')->get(['id', 'name']),
+            'payment_terms' => PaymentTerm::where('is_active', true)->orderBy('days')->get(['id', 'name', 'days']),
         ]);
     }
 
     public function update(Request $request, Customer $customer): RedirectResponse
     {
         $data = $request->validate([
-            'code' => ['required', 'string', 'unique:customers,code,' . $customer->id],
-            'name' => ['required', 'string', 'max:255'],
-            'company' => ['nullable', 'string', 'max:255'],
-            'tax_code' => ['nullable', 'string', 'max:50'],
-            'phone' => ['nullable', 'string', 'max:20'],
-            'email' => ['nullable', 'email'],
-            'address' => ['nullable', 'string'],
-            'lead_status' => ['required', 'string'],
-            'assigned_to' => ['nullable', 'exists:users,id'],
-            'notes' => ['nullable', 'string'],
+            'code'            => ['required', 'string', 'unique:customers,code,' . $customer->id],
+            'name'            => ['required', 'string', 'max:255'],
+            'company'         => ['nullable', 'string', 'max:255'],
+            'tax_code'        => ['nullable', 'string', 'max:50'],
+            'phone'           => ['nullable', 'string', 'max:20'],
+            'email'           => ['nullable', 'email'],
+            'address'         => ['nullable', 'string'],
+            'lead_status'     => ['required', 'string'],
+            'assigned_to'     => ['nullable', 'exists:users,id'],
+            'notes'           => ['nullable', 'string'],
+            'payment_term_id' => ['nullable', 'exists:payment_terms,id'],
+            'credit_limit'    => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $customer->update($data);

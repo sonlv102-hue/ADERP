@@ -24,6 +24,18 @@
         </select>
       </div>
 
+      <!-- Hướng dẫn đọc báo cáo VAT -->
+      <div class="bg-blue-50 border border-blue-200 rounded-lg px-5 py-3 text-sm text-blue-800 space-y-1">
+        <p class="font-semibold">📋 Hướng dẫn đọc Báo cáo VAT (Mẫu 01/GTGT):</p>
+        <ul class="list-disc list-inside space-y-0.5 text-blue-700">
+          <li><strong>VAT đầu ra (TK 3331):</strong> Từ hóa đơn bán hàng đã phát hành. Phải nộp cho nhà nước.</li>
+          <li><strong>VAT đầu vào (TK 133):</strong> Từ hóa đơn mua vào hợp lệ. Được khấu trừ.</li>
+          <li><strong>VAT phải nộp = VAT đầu ra − VAT đầu vào.</strong> Nếu âm = được hoàn thuế hoặc chuyển kỳ sau.</li>
+          <li><strong>Lưu ý:</strong> Báo cáo này lấy dữ liệu trực tiếp từ hóa đơn. Kiểm tra TK 3331 trên Sổ cái để đối chiếu.</li>
+          <li>Click vào số tháng bất kỳ để xem chi tiết hóa đơn.</li>
+        </ul>
+      </div>
+
       <!-- Summary cards -->
       <div class="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <div class="bg-white rounded-xl border border-gray-200 p-4">

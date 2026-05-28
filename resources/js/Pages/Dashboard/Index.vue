@@ -84,6 +84,56 @@
         </div>
       </div>
 
+      <!-- Accounting alerts -->
+      <div v-if="accountingAlerts.has_alerts" class="bg-white rounded-xl border border-amber-300 overflow-hidden">
+        <div class="px-5 py-4 border-b border-amber-200 flex items-center gap-2 bg-amber-50">
+          <svg class="w-5 h-5 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <h3 class="text-base font-semibold text-amber-800">Cảnh báo kế toán</h3>
+          <span class="text-xs text-amber-600 ml-auto">Cần xử lý để đảm bảo số liệu chính xác</span>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 divide-x divide-y divide-amber-100">
+          <!-- Overdue invoices -->
+          <div class="px-5 py-4">
+            <p class="text-xs text-gray-500 mb-1">HĐ quá hạn</p>
+            <p class="text-2xl font-bold" :class="accountingAlerts.overdue_invoices > 0 ? 'text-red-600' : 'text-gray-400'">
+              {{ accountingAlerts.overdue_invoices }}
+            </p>
+            <p class="text-xs text-gray-500 mt-1">{{ fmtVnd(accountingAlerts.overdue_amount) }} chưa thu</p>
+            <a href="/accounting/invoices?status=overdue" class="text-xs text-primary-600 hover:underline mt-1 block">Xem chi tiết →</a>
+          </div>
+          <!-- Invoices sent but not yet marked overdue -->
+          <div class="px-5 py-4">
+            <p class="text-xs text-gray-500 mb-1">HĐ sắp quá hạn chưa cập nhật</p>
+            <p class="text-2xl font-bold" :class="accountingAlerts.pending_overdue_invoices > 0 ? 'text-orange-500' : 'text-gray-400'">
+              {{ accountingAlerts.pending_overdue_invoices }}
+            </p>
+            <p class="text-xs text-gray-500 mt-1">Đã qua due_date, cần chuyển Overdue</p>
+            <a href="/accounting/invoices?status=sent" class="text-xs text-primary-600 hover:underline mt-1 block">Xem →</a>
+          </div>
+          <!-- Unreconciled bank -->
+          <div class="px-5 py-4">
+            <p class="text-xs text-gray-500 mb-1">GD ngân hàng chưa đối chiếu</p>
+            <p class="text-2xl font-bold" :class="accountingAlerts.unreconciled_bank > 0 ? 'text-blue-600' : 'text-gray-400'">
+              {{ accountingAlerts.unreconciled_bank }}
+            </p>
+            <p class="text-xs text-gray-500 mt-1">Cần ghép với bút toán TK 112</p>
+            <a href="/accounting/bank-accounts" class="text-xs text-primary-600 hover:underline mt-1 block">Đối chiếu →</a>
+          </div>
+          <!-- Pending payrolls -->
+          <div class="px-5 py-4">
+            <p class="text-xs text-gray-500 mb-1">Bảng lương chưa xác nhận</p>
+            <p class="text-2xl font-bold" :class="accountingAlerts.pending_payrolls > 0 ? 'text-purple-600' : 'text-gray-400'">
+              {{ accountingAlerts.pending_payrolls }}
+            </p>
+            <p class="text-xs text-gray-500 mt-1">Cần xác nhận để hạch toán lương</p>
+            <a href="/accounting/payrolls" class="text-xs text-primary-600 hover:underline mt-1 block">Xem bảng lương →</a>
+          </div>
+        </div>
+      </div>
+
       <!-- Unfulfilled orders warning -->
       <div v-if="unfulfilledOrders.length" class="bg-white rounded-xl border border-orange-200 overflow-hidden">
         <div class="px-5 py-4 border-b border-orange-100 flex items-center gap-2">
@@ -233,9 +283,12 @@ const props = defineProps({
   ticketStats:       { type: Array,  default: () => [] },
   unfulfilledOrders:   { type: Array,  default: () => [] },
   overDeliveryAlerts:  { type: Array,  default: () => [] },
+  accountingAlerts:    { type: Object, default: () => ({}) },
 });
 
 const isLowStock = (p) => p.min_stock > 0 && p.stock <= p.min_stock;
+
+const fmtVnd = (v) => new Intl.NumberFormat('vi-VN').format(v || 0) + ' ₫';
 
 // ----- KPI card -----
 const KpiCard = {

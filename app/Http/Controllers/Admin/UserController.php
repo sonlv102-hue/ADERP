@@ -67,12 +67,16 @@ class UserController extends Controller
     {
         return Inertia::render('Admin/Users/Form', [
             'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-                'phone' => $user->phone,
-                'is_active' => $user->is_active,
-                'role' => $user->roles->first()?->name,
+                'id'               => $user->id,
+                'name'             => $user->name,
+                'email'            => $user->email,
+                'phone'            => $user->phone,
+                'is_active'        => $user->is_active,
+                'role'             => $user->roles->first()?->name,
+                'base_salary'      => (float) ($user->base_salary ?? 0),
+                'allowance'        => (float) ($user->allowance   ?? 0),
+                'dependents_count' => (int)   ($user->dependents_count ?? 0),
+                'pit_tax_code'     => $user->pit_tax_code,
             ],
             'roles' => Role::orderBy('name')->pluck('name'),
         ]);
@@ -81,19 +85,27 @@ class UserController extends Controller
     public function update(Request $request, User $user): RedirectResponse
     {
         $data = $request->validate([
-            'name' => ['required', 'string', 'max:255'],
-            'email' => ['required', 'email', 'unique:users,email,' . $user->id],
-            'password' => ['nullable', 'confirmed', Rules\Password::defaults()],
-            'phone' => ['nullable', 'string', 'max:20'],
-            'is_active' => ['boolean'],
-            'role' => ['required', 'string', 'exists:roles,name'],
+            'name'             => ['required', 'string', 'max:255'],
+            'email'            => ['required', 'email', 'unique:users,email,' . $user->id],
+            'password'         => ['nullable', 'confirmed', Rules\Password::defaults()],
+            'phone'            => ['nullable', 'string', 'max:20'],
+            'is_active'        => ['boolean'],
+            'role'             => ['required', 'string', 'exists:roles,name'],
+            'base_salary'      => ['nullable', 'numeric', 'min:0'],
+            'allowance'        => ['nullable', 'numeric', 'min:0'],
+            'dependents_count' => ['nullable', 'integer', 'min:0', 'max:10'],
+            'pit_tax_code'     => ['nullable', 'string', 'max:20'],
         ]);
 
         $user->update([
-            'name' => $data['name'],
-            'email' => $data['email'],
-            'phone' => $data['phone'] ?? null,
-            'is_active' => $data['is_active'] ?? true,
+            'name'             => $data['name'],
+            'email'            => $data['email'],
+            'phone'            => $data['phone']            ?? null,
+            'is_active'        => $data['is_active']        ?? true,
+            'base_salary'      => $data['base_salary']      ?? $user->base_salary,
+            'allowance'        => $data['allowance']        ?? $user->allowance,
+            'dependents_count' => $data['dependents_count'] ?? 0,
+            'pit_tax_code'     => $data['pit_tax_code']     ?? null,
         ]);
 
         if (! empty($data['password'])) {

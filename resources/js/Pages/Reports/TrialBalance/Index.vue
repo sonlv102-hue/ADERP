@@ -37,6 +37,33 @@
         <button @click="applyFilters" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium">Cập nhật</button>
       </div>
 
+      <!-- Hướng dẫn đọc báo cáo -->
+      <div class="bg-blue-50 border border-blue-200 rounded-lg px-5 py-3 text-sm text-blue-800 space-y-1">
+        <p class="font-semibold">📋 Hướng dẫn đọc Bảng cân đối số phát sinh (CDPS):</p>
+        <ul class="list-disc list-inside space-y-0.5 text-blue-700">
+          <li><strong>Số dư đầu kỳ:</strong> Số dư TK tại thời điểm trước ngày bắt đầu kỳ.</li>
+          <li><strong>Phát sinh Nợ/Có:</strong> Tổng phát sinh trong kỳ được chọn.</li>
+          <li><strong>Số dư cuối kỳ:</strong> = Đầu kỳ + Phát sinh trong kỳ.</li>
+          <li><strong>Kiểm tra:</strong> Tổng Nợ = Tổng Có ở cả 3 cột → đây là dấu hiệu bút toán cân bằng.</li>
+        </ul>
+      </div>
+
+      <!-- Cảnh báo mất cân bằng -->
+      <div v-if="Math.abs(totals.debit - totals.credit) >= 1"
+        class="bg-red-50 border border-red-300 rounded-lg px-5 py-3 flex items-start gap-3">
+        <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        </svg>
+        <div>
+          <p class="font-semibold text-red-800 text-sm">Cảnh báo: Tổng phát sinh Nợ ≠ Tổng phát sinh Có!</p>
+          <p class="text-red-700 text-xs mt-0.5">
+            Chênh lệch: {{ fmt(Math.abs(totals.debit - totals.credit)) }} —
+            Có thể do bút toán lỗi hoặc dữ liệu chưa đầy đủ. Kiểm tra lại Sổ nhật ký chung.
+          </p>
+        </div>
+      </div>
+
       <!-- Table -->
       <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <div class="bg-gray-50 border-b border-gray-200 px-5 py-3">

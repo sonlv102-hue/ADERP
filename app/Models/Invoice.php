@@ -13,18 +13,29 @@ class Invoice extends Model
         'code', 'customer_id', 'order_id', 'contract_id',
         'issue_date', 'due_date', 'subtotal', 'tax_amount', 'total',
         'status', 'notes', 'created_by',
+        'e_inv_template', 'e_inv_series', 'e_inv_number',
+        'e_inv_status', 'e_inv_issued_at', 'e_inv_cancel_reason',
     ];
 
     protected function casts(): array
     {
         return [
-            'status'     => InvoiceStatus::class,
-            'issue_date' => 'date',
-            'due_date'   => 'date',
-            'subtotal'   => 'decimal:2',
-            'tax_amount' => 'decimal:2',
-            'total'      => 'decimal:2',
+            'status'          => InvoiceStatus::class,
+            'issue_date'      => 'date',
+            'due_date'        => 'date',
+            'subtotal'        => 'decimal:2',
+            'tax_amount'      => 'decimal:2',
+            'total'           => 'decimal:2',
+            'e_inv_issued_at' => 'datetime',
         ];
+    }
+
+    public function nextEInvoiceNumber(): int
+    {
+        $max = static::where('e_inv_series', $this->e_inv_series)
+            ->whereNotNull('e_inv_number')
+            ->max('e_inv_number');
+        return ($max ?? 0) + 1;
     }
 
     public static function generateCode(): string

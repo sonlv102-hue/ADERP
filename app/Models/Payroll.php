@@ -10,27 +10,26 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Payroll extends Model
 {
     protected $fillable = [
-        'code',
-        'period',
-        'status',
-        'total_base_salary',
-        'total_allowance',
-        'total_bonus',
-        'total_deductions',
-        'total_net_salary',
-        'created_by',
-        'notes',
+        'code', 'period', 'status',
+        'total_base_salary', 'total_allowance', 'total_bonus',
+        'total_gross', 'total_insurance_employee', 'total_insurance_employer',
+        'total_pit', 'total_deductions', 'total_net_salary',
+        'created_by', 'notes',
     ];
 
     protected function casts(): array
     {
         return [
-            'status'            => PayrollStatus::class,
-            'total_base_salary' => 'decimal:2',
-            'total_allowance'   => 'decimal:2',
-            'total_bonus'       => 'decimal:2',
-            'total_deductions'  => 'decimal:2',
-            'total_net_salary'  => 'decimal:2',
+            'status'                   => PayrollStatus::class,
+            'total_base_salary'        => 'decimal:0',
+            'total_allowance'          => 'decimal:0',
+            'total_bonus'              => 'decimal:0',
+            'total_gross'              => 'decimal:0',
+            'total_insurance_employee' => 'decimal:0',
+            'total_insurance_employer' => 'decimal:0',
+            'total_pit'                => 'decimal:0',
+            'total_deductions'         => 'decimal:0',
+            'total_net_salary'         => 'decimal:0',
         ];
     }
 

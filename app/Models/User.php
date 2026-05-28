@@ -15,14 +15,9 @@ class User extends Authenticatable
     use HasFactory, Notifiable, HasRoles, SoftDeletes;
 
     protected $fillable = [
-        'name',
-        'email',
-        'password',
-        'phone',
-        'avatar',
-        'is_active',
-        'base_salary',
-        'allowance',
+        'name', 'email', 'password', 'phone', 'avatar',
+        'is_active', 'base_salary', 'allowance',
+        'dependents_count', 'pit_tax_code',
     ];
 
     protected $hidden = [
@@ -33,11 +28,12 @@ class User extends Authenticatable
     protected function casts(): array
     {
         return [
-            'email_verified_at' => 'datetime',
-            'password' => 'hashed',
-            'is_active' => 'boolean',
-            'base_salary' => 'decimal:2',
-            'allowance' => 'decimal:2',
+            'email_verified_at'  => 'datetime',
+            'password'           => 'hashed',
+            'is_active'          => 'boolean',
+            'base_salary'        => 'decimal:2',
+            'allowance'          => 'decimal:2',
+            'dependents_count'   => 'integer',
         ];
     }
 }

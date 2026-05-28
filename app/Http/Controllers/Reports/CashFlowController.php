@@ -54,14 +54,48 @@ class CashFlowController extends Controller
             ->whereBetween('purchase_invoice_payments.payment_date', [$dateFrom, $dateTo])
             ->when($method, fn ($q) => $q->where('purchase_invoice_payments.method', $method));
 
+        // Phiếu thu (CashVoucher type=receipt, status=confirmed)
+        $voucherIn = DB::table('cash_vouchers')
+            ->select([
+                'id',
+                'voucher_date as date',
+                DB::raw("'in' as type"),
+                'code as ref_code',
+                DB::raw("CONCAT('[PT] ', COALESCE(description, code)) as description"),
+                DB::raw("'cash' as method"),
+                'amount',
+                DB::raw('0 as outflow'),
+            ])
+            ->where('type', 'receipt')
+            ->where('status', 'confirmed')
+            ->whereBetween('voucher_date', [$dateFrom, $dateTo]);
+
+        // Phiếu chi (CashVoucher type=payment, status=confirmed)
+        $voucherOut = DB::table('cash_vouchers')
+            ->select([
+                'id',
+                'voucher_date as date',
+                DB::raw("'out' as type"),
+                'code as ref_code',
+                DB::raw("CONCAT('[PC] ', COALESCE(description, code)) as description"),
+                DB::raw("'cash' as method"),
+                'amount',
+                DB::raw('0 as outflow'),
+            ])
+            ->where('type', 'payment')
+            ->where('status', 'confirmed')
+            ->whereBetween('voucher_date', [$dateFrom, $dateTo]);
+
         // UNION và lọc theo type
         $allRows = collect();
 
         if ($type !== 'out') {
             $allRows = $allRows->merge($inflow->get()->map(fn ($r) => (array) $r));
+            $allRows = $allRows->merge($voucherIn->get()->map(fn ($r) => (array) $r));
         }
         if ($type !== 'in') {
             $allRows = $allRows->merge($outflow->get()->map(fn ($r) => (array) $r));
+            $allRows = $allRows->merge($voucherOut->get()->map(fn ($r) => (array) $r));
         }
 
         $allRows = $allRows->sortBy('date')->values();

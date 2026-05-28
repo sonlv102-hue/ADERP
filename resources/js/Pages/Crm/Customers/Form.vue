@@ -81,6 +81,23 @@
             </select>
             <p v-if="form.errors.assigned_to" class="mt-1 text-xs text-red-600">{{ form.errors.assigned_to }}</p>
           </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Điều khoản thanh toán</label>
+            <select v-model="form.payment_term_id"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
+              <option :value="null">-- Không có --</option>
+              <option v-for="pt in payment_terms" :key="pt.id" :value="pt.id">{{ pt.name }}</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Hạn mức tín dụng (₫)</label>
+            <input v-model.number="form.credit_limit" type="number" min="0" step="1000000"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+              placeholder="0 = không giới hạn" />
+            <p class="mt-1 text-xs text-gray-400">0 hoặc bỏ trống = không giới hạn</p>
+          </div>
         </div>
 
         <div>
@@ -121,19 +138,22 @@ const props = defineProps({
   nextCode: String,
   lead_statuses: Array,
   sales_users: Array,
+  payment_terms: Array,
 });
 
 const form = useForm({
-  code: props.customer?.code ?? props.nextCode ?? '',
-  name: props.customer?.name ?? '',
-  company: props.customer?.company ?? '',
-  tax_code: props.customer?.tax_code ?? '',
-  phone: props.customer?.phone ?? '',
-  email: props.customer?.email ?? '',
-  lead_status: props.customer?.lead_status ?? '',
-  assigned_to: props.customer?.assigned_user?.id ?? null,
-  address: props.customer?.address ?? '',
-  notes: props.customer?.notes ?? '',
+  code:            props.customer?.code            ?? props.nextCode ?? '',
+  name:            props.customer?.name            ?? '',
+  company:         props.customer?.company         ?? '',
+  tax_code:        props.customer?.tax_code        ?? '',
+  phone:           props.customer?.phone           ?? '',
+  email:           props.customer?.email           ?? '',
+  lead_status:     props.customer?.lead_status     ?? '',
+  assigned_to:     props.customer?.assigned_to     ?? null,
+  address:         props.customer?.address         ?? '',
+  notes:           props.customer?.notes           ?? '',
+  payment_term_id: props.customer?.payment_term_id ?? null,
+  credit_limit:    props.customer?.credit_limit    ?? null,
 });
 
 const submit = () => {

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Sales;
 
 use App\Enums\OrderStatus;
 use App\Enums\QuotationStatus;
+use App\Models\StockMovement;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
@@ -27,22 +28,30 @@ class OrderController extends Controller
                 ->addSelect([
                     'items_total' => OrderItem::selectRaw('COALESCE(SUM(quantity * unit_price), 0)')
                         ->whereColumn('order_id', 'orders.id'),
+                    'has_contract' => \App\Models\Contract::selectRaw('COUNT(*)')
+                        ->whereColumn('order_id', 'orders.id')
+                        ->limit(1),
+                    'undelivered_qty' => OrderItem::selectRaw('COALESCE(SUM(GREATEST(0, quantity - COALESCE(delivered_quantity, 0))), 0)')
+                        ->whereColumn('order_id', 'orders.id')
+                        ->whereNotNull('product_id'),
                 ])
                 ->orderByDesc('id')
                 ->paginate(20)
                 ->through(fn ($o) => [
-                    'id'             => $o->id,
-                    'code'           => $o->code,
-                    'customer'       => $o->customer->name,
-                    'order_date'     => $o->order_date->format('d/m/Y'),
-                    'expected_delivery' => $o->expected_delivery?->format('d/m/Y'),
-                    'status'         => $o->status->value,
-                    'status_label'   => $o->status->label(),
-                    'status_color'   => $o->status->color(),
-                    'creator'        => $o->creator->name,
-                    'quotation_code' => $o->quotation?->code,
-                    'items_count'    => $o->items_count,
-                    'total'          => (float) $o->items_total,
+                    'id'               => $o->id,
+                    'code'             => $o->code,
+                    'customer'         => $o->customer->name,
+                    'order_date'       => $o->order_date->format('d/m/Y'),
+                    'expected_delivery'=> $o->expected_delivery?->format('d/m/Y'),
+                    'status'           => $o->status->value,
+                    'status_label'     => $o->status->label(),
+                    'status_color'     => $o->status->color(),
+                    'creator'          => $o->creator->name,
+                    'quotation_code'   => $o->quotation?->code,
+                    'items_count'      => $o->items_count,
+                    'total'            => (float) $o->items_total,
+                    'has_contract'     => (int) $o->has_contract > 0,
+                    'delivery_status'  => $this->resolveDeliveryStatus($o),
                 ]),
         ]);
     }
@@ -116,6 +125,13 @@ class OrderController extends Controller
     {
         $order->load(['customer', 'creator', 'quotation', 'items.product', 'items.service', 'contracts']);
 
+        // Tồn kho hiện tại cho từng sản phẩm trong đơn
+        $productIds = $order->items->whereNotNull('product_id')->pluck('product_id');
+        $stocks = StockMovement::whereIn('product_id', $productIds)
+            ->selectRaw('product_id, COALESCE(SUM(quantity), 0) as total')
+            ->groupBy('product_id')
+            ->pluck('total', 'product_id');
+
         return Inertia::render('Sales/Orders/Show', [
             'order' => [
                 'id'                => $order->id,
@@ -133,11 +149,13 @@ class OrderController extends Controller
                 'total'             => $order->total(),
                 'items'             => $order->items->map(fn ($item) => [
                     'id'                 => $item->id,
+                    'product_id'         => $item->product_id,
                     'name'               => $item->name,
                     'unit'               => $item->unit,
                     'quantity'           => $item->quantity,
                     'delivered_quantity' => $item->delivered_quantity,
                     'remaining'          => max(0, (float)$item->quantity - (float)$item->delivered_quantity),
+                    'current_stock'      => (int) ($stocks[$item->product_id] ?? 0),
                     'unit_price'         => $item->unit_price,
                     'line_total'         => $item->lineTotal(),
                 ]),
@@ -294,6 +312,15 @@ class OrderController extends Controller
 
         return redirect()->route('sales.orders.show', $order)
             ->with('success', 'Đã xóa file đính kèm.');
+    }
+
+    private function resolveDeliveryStatus(Order $order): string
+    {
+        if ($order->status === OrderStatus::Cancelled) return 'cancelled';
+        $undelivered = (float) ($order->undelivered_qty ?? 0);
+        if ($undelivered == 0) return 'done';
+        if ($order->status->value === 'partial_delivered') return 'partial';
+        return 'none';
     }
 
     private function approvedQuotations(): array

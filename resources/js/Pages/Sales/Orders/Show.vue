@@ -103,6 +103,69 @@
         </table>
       </div>
 
+      <!-- Gợi ý giao hàng -->
+      <div v-if="undeliveredItems.length && order.status !== 'cancelled'"
+        class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-200 flex items-center gap-2">
+          <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <h2 class="text-base font-semibold text-gray-800">Gợi ý giao hàng</h2>
+          <span class="text-xs text-gray-500">— {{ undeliveredItems.length }} mặt hàng chưa giao đủ</span>
+        </div>
+        <div class="divide-y divide-gray-100">
+          <div v-for="item in undeliveredItems" :key="item.id"
+            class="flex items-center justify-between px-5 py-3 gap-4">
+            <div class="flex-1 min-w-0">
+              <p class="text-sm font-medium text-gray-800 truncate">{{ item.name }}</p>
+              <p class="text-xs text-gray-500 mt-0.5">
+                Còn lại: <strong class="text-orange-600">{{ item.remaining }}</strong> {{ item.unit ?? '' }}
+                &nbsp;·&nbsp;
+                Tồn kho:
+                <strong :class="item.current_stock >= item.remaining ? 'text-green-600' : item.current_stock > 0 ? 'text-yellow-600' : 'text-red-600'">
+                  {{ item.current_stock }}
+                </strong>
+              </p>
+            </div>
+            <div class="flex gap-2 shrink-0">
+              <template v-if="item.current_stock >= item.remaining">
+                <Link :href="route('warehouse.stock-exits.create') + '?order_id=' + order.id"
+                  class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                  </svg>
+                  Xuất kho
+                </Link>
+              </template>
+              <template v-else>
+                <span v-if="item.current_stock > 0"
+                  class="px-2 py-1.5 bg-yellow-50 border border-yellow-200 text-yellow-700 text-xs rounded-lg">
+                  Kho chỉ còn {{ item.current_stock }}
+                </span>
+                <Link :href="route('purchasing.purchase-orders.create')"
+                  class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium rounded-lg flex items-center gap-1">
+                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-9H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                  </svg>
+                  Mua hàng
+                </Link>
+              </template>
+            </div>
+          </div>
+        </div>
+        <div v-if="canCreateExit" class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex justify-end">
+          <Link :href="route('warehouse.stock-exits.create') + '?order_id=' + order.id"
+            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 4m0 0l-3-4m3 4V4" />
+            </svg>
+            Tạo phiếu xuất kho cho đơn này
+          </Link>
+        </div>
+      </div>
+
       <!-- Notes -->
       <div v-if="order.notes" class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-sm text-gray-700">
         <p class="font-semibold text-yellow-800 mb-1">Ghi chú</p>
@@ -227,6 +290,16 @@ const hasDeliveryTracking = computed(() =>
 
 const productItemsWithRemaining = computed(() =>
   (props.order.items ?? []).filter(i => i.remaining > 0)
+);
+
+// Các mặt hàng có sản phẩm (product_id) chưa giao đủ
+const undeliveredItems = computed(() =>
+  (props.order.items ?? []).filter(i => i.product_id && i.remaining > 0)
+);
+
+// Có thể tạo phiếu xuất khi ít nhất 1 sản phẩm đủ tồn kho
+const canCreateExit = computed(() =>
+  undeliveredItems.value.some(i => i.current_stock >= i.remaining)
 );
 
 const action = (act) => {

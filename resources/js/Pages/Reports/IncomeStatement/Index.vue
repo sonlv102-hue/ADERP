@@ -64,6 +64,32 @@
         </div>
       </div>
 
+      <!-- Hướng dẫn + cảnh báo lỗ -->
+      <div class="bg-blue-50 border border-blue-200 rounded-lg px-5 py-3 text-sm text-blue-800 space-y-1">
+        <p class="font-semibold">📋 Hướng dẫn đọc Báo cáo KQHĐKD:</p>
+        <ul class="list-disc list-inside space-y-0.5 text-blue-700">
+          <li><strong>Doanh thu thuần = Doanh thu − Giảm trừ doanh thu</strong> (TK 521: chiết khấu, hàng trả lại).</li>
+          <li><strong>Lợi nhuận gộp = Doanh thu thuần − Giá vốn (TK 632).</strong> Chỉ số này phản ánh hiệu quả sản xuất/kinh doanh.</li>
+          <li><strong>EBIT</strong> (Lợi nhuận thuần từ HĐKD) = Lợi nhuận gộp − Chi phí tài chính − Chi phí bán hàng − Chi phí QLDN.</li>
+          <li><strong>Lợi nhuận sau thuế</strong> = EBIT + Thu nhập khác − Thuế TNDN. Đây là con số cuối cùng phản ánh lợi nhuận thực.</li>
+        </ul>
+      </div>
+
+      <div v-if="summary.net_profit !== undefined && summary.net_profit < 0"
+        class="bg-red-50 border border-red-300 rounded-lg px-5 py-3 flex items-start gap-3">
+        <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        </svg>
+        <div>
+          <p class="font-semibold text-red-800 text-sm">Cảnh báo: Kinh doanh lỗ trong kỳ này</p>
+          <p class="text-red-700 text-xs mt-0.5">
+            Lợi nhuận sau thuế: {{ fmt(summary.net_profit) }}.
+            Kiểm tra chi phí bán hàng (TK 641), chi phí QLDN (TK 642), và giá vốn (TK 632).
+          </p>
+        </div>
+      </div>
+
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <!-- P&L Statement -->
         <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">

@@ -2,109 +2,83 @@
 
 namespace App\Services;
 
-use App\Enums\PayrollStatus;
-use App\Enums\PayrollItemStatus;
 use App\Enums\CashVoucherType;
+use App\Enums\PayrollItemStatus;
+use App\Enums\PayrollStatus;
+use App\Models\CashVoucher;
 use App\Models\Payroll;
 use App\Models\PayrollItem;
-use App\Models\CashVoucher;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class PayrollService
 {
-    public function __construct(private CashVoucherService $cashVoucherService) {}
+    public function __construct(
+        private CashVoucherService  $cashVoucherService,
+        private PitCalculatorService $pit,
+        private AccountingService   $accounting,
+    ) {}
 
-    /**
-     * Create a new payroll for the period and populate active users
-     */
     public function createPayroll(string $period, ?string $notes = null): Payroll
     {
         return DB::transaction(function () use ($period, $notes) {
-            $exists = Payroll::where('period', $period)->exists();
-            if ($exists) {
-                throw new RuntimeException("Bảng lương cho tháng {$period} đã tồn tại.");
+            if (Payroll::where('period', $period)->exists()) {
+                throw new RuntimeException("Bảng lương tháng {$period} đã tồn tại.");
             }
 
             $payroll = Payroll::create([
-                'code'              => Payroll::generateCode($period),
-                'period'            => $period,
-                'status'            => PayrollStatus::Draft,
-                'total_base_salary' => 0,
-                'total_allowance'   => 0,
-                'total_bonus'       => 0,
-                'total_deductions'  => 0,
-                'total_net_salary'  => 0,
-                'created_by'        => auth()->id() ?? throw new RuntimeException('Không xác định được người dùng hiện tại.'),
-                'notes'             => $notes,
+                'code'                     => Payroll::generateCode($period),
+                'period'                   => $period,
+                'status'                   => PayrollStatus::Draft,
+                'total_base_salary'        => 0,
+                'total_allowance'          => 0,
+                'total_bonus'              => 0,
+                'total_gross'              => 0,
+                'total_insurance_employee' => 0,
+                'total_insurance_employer' => 0,
+                'total_pit'                => 0,
+                'total_deductions'         => 0,
+                'total_net_salary'         => 0,
+                'created_by'               => auth()->id() ?? throw new RuntimeException('Chưa đăng nhập.'),
+                'notes'                    => $notes,
             ]);
 
-            $activeUsers = User::where('is_active', true)->get();
-
-            $totalBase = 0;
-            $totalAllowance = 0;
-            $totalNet = 0;
-
-            foreach ($activeUsers as $user) {
-                $base = $user->base_salary ?? 0;
-                $allowance = $user->allowance ?? 0;
-                $net = $base + $allowance;
-
-                PayrollItem::create([
-                    'payroll_id'  => $payroll->id,
-                    'user_id'     => $user->id,
-                    'base_salary' => $base,
-                    'allowance'   => $allowance,
-                    'bonus'       => 0,
-                    'deductions'  => 0,
-                    'net_salary'  => $net,
-                    'status'      => PayrollItemStatus::Pending,
-                ]);
-
-                $totalBase += $base;
-                $totalAllowance += $allowance;
-                $totalNet += $net;
+            foreach (User::where('is_active', true)->get() as $user) {
+                $this->buildItem($payroll, $user, 0);
             }
 
-            $payroll->update([
-                'total_base_salary' => $totalBase,
-                'total_allowance'   => $totalAllowance,
-                'total_net_salary'  => $totalNet,
-            ]);
+            $this->recalculateTotals($payroll);
 
             return $payroll;
         });
     }
 
-    /**
-     * Confirm a payroll (freeze details)
-     */
     public function confirmPayroll(Payroll $payroll): void
     {
         if ($payroll->status !== PayrollStatus::Draft) {
-            throw new RuntimeException("Chỉ có thể xác nhận bảng lương ở trạng thái nháp.");
+            throw new RuntimeException('Chỉ xác nhận bảng lương ở trạng thái nháp.');
         }
 
-        $payroll->update(['status' => PayrollStatus::Confirmed]);
+        DB::transaction(function () use ($payroll) {
+            $payroll->update(['status' => PayrollStatus::Confirmed]);
+            $this->postPayrollJournalEntry($payroll);
+        });
     }
 
-    /**
-     * Pay salary to an individual employee and automatically create a cash voucher (payment)
-     */
     public function payEmployeeSalary(PayrollItem $item, int $fundId): void
     {
         if ($item->status === PayrollItemStatus::Paid) {
-            throw new RuntimeException("Dòng lương này đã được thanh toán.");
+            throw new RuntimeException('Dòng lương này đã thanh toán.');
         }
 
         $payroll = $item->payroll;
         if ($payroll->status !== PayrollStatus::Confirmed) {
-            throw new RuntimeException("Chỉ có thể thanh toán khi bảng lương đã được xác nhận.");
+            throw new RuntimeException('Chỉ thanh toán khi bảng lương đã xác nhận.');
         }
 
         DB::transaction(function () use ($item, $payroll, $fundId) {
-            // Create CashVoucher as Payment in Draft
             $voucher = CashVoucher::create([
                 'code'         => CashVoucher::generateCode(CashVoucherType::Payment),
                 'type'         => 'payment',
@@ -113,21 +87,18 @@ class PayrollService
                 'amount'       => $item->net_salary,
                 'voucher_date' => now(),
                 'counterparty' => $item->user->name,
-                'description'  => "Chi trả lương nhân viên {$item->user->name} tháng {$payroll->period}",
-                'created_by'   => auth()->id() ?? throw new RuntimeException('Không xác định được người dùng hiện tại.'),
+                'description'  => "Chi lương {$item->user->name} tháng {$payroll->period}",
+                'created_by'   => auth()->id() ?? throw new RuntimeException('Chưa đăng nhập.'),
             ]);
 
-            // Confirm via CashVoucherService to deduct fund
             $this->cashVoucherService->confirm($voucher);
 
-            // Update PayrollItem status and link CashVoucher
             $item->update([
                 'status'          => PayrollItemStatus::Paid,
                 'paid_at'         => now(),
                 'cash_voucher_id' => $voucher->id,
             ]);
 
-            // Check if all items in payroll are paid, then mark payroll as paid
             $allPaid = $payroll->items()->where('status', '!=', PayrollItemStatus::Paid->value)->count() === 0;
             if ($allPaid) {
                 $payroll->update(['status' => PayrollStatus::Paid]);
@@ -135,21 +106,112 @@ class PayrollService
         });
     }
 
-    /**
-     * Recalculate totals for a draft payroll
-     */
     public function recalculateTotals(Payroll $payroll): void
     {
-        $totals = $payroll->items()
-            ->selectRaw('SUM(base_salary) as base, SUM(allowance) as allowance, SUM(bonus) as bonus, SUM(deductions) as deductions, SUM(net_salary) as net')
-            ->first();
+        $t = $payroll->items()->selectRaw(
+            'SUM(base_salary) as base, SUM(allowance) as allowance, SUM(bonus) as bonus,
+             SUM(gross_salary) as gross,
+             SUM(bhxh_employee+bhyt_employee+bhtn_employee) as ins_emp,
+             SUM(bhxh_employer+bhyt_employer+bhtn_employer) as ins_empl,
+             SUM(pit) as pit,
+             SUM(deductions) as deductions,
+             SUM(net_salary) as net'
+        )->first();
 
         $payroll->update([
-            'total_base_salary' => $totals->base ?? 0,
-            'total_allowance'   => $totals->allowance ?? 0,
-            'total_bonus'       => $totals->bonus ?? 0,
-            'total_deductions'  => $totals->deductions ?? 0,
-            'total_net_salary'  => $totals->net ?? 0,
+            'total_base_salary'        => $t->base     ?? 0,
+            'total_allowance'          => $t->allowance ?? 0,
+            'total_bonus'              => $t->bonus     ?? 0,
+            'total_gross'              => $t->gross     ?? 0,
+            'total_insurance_employee' => $t->ins_emp   ?? 0,
+            'total_insurance_employer' => $t->ins_empl  ?? 0,
+            'total_pit'                => $t->pit       ?? 0,
+            'total_deductions'         => $t->deductions ?? 0,
+            'total_net_salary'         => $t->net       ?? 0,
         ]);
+    }
+
+    /** Rebuild a single PayrollItem with given bonus */
+    public function buildItem(Payroll $payroll, User $user, float $bonus = 0): PayrollItem
+    {
+        $base       = (float)($user->base_salary ?? 0);
+        $allowance  = (float)($user->allowance   ?? 0);
+        $gross      = $base + $allowance + $bonus;
+        $dependents = (int)($user->dependents_count ?? 0);
+
+        $bd = $this->pit->breakdown($gross, $dependents);
+
+        $deductions = $bd['ins_employee'] + $bd['pit'];
+
+        return $payroll->items()->create([
+            'user_id'          => $user->id,
+            'base_salary'      => $base,
+            'allowance'        => $allowance,
+            'bonus'            => $bonus,
+            'gross_salary'     => $bd['gross_salary'],
+            'insurance_base'   => $bd['insurance_base'],
+            'bhxh_employee'    => $bd['bhxh_employee'],
+            'bhyt_employee'    => $bd['bhyt_employee'],
+            'bhtn_employee'    => $bd['bhtn_employee'],
+            'bhxh_employer'    => $bd['bhxh_employer'],
+            'bhyt_employer'    => $bd['bhyt_employer'],
+            'bhtn_employer'    => $bd['bhtn_employer'],
+            'pit'              => $bd['pit'],
+            'dependents_count' => $dependents,
+            'deductions'       => $deductions,
+            'net_salary'       => $bd['net_salary'],
+            'status'           => PayrollItemStatus::Pending,
+        ]);
+    }
+
+    /** Post journal entry when payroll is confirmed */
+    private function postPayrollJournalEntry(Payroll $payroll): void
+    {
+        $gross      = (float)$payroll->total_gross;
+        $insEmp     = (float)$payroll->total_insurance_employee;
+        $insEmpl    = (float)$payroll->total_insurance_employer;
+        $pit        = (float)$payroll->total_pit;
+        $net        = (float)$payroll->total_net_salary;
+
+        // BHXH breakdown from items
+        $sums = $payroll->items()->selectRaw(
+            'SUM(bhxh_employee+bhxh_employer) as bhxh,
+             SUM(bhyt_employee+bhyt_employer) as bhyt,
+             SUM(bhtn_employee+bhtn_employer) as bhtn'
+        )->first();
+
+        $bhxh = round((float)$sums->bhxh);
+        $bhyt = round((float)$sums->bhyt);
+        $bhtn = round((float)$sums->bhtn);
+
+        $lines = [
+            // Dr: chi phí lương (gross + employer insurance)
+            ['account_code' => '6421', 'debit' => round($gross + $insEmpl), 'credit' => 0, 'description' => "Chi phí lương tháng {$payroll->period}", 'sort_order' => 1],
+            // Cr: phải trả người lao động (net)
+            ['account_code' => '334',  'debit' => 0, 'credit' => round($net),  'description' => "Lương net nhân viên", 'sort_order' => 2],
+            // Cr: thuế TNCN
+            ['account_code' => '3335', 'debit' => 0, 'credit' => round($pit),  'description' => "Thuế TNCN tháng {$payroll->period}", 'sort_order' => 3],
+        ];
+
+        if ($bhxh > 0) {
+            $lines[] = ['account_code' => '3338', 'debit' => 0, 'credit' => $bhxh, 'description' => "BHXH phải nộp", 'sort_order' => 4];
+        }
+        if ($bhyt > 0) {
+            $lines[] = ['account_code' => '3389', 'debit' => 0, 'credit' => $bhyt, 'description' => "BHYT phải nộp", 'sort_order' => 5];
+        }
+        if ($bhtn > 0) {
+            $lines[] = ['account_code' => '3384', 'debit' => 0, 'credit' => $bhtn, 'description' => "BHTN phải nộp", 'sort_order' => 6];
+        }
+
+        try {
+            $this->accounting->post([
+                'description'  => "Bảng lương tháng {$payroll->period} ({$payroll->code})",
+                'reference_type' => Payroll::class,
+                'reference_id'   => $payroll->id,
+                'lines'          => $lines,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning("PayrollService: journal entry failed for payroll #{$payroll->id}: " . $e->getMessage());
+        }
     }
 }

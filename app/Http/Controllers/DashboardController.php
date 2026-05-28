@@ -4,11 +4,14 @@ namespace App\Http\Controllers;
 
 use App\Enums\OrderStatus;
 use App\Enums\TicketStatus;
+use App\Models\BankTransaction;
 use App\Models\Contract;
 use App\Models\Customer;
+use App\Models\Invoice;
 use App\Models\Order;
 use App\Models\OrderOverDelivery;
 use App\Models\Payment;
+use App\Models\Payroll;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\StockMovement;
@@ -28,8 +31,9 @@ class DashboardController extends Controller
             'topCustomers'       => Cache::remember('dashboard.top_customers', 600, fn () => $this->topCustomers()),
             'stockOverview'      => Cache::remember('dashboard.stock_overview', 120, fn () => $this->stockOverview()),
             'ticketStats'        => Cache::remember('dashboard.ticket_stats', 300, fn () => $this->ticketStats()),
-            'unfulfilledOrders'    => Cache::remember('dashboard.unfulfilled_orders', 120, fn () => $this->unfulfilledOrders()),
-            'overDeliveryAlerts'   => $this->overDeliveryAlerts(),
+            'unfulfilledOrders'  => Cache::remember('dashboard.unfulfilled_orders', 120, fn () => $this->unfulfilledOrders()),
+            'overDeliveryAlerts' => $this->overDeliveryAlerts(),
+            'accountingAlerts'   => Cache::remember('dashboard.accounting_alerts', 300, fn () => $this->accountingAlerts()),
         ]);
     }
 
@@ -216,5 +220,39 @@ class DashboardController extends Controller
             'color'  => $s->color(),
             'count'  => (int) ($counts[$s->value] ?? 0),
         ])->all();
+    }
+
+    private function accountingAlerts(): array
+    {
+        $today = now()->toDateString();
+
+        // HĐ đã gửi + quá due_date nhưng chưa được đánh dấu Overdue
+        $pendingOverdue = Invoice::where('status', 'sent')
+            ->whereNotNull('due_date')
+            ->where('due_date', '<', $today)
+            ->count();
+
+        // HĐ đang ở trạng thái Quá hạn
+        $overdueInvoices = Invoice::where('status', 'overdue')->count();
+
+        // Giao dịch ngân hàng chưa đối chiếu
+        $unreconciledBank = BankTransaction::where('status', 'pending')->count();
+
+        // Bảng lương chưa xác nhận (draft/pending)
+        $pendingPayrolls = Payroll::whereNotIn('status', ['confirmed', 'paid'])->count();
+
+        // Tổng giá trị HĐ quá hạn
+        $overdueAmount = Invoice::where('status', 'overdue')
+            ->get()
+            ->sum(fn ($inv) => max(0, (float) $inv->total - $inv->amountPaid()));
+
+        return [
+            'pending_overdue_invoices'  => $pendingOverdue,
+            'overdue_invoices'          => $overdueInvoices,
+            'overdue_amount'            => $overdueAmount,
+            'unreconciled_bank'         => $unreconciledBank,
+            'pending_payrolls'          => $pendingPayrolls,
+            'has_alerts'                => ($pendingOverdue + $overdueInvoices + $unreconciledBank + $pendingPayrolls) > 0,
+        ];
     }
 }

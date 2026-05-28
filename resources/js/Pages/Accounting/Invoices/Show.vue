@@ -97,6 +97,86 @@
             </div>
           </div>
 
+          <!-- E-Invoice section -->
+          <div class="bg-white rounded-xl border border-gray-200 p-5">
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="text-base font-semibold text-gray-900">Hóa đơn điện tử (HĐDT)</h2>
+              <div class="flex gap-2">
+                <a v-if="invoice.e_inv_status === 'issued'"
+                  :href="route('accounting.invoices.e-invoice-pdf', invoice.id)"
+                  target="_blank"
+                  class="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg font-medium">
+                  Tải PDF
+                </a>
+              </div>
+            </div>
+
+            <!-- Already issued -->
+            <template v-if="invoice.e_inv_status === 'issued' || invoice.e_inv_status === 'cancelled'">
+              <dl class="grid grid-cols-3 gap-3 text-sm mb-4">
+                <div>
+                  <dt class="text-xs text-gray-500">Mẫu số</dt>
+                  <dd class="font-mono font-medium mt-0.5">{{ invoice.e_inv_template }}</dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-gray-500">Ký hiệu</dt>
+                  <dd class="font-mono font-medium mt-0.5">{{ invoice.e_inv_series }}</dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-gray-500">Số</dt>
+                  <dd class="font-bold text-primary-600 text-lg mt-0.5">{{ String(invoice.e_inv_number).padStart(7,'0') }}</dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-gray-500">Ngày phát hành</dt>
+                  <dd class="font-medium mt-0.5">{{ invoice.e_inv_issued_at }}</dd>
+                </div>
+                <div>
+                  <dt class="text-xs text-gray-500">Trạng thái</dt>
+                  <dd class="mt-0.5">
+                    <span :class="invoice.e_inv_status === 'issued' ? 'badge-green' : 'badge-red'">
+                      {{ invoice.e_inv_status === 'issued' ? 'Đã phát hành' : 'Đã hủy' }}
+                    </span>
+                  </dd>
+                </div>
+              </dl>
+              <div v-if="invoice.e_inv_cancel_reason" class="bg-red-50 p-3 rounded text-xs text-red-700">
+                <strong>Lý do hủy:</strong> {{ invoice.e_inv_cancel_reason }}
+              </div>
+              <!-- Cancel button -->
+              <div v-if="invoice.e_inv_status === 'issued' && can('accounting.manage')" class="mt-3 border-t pt-3">
+                <form @submit.prevent="cancelEInvoice" class="flex gap-3 items-end">
+                  <div class="flex-1">
+                    <label class="form-label text-xs">Lý do hủy <span class="text-red-500">*</span></label>
+                    <input v-model="cancelReason" class="form-input text-sm" placeholder="Nhập lý do hủy..." required />
+                  </div>
+                  <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                    Hủy HĐDT
+                  </button>
+                </form>
+              </div>
+            </template>
+
+            <!-- Issue form -->
+            <template v-else>
+              <p class="text-sm text-gray-500 mb-4">Chưa phát hành hóa đơn điện tử cho hóa đơn này.</p>
+              <form v-if="can('accounting.manage')" @submit.prevent="issueEInvoice" class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="form-label text-xs">Mẫu số <span class="text-red-500">*</span></label>
+                  <input v-model="eInvForm.e_inv_template" class="form-input text-sm font-mono" placeholder="01GTKT0/001" required />
+                </div>
+                <div>
+                  <label class="form-label text-xs">Ký hiệu <span class="text-red-500">*</span></label>
+                  <input v-model="eInvForm.e_inv_series" class="form-input text-sm font-mono" placeholder="AA/24E" required />
+                </div>
+                <div class="col-span-2">
+                  <button type="submit" :disabled="eInvForm.processing" class="btn-primary text-sm">
+                    {{ eInvForm.processing ? 'Đang phát hành...' : 'Phát hành HĐDT' }}
+                  </button>
+                </div>
+              </form>
+            </template>
+          </div>
+
           <!-- Payments list -->
           <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
@@ -261,4 +341,16 @@ function deletePayment(paymentId) {
   }
 }
 
+// E-invoice
+const eInvForm    = useForm({ e_inv_template: '01GTKT0/001', e_inv_series: '' });
+const cancelReason = ref('');
+
+function issueEInvoice() {
+  eInvForm.post(route('accounting.invoices.issue-einvoice', props.invoice.id));
+}
+
+function cancelEInvoice() {
+  if (!cancelReason.value) return;
+  router.post(route('accounting.invoices.cancel-einvoice', props.invoice.id), { e_inv_cancel_reason: cancelReason.value });
+}
 </script>

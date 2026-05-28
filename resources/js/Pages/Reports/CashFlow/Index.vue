@@ -44,6 +44,17 @@
           class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium">Lọc</button>
       </div>
 
+      <!-- Hướng dẫn -->
+      <div class="bg-blue-50 border border-blue-200 rounded-lg px-5 py-3 text-sm text-blue-800 space-y-1">
+        <p class="font-semibold">📋 Hướng dẫn đọc Báo cáo lưu chuyển tiền tệ:</p>
+        <ul class="list-disc list-inside space-y-0.5 text-blue-700">
+          <li><strong>Thu (In):</strong> Tiền nhận từ thanh toán hóa đơn bán hàng + phiếu thu.</li>
+          <li><strong>Chi (Out):</strong> Tiền trả cho hóa đơn mua vào + phiếu chi.</li>
+          <li><strong>Dòng tiền ròng = Thu − Chi.</strong> Dương = tích lũy tiền, Âm = tiêu tiền nhiều hơn.</li>
+          <li>Cột <strong>Số dư lũy kế</strong> theo dõi sự thay đổi tiền mặt theo từng giao dịch trong kỳ.</li>
+        </ul>
+      </div>
+
       <!-- Summary cards -->
       <div class="grid grid-cols-3 gap-4">
         <div class="bg-white rounded-xl border border-green-200 bg-green-50 p-4">

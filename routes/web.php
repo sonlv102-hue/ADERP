@@ -34,12 +34,21 @@ use App\Http\Controllers\Projects\ProjectController;
 use App\Http\Controllers\Projects\TaskController;
 use App\Http\Controllers\Support\TicketController;
 use App\Http\Controllers\Support\WarrantyController;
+use App\Http\Controllers\Accounting\AccountCodeController;
+use App\Http\Controllers\Accounting\AccountingPeriodController;
 use App\Http\Controllers\Accounting\CashVoucherController;
 use App\Http\Controllers\Accounting\FundController;
 use App\Http\Controllers\Accounting\InvoiceController;
+use App\Http\Controllers\Accounting\JournalEntryController;
 use App\Http\Controllers\Accounting\PaymentController;
+use App\Http\Controllers\Accounting\PrepaidExpenseController;
+use App\Http\Controllers\Accounting\PaymentTermController;
+use App\Http\Controllers\Accounting\BankAccountController;
+use App\Http\Controllers\Accounting\BankTransactionController;
 use App\Http\Controllers\Accounting\PayrollController;
 use App\Http\Controllers\Accounting\TaxController;
+use App\Http\Controllers\Reports\ArDetailController;
+use App\Http\Controllers\Reports\ApDetailController;
 use App\Http\Controllers\Reports\FundLedgerController;
 use App\Http\Controllers\Purchasing\PurchaseOrderController;
 use App\Http\Controllers\Purchasing\PurchaseInvoiceController;
@@ -218,10 +227,13 @@ Route::middleware('auth')->group(function () {
     // Accounting - kế toán
     Route::prefix('accounting')->name('accounting.')->middleware('can:accounting.view')->group(function () {
         Route::resource('invoices', InvoiceController::class);
-        Route::post('invoices/{invoice}/mark-sent',    [InvoiceController::class, 'markSent'])->name('invoices.mark-sent');
-        Route::post('invoices/{invoice}/mark-paid',    [InvoiceController::class, 'markPaid'])->name('invoices.mark-paid');
-        Route::post('invoices/{invoice}/mark-overdue', [InvoiceController::class, 'markOverdue'])->name('invoices.mark-overdue');
-        Route::get('invoices/{invoice}/pdf',           [InvoiceController::class, 'pdf'])->name('invoices.pdf');
+        Route::post('invoices/{invoice}/mark-sent',       [InvoiceController::class, 'markSent'])->name('invoices.mark-sent');
+        Route::post('invoices/{invoice}/mark-paid',       [InvoiceController::class, 'markPaid'])->name('invoices.mark-paid');
+        Route::post('invoices/{invoice}/mark-overdue',    [InvoiceController::class, 'markOverdue'])->name('invoices.mark-overdue');
+        Route::get('invoices/{invoice}/pdf',              [InvoiceController::class, 'pdf'])->name('invoices.pdf');
+        Route::post('invoices/{invoice}/issue-einvoice',  [InvoiceController::class, 'issueEInvoice'])->name('invoices.issue-einvoice')->middleware('can:accounting.manage');
+        Route::post('invoices/{invoice}/cancel-einvoice', [InvoiceController::class, 'cancelEInvoice'])->name('invoices.cancel-einvoice')->middleware('can:accounting.manage');
+        Route::get('invoices/{invoice}/e-invoice-pdf',    [InvoiceController::class, 'eInvoicePdf'])->name('invoices.e-invoice-pdf');
 
         Route::post('invoices/{invoice}/payments',             [PaymentController::class, 'store'])->name('invoices.payments.store');
         Route::delete('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'destroy'])->name('invoices.payments.destroy');
@@ -241,6 +253,37 @@ Route::middleware('auth')->group(function () {
         // Kê khai thuế (Taxes)
         Route::get('taxes', [TaxController::class, 'index'])->name('taxes.index');
         Route::get('taxes/export-xml', [TaxController::class, 'exportXml'])->name('taxes.export-xml');
+
+        // Hệ thống tài khoản kế toán (Chart of Accounts)
+        Route::get('account-codes', [AccountCodeController::class, 'index'])->name('account-codes.index');
+        Route::post('account-codes', [AccountCodeController::class, 'store'])->name('account-codes.store')->middleware('can:accounting.manage');
+        Route::put('account-codes/{accountCode}', [AccountCodeController::class, 'update'])->name('account-codes.update')->middleware('can:accounting.manage');
+        Route::delete('account-codes/{accountCode}', [AccountCodeController::class, 'destroy'])->name('account-codes.destroy')->middleware('can:accounting.manage');
+
+        // Kỳ kế toán (Accounting Periods)
+        Route::get('accounting-periods', [AccountingPeriodController::class, 'index'])->name('accounting-periods.index');
+        Route::post('accounting-periods', [AccountingPeriodController::class, 'store'])->name('accounting-periods.store')->middleware('can:accounting.manage');
+        Route::post('accounting-periods/{accountingPeriod}/close', [AccountingPeriodController::class, 'close'])->name('accounting-periods.close')->middleware('can:accounting.manage');
+        Route::post('accounting-periods/{accountingPeriod}/lock', [AccountingPeriodController::class, 'lock'])->name('accounting-periods.lock')->middleware('can:accounting.manage');
+        Route::post('accounting-periods/{accountingPeriod}/reopen', [AccountingPeriodController::class, 'reopen'])->name('accounting-periods.reopen')->middleware('can:accounting.manage');
+
+        // Phiếu kế toán / Bút toán (Journal Entries)
+        Route::resource('journal-entries', JournalEntryController::class)->only(['index', 'create', 'store', 'show']);
+        Route::post('journal-entries/{journalEntry}/reverse', [JournalEntryController::class, 'reverse'])->name('journal-entries.reverse')->middleware('can:accounting.manage');
+
+        // Chi phí trả trước (Prepaid Expenses)
+        Route::resource('prepaid-expenses', PrepaidExpenseController::class)->only(['index', 'create', 'store', 'show'])->middleware('can:accounting.view');
+        Route::post('prepaid-expenses/{prepaidExpense}/amortize', [PrepaidExpenseController::class, 'amortize'])->name('prepaid-expenses.amortize')->middleware('can:accounting.manage');
+        Route::post('prepaid-expenses/run-batch', [PrepaidExpenseController::class, 'runBatch'])->name('prepaid-expenses.run-batch')->middleware('can:accounting.manage');
+
+        // Điều khoản thanh toán (Payment Terms)
+        Route::resource('payment-terms', PaymentTermController::class)->only(['index', 'create', 'store', 'edit', 'update'])->middleware('can:accounting.manage');
+
+        // Tài khoản ngân hàng + Đối chiếu (Bank Accounts & Reconciliation)
+        Route::resource('bank-accounts', BankAccountController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update']);
+        Route::resource('bank-accounts.transactions', BankTransactionController::class)->only(['index', 'store']);
+        Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/reconcile',   [BankTransactionController::class, 'reconcile'])->name('bank-accounts.transactions.reconcile')->middleware('can:accounting.manage');
+        Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/unreconcile', [BankTransactionController::class, 'unreconcile'])->name('bank-accounts.transactions.unreconcile')->middleware('can:accounting.manage');
     });
 
     // Support - ticket kỹ thuật và bảo hành
@@ -319,6 +362,8 @@ Route::middleware('auth')->group(function () {
         Route::get('fixed-assets',            [FixedAssetReportController::class,'index'])->name('fixed_assets');
         Route::get('fixed-assets/export',     [FixedAssetReportController::class,'export'])->name('fixed_assets.export');
         Route::get('fund-ledger',             [FundLedgerController::class,      'index'])->name('fund-ledger.index');
+        Route::get('ar-detail',               [ArDetailController::class,        'index'])->name('ar.detail');
+        Route::get('ap-detail',               [ApDetailController::class,        'index'])->name('ap.detail');
     });
 
     // Documents - quản lý hồ sơ chứng từ

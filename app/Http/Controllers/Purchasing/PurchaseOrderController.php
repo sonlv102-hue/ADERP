@@ -29,6 +29,11 @@ class PurchaseOrderController extends Controller
                 ->addSelect([
                     'items_total' => PurchaseOrderItem::selectRaw('COALESCE(SUM(quantity * unit_price), 0)')
                         ->whereColumn('purchase_order_id', 'purchase_orders.id'),
+                    'invoice_status' => \App\Models\PurchaseInvoice::select('status')
+                        ->whereColumn('purchase_order_id', 'purchase_orders.id')
+                        ->where('status', '!=', 'cancelled')
+                        ->orderByDesc('id')
+                        ->limit(1),
                 ])
                 ->orderByDesc('id')
                 ->paginate(20)
@@ -45,6 +50,8 @@ class PurchaseOrderController extends Controller
                     'creator'        => $po->creator->name,
                     'items_count'    => $po->items_count,
                     'total'          => (float) $po->items_total,
+                    'receipt_status' => $this->resolveReceiptStatus($po->status->value),
+                    'invoice_status' => $po->invoice_status,
                 ]),
         ]);
     }
@@ -264,5 +271,15 @@ class PurchaseOrderController extends Controller
 
         return redirect()->route('purchasing.purchase-orders.index')
             ->with('success', "Đã xóa đơn mua hàng {$code}.");
+    }
+
+    private function resolveReceiptStatus(string $status): string
+    {
+        return match($status) {
+            'received'         => 'done',
+            'partial_received' => 'partial',
+            'cancelled'        => 'cancelled',
+            default            => 'none',
+        };
     }
 }

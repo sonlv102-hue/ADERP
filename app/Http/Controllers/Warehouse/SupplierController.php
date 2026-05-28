@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Warehouse;
 use App\Exports\TemplateExport;
 use App\Http\Controllers\Controller;
 use App\Imports\SupplierImport;
+use App\Models\PaymentTerm;
 use App\Models\Supplier;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -32,24 +33,26 @@ class SupplierController extends Controller
     public function create(): Response
     {
         return Inertia::render('Warehouse/Suppliers/Form', [
-            'nextCode' => Supplier::generateCode(),
+            'nextCode'      => Supplier::generateCode(),
+            'payment_terms' => PaymentTerm::where('is_active', true)->orderBy('days')->get(['id', 'name', 'days']),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'code' => ['required', 'string', 'unique:suppliers,code'],
-            'name' => ['required', 'string', 'max:255'],
-            'tax_code' => ['nullable', 'string', 'max:50'],
-            'phone' => ['nullable', 'string', 'max:20'],
-            'email' => ['nullable', 'email'],
-            'address' => ['nullable', 'string'],
-            'bank_name' => ['nullable', 'string', 'max:100'],
-            'bank_account' => ['nullable', 'string', 'max:50'],
-            'bank_account_name' => ['nullable', 'string', 'max:255'],
-            'bank_branch' => ['nullable', 'string', 'max:255'],
-            'notes' => ['nullable', 'string'],
+            'code'             => ['required', 'string', 'unique:suppliers,code'],
+            'name'             => ['required', 'string', 'max:255'],
+            'tax_code'         => ['nullable', 'string', 'max:50'],
+            'phone'            => ['nullable', 'string', 'max:20'],
+            'email'            => ['nullable', 'email'],
+            'address'          => ['nullable', 'string'],
+            'bank_name'        => ['nullable', 'string', 'max:100'],
+            'bank_account'     => ['nullable', 'string', 'max:50'],
+            'bank_account_name'=> ['nullable', 'string', 'max:255'],
+            'bank_branch'      => ['nullable', 'string', 'max:255'],
+            'notes'            => ['nullable', 'string'],
+            'payment_term_id'  => ['nullable', 'exists:payment_terms,id'],
         ]);
 
         Supplier::create($data);
@@ -62,38 +65,41 @@ class SupplierController extends Controller
     {
         return Inertia::render('Warehouse/Suppliers/Form', [
             'supplier' => [
-                'id' => $supplier->id,
-                'code' => $supplier->code,
-                'name' => $supplier->name,
-                'tax_code' => $supplier->tax_code,
-                'phone' => $supplier->phone,
-                'email' => $supplier->email,
-                'address' => $supplier->address,
-                'bank_name' => $supplier->bank_name,
-                'bank_account' => $supplier->bank_account,
-                'bank_account_name' => $supplier->bank_account_name,
-                'bank_branch' => $supplier->bank_branch,
-                'notes' => $supplier->notes,
-                'is_active' => $supplier->is_active,
+                'id'               => $supplier->id,
+                'code'             => $supplier->code,
+                'name'             => $supplier->name,
+                'tax_code'         => $supplier->tax_code,
+                'phone'            => $supplier->phone,
+                'email'            => $supplier->email,
+                'address'          => $supplier->address,
+                'bank_name'        => $supplier->bank_name,
+                'bank_account'     => $supplier->bank_account,
+                'bank_account_name'=> $supplier->bank_account_name,
+                'bank_branch'      => $supplier->bank_branch,
+                'notes'            => $supplier->notes,
+                'is_active'        => $supplier->is_active,
+                'payment_term_id'  => $supplier->payment_term_id,
             ],
+            'payment_terms' => PaymentTerm::where('is_active', true)->orderBy('days')->get(['id', 'name', 'days']),
         ]);
     }
 
     public function update(Request $request, Supplier $supplier): RedirectResponse
     {
         $data = $request->validate([
-            'code' => ['required', 'string', 'unique:suppliers,code,' . $supplier->id],
-            'name' => ['required', 'string', 'max:255'],
-            'tax_code' => ['nullable', 'string', 'max:50'],
-            'phone' => ['nullable', 'string', 'max:20'],
-            'email' => ['nullable', 'email'],
-            'address' => ['nullable', 'string'],
-            'bank_name' => ['nullable', 'string', 'max:100'],
-            'bank_account' => ['nullable', 'string', 'max:50'],
-            'bank_account_name' => ['nullable', 'string', 'max:255'],
-            'bank_branch' => ['nullable', 'string', 'max:255'],
-            'notes' => ['nullable', 'string'],
-            'is_active' => ['boolean'],
+            'code'             => ['required', 'string', 'unique:suppliers,code,' . $supplier->id],
+            'name'             => ['required', 'string', 'max:255'],
+            'tax_code'         => ['nullable', 'string', 'max:50'],
+            'phone'            => ['nullable', 'string', 'max:20'],
+            'email'            => ['nullable', 'email'],
+            'address'          => ['nullable', 'string'],
+            'bank_name'        => ['nullable', 'string', 'max:100'],
+            'bank_account'     => ['nullable', 'string', 'max:50'],
+            'bank_account_name'=> ['nullable', 'string', 'max:255'],
+            'bank_branch'      => ['nullable', 'string', 'max:255'],
+            'notes'            => ['nullable', 'string'],
+            'is_active'        => ['boolean'],
+            'payment_term_id'  => ['nullable', 'exists:payment_terms,id'],
         ]);
 
         $supplier->update($data);

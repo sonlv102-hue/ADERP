@@ -15,11 +15,20 @@ class Customer extends Model
     protected $fillable = [
         'code', 'name', 'company', 'tax_code', 'phone', 'email',
         'address', 'lead_status', 'assigned_to', 'notes',
+        'payment_term_id', 'credit_limit',
     ];
 
     protected function casts(): array
     {
-        return ['lead_status' => LeadStatus::class];
+        return [
+            'lead_status'  => LeadStatus::class,
+            'credit_limit' => 'decimal:0',
+        ];
+    }
+
+    public function paymentTerm(): BelongsTo
+    {
+        return $this->belongsTo(PaymentTerm::class);
     }
 
     public static function generateCode(): string

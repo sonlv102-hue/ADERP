@@ -82,8 +82,12 @@ class InvoiceController extends Controller
 
         $invoice = Invoice::create([...$data, 'created_by' => auth()->id()]);
 
+        // Kiểm tra hạn mức công nợ khách hàng
+        $warning = $this->checkCreditLimit($invoice->customer_id, (float) $invoice->total);
+
         return redirect()->route('accounting.invoices.show', $invoice)
-            ->with('success', "Đã tạo hóa đơn {$invoice->code}");
+            ->with('success', "Đã tạo hóa đơn {$invoice->code}")
+            ->with('warning', $warning);
     }
 
     public function show(Invoice $invoice): Response
@@ -107,9 +111,15 @@ class InvoiceController extends Controller
                 'status'       => $invoice->status->value,
                 'status_label' => $invoice->status->label(),
                 'status_color' => $invoice->status->color(),
-                'notes'        => $invoice->notes,
-                'creator'      => $invoice->creator->name,
-                'created_at'   => $invoice->created_at->format('d/m/Y H:i'),
+                'notes'              => $invoice->notes,
+                'creator'            => $invoice->creator->name,
+                'created_at'         => $invoice->created_at->format('d/m/Y H:i'),
+                'e_inv_template'     => $invoice->e_inv_template,
+                'e_inv_series'       => $invoice->e_inv_series,
+                'e_inv_number'       => $invoice->e_inv_number,
+                'e_inv_status'       => $invoice->e_inv_status,
+                'e_inv_issued_at'    => $invoice->e_inv_issued_at?->format('d/m/Y H:i'),
+                'e_inv_cancel_reason'=> $invoice->e_inv_cancel_reason,
                 'payments'     => $invoice->payments->map(fn ($p) => [
                     'id'           => $p->id,
                     'amount'       => (float) $p->amount,
@@ -229,6 +239,55 @@ class InvoiceController extends Controller
         return $pdf->download("HoaDon-{$invoice->code}.pdf");
     }
 
+    public function issueEInvoice(Request $request, Invoice $invoice): RedirectResponse
+    {
+        if ($invoice->e_inv_status === 'issued') {
+            return back()->with('error', 'Hóa đơn đã được phát hành điện tử.');
+        }
+
+        $data = $request->validate([
+            'e_inv_template' => 'required|string|max:30',
+            'e_inv_series'   => 'required|string|max:30',
+        ]);
+
+        $invoice->e_inv_template = $data['e_inv_template'];
+        $invoice->e_inv_series   = $data['e_inv_series'];
+        $invoice->e_inv_number   = $invoice->nextEInvoiceNumber();
+        $invoice->e_inv_status   = 'issued';
+        $invoice->e_inv_issued_at = now();
+        $invoice->save();
+
+        return back()->with('success', "Đã phát hành HĐDT số {$invoice->e_inv_number}.");
+    }
+
+    public function cancelEInvoice(Request $request, Invoice $invoice): RedirectResponse
+    {
+        if ($invoice->e_inv_status !== 'issued') {
+            return back()->with('error', 'Chỉ hủy HĐDT đã phát hành.');
+        }
+
+        $data = $request->validate([
+            'e_inv_cancel_reason' => 'required|string|max:500',
+        ]);
+
+        $invoice->update([
+            'e_inv_status'        => 'cancelled',
+            'e_inv_cancel_reason' => $data['e_inv_cancel_reason'],
+        ]);
+
+        return back()->with('success', 'Đã hủy hóa đơn điện tử.');
+    }
+
+    public function eInvoicePdf(Invoice $invoice)
+    {
+        $invoice->load(['customer', 'order', 'creator']);
+        $company = \App\Models\Setting::getGroup('company');
+        $pdf = Pdf::loadView('pdf.e-invoice', compact('invoice', 'company'))
+            ->setPaper('a4', 'portrait');
+
+        return $pdf->download("HDDT-{$invoice->e_inv_series}-{$invoice->e_inv_number}.pdf");
+    }
+
     private function allowedActions(Invoice $invoice): array
     {
         return match($invoice->status) {
@@ -237,5 +296,32 @@ class InvoiceController extends Controller
             InvoiceStatus::Overdue => ['add_payment'],
             InvoiceStatus::Paid    => [],
         };
+    }
+
+    /**
+     * Trả về cảnh báo (string) nếu tổng công nợ vượt hạn mức, null nếu OK.
+     */
+    private function checkCreditLimit(int $customerId, float $newInvoiceTotal): ?string
+    {
+        $customer = Customer::find($customerId);
+        if (!$customer || !$customer->credit_limit || $customer->credit_limit <= 0) {
+            return null;
+        }
+
+        // Tổng công nợ chưa thanh toán (Sent + Overdue)
+        $outstanding = Invoice::where('customer_id', $customerId)
+            ->whereIn('status', ['sent', 'overdue'])
+            ->get()
+            ->sum(fn ($inv) => max(0, (float) $inv->total - $inv->amountPaid()));
+
+        $total = $outstanding + $newInvoiceTotal;
+        $limit = (float) $customer->credit_limit;
+
+        if ($total > $limit) {
+            $fmt = fn ($v) => number_format($v, 0, ',', '.') . ' ₫';
+            return "Cảnh báo hạn mức: Tổng công nợ {$customer->name} sau hóa đơn này là {$fmt($total)}, vượt hạn mức {$fmt($limit)}.";
+        }
+
+        return null;
     }
 }

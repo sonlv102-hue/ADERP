@@ -17,156 +17,81 @@ class BalanceSheetController extends Controller
     {
         $asOf = $request->input('as_of', now()->toDateString());
 
-        // ── ASSETS ──────────────────────────────────────────────────────────
+        // Lấy toàn bộ số dư tài khoản tính đến $asOf
+        $bal = $this->accountBalancesAsOf($asOf);
+        $b   = fn(string $code) => $bal[$code] ?? 0.0;
 
-        // TK 111 – Tiền mặt tại quỹ
-        $cashFundIds = DB::table('funds')->where('type', 'cash')->pluck('id');
-        $cashOpeningBalance = (float) DB::table('funds')->where('type', 'cash')->sum('opening_balance');
-        $cashReceipts = (float) DB::table('cash_vouchers')
-            ->whereIn('fund_id', $cashFundIds)->where('type', 'receipt')->where('status', 'confirmed')
-            ->where('voucher_date', '<=', $asOf)->sum('amount');
-        $cashPaymentsVoucher = (float) DB::table('cash_vouchers')
-            ->whereIn('fund_id', $cashFundIds)->where('type', 'payment')->where('status', 'confirmed')
-            ->where('voucher_date', '<=', $asOf)->sum('amount');
-        $cashArReceived = (float) DB::table('payments')->whereIn('fund_id', $cashFundIds)
-            ->where('payment_date', '<=', $asOf)->sum('amount');
-        $cashApPaid = (float) DB::table('purchase_invoice_payments')->whereIn('fund_id', $cashFundIds)
-            ->where('payment_date', '<=', $asOf)->sum('amount');
-        $cashOnHand = $cashOpeningBalance + $cashReceipts - $cashPaymentsVoucher + $cashArReceived - $cashApPaid;
+        // ─── TÀI SẢN ──────────────────────────────────────────────────────────
+        $cashOnHand  = $b('111');
+        $bankBalance = $b('112');
+        $ar          = $b('131');          // Phải thu KH
+        $prepaidST   = $b('142');          // Chi phí trả trước ngắn hạn
+        $inventory   = $b('156') + $b('155') + $b('152') + $b('153');
+        $faGross     = $b('211') + $b('213');
+        $faAccDep    = $b('214');          // credit-normal → dương = hao mòn tích lũy
+        $faNet       = max(0.0, $faGross - $faAccDep);
+        $prepaidLT   = $b('242');          // Chi phí trả trước dài hạn
 
-        // TK 112 – Tiền gửi ngân hàng
-        $bankFundIds = DB::table('funds')->where('type', 'bank')->pluck('id');
-        $bankOpeningBalance = (float) DB::table('funds')->where('type', 'bank')->sum('opening_balance');
-        $bankReceipts = (float) DB::table('cash_vouchers')
-            ->whereIn('fund_id', $bankFundIds)->where('type', 'receipt')->where('status', 'confirmed')
-            ->where('voucher_date', '<=', $asOf)->sum('amount');
-        $bankPaymentsVoucher = (float) DB::table('cash_vouchers')
-            ->whereIn('fund_id', $bankFundIds)->where('type', 'payment')->where('status', 'confirmed')
-            ->where('voucher_date', '<=', $asOf)->sum('amount');
-        $bankArReceived = (float) DB::table('payments')->whereIn('fund_id', $bankFundIds)
-            ->where('payment_date', '<=', $asOf)->sum('amount');
-        $bankApPaid = (float) DB::table('purchase_invoice_payments')->whereIn('fund_id', $bankFundIds)
-            ->where('payment_date', '<=', $asOf)->sum('amount');
-        // Fallback: payments not assigned to any fund go to bank (backward compat)
-        $cashIn  = (float) DB::table('payments')->whereNull('fund_id')->where('payment_date', '<=', $asOf)->sum('amount');
-        $cashOut = (float) DB::table('purchase_invoice_payments')->whereNull('fund_id')->where('payment_date', '<=', $asOf)->sum('amount');
-        $bankBalance = $bankOpeningBalance + $bankReceipts - $bankPaymentsVoucher + $bankArReceived - $bankApPaid + $cashIn - $cashOut;
-
-        $cash = $cashOnHand + $bankBalance;
-
-        // TK 131 – Phải thu KH
-        $totalInvoiced  = (float) DB::table('invoices')
-            ->whereNotIn('status', ['cancelled'])
-            ->where('issue_date', '<=', $asOf)
-            ->sum('total');
-        $ar = max(0, $totalInvoiced - $cashIn);
-
-        // TK 156 – Hàng tồn kho
-        $stockIn  = (float) DB::table('stock_movements')
-            ->join('products', 'products.id', '=', 'stock_movements.product_id')
-            ->where('stock_movements.type', 'in')
-            ->where('stock_movements.created_at', '<=', $asOf . ' 23:59:59')
-            ->sum(DB::raw('stock_movements.quantity * COALESCE(products.cost_price, 0)'));
-        $stockOut = (float) DB::table('stock_movements')
-            ->join('products', 'products.id', '=', 'stock_movements.product_id')
-            ->where('stock_movements.type', 'out')
-            ->where('stock_movements.created_at', '<=', $asOf . ' 23:59:59')
-            ->sum(DB::raw('stock_movements.quantity * COALESCE(products.cost_price, 0)'));
-        $inventory = max(0, $stockIn - $stockOut);
-
-        // TK 211/214 – TSCĐ
-        $faGross = (float) DB::table('fixed_assets')
-            ->whereNull('deleted_at')
-            ->where('acquisition_date', '<=', $asOf)
-            ->sum('acquisition_cost');
-        $faAccDep = (float) DB::table('fixed_assets')
-            ->whereNull('deleted_at')
-            ->where('acquisition_date', '<=', $asOf)
-            ->sum('accumulated_depreciation');
-        $faNet = max(0, $faGross - $faAccDep);
-
-        $totalCurrentAssets    = $cash + $ar + $inventory;
-        $totalNonCurrentAssets = $faNet;
+        $cash                  = $cashOnHand + $bankBalance;
+        $totalCurrentAssets    = $cash + $ar + $prepaidST + $inventory;
+        $totalNonCurrentAssets = $faNet + $prepaidLT;
         $totalAssets           = $totalCurrentAssets + $totalNonCurrentAssets;
 
-        // ── LIABILITIES ──────────────────────────────────────────────────────
+        // ─── NỢ PHẢI TRẢ ──────────────────────────────────────────────────────
+        $ap         = $b('331');
+        $vatPayable = $b('3331') + $b('3332') + $b('3333');
+        $citPayable = $b('3334');
+        $pitPayable = $b('3335');
+        $bhxhPayable= $b('3383') + $b('3384') + $b('3389');
+        $salaryPayable = $b('334');
+        $totalLiabilities = $ap + $vatPayable + $citPayable + $pitPayable + $bhxhPayable + $salaryPayable;
 
-        // TK 331 – Phải trả NCC
-        $ap = (float) DB::table('purchase_invoices')
-            ->whereNotIn('status', ['cancelled'])
-            ->where('invoice_date', '<=', $asOf)
-            ->sum(DB::raw('GREATEST(0, total - paid_amount)'));
+        // ─── VỐN CHỦ SỞ HỮU ──────────────────────────────────────────────────
+        $charterCapital  = $b('411');
 
-        // TK 3331 – Thuế GTGT phải nộp
-        $vatOut     = (float) DB::table('invoices')
-            ->whereNotIn('status', ['draft', 'cancelled'])
-            ->where('issue_date', '<=', $asOf)
-            ->sum('tax_amount');
-        $vatIn      = (float) DB::table('purchase_invoices')
-            ->whereNotNull('invoice_date')
-            ->where('invoice_date', '<=', $asOf)
-            ->sum('tax_amount');
-        $vatPayable = max(0, $vatOut - $vatIn);
+        // Lợi nhuận chưa phân phối = tổng doanh thu – tổng chi phí (tất cả các kỳ)
+        $revenue  = $this->sumPrefix($bal, '5');
+        $expenses = $this->sumPrefix($bal, '6') + $this->sumPrefix($bal, '8');
+        $retainedEarnings = $revenue - $expenses;
 
-        $totalLiabilities = $ap + $vatPayable;
-
-        // ── EQUITY ───────────────────────────────────────────────────────────
-
-        $revenue = (float) DB::table('invoices')
-            ->whereNotIn('status', ['draft', 'cancelled'])
-            ->where('issue_date', '<=', $asOf)
-            ->sum('subtotal');
-
-        $cogsOrders = (float) DB::table('order_items')
-            ->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->join('products', 'products.id', '=', 'order_items.product_id')
-            ->where('orders.order_date', '<=', $asOf)
-            ->whereNotIn('orders.status', ['draft', 'cancelled'])
-            ->sum(DB::raw('order_items.quantity * COALESCE(products.cost_price, 0)'));
-
-        $cogsMaterials = (float) DB::table('project_materials')
-            ->join('projects', 'projects.id', '=', 'project_materials.project_id')
-            ->where('projects.start_date', '<=', $asOf)
-            ->whereNotIn('projects.status', ['cancelled'])
-            ->sum(DB::raw('project_materials.quantity * project_materials.unit_price'));
-
-        $cogsExpenses = (float) DB::table('project_expenses')
-            ->join('projects', 'projects.id', '=', 'project_expenses.project_id')
-            ->where('projects.start_date', '<=', $asOf)
-            ->whereNotIn('projects.status', ['cancelled'])
-            ->sum('project_expenses.amount');
-
-        $retainedEarnings  = $revenue - $cogsOrders - $cogsMaterials - $cogsExpenses;
-        $totalEquity       = $retainedEarnings;
-        $totalLiabEquity   = $totalLiabilities + $totalEquity;
+        $totalEquity     = $charterCapital + $retainedEarnings;
+        $totalLiabEquity = $totalLiabilities + $totalEquity;
 
         $balanceSheet = [
-            ['label' => 'A. TÀI SẢN NGẮN HẠN',                                           'amount' => $totalCurrentAssets,    'bold' => true,  'indent' => 0, 'side' => 'asset'],
-            ['label' => 'I. Tiền và tương đương tiền',                                       'amount' => $cash,                  'bold' => false, 'indent' => 1, 'side' => 'asset'],
-            ['label' => '   - Tiền mặt (TK 111)',                                            'amount' => $cashOnHand,            'bold' => false, 'indent' => 2, 'side' => 'asset'],
-            ['label' => '   - Tiền gửi ngân hàng (TK 112)',                                  'amount' => $bankBalance,           'bold' => false, 'indent' => 2, 'side' => 'asset'],
-            ['label' => 'II. Phải thu ngắn hạn – Phải thu của KH (TK 131)',               'amount' => $ar,                    'bold' => false, 'indent' => 1, 'side' => 'asset'],
-            ['label' => 'III. Hàng tồn kho (TK 156)',                                      'amount' => $inventory,             'bold' => false, 'indent' => 1, 'side' => 'asset'],
-            ['label' => 'B. TÀI SẢN DÀI HẠN',                                            'amount' => $totalNonCurrentAssets, 'bold' => true,  'indent' => 0, 'side' => 'asset'],
-            ['label' => 'I. TSCĐ hữu hình – Nguyên giá (TK 211)',                         'amount' => $faGross,               'bold' => false, 'indent' => 1, 'side' => 'asset'],
-            ['label' => '   Hao mòn lũy kế (TK 214)',                                     'amount' => -$faAccDep,             'bold' => false, 'indent' => 2, 'side' => 'asset'],
-            ['label' => '   Giá trị còn lại',                                             'amount' => $faNet,                 'bold' => false, 'indent' => 2, 'side' => 'asset'],
-            ['label' => 'TỔNG CỘNG TÀI SẢN (A+B)',                                        'amount' => $totalAssets,           'bold' => true,  'indent' => 0, 'side' => 'total_asset'],
+            ['label' => 'A. TÀI SẢN NGẮN HẠN',                                   'amount' => $totalCurrentAssets,    'bold' => true,  'indent' => 0, 'side' => 'asset'],
+            ['label' => 'I. Tiền và tương đương tiền',                              'amount' => $cash,                  'bold' => false, 'indent' => 1, 'side' => 'asset'],
+            ['label' => '   - Tiền mặt (TK 111)',                                   'amount' => $cashOnHand,            'bold' => false, 'indent' => 2, 'side' => 'asset'],
+            ['label' => '   - Tiền gửi ngân hàng (TK 112)',                         'amount' => $bankBalance,           'bold' => false, 'indent' => 2, 'side' => 'asset'],
+            ['label' => 'II. Phải thu ngắn hạn – KH (TK 131)',                    'amount' => $ar,                    'bold' => false, 'indent' => 1, 'side' => 'asset'],
+            ['label' => 'III. Hàng tồn kho (TK 152/153/155/156)',                 'amount' => $inventory,             'bold' => false, 'indent' => 1, 'side' => 'asset'],
+            ['label' => 'IV. Chi phí trả trước ngắn hạn (TK 142)',               'amount' => $prepaidST,             'bold' => false, 'indent' => 1, 'side' => 'asset'],
+            ['label' => 'B. TÀI SẢN DÀI HẠN',                                    'amount' => $totalNonCurrentAssets, 'bold' => true,  'indent' => 0, 'side' => 'asset'],
+            ['label' => 'I. TSCĐ hữu hình – Nguyên giá (TK 211)',                'amount' => $faGross,               'bold' => false, 'indent' => 1, 'side' => 'asset'],
+            ['label' => '   Hao mòn lũy kế (TK 214)',                            'amount' => -$faAccDep,             'bold' => false, 'indent' => 2, 'side' => 'asset'],
+            ['label' => '   Giá trị còn lại',                                    'amount' => $faNet,                 'bold' => false, 'indent' => 2, 'side' => 'asset'],
+            ['label' => 'II. Chi phí trả trước dài hạn (TK 242)',                'amount' => $prepaidLT,             'bold' => false, 'indent' => 1, 'side' => 'asset'],
+            ['label' => 'TỔNG CỘNG TÀI SẢN (A+B)',                               'amount' => $totalAssets,           'bold' => true,  'indent' => 0, 'side' => 'total_asset'],
 
-            ['label' => 'A. NỢ PHẢI TRẢ',                                                  'amount' => $totalLiabilities,      'bold' => true,  'indent' => 0, 'side' => 'liability'],
-            ['label' => 'I. Phải trả người bán ngắn hạn (TK 331)',                         'amount' => $ap,                    'bold' => false, 'indent' => 1, 'side' => 'liability'],
-            ['label' => 'II. Thuế GTGT phải nộp (TK 3331)',                               'amount' => $vatPayable,            'bold' => false, 'indent' => 1, 'side' => 'liability'],
-            ['label' => 'B. VỐN CHỦ SỞ HỮU',                                              'amount' => $totalEquity,           'bold' => true,  'indent' => 0, 'side' => 'equity'],
-            ['label' => 'Lợi nhuận chưa phân phối',                                        'amount' => $retainedEarnings,      'bold' => false, 'indent' => 1, 'side' => 'equity'],
-            ['label' => 'TỔNG CỘNG NGUỒN VỐN (A+B)',                                      'amount' => $totalLiabEquity,       'bold' => true,  'indent' => 0, 'side' => 'total_equity'],
+            ['label' => 'A. NỢ PHẢI TRẢ',                                         'amount' => $totalLiabilities,      'bold' => true,  'indent' => 0, 'side' => 'liability'],
+            ['label' => 'I. Phải trả người bán (TK 331)',                          'amount' => $ap,                    'bold' => false, 'indent' => 1, 'side' => 'liability'],
+            ['label' => 'II. Thuế và các khoản phải nộp',                         'amount' => $vatPayable + $citPayable + $pitPayable, 'bold' => false, 'indent' => 1, 'side' => 'liability'],
+            ['label' => '   - Thuế GTGT phải nộp (TK 3331)',                      'amount' => $vatPayable,            'bold' => false, 'indent' => 2, 'side' => 'liability'],
+            ['label' => '   - Thuế TNDN (TK 3334)',                               'amount' => $citPayable,            'bold' => false, 'indent' => 2, 'side' => 'liability'],
+            ['label' => '   - Thuế TNCN (TK 3335)',                               'amount' => $pitPayable,            'bold' => false, 'indent' => 2, 'side' => 'liability'],
+            ['label' => 'III. Phải trả NLĐ (TK 334)',                             'amount' => $salaryPayable,         'bold' => false, 'indent' => 1, 'side' => 'liability'],
+            ['label' => 'IV. BHXH/BHYT/BHTN (TK 338)',                            'amount' => $bhxhPayable,           'bold' => false, 'indent' => 1, 'side' => 'liability'],
+            ['label' => 'B. VỐN CHỦ SỞ HỮU',                                      'amount' => $totalEquity,           'bold' => true,  'indent' => 0, 'side' => 'equity'],
+            ['label' => 'Vốn đầu tư của CSH (TK 411)',                             'amount' => $charterCapital,        'bold' => false, 'indent' => 1, 'side' => 'equity'],
+            ['label' => 'Lợi nhuận chưa phân phối (TK 421)',                      'amount' => $retainedEarnings,      'bold' => false, 'indent' => 1, 'side' => 'equity'],
+            ['label' => 'TỔNG CỘNG NGUỒN VỐN (A+B)',                              'amount' => $totalLiabEquity,       'bold' => true,  'indent' => 0, 'side' => 'total_equity'],
         ];
 
         $summary = [
-            'total_assets'           => $totalAssets,
-            'total_liabilities'      => $totalLiabilities,
-            'total_equity'           => $totalEquity,
+            'total_assets'             => $totalAssets,
+            'total_liabilities'        => $totalLiabilities,
+            'total_equity'             => $totalEquity,
             'total_liabilities_equity' => $totalLiabEquity,
-            'balanced'               => abs($totalAssets - $totalLiabEquity) < 1,
+            'balanced'                 => abs($totalAssets - $totalLiabEquity) < 1,
         ];
 
         return Inertia::render('Reports/BalanceSheet/Index', [
@@ -174,6 +99,43 @@ class BalanceSheetController extends Controller
             'summary'      => $summary,
             'filters'      => ['as_of' => $asOf],
         ]);
+    }
+
+    // ─── Helpers ─────────────────────────────────────────────────────────────
+
+    /** Trả về map [account_code => net_balance] cho tất cả TK có phát sinh tính đến $asOf */
+    private function accountBalancesAsOf(string $asOf): array
+    {
+        $rows = DB::table('journal_entry_lines as jel')
+            ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
+            ->join('account_codes as ac', 'ac.code', '=', 'jel.account_code')
+            ->where('je.status', 'posted')
+            ->where('je.entry_date', '<=', $asOf)
+            ->select('jel.account_code', 'ac.normal_balance',
+                DB::raw('SUM(jel.debit) as dr'),
+                DB::raw('SUM(jel.credit) as cr'))
+            ->groupBy('jel.account_code', 'ac.normal_balance')
+            ->get();
+
+        $result = [];
+        foreach ($rows as $r) {
+            $result[$r->account_code] = $r->normal_balance === 'debit'
+                ? (float) $r->dr - (float) $r->cr
+                : (float) $r->cr - (float) $r->dr;
+        }
+        return $result;
+    }
+
+    /** Tổng số dư của tất cả TK bắt đầu bằng $prefix */
+    private function sumPrefix(array $balances, string $prefix): float
+    {
+        $total = 0.0;
+        foreach ($balances as $code => $balance) {
+            if (str_starts_with((string) $code, $prefix)) {
+                $total += $balance;
+            }
+        }
+        return $total;
     }
 
     public function export(Request $request): BinaryFileResponse

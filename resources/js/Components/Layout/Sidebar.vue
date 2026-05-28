@@ -78,11 +78,17 @@
 
         <NavGroup v-if="can('accounting.view')"
           label="Kế toán" icon="currency-dollar" prefix="/accounting">
-          <NavItem :href="route('accounting.invoices.index')"      icon="document-text" sub>Hóa đơn</NavItem>
-          <NavItem :href="route('accounting.funds.index')"         icon="library"       sub>Quản lý quỹ</NavItem>
-          <NavItem :href="route('accounting.cash-vouchers.index')" icon="cash"          sub>Phiếu thu / chi</NavItem>
-          <NavItem :href="route('accounting.payrolls.index')"      icon="clipboard-list" sub>Bảng lương tháng</NavItem>
-          <NavItem :href="route('accounting.taxes.index')"         icon="receipt-tax"   sub>Kê khai thuế VAT</NavItem>
+          <NavItem :href="route('accounting.invoices.index')"            icon="document-text"  sub>Hóa đơn bán</NavItem>
+          <NavItem :href="route('accounting.funds.index')"               icon="library"        sub>Quản lý quỹ</NavItem>
+          <NavItem :href="route('accounting.cash-vouchers.index')"       icon="cash"           sub>Phiếu thu / chi</NavItem>
+          <NavItem :href="route('accounting.payrolls.index')"            icon="clipboard-list" sub>Bảng lương</NavItem>
+          <NavItem :href="route('accounting.taxes.index')"               icon="receipt-tax"    sub>Kê khai thuế</NavItem>
+          <NavItem :href="route('accounting.journal-entries.index')"     icon="pencil-alt"     sub>Phiếu kế toán</NavItem>
+          <NavItem :href="route('accounting.prepaid-expenses.index')"                                     icon="clock"     sub>Chi phí trả trước</NavItem>
+          <NavItem :href="route('accounting.bank-accounts.index')"                                       icon="library"   sub>Tài khoản ngân hàng</NavItem>
+          <NavItem v-if="can('accounting.manage')" :href="route('accounting.payment-terms.index')"       icon="tag"       sub>Điều khoản TT</NavItem>
+          <NavItem v-if="can('accounting.manage')" :href="route('accounting.account-codes.index')"       icon="view-list" sub>Hệ thống tài khoản</NavItem>
+          <NavItem v-if="can('accounting.manage')" :href="route('accounting.accounting-periods.index')"  icon="calendar"  sub>Kỳ kế toán</NavItem>
         </NavGroup>
 
         <NavGroup v-if="can('documents.view')"
@@ -96,7 +102,9 @@
           <NavItem :href="route('reports.profit.orders')"    icon="trending-up"     sub>Lợi nhuận đơn hàng</NavItem>
           <NavItem :href="route('reports.profit.projects')"  icon="trending-up"     sub>Lợi nhuận dự án</NavItem>
           <NavItem :href="route('reports.ar.aging')"         icon="users"           sub>Công nợ phải thu (AR)</NavItem>
+          <NavItem :href="route('reports.ar.detail')"        icon="document-text"   sub>Sổ chi tiết CN phải thu</NavItem>
           <NavItem :href="route('reports.ap.aging')"         icon="truck"           sub>Công nợ phải trả (AP)</NavItem>
+          <NavItem :href="route('reports.ap.detail')"        icon="document-text"   sub>Sổ chi tiết CN phải trả</NavItem>
           <NavItem :href="route('reports.vat')"              icon="receipt-tax"     sub>Báo cáo VAT</NavItem>
           <NavItem :href="route('reports.inventory')"        icon="cube"            sub>Tồn kho</NavItem>
           <NavItem :href="route('reports.fund-ledger.index')"  icon="banknotes"       sub>Sổ quỹ</NavItem>

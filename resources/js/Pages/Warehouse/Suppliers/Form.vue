@@ -80,6 +80,19 @@
           </div>
         </div>
 
+        <!-- Điều khoản thanh toán -->
+        <div class="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-4">Điều khoản</h2>
+          <div class="max-w-xs">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Điều khoản thanh toán</label>
+            <select v-model="form.payment_term_id"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
+              <option :value="null">-- Không có --</option>
+              <option v-for="pt in payment_terms" :key="pt.id" :value="pt.id">{{ pt.name }}</option>
+            </select>
+          </div>
+        </div>
+
         <!-- Thông tin ngân hàng -->
         <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
           <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Tài khoản ngân hàng</h2>
@@ -136,23 +149,25 @@ import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 
 const props = defineProps({
-  supplier: { type: Object, default: null },
-  nextCode: String,
+  supplier:      { type: Object, default: null },
+  nextCode:      String,
+  payment_terms: { type: Array, default: () => [] },
 });
 
 const form = useForm({
-  code: props.supplier?.code ?? props.nextCode ?? '',
-  name: props.supplier?.name ?? '',
-  tax_code: props.supplier?.tax_code ?? '',
-  phone: props.supplier?.phone ?? '',
-  email: props.supplier?.email ?? '',
-  address: props.supplier?.address ?? '',
-  bank_name: props.supplier?.bank_name ?? '',
-  bank_account: props.supplier?.bank_account ?? '',
+  code:              props.supplier?.code              ?? props.nextCode ?? '',
+  name:              props.supplier?.name              ?? '',
+  tax_code:          props.supplier?.tax_code          ?? '',
+  phone:             props.supplier?.phone             ?? '',
+  email:             props.supplier?.email             ?? '',
+  address:           props.supplier?.address           ?? '',
+  bank_name:         props.supplier?.bank_name         ?? '',
+  bank_account:      props.supplier?.bank_account      ?? '',
   bank_account_name: props.supplier?.bank_account_name ?? '',
-  bank_branch: props.supplier?.bank_branch ?? '',
-  notes: props.supplier?.notes ?? '',
-  is_active: props.supplier?.is_active ?? true,
+  bank_branch:       props.supplier?.bank_branch       ?? '',
+  notes:             props.supplier?.notes             ?? '',
+  is_active:         props.supplier?.is_active         ?? true,
+  payment_term_id:   props.supplier?.payment_term_id   ?? null,
 });
 
 const submit = () => {

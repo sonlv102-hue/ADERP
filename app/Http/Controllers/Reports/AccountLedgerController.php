@@ -13,40 +13,70 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class AccountLedgerController extends Controller
 {
-    private const ACCOUNTS = [
-        '131' => 'Phải thu của khách hàng',
-        '331' => 'Phải trả người bán',
-        '156' => 'Hàng hóa',
-    ];
-
     public function index(Request $request): Response
     {
         $account  = $request->input('account', '131');
         $year     = (int) $request->input('year', now()->year);
         $dateFrom = $request->input('date_from') ?: "{$year}-01-01";
         $dateTo   = $request->input('date_to')   ?: "{$year}-12-31";
-        $prevDate = date('Y-m-d', strtotime($dateFrom . ' -1 day'));
 
-        if (!array_key_exists($account, self::ACCOUNTS)) {
-            $account = '131';
+        // Tất cả tài khoản chi tiết cho dropdown
+        $allAccounts = DB::table('account_codes')
+            ->where('is_active', true)
+            ->orderBy('code')
+            ->pluck('name', 'code');
+
+        if (!$allAccounts->has($account)) {
+            $account = $allAccounts->keys()->first() ?? '131';
         }
 
-        [$openingBalance, $rows] = match ($account) {
-            '131'   => $this->buildTK131($dateFrom, $dateTo, $prevDate),
-            '331'   => $this->buildTK331($dateFrom, $dateTo, $prevDate),
-            '156'   => $this->buildTK156($dateFrom, $dateTo, $prevDate),
-            default => $this->buildTK131($dateFrom, $dateTo, $prevDate),
-        };
+        $accountName   = $allAccounts->get($account, $account);
+        $normalBalance = DB::table('account_codes')->where('code', $account)->value('normal_balance') ?? 'debit';
 
-        // Compute running balance
+        // Số dư đầu kỳ
+        $openingData = DB::table('journal_entry_lines as jel')
+            ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
+            ->where('je.status', 'posted')
+            ->where('jel.account_code', $account)
+            ->where('je.entry_date', '<', $dateFrom)
+            ->selectRaw('SUM(jel.debit) as dr, SUM(jel.credit) as cr')
+            ->first();
+
+        $openDr         = (float) ($openingData?->dr ?? 0);
+        $openCr         = (float) ($openingData?->cr ?? 0);
+        $openingBalance = $normalBalance === 'debit' ? $openDr - $openCr : $openCr - $openDr;
+
+        // Các dòng phát sinh trong kỳ
+        $lineRows = DB::table('journal_entry_lines as jel')
+            ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
+            ->where('je.status', 'posted')
+            ->where('jel.account_code', $account)
+            ->whereBetween('je.entry_date', [$dateFrom, $dateTo])
+            ->orderBy('je.entry_date')
+            ->orderBy('je.id')
+            ->orderBy('jel.sort_order')
+            ->select('je.entry_date as date', 'je.code as ref',
+                'je.description as entry_desc', 'jel.description as line_desc',
+                'jel.debit', 'jel.credit')
+            ->get();
+
+        $rows    = [];
         $balance = $openingBalance;
-        foreach ($rows as &$row) {
-            if ($account === '331') {
-                $balance = $balance + $row['credit'] - $row['debit'];
-            } else {
-                $balance = $balance + $row['debit'] - $row['credit'];
-            }
-            $row['balance'] = $balance;
+
+        foreach ($lineRows as $l) {
+            $balance += $normalBalance === 'debit'
+                ? ((float) $l->debit - (float) $l->credit)
+                : ((float) $l->credit - (float) $l->debit);
+
+            $rows[] = [
+                'date'        => $l->date,
+                'ref'         => $l->ref,
+                'description' => $l->line_desc ?? $l->entry_desc,
+                'partner'     => '',
+                'debit'       => (float) $l->debit,
+                'credit'      => (float) $l->credit,
+                'balance'     => $balance,
+            ];
         }
 
         $closingBalance = $balance;
@@ -54,178 +84,17 @@ class AccountLedgerController extends Controller
         $totalCredit    = array_sum(array_column($rows, 'credit'));
 
         return Inertia::render('Reports/AccountLedger/Index', [
-            'rows'           => array_values($rows),
+            'rows'           => $rows,
             'openingBalance' => $openingBalance,
             'closingBalance' => $closingBalance,
             'totalDebit'     => $totalDebit,
             'totalCredit'    => $totalCredit,
             'account'        => $account,
-            'accountName'    => self::ACCOUNTS[$account],
-            'accounts'       => self::ACCOUNTS,
+            'accountName'    => $accountName,
+            'accounts'       => $allAccounts,
             'filters'        => ['year' => $year, 'date_from' => $dateFrom, 'date_to' => $dateTo, 'account' => $account],
             'currentYear'    => $year,
         ]);
-    }
-
-    private function buildTK131(string $from, string $to, string $prev): array
-    {
-        // Opening: total invoiced - total payments received before period
-        $invoicedBefore = (float) DB::table('invoices')
-            ->whereNotIn('status', ['cancelled'])->where('issue_date', '<=', $prev)->sum('total');
-        $paidBefore     = (float) DB::table('payments')->where('payment_date', '<=', $prev)->sum('amount');
-        $opening        = $invoicedBefore - $paidBefore;
-
-        $rows = [];
-
-        // DR: Invoices in period
-        $invs = DB::table('invoices')
-            ->join('customers', 'customers.id', '=', 'invoices.customer_id')
-            ->whereNotIn('invoices.status', ['cancelled'])
-            ->whereBetween('invoices.issue_date', [$from, $to])
-            ->select('invoices.issue_date as date', 'invoices.code as ref',
-                     'customers.name as partner',
-                     DB::raw("'Xuất hóa đơn' as description"),
-                     'invoices.total as debit',
-                     DB::raw('0 as credit'))
-            ->get();
-
-        foreach ($invs as $r) {
-            $rows[] = ['date' => $r->date, 'ref' => $r->ref, 'description' => $r->description . ': ' . $r->ref,
-                       'partner' => $r->partner, 'debit' => (float)$r->debit, 'credit' => 0.0];
-        }
-
-        // CR: Payments in period
-        $pmts = DB::table('payments')
-            ->join('invoices', 'invoices.id', '=', 'payments.invoice_id')
-            ->join('customers', 'customers.id', '=', 'invoices.customer_id')
-            ->whereBetween('payments.payment_date', [$from, $to])
-            ->select('payments.payment_date as date', 'invoices.code as ref',
-                     'customers.name as partner',
-                     DB::raw("'Thu tiền' as description"),
-                     DB::raw('0 as debit'),
-                     'payments.amount as credit')
-            ->get();
-
-        foreach ($pmts as $r) {
-            $rows[] = ['date' => $r->date, 'ref' => $r->ref, 'description' => $r->description . ' / HĐ: ' . $r->ref,
-                       'partner' => $r->partner, 'debit' => 0.0, 'credit' => (float)$r->credit];
-        }
-
-        usort($rows, fn($a, $b) => strcmp($a['date'], $b['date']));
-
-        return [$opening, $rows];
-    }
-
-    private function buildTK331(string $from, string $to, string $prev): array
-    {
-        // Opening: total purchases - total AP payments before period (credit-normal → positive = credit balance)
-        $pisBefore  = (float) DB::table('purchase_invoices')
-            ->whereNotIn('status', ['cancelled'])->whereNotNull('invoice_date')
-            ->where('invoice_date', '<=', $prev)->sum('total');
-        $appBefore  = (float) DB::table('purchase_invoice_payments')
-            ->where('payment_date', '<=', $prev)->sum('amount');
-        $opening    = $pisBefore - $appBefore;
-
-        $rows = [];
-
-        // CR: Purchase invoices in period
-        $piList = DB::table('purchase_invoices')
-            ->join('suppliers', 'suppliers.id', '=', 'purchase_invoices.supplier_id')
-            ->whereNotIn('purchase_invoices.status', ['cancelled'])
-            ->whereNotNull('purchase_invoices.invoice_date')
-            ->whereBetween('purchase_invoices.invoice_date', [$from, $to])
-            ->select('purchase_invoices.invoice_date as date', 'purchase_invoices.code as ref',
-                     'suppliers.name as partner',
-                     DB::raw("'Nhận HĐ mua' as description"),
-                     DB::raw('0 as debit'),
-                     'purchase_invoices.total as credit')
-            ->get();
-
-        foreach ($piList as $r) {
-            $rows[] = ['date' => $r->date, 'ref' => $r->ref, 'description' => $r->description . ': ' . $r->ref,
-                       'partner' => $r->partner, 'debit' => 0.0, 'credit' => (float)$r->credit];
-        }
-
-        // DR: AP payments in period
-        $appmts = DB::table('purchase_invoice_payments')
-            ->join('purchase_invoices', 'purchase_invoices.id', '=', 'purchase_invoice_payments.purchase_invoice_id')
-            ->join('suppliers', 'suppliers.id', '=', 'purchase_invoices.supplier_id')
-            ->whereBetween('purchase_invoice_payments.payment_date', [$from, $to])
-            ->select('purchase_invoice_payments.payment_date as date',
-                     'purchase_invoices.code as ref',
-                     'suppliers.name as partner',
-                     DB::raw("'Trả tiền NCC' as description"),
-                     'purchase_invoice_payments.amount as debit',
-                     DB::raw('0 as credit'))
-            ->get();
-
-        foreach ($appmts as $r) {
-            $rows[] = ['date' => $r->date, 'ref' => $r->ref, 'description' => $r->description . ' / HĐ: ' . $r->ref,
-                       'partner' => $r->partner, 'debit' => (float)$r->debit, 'credit' => 0.0];
-        }
-
-        usort($rows, fn($a, $b) => strcmp($a['date'], $b['date']));
-
-        return [$opening, $rows];
-    }
-
-    private function buildTK156(string $from, string $to, string $prev): array
-    {
-        // Opening: stock value before period
-        $stockInBefore  = (float) DB::table('stock_movements')
-            ->join('products', 'products.id', '=', 'stock_movements.product_id')
-            ->where('type', 'in')->where('stock_movements.created_at', '<=', $prev . ' 23:59:59')
-            ->sum(DB::raw('stock_movements.quantity * COALESCE(products.cost_price, 0)'));
-        $stockOutBefore = (float) DB::table('stock_movements')
-            ->join('products', 'products.id', '=', 'stock_movements.product_id')
-            ->where('type', 'out')->where('stock_movements.created_at', '<=', $prev . ' 23:59:59')
-            ->sum(DB::raw('stock_movements.quantity * COALESCE(products.cost_price, 0)'));
-        $opening = $stockInBefore - $stockOutBefore;
-
-        $rows = [];
-
-        // DR: Stock in
-        $ins = DB::table('stock_movements')
-            ->join('products', 'products.id', '=', 'stock_movements.product_id')
-            ->leftJoin('warehouses', 'warehouses.id', '=', 'stock_movements.warehouse_id')
-            ->where('stock_movements.type', 'in')
-            ->whereBetween('stock_movements.created_at', [$from . ' 00:00:00', $to . ' 23:59:59'])
-            ->select(DB::raw("DATE(stock_movements.created_at) as date"),
-                     DB::raw("'—' as ref"),
-                     'products.name as partner',
-                     'stock_movements.quantity',
-                     DB::raw('stock_movements.quantity * COALESCE(products.cost_price, 0) as debit'),
-                     DB::raw('0 as credit'))
-            ->get();
-
-        foreach ($ins as $r) {
-            $rows[] = ['date' => $r->date, 'ref' => $r->ref,
-                       'description' => 'Nhập kho: ' . $r->partner . ' (x' . $r->quantity . ')',
-                       'partner' => $r->partner, 'debit' => (float)$r->debit, 'credit' => 0.0];
-        }
-
-        // CR: Stock out
-        $outs = DB::table('stock_movements')
-            ->join('products', 'products.id', '=', 'stock_movements.product_id')
-            ->where('stock_movements.type', 'out')
-            ->whereBetween('stock_movements.created_at', [$from . ' 00:00:00', $to . ' 23:59:59'])
-            ->select(DB::raw("DATE(stock_movements.created_at) as date"),
-                     DB::raw("'—' as ref"),
-                     'products.name as partner',
-                     'stock_movements.quantity',
-                     DB::raw('0 as debit'),
-                     DB::raw('stock_movements.quantity * COALESCE(products.cost_price, 0) as credit'))
-            ->get();
-
-        foreach ($outs as $r) {
-            $rows[] = ['date' => $r->date, 'ref' => $r->ref,
-                       'description' => 'Xuất kho: ' . $r->partner . ' (x' . $r->quantity . ')',
-                       'partner' => $r->partner, 'debit' => 0.0, 'credit' => (float)$r->credit];
-        }
-
-        usort($rows, fn($a, $b) => strcmp($a['date'], $b['date']));
-
-        return [$opening, $rows];
     }
 
     public function export(Request $request): BinaryFileResponse

@@ -12,11 +12,14 @@ use App\Models\StockEntry;
 use App\Models\StockEntryItem;
 use App\Models\StockExit;
 use App\Models\StockMovement;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class StockService
 {
+    public function __construct(private AccountingService $accounting) {}
     public function confirmEntry(StockEntry $entry): void
     {
         if ($entry->status !== StockEntryStatus::Draft) {
@@ -69,6 +72,12 @@ class StockService
 
             $entry->update(['status' => StockEntryStatus::Confirmed]);
         });
+
+        Cache::forget('dashboard.stock_overview');
+        Cache::forget('dashboard.stats');
+
+        // Hạch toán nhập kho: Dr 156 / Cr 331
+        $this->postEntryJournal($entry);
     }
 
     public function cancelEntry(StockEntry $entry): void
@@ -182,6 +191,12 @@ class StockService
             $exit->update(['status' => StockExitStatus::Confirmed]);
         });
 
+        Cache::forget('dashboard.stock_overview');
+        Cache::forget('dashboard.stats');
+
+        // Hạch toán giá vốn: Dr 632 / Cr 156
+        $this->postExitJournal($exit);
+
         // After transaction: check low stock threshold and dispatch async notification job
         // Dispatch AFTER transaction commit — đảm bảo job chỉ chạy khi dữ liệu đã được lưu
         $threshold = (int) \App\Models\Setting::where('key', 'low_stock_threshold')->value('value') ?: 5;
@@ -216,5 +231,70 @@ class StockService
         return (int) StockMovement::where('product_id', $productId)
             ->where('warehouse_id', $warehouseId)
             ->sum('quantity');
+    }
+
+    // ─── Auto-posting helpers ────────────────────────────────────────────────
+
+    private function postEntryJournal(StockEntry $entry): void
+    {
+        $entry->load('items.product');
+        $totalCost = 0;
+        $lines = [];
+
+        foreach ($entry->items as $item) {
+            $costPerUnit = (float) ($item->cost_price ?? $item->product?->cost_price ?? 0);
+            $cost = $costPerUnit * $item->quantity;
+            $totalCost += $cost;
+            if ($cost > 0) {
+                $lines[] = ['account' => '156', 'debit' => (int) $cost, 'credit' => 0,
+                            'description' => "Nhập kho {$item->product?->name}"];
+            }
+        }
+
+        if ($totalCost <= 0 || empty($lines)) return;
+
+        $lines[] = ['account' => '331', 'debit' => 0, 'credit' => (int) $totalCost,
+                    'description' => "Phải trả NCC - phiếu {$entry->code}"];
+
+        try {
+            $this->accounting->post(
+                "Nhập kho hàng hóa {$entry->code}",
+                Carbon::parse($entry->created_at),
+                $lines, 'stock_entry', $entry->id, true
+            );
+        } catch (\Exception $e) {
+            \Log::warning("Auto-posting failed [StockEntry {$entry->code}]: " . $e->getMessage());
+        }
+    }
+
+    private function postExitJournal(StockExit $exit): void
+    {
+        $exit->load('items.product');
+        $totalCost = 0;
+        $lines = [];
+
+        foreach ($exit->items as $item) {
+            $costPerUnit = (float) ($item->product?->cost_price ?? 0);
+            $cost = $costPerUnit * $item->quantity;
+            $totalCost += $cost;
+            if ($cost > 0) {
+                $lines[] = ['account' => '632', 'debit' => (int) $cost, 'credit' => 0,
+                            'description' => "Giá vốn {$item->product?->name}"];
+                $lines[] = ['account' => '156', 'debit' => 0, 'credit' => (int) $cost,
+                            'description' => "Xuất kho {$item->product?->name}"];
+            }
+        }
+
+        if ($totalCost <= 0 || empty($lines)) return;
+
+        try {
+            $this->accounting->post(
+                "Giá vốn hàng bán {$exit->code}",
+                Carbon::parse($exit->created_at),
+                $lines, 'stock_exit', $exit->id, true
+            );
+        } catch (\Exception $e) {
+            \Log::warning("Auto-posting failed [StockExit {$exit->code}]: " . $e->getMessage());
+        }
     }
 }

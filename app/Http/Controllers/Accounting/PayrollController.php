@@ -7,6 +7,7 @@ use App\Models\Payroll;
 use App\Models\PayrollItem;
 use App\Models\Fund;
 use App\Services\PayrollService;
+use App\Services\PitCalculatorService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -15,7 +16,10 @@ use RuntimeException;
 
 class PayrollController extends Controller
 {
-    public function __construct(private PayrollService $service) {}
+    public function __construct(
+        private PayrollService       $service,
+        private PitCalculatorService $pit,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -70,19 +74,30 @@ class PayrollController extends Controller
         $payroll->load('creator');
 
         $items = $payroll->items()->with('user', 'cashVoucher')->get()->map(fn (PayrollItem $item) => [
-            'id'             => $item->id,
-            'employee_name'  => $item->user?->name,
-            'role_label'     => $item->user?->roles?->first()?->name ?? 'Nhân viên',
-            'base_salary'    => (float) $item->base_salary,
-            'allowance'      => (float) $item->allowance,
-            'bonus'          => (float) $item->bonus,
-            'deductions'     => (float) $item->deductions,
-            'net_salary'     => (float) $item->net_salary,
-            'status'         => $item->status->value,
-            'status_label'   => $item->status->label(),
-            'status_color'   => $item->status->color(),
-            'paid_at'        => $item->paid_at?->format('d/m/Y H:i'),
-            'cash_voucher'   => $item->cashVoucher ? [
+            'id'              => $item->id,
+            'employee_name'   => $item->user?->name,
+            'pit_tax_code'    => $item->user?->pit_tax_code,
+            'role_label'      => $item->user?->roles?->first()?->name ?? 'Nhân viên',
+            'base_salary'     => (float) $item->base_salary,
+            'allowance'       => (float) $item->allowance,
+            'bonus'           => (float) $item->bonus,
+            'gross_salary'    => (float) $item->gross_salary,
+            'insurance_base'  => (float) $item->insurance_base,
+            'bhxh_employee'   => (float) $item->bhxh_employee,
+            'bhyt_employee'   => (float) $item->bhyt_employee,
+            'bhtn_employee'   => (float) $item->bhtn_employee,
+            'bhxh_employer'   => (float) $item->bhxh_employer,
+            'bhyt_employer'   => (float) $item->bhyt_employer,
+            'bhtn_employer'   => (float) $item->bhtn_employer,
+            'pit'             => (float) $item->pit,
+            'dependents_count'=> (int)   $item->dependents_count,
+            'deductions'      => (float) $item->deductions,
+            'net_salary'      => (float) $item->net_salary,
+            'status'          => $item->status->value,
+            'status_label'    => $item->status->label(),
+            'status_color'    => $item->status->color(),
+            'paid_at'         => $item->paid_at?->format('d/m/Y H:i'),
+            'cash_voucher'    => $item->cashVoucher ? [
                 'id'   => $item->cashVoucher->id,
                 'code' => $item->cashVoucher->code,
             ] : null,
@@ -92,20 +107,24 @@ class PayrollController extends Controller
 
         return Inertia::render('Accounting/Payrolls/Show', [
             'payroll' => [
-                'id'                => $payroll->id,
-                'code'              => $payroll->code,
-                'period'            => $payroll->period,
-                'status'            => $payroll->status->value,
-                'status_label'      => $payroll->status->label(),
-                'status_color'      => $payroll->status->color(),
-                'total_base_salary' => (float) $payroll->total_base_salary,
-                'total_allowance'   => (float) $payroll->total_allowance,
-                'total_bonus'       => (float) $payroll->total_bonus,
-                'total_deductions'  => (float) $payroll->total_deductions,
-                'total_net_salary'  => (float) $payroll->total_net_salary,
-                'creator'           => $payroll->creator?->name,
-                'notes'             => $payroll->notes,
-                'created_at'        => $payroll->created_at->format('d/m/Y H:i'),
+                'id'                        => $payroll->id,
+                'code'                      => $payroll->code,
+                'period'                    => $payroll->period,
+                'status'                    => $payroll->status->value,
+                'status_label'              => $payroll->status->label(),
+                'status_color'              => $payroll->status->color(),
+                'total_base_salary'         => (float) $payroll->total_base_salary,
+                'total_allowance'           => (float) $payroll->total_allowance,
+                'total_bonus'               => (float) $payroll->total_bonus,
+                'total_gross'               => (float) $payroll->total_gross,
+                'total_insurance_employee'  => (float) $payroll->total_insurance_employee,
+                'total_insurance_employer'  => (float) $payroll->total_insurance_employer,
+                'total_pit'                 => (float) $payroll->total_pit,
+                'total_deductions'          => (float) $payroll->total_deductions,
+                'total_net_salary'          => (float) $payroll->total_net_salary,
+                'creator'                   => $payroll->creator?->name,
+                'notes'                     => $payroll->notes,
+                'created_at'                => $payroll->created_at->format('d/m/Y H:i'),
             ],
             'items' => $items,
             'funds' => $funds,
@@ -123,16 +142,34 @@ class PayrollController extends Controller
         }
 
         $data = $request->validate([
-            'base_salary' => 'required|numeric|min:0',
-            'allowance'   => 'required|numeric|min:0',
-            'bonus'       => 'required|numeric|min:0',
-            'deductions'  => 'required|numeric|min:0',
+            'base_salary'      => 'required|numeric|min:0',
+            'allowance'        => 'required|numeric|min:0',
+            'bonus'            => 'required|numeric|min:0',
+            'dependents_count' => 'nullable|integer|min:0|max:10',
         ]);
 
-        $net = $data['base_salary'] + $data['allowance'] + $data['bonus'] - $data['deductions'];
-        $data['net_salary'] = max(0, $net);
+        $gross      = $data['base_salary'] + $data['allowance'] + $data['bonus'];
+        $dependents = (int)($data['dependents_count'] ?? $item->dependents_count ?? 0);
+        $bd         = $this->pit->breakdown($gross, $dependents);
 
-        $item->update($data);
+        $item->update([
+            'base_salary'      => $data['base_salary'],
+            'allowance'        => $data['allowance'],
+            'bonus'            => $data['bonus'],
+            'gross_salary'     => $bd['gross_salary'],
+            'insurance_base'   => $bd['insurance_base'],
+            'bhxh_employee'    => $bd['bhxh_employee'],
+            'bhyt_employee'    => $bd['bhyt_employee'],
+            'bhtn_employee'    => $bd['bhtn_employee'],
+            'bhxh_employer'    => $bd['bhxh_employer'],
+            'bhyt_employer'    => $bd['bhyt_employer'],
+            'bhtn_employer'    => $bd['bhtn_employer'],
+            'pit'              => $bd['pit'],
+            'dependents_count' => $dependents,
+            'deductions'       => $bd['ins_employee'] + $bd['pit'],
+            'net_salary'       => $bd['net_salary'],
+        ]);
+
         $this->service->recalculateTotals($payroll);
 
         return back()->with('success', 'Đã cập nhật lương của nhân viên.');

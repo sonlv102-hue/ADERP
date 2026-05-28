@@ -46,7 +46,44 @@ Tài liệu: `C:\Mini_erp\Plan.docx` | `C:\Mini_erp\P2.docx`
 - **Supplementary order link:** `orders.supplementary_for_order_id` — đơn bổ sung biết nó bù cho đơn nào; `OrderService.resolveOverDeliveriesForOrder()` ưu tiên explicit link trước heuristic; Dashboard hiển thị "Đang bổ sung: DH-XXXX" khi đã có đơn chờ ✅
 - **Phase B — Fixed Asset Depreciation:** FixedAsset (900028-29), FixedAssetDepreciation, FixedAssetService (getSchedule/runMonthlyDepreciation), FixedAssetController (show/depreciate), Admin/FixedAssets/Show.vue với schedule table, CLI `assets:depreciate --period=YYYY-MM` ✅
 - **Phase C — Kiểm kê kho:** InventoryCount/Item (IK-YYMMDDXX, 900030-31), InventoryCountService (populateItems/saveItems/confirm atomically), InventoryCountController, Warehouse/InventoryCounts/Index|Form|Show.vue — confirm gửi kèm items để save+confirm 1 lần ✅
-- **Migration tiếp theo:** `2026_05_25_900032`
+- **Phase P1 — Nền tảng kế toán:** account_codes (136 TK TT200), accounting_periods, journal_entries/lines, AccountingService (post/reverse/getBalance), auto-posting trong InvoiceService/StockService/CashVoucherService, AccountCodeController/AccountingPeriodController/JournalEntryController ✅ (2026-05-28)
+- **Phase P2 — Báo cáo từ journal_entry_lines + Chi phí trả trước:**
+  - Rebuild 5 báo cáo kế toán từ journal_entry_lines: TrialBalance, GeneralJournal, AccountLedger (all accounts), BalanceSheet, IncomeStatement ✅
+  - PrepaidExpense (CPT-), PrepaidExpenseAllocation, PrepaidExpenseService (create/amortize/runMonthlyAmortization) ✅
+- **Phase P3 — Đối chiếu ngân hàng (Bank Reconciliation):**
+  - BankAccount (bank_accounts), BankTransaction (bank_transactions), BankTransactionStatus enum ✅
+  - BankReconciliationService: createTransaction/reconcile/unreconcile ✅
+  - BankAccountController + BankTransactionController, Vue: BankAccounts/Index+Form, BankTransactions/Index ✅
+- **Phase P4 — Công nợ chi tiết + Điều khoản thanh toán:**
+  - PaymentTerm (payment_terms), PaymentTermController, Vue: PaymentTerms/Index+Form ✅
+  - Customers: thêm credit_limit + payment_term_id; Suppliers: thêm payment_term_id ✅
+  - ArDetailController (Sổ chi tiết TK 131 per customer from journal_entry_lines) ✅
+  - ApDetailController (Sổ chi tiết TK 331 per supplier from journal_entry_lines) ✅
+- **Phase P5 — Hóa đơn điện tử (HĐDT):**
+  - Migration 200010: add e_inv_template/series/number/status/issued_at/cancel_reason to invoices ✅
+  - InvoiceController: issueEInvoice() / cancelEInvoice() / eInvoicePdf() ✅
+  - Invoice model: nextEInvoiceNumber() auto-sequence per series ✅
+  - PDF template: resources/views/pdf/e-invoice.blade.php (mẫu HĐDT TT78) ✅
+  - Invoices/Show.vue: HĐDT section (issue form / status / cancel / PDF download) ✅
+  - Helper: App\Helpers\NumberToWords (số tiền bằng chữ tiếng Việt) ✅
+- **Phase P6 — Payroll BHXH/BHYT/BHTN + PIT:**
+  - Migration 200007-200009: users (dependents_count, pit_tax_code), payroll_items (insurance breakdown, pit), payrolls (totals) ✅
+  - PitCalculatorService: BHXH 8%/17.5%, BHYT 1.5%/3%, BHTN 1%/1%, PIT lũy tiến 7 bậc, cap 46.8M ✅
+  - PayrollService: tự động tính khi createPayroll/updateItem; journal entry khi confirm (Dr 6421 Cr 334/3335/3338/3389/3384) ✅
+  - Payrolls/Show.vue: bảng breakdown BHXH/BHYT/BHTN/PIT per nhân viên, live preview khi sửa ✅
+  - Admin/Users/Form.vue: thêm trường base_salary, allowance, dependents_count, pit_tax_code ✅
+  - Migration tiếp theo: `2026_05_28_200011`
+- **Phase P7 — Logic fixes + Automation + Report Guidance (2026-05-28):**
+  - Fix InvoiceService: ngăn hạch toán trùng (kiểm tra journal_entry tồn tại trước khi post) ✅
+  - Fix IncomeStatement: bỏ TK '511' cha khỏi tổng doanh thu (chỉ dùng 5111/5113) ✅
+  - Fix CashFlow: thêm phiếu thu/chi (CashVoucher confirmed) vào dòng tiền ✅
+  - Command `accounting:mark-overdue`: tự động chuyển Invoice Sent → Overdue khi qua due_date ✅
+  - Command `accounting:amortize-prepaid {--period}`: phân bổ CPT hàng tháng ✅
+  - Command `accounting:month-end {period}`: chạy toàn bộ nghiệp vụ cuối tháng (depreciate + amortize + mark-overdue) ✅
+  - Schedule: mark-overdue daily 01:00, month-end ngày 28 mỗi tháng 02:00 ✅
+  - Credit limit: InvoiceController.store() kiểm tra hạn mức công nợ KH, trả warning nếu vượt ✅
+  - Dashboard: accountingAlerts widget (overdue count+amount, pending overdue, unreconciled bank, pending payroll) ✅
+  - Guidance banners trên báo cáo: TrialBalance (alert Nợ≠Có), BalanceSheet (green/red balance status), IncomeStatement (alert lỗ), VAT (hướng dẫn 01/GTGT), CashFlow (hướng dẫn) ✅
 
 ## Quy tắc quan trọng
 - `cost_price` trên sản phẩm = giá **đã gồm VAT** (tổng trả NCC)

@@ -4,16 +4,23 @@ namespace App\Services;
 
 use App\Enums\InvoiceStatus;
 use App\Models\Invoice;
+use App\Models\JournalEntry;
 use App\Models\Payment;
+use Carbon\Carbon;
 
 class InvoiceService
 {
+    public function __construct(private AccountingService $accounting) {}
+
     public function markSent(Invoice $invoice): void
     {
         if ($invoice->status !== InvoiceStatus::Draft) {
             throw new \RuntimeException('Chỉ có thể gửi hóa đơn ở trạng thái Nháp.');
         }
         $invoice->update(['status' => InvoiceStatus::Sent]);
+
+        // Hạch toán: Dr 131 / Cr 5111|5113 + Cr 33311
+        $this->postInvoiceEntry($invoice);
     }
 
     public function markPaid(Invoice $invoice): void
@@ -45,6 +52,88 @@ class InvoiceService
             $invoice->update(['status' => InvoiceStatus::Paid]);
         }
 
+        // Hạch toán thanh toán: Dr 111/112 / Cr 131
+        $this->postPaymentEntry($payment, $invoice);
+
         return $payment;
+    }
+
+    // ─── Private helpers ────────────────────────────────────────────────────
+
+    private function postInvoiceEntry(Invoice $invoice): void
+    {
+        // Ngăn hạch toán trùng — kiểm tra journal entry đã tồn tại cho hóa đơn này
+        $alreadyPosted = JournalEntry::where('reference_type', 'invoice')
+            ->where('reference_id', $invoice->id)
+            ->where('status', 'posted')
+            ->whereRaw("description NOT LIKE 'Đảo:%'")
+            ->exists();
+        if ($alreadyPosted) return;
+
+        $subtotal = (float) $invoice->subtotal;
+        $tax      = (float) $invoice->tax_amount;
+        $total    = (float) $invoice->total;
+
+        if ($total <= 0) return;
+
+        $lines = [
+            ['account' => '131', 'debit' => $total, 'credit' => 0,
+             'description' => "Phải thu KH - {$invoice->code}"],
+        ];
+
+        // Doanh thu: hàng hóa → 5111, dịch vụ → 5113 (phân tách đơn giản dựa subtotal)
+        if ($subtotal > 0) {
+            $lines[] = ['account' => '5111', 'debit' => 0, 'credit' => $subtotal,
+                        'description' => "Doanh thu - {$invoice->code}"];
+        }
+        if ($tax > 0) {
+            $lines[] = ['account' => '33311', 'debit' => 0, 'credit' => $tax,
+                        'description' => "Thuế GTGT đầu ra - {$invoice->code}"];
+        }
+        // Nếu không có VAT (tax=0), tổng debit=subtotal=total
+        if ($tax == 0) {
+            $lines[0]['debit'] = $subtotal;
+        }
+
+        $this->tryPost("Ghi nhận doanh thu {$invoice->code}", Carbon::parse($invoice->issue_date),
+            $lines, 'invoice', $invoice->id);
+    }
+
+    private function postPaymentEntry(Payment $payment, Invoice $invoice): void
+    {
+        $amount = (float) $payment->amount;
+        if ($amount <= 0) return;
+
+        $cashAccount = $this->resolvePaymentAccount($payment->payment_method ?? 'cash');
+
+        $this->tryPost(
+            "Thu tiền {$invoice->code}",
+            Carbon::parse($payment->payment_date),
+            [
+                ['account' => $cashAccount, 'debit' => $amount, 'credit' => 0,
+                 'description' => "Thu tiền - {$invoice->code}"],
+                ['account' => '131', 'debit' => 0, 'credit' => $amount,
+                 'description' => "Xóa công nợ KH - {$invoice->code}"],
+            ],
+            'payment', $payment->id
+        );
+    }
+
+    private function resolvePaymentAccount(string $method): string
+    {
+        return match($method) {
+            'bank_transfer', 'bank' => '112',
+            default => '111',
+        };
+    }
+
+    private function tryPost(string $description, Carbon $date, array $lines, string $refType, int $refId): void
+    {
+        try {
+            $this->accounting->post($description, $date, $lines, $refType, $refId, true);
+        } catch (\Exception $e) {
+            // Không để lỗi kế toán block nghiệp vụ — log để xem lại
+            \Log::warning("Auto-posting failed [{$description}]: " . $e->getMessage());
+        }
     }
 }

@@ -13,6 +13,7 @@ class DatabaseSeeder extends Seeder
         $this->call(RolePermissionSeeder::class);
         $this->call(SettingsSeeder::class);
         $this->call(DocumentTypeSeeder::class);
+        $this->call(AccountCodeSeeder::class);
 
         // Admin
         $admin = User::firstOrCreate(
