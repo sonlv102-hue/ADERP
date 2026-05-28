@@ -43,14 +43,17 @@ class QuotationService
 
         return DB::transaction(function () use ($quotation) {
             $order = Order::create([
-                'code'        => Order::generateCode(),
-                'customer_id' => $quotation->customer_id,
-                'quotation_id'=> $quotation->id,
-                'order_date'  => now()->toDateString(),
-                'status'      => OrderStatus::Pending,
-                'created_by'  => auth()->id(),
-                'notes'       => $quotation->notes,
+                'code'         => Order::generateCode(),
+                'customer_id'  => $quotation->customer_id,
+                'quotation_id' => $quotation->id,
+                'order_date'   => now()->toDateString(),
+                'status'       => OrderStatus::Pending,
+                'created_by'   => auth()->id(),
+                'notes'        => $quotation->notes,
             ]);
+
+            $sub = $quotation->subtotal();
+            $docFactor = $sub > 0 ? $quotation->total() / $sub : 1;
 
             foreach ($quotation->items as $qItem) {
                 $order->items()->create([
@@ -59,7 +62,10 @@ class QuotationService
                     'name'       => $qItem->name,
                     'unit'       => $qItem->unit,
                     'quantity'   => $qItem->quantity,
-                    'unit_price' => $qItem->unit_price * (1 - $qItem->discount_percent / 100),
+                    'unit_price' => round(
+                        (float) $qItem->unit_price * (1 - (float) $qItem->discount_percent / 100) * $docFactor,
+                        0
+                    ),
                 ]);
             }
 

@@ -58,13 +58,17 @@
             </div>
           </div>
 
+          <!-- Báo giá liên kết -->
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Bảng giá</label>
-            <select v-model="selectedPriceList" @change="applyPriceList"
+            <label class="block text-sm font-medium text-gray-700 mb-1">Báo giá</label>
+            <select v-model="form.quotation_id" @change="onQuotationChange"
               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
-              <option value="">-- Chọn bảng giá --</option>
-              <option v-for="pl in priceLists" :key="pl.id" :value="pl.id">{{ pl.code }} - {{ pl.name }}</option>
+              <option :value="null">-- Chọn báo giá (tuỳ chọn) --</option>
+              <option v-for="q in quotations" :key="q.id" :value="q.id">{{ q.code }}</option>
             </select>
+            <p v-if="form.quotation_id" class="mt-1 text-xs text-green-600">
+              Đã liên kết báo giá — khách hàng và danh sách hàng hoá đã được điền tự động.
+            </p>
           </div>
 
           <div>
@@ -167,50 +171,46 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, onMounted } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({
-  nextCode: String,
-  order: Object,
-  customers: Array,
-  products: Array,
-  services: Array,
-  priceLists: Array,
+  nextCode:        String,
+  order:           Object,
+  customers:       Array,
+  products:        Array,
+  services:        Array,
+  quotations:      Array,
+  fromQuotationId: { type: [Number, String], default: null },
   supplementaryFor: { type: Object, default: null },
 });
-
-const selectedPriceList = ref('');
-
-const applyPriceList = async () => {
-  if (!selectedPriceList.value) return;
-  try {
-    const res = await fetch(route('catalog.price-lists.items', selectedPriceList.value));
-    const items = await res.json();
-    const priceMap = {};
-    items.forEach(i => { priceMap[i.product_id] = i.unit_price; });
-    form.items.forEach(item => {
-      if (item._type === 'product' && item.product_id && priceMap[item.product_id] !== undefined) {
-        item.unit_price = Number(priceMap[item.product_id]);
-      }
-    });
-  } catch (e) {
-    console.error('Failed to load price list items', e);
-  }
-};
-
-const today = new Date().toISOString().slice(0, 10);
 
 const form = useForm({
   code:                       props.order?.code ?? props.nextCode ?? '',
   customer_id:                props.order?.customer_id ?? props.supplementaryFor?.customer_id ?? '',
+  quotation_id:               props.order?.quotation_id ?? null,
   supplementary_for_order_id: props.order ? null : (props.supplementaryFor?.id ?? null),
-  order_date:                 props.order?.order_date ?? today,
+  order_date:                 props.order?.order_date ?? new Date().toISOString().slice(0, 10),
   expected_delivery:          props.order?.expected_delivery ?? '',
   notes:                      props.order?.notes ?? '',
   items:                      props.order?.items ? props.order.items.map(i => ({ ...i })) : [],
+});
+
+const onQuotationChange = () => {
+  if (!form.quotation_id) return;
+  const q = props.quotations.find(q => q.id === form.quotation_id);
+  if (!q) return;
+  form.customer_id = q.customer_id;
+  form.items = q.items.map(i => ({ ...i }));
+};
+
+onMounted(() => {
+  if (props.fromQuotationId && !props.order) {
+    form.quotation_id = Number(props.fromQuotationId);
+    onQuotationChange();
+  }
 });
 
 const addRow = (type) => {

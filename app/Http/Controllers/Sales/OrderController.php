@@ -3,13 +3,14 @@
 namespace App\Http\Controllers\Sales;
 
 use App\Enums\OrderStatus;
+use App\Enums\QuotationStatus;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Models\Order;
 use App\Models\OrderItem;
-use App\Models\PriceList;
 use App\Models\Product;
+use App\Models\Quotation;
 use App\Models\Service;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -62,11 +63,12 @@ class OrderController extends Controller
         }
 
         return Inertia::render('Sales/Orders/Form', [
-            'nextCode'        => Order::generateCode(),
-            'customers'       => Customer::orderBy('name')->get(['id', 'code', 'name']),
-            'products'        => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'sell_price']),
-            'services'        => Service::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'price']),
-            'priceLists'      => PriceList::select('id', 'code', 'name')->orderBy('name')->get(),
+            'nextCode'         => Order::generateCode(),
+            'customers'        => Customer::orderBy('name')->get(['id', 'code', 'name']),
+            'products'         => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'sell_price']),
+            'services'         => Service::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'price']),
+            'quotations'       => $this->approvedQuotations(),
+            'fromQuotationId'  => $request->query('from_quotation'),
             'supplementaryFor' => $supplementaryFor,
         ]);
     }
@@ -76,6 +78,7 @@ class OrderController extends Controller
         $data = $request->validate([
             'code'                        => ['required', 'string', 'unique:orders,code'],
             'customer_id'                 => ['required', 'exists:customers,id'],
+            'quotation_id'                => ['nullable', 'exists:quotations,id'],
             'supplementary_for_order_id'  => ['nullable', 'exists:orders,id'],
             'order_date'                  => ['required', 'date'],
             'expected_delivery'           => ['nullable', 'date'],
@@ -92,6 +95,7 @@ class OrderController extends Controller
         $order = Order::create([
             'code'                        => $data['code'],
             'customer_id'                 => $data['customer_id'],
+            'quotation_id'                => $data['quotation_id'] ?? null,
             'supplementary_for_order_id'  => $data['supplementary_for_order_id'] ?? null,
             'order_date'                  => $data['order_date'],
             'expected_delivery'           => $data['expected_delivery'] ?? null,
@@ -158,10 +162,11 @@ class OrderController extends Controller
         $order->load('items');
 
         return Inertia::render('Sales/Orders/Form', [
-            'order'     => [
+            'order'      => [
                 'id'                => $order->id,
                 'code'              => $order->code,
                 'customer_id'       => $order->customer_id,
+                'quotation_id'      => $order->quotation_id,
                 'order_date'        => $order->order_date->format('Y-m-d'),
                 'expected_delivery' => $order->expected_delivery?->format('Y-m-d'),
                 'notes'             => $order->notes,
@@ -175,9 +180,10 @@ class OrderController extends Controller
                     '_type'      => $item->product_id ? 'product' : 'service',
                 ]),
             ],
-            'customers' => Customer::orderBy('name')->get(['id', 'code', 'name']),
-            'products'  => Product::orderBy('name')->get(['id', 'code', 'name', 'unit', 'sell_price']),
-            'services'  => Service::orderBy('name')->get(['id', 'code', 'name', 'unit', 'price']),
+            'customers'  => Customer::orderBy('name')->get(['id', 'code', 'name']),
+            'products'   => Product::orderBy('name')->get(['id', 'code', 'name', 'unit', 'sell_price']),
+            'services'   => Service::orderBy('name')->get(['id', 'code', 'name', 'unit', 'price']),
+            'quotations' => $this->approvedQuotations(),
         ]);
     }
 
@@ -288,5 +294,37 @@ class OrderController extends Controller
 
         return redirect()->route('sales.orders.show', $order)
             ->with('success', 'Đã xóa file đính kèm.');
+    }
+
+    private function approvedQuotations(): array
+    {
+        return Quotation::where('status', QuotationStatus::Approved)
+            ->with('items')
+            ->orderByDesc('id')
+            ->get()
+            ->map(function ($q) {
+                $sub = $q->subtotal();
+                // Tỷ lệ chiết khấu tài liệu (doc-level) phân bổ đều cho từng dòng
+                $docFactor = $sub > 0 ? $q->total() / $sub : 1;
+
+                return [
+                    'id'          => $q->id,
+                    'code'        => $q->code,
+                    'customer_id' => $q->customer_id,
+                    'items'       => $q->items->map(fn ($i) => [
+                        'product_id' => $i->product_id,
+                        'service_id' => $i->service_id,
+                        'name'       => $i->name,
+                        'unit'       => $i->unit ?? '',
+                        'quantity'   => (float) $i->quantity,
+                        'unit_price' => round(
+                            (float) $i->unit_price * (1 - (float) $i->discount_percent / 100) * $docFactor,
+                            0
+                        ),
+                        '_type'      => $i->product_id ? 'product' : 'service',
+                    ])->values()->all(),
+                ];
+            })
+            ->all();
     }
 }
