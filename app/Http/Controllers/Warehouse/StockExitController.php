@@ -91,6 +91,7 @@ class StockExitController extends Controller
                     ->map(fn ($i) => [
                         'product_id'         => $i->product_id,
                         'product_name'       => $i->name,
+                        'unit_price'         => (float) $i->unit_price,
                         'quantity'           => (int) $i->quantity,
                         'delivered_quantity' => (int) $i->delivered_quantity,
                         'remaining'          => max(0, (int) $i->quantity - (int) $i->delivered_quantity),

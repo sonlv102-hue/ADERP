@@ -53,7 +53,7 @@
 
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Đơn hàng liên kết</label>
-              <select v-model="form.order_id"
+              <select v-model="form.order_id" @change="onOrderChange"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                 :class="{ 'border-red-500': form.errors.order_id }">
                 <option :value="null">-- Không liên kết --</option>
@@ -286,8 +286,21 @@ const hasOrderContract = computed(() =>
 const onCustomerChange = () => {
   if (form.order_id) {
     const valid = customerOrders.value.some(o => o.id === form.order_id);
-    if (!valid) form.order_id = null;
+    if (!valid) { form.order_id = null; form.items = []; }
   }
+};
+
+const onOrderChange = () => {
+  if (!form.order_id) return;
+  const order = props.orders.find(o => o.id === form.order_id);
+  if (!order) return;
+  // Auto-fill customer từ đơn hàng
+  form.customer_id = order.customer_id;
+  // Auto-fill items còn cần giao (remaining > 0), lấy giá từ đơn hàng
+  const filled = order.items
+    .filter(i => i.remaining > 0)
+    .map(i => ({ product_id: i.product_id, quantity: i.remaining, unit_price: i.unit_price, serial_ids: [] }));
+  if (filled.length) form.items = filled;
 };
 
 const addRow = () => {
@@ -303,11 +316,17 @@ const onWarehouseChange = () => {
 };
 
 const onProductChange = (index) => {
-  const product = props.products.find(p => p.id === form.items[index].product_id);
-  if (product) {
-    form.items[index].unit_price = Number(product.sell_price ?? 0);
-    form.items[index].serial_ids = [];
+  const productId = form.items[index].product_id;
+  // Ưu tiên giá từ đơn hàng liên kết (đã tính chiết khấu theo báo giá)
+  const order = form.order_id ? props.orders.find(o => o.id === form.order_id) : null;
+  const orderItem = order?.items?.find(i => i.product_id === productId);
+  if (orderItem) {
+    form.items[index].unit_price = orderItem.unit_price;
+  } else {
+    const product = props.products.find(p => p.id === productId);
+    form.items[index].unit_price = Number(product?.sell_price ?? 0);
   }
+  form.items[index].serial_ids = [];
 };
 
 const onQuantityChange = (index) => {
