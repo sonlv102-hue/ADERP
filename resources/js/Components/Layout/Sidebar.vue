@@ -79,6 +79,8 @@
         <NavGroup v-if="can('accounting.view')"
           label="Kế toán" icon="currency-dollar" prefix="/accounting">
           <NavItem :href="route('accounting.invoices.index')"            icon="document-text"  sub>Hóa đơn bán</NavItem>
+          <NavItem :href="route('accounting.ar-collections.index')"      icon="inbox-in"       sub>Thu nợ KH (TK 131)</NavItem>
+          <NavItem :href="route('accounting.ap-payments.index')"         icon="inbox"          sub>Trả NCC (TK 331)</NavItem>
           <NavItem :href="route('accounting.funds.index')"               icon="library"        sub>Quản lý quỹ</NavItem>
           <NavItem :href="route('accounting.cash-vouchers.index')"       icon="cash"           sub>Phiếu thu / chi</NavItem>
           <NavItem :href="route('accounting.payrolls.index')"            icon="clipboard-list" sub>Bảng lương</NavItem>

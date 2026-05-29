@@ -47,6 +47,8 @@ use App\Http\Controllers\Accounting\BankAccountController;
 use App\Http\Controllers\Accounting\BankTransactionController;
 use App\Http\Controllers\Accounting\PayrollController;
 use App\Http\Controllers\Accounting\TaxController;
+use App\Http\Controllers\Accounting\ArCollectionController;
+use App\Http\Controllers\Accounting\ApPaymentController;
 use App\Http\Controllers\Reports\ArDetailController;
 use App\Http\Controllers\Reports\ApDetailController;
 use App\Http\Controllers\Reports\FundLedgerController;
@@ -238,6 +240,10 @@ Route::middleware('auth')->group(function () {
 
         Route::post('invoices/{invoice}/payments',             [PaymentController::class, 'store'])->name('invoices.payments.store');
         Route::delete('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'destroy'])->name('invoices.payments.destroy');
+
+        // Công nợ phải thu / phải trả
+        Route::get('ar-collections', [ArCollectionController::class, 'index'])->name('ar-collections.index');
+        Route::get('ap-payments',    [ApPaymentController::class,    'index'])->name('ap-payments.index');
 
         // Quỹ và phiếu thu/chi
         Route::resource('funds', FundController::class)->except(['show']);
