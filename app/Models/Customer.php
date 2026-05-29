@@ -15,7 +15,7 @@ class Customer extends Model
     protected $fillable = [
         'code', 'name', 'company', 'tax_code', 'phone', 'email',
         'address', 'lead_status', 'assigned_to', 'notes',
-        'payment_term_id', 'credit_limit',
+        'payment_term_id', 'credit_limit', 'is_fdi',
     ];
 
     protected function casts(): array
@@ -23,6 +23,7 @@ class Customer extends Model
         return [
             'lead_status'  => LeadStatus::class,
             'credit_limit' => 'decimal:0',
+            'is_fdi'       => 'boolean',
         ];
     }
 

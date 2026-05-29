@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Sales;
 
+use App\Enums\CustomsStatus;
 use App\Enums\OrderStatus;
 use App\Enums\QuotationStatus;
 use App\Models\StockMovement;
@@ -52,6 +53,9 @@ class OrderController extends Controller
                     'total'            => (float) $o->items_total,
                     'has_contract'     => (int) $o->has_contract > 0,
                     'delivery_status'  => $this->resolveDeliveryStatus($o),
+                    'customs_status'       => $o->customs_status->value,
+                    'customs_status_label' => $o->customs_status->label(),
+                    'customs_status_color' => $o->customs_status->color(),
                 ]),
         ]);
     }
@@ -73,7 +77,7 @@ class OrderController extends Controller
 
         return Inertia::render('Sales/Orders/Form', [
             'nextCode'         => Order::generateCode(),
-            'customers'        => Customer::orderBy('name')->get(['id', 'code', 'name']),
+            'customers'        => Customer::orderBy('name')->get(['id', 'code', 'name', 'is_fdi']),
             'products'         => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'sell_price']),
             'services'         => Service::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'price']),
             'quotations'       => $this->approvedQuotations(),
@@ -101,6 +105,8 @@ class OrderController extends Controller
             'items.*.unit_price'          => ['required', 'numeric', 'min:0'],
         ]);
 
+        $isFdi = Customer::where('id', $data['customer_id'])->value('is_fdi');
+
         $order = Order::create([
             'code'                        => $data['code'],
             'customer_id'                 => $data['customer_id'],
@@ -111,6 +117,7 @@ class OrderController extends Controller
             'notes'                       => $data['notes'] ?? null,
             'created_by'                  => auth()->id(),
             'status'                      => OrderStatus::Pending,
+            'customs_status'              => $isFdi ? CustomsStatus::Pending : CustomsStatus::NotRequired,
         ]);
 
         foreach ($data['items'] as $item) {
@@ -136,7 +143,7 @@ class OrderController extends Controller
             'order' => [
                 'id'                => $order->id,
                 'code'              => $order->code,
-                'customer'          => ['id' => $order->customer->id, 'name' => $order->customer->name],
+                'customer'          => ['id' => $order->customer->id, 'name' => $order->customer->name, 'is_fdi' => (bool) $order->customer->is_fdi],
                 'quotation'         => $order->quotation ? ['id' => $order->quotation->id, 'code' => $order->quotation->code] : null,
                 'order_date'        => $order->order_date->format('d/m/Y'),
                 'expected_delivery' => $order->expected_delivery?->format('d/m/Y'),
@@ -165,6 +172,13 @@ class OrderController extends Controller
                 ]),
                 'file_name' => $order->file_name,
                 'file_url'  => $order->file_path ? Storage::disk('public')->url($order->file_path) : null,
+                'customs_status'        => $order->customs_status->value,
+                'customs_status_label'  => $order->customs_status->label(),
+                'customs_status_color'  => $order->customs_status->color(),
+                'customs_declared_at'   => $order->customs_declared_at?->format('d/m/Y H:i'),
+                'customs_document_name' => $order->customs_document_name,
+                'customs_document_url'  => $order->customs_document_path ? Storage::disk('public')->url($order->customs_document_path) : null,
+                'customs_notes'         => $order->customs_notes,
             ],
         ]);
     }
@@ -198,7 +212,7 @@ class OrderController extends Controller
                     '_type'      => $item->product_id ? 'product' : 'service',
                 ]),
             ],
-            'customers'  => Customer::orderBy('name')->get(['id', 'code', 'name']),
+            'customers'  => Customer::orderBy('name')->get(['id', 'code', 'name', 'is_fdi']),
             'products'   => Product::orderBy('name')->get(['id', 'code', 'name', 'unit', 'sell_price']),
             'services'   => Service::orderBy('name')->get(['id', 'code', 'name', 'unit', 'price']),
             'quotations' => $this->approvedQuotations(),
@@ -283,6 +297,32 @@ class OrderController extends Controller
 
         return redirect()->route('sales.orders.index')
             ->with('success', 'Đã xóa đơn hàng.');
+    }
+
+    public function declareCustoms(Request $request, Order $order): RedirectResponse
+    {
+        $request->validate([
+            'file'           => ['required', 'file', 'max:20480'],
+            'customs_notes'  => ['nullable', 'string', 'max:500'],
+        ]);
+
+        if ($order->customs_document_path) {
+            Storage::disk('public')->delete($order->customs_document_path);
+        }
+
+        $file = $request->file('file');
+        $path = $file->store('attachments/customs', 'public');
+
+        $order->update([
+            'customs_status'        => CustomsStatus::Declared,
+            'customs_declared_at'   => now(),
+            'customs_document_path' => $path,
+            'customs_document_name' => $file->getClientOriginalName(),
+            'customs_notes'         => $request->input('customs_notes'),
+        ]);
+
+        return redirect()->route('sales.orders.show', $order)
+            ->with('success', 'Đã xác nhận khai báo hải quan.');
     }
 
     public function uploadAttachment(Request $request, Order $order): RedirectResponse

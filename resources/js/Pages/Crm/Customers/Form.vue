@@ -100,6 +100,22 @@
           </div>
         </div>
 
+        <!-- FDI flag -->
+        <div class="flex items-start gap-3 px-4 py-3 rounded-xl border"
+          :class="form.is_fdi ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'">
+          <input id="is_fdi" v-model="form.is_fdi" type="checkbox"
+            class="mt-0.5 h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500 cursor-pointer" />
+          <div>
+            <label for="is_fdi" class="block text-sm font-semibold cursor-pointer"
+              :class="form.is_fdi ? 'text-amber-800' : 'text-gray-700'">
+              Khách hàng FDI (Doanh nghiệp có vốn đầu tư nước ngoài)
+            </label>
+            <p class="text-xs mt-0.5" :class="form.is_fdi ? 'text-amber-600' : 'text-gray-400'">
+              Khi tạo đơn hàng cho khách này, hệ thống sẽ nhắc nhở đội bán hàng hoàn thành thủ tục khai báo hải quan.
+            </p>
+          </div>
+        </div>
+
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Địa chỉ</label>
           <textarea v-model="form.address" rows="2"
@@ -154,6 +170,7 @@ const form = useForm({
   notes:           props.customer?.notes           ?? '',
   payment_term_id: props.customer?.payment_term_id ?? null,
   credit_limit:    props.customer?.credit_limit    ?? null,
+  is_fdi:          props.customer?.is_fdi          ?? false,
 });
 
 const submit = () => {

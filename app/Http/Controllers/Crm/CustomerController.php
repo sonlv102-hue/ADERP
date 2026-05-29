@@ -30,6 +30,7 @@ class CustomerController extends Controller
                     'company' => $c->company,
                     'phone' => $c->phone,
                     'email' => $c->email,
+                    'is_fdi' => (bool) $c->is_fdi,
                     'lead_status' => $c->lead_status->value,
                     'lead_status_label' => $c->lead_status->label(),
                     'lead_status_color' => $c->lead_status->color(),
@@ -68,6 +69,7 @@ class CustomerController extends Controller
             'notes'           => ['nullable', 'string'],
             'payment_term_id' => ['nullable', 'exists:payment_terms,id'],
             'credit_limit'    => ['nullable', 'numeric', 'min:0'],
+            'is_fdi'          => ['boolean'],
         ]);
 
         Customer::create($data);
@@ -122,6 +124,7 @@ class CustomerController extends Controller
                 'notes'           => $customer->notes,
                 'payment_term_id' => $customer->payment_term_id,
                 'credit_limit'    => $customer->credit_limit,
+                'is_fdi'          => (bool) $customer->is_fdi,
             ],
             'lead_statuses' => collect(LeadStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
             'sales_users'   => User::role(['admin', 'sales', 'director'])->orderBy('name')->get(['id', 'name']),
@@ -144,6 +147,7 @@ class CustomerController extends Controller
             'notes'           => ['nullable', 'string'],
             'payment_term_id' => ['nullable', 'exists:payment_terms,id'],
             'credit_limit'    => ['nullable', 'numeric', 'min:0'],
+            'is_fdi'          => ['boolean'],
         ]);
 
         $customer->update($data);

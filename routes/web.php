@@ -166,6 +166,7 @@ Route::middleware('auth')->group(function () {
         Route::post('orders/{order}/process', [OrderController::class, 'process'])->name('orders.process');
         Route::post('orders/{order}/complete', [OrderController::class, 'complete'])->name('orders.complete');
         Route::post('orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
+        Route::post('orders/{order}/customs', [OrderController::class, 'declareCustoms'])->name('orders.customs.declare');
         Route::post('orders/{order}/attachment', [OrderController::class, 'uploadAttachment'])->name('orders.attachment.upload');
         Route::delete('orders/{order}/attachment', [OrderController::class, 'deleteAttachment'])->name('orders.attachment.delete');
 

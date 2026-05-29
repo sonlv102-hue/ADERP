@@ -23,6 +23,7 @@
               <th class="text-right px-5 py-3 font-semibold text-gray-600">Tổng tiền</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Duyệt đơn</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Hợp đồng</th>
+              <th class="text-left px-5 py-3 font-semibold text-gray-600">Hải quan</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Giao hàng</th>
               <th class="px-5 py-3" />
             </tr>
@@ -59,6 +60,26 @@
                 <span v-else class="text-gray-300 text-xs">—</span>
               </td>
 
+              <!-- Hải quan -->
+              <td class="px-5 py-3">
+                <span v-if="o.customs_status === 'pending'"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-300">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+                  </svg>
+                  Chờ khai HQ
+                </span>
+                <span v-else-if="o.customs_status === 'declared'"
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                  <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                  </svg>
+                  Đã khai HQ
+                </span>
+                <span v-else class="text-gray-300 text-xs">—</span>
+              </td>
+
               <!-- Giao hàng -->
               <td class="px-5 py-3">
                 <span v-if="o.delivery_status === 'done'"
@@ -88,7 +109,7 @@
               </td>
             </tr>
             <tr v-if="!orders.data?.length">
-              <td colspan="9" class="px-5 py-10 text-center text-gray-400">Chưa có đơn hàng nào</td>
+              <td colspan="10" class="px-5 py-10 text-center text-gray-400">Chưa có đơn hàng nào</td>
             </tr>
           </tbody>
         </table>

@@ -37,7 +37,13 @@
           <tbody class="divide-y divide-gray-100">
             <tr v-for="customer in customers.data" :key="customer.id" class="hover:bg-gray-50">
               <td class="px-5 py-3 font-mono text-xs text-gray-700">{{ customer.code }}</td>
-              <td class="px-5 py-3 font-medium text-gray-900">{{ customer.name }}</td>
+              <td class="px-5 py-3 font-medium text-gray-900">
+                {{ customer.name }}
+                <span v-if="customer.is_fdi"
+                  class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200">
+                  FDI
+                </span>
+              </td>
               <td class="px-5 py-3 text-gray-600">{{ customer.company ?? '—' }}</td>
               <td class="px-5 py-3 text-gray-600">{{ customer.phone ?? '—' }}</td>
               <td class="px-5 py-3">

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\CustomsStatus;
 use App\Enums\OrderStatus;
 use App\Models\Concerns\GeneratesCode;
 use Illuminate\Database\Eloquent\Model;
@@ -19,14 +20,17 @@ class Order extends Model
         'code', 'customer_id', 'quotation_id', 'supplementary_for_order_id', 'order_date',
         'expected_delivery', 'status', 'notes', 'created_by',
         'file_path', 'file_name',
+        'customs_status', 'customs_declared_at', 'customs_document_path', 'customs_document_name', 'customs_notes',
     ];
 
     protected function casts(): array
     {
         return [
-            'status'            => OrderStatus::class,
-            'order_date'        => 'date',
-            'expected_delivery' => 'date',
+            'status'               => OrderStatus::class,
+            'customs_status'       => CustomsStatus::class,
+            'order_date'           => 'date',
+            'expected_delivery'    => 'date',
+            'customs_declared_at'  => 'datetime',
         ];
     }
 

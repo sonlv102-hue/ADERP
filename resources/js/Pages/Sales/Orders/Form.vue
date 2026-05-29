@@ -10,6 +10,21 @@
         <h1 class="text-2xl font-bold text-gray-900">{{ order ? 'Sửa đơn hàng ' + order.code : 'Tạo đơn hàng' }}</h1>
       </div>
 
+      <!-- Banner FDI — cảnh báo hải quan -->
+      <div v-if="selectedCustomerIsFdi" class="flex items-start gap-3 px-4 py-3 bg-amber-50 border border-amber-300 rounded-xl text-sm">
+        <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        </svg>
+        <div class="text-amber-800">
+          <p class="font-semibold">Khách hàng FDI — Yêu cầu khai báo hải quan</p>
+          <p class="mt-0.5 text-amber-700">
+            Đây là doanh nghiệp có vốn đầu tư nước ngoài. Sau khi tạo đơn, đội bán hàng cần hoàn thành
+            <strong>thủ tục khai báo hải quan</strong> và đính kèm tờ khai trước khi giao hàng.
+          </p>
+        </div>
+      </div>
+
       <!-- Banner đơn bổ sung -->
       <div v-if="supplementaryFor" class="flex items-center gap-3 px-4 py-3 bg-orange-50 border border-orange-200 rounded-xl text-sm">
         <svg class="w-4 h-4 text-orange-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -38,7 +53,9 @@
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                 :class="{ 'border-red-500': form.errors.customer_id }">
                 <option value="">-- Chọn khách hàng --</option>
-                <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.code }} - {{ c.name }}</option>
+                <option v-for="c in customers" :key="c.id" :value="c.id">
+                  {{ c.code }} - {{ c.name }}{{ c.is_fdi ? ' 🔶 FDI' : '' }}
+                </option>
               </select>
               <p v-if="form.errors.customer_id" class="mt-1 text-xs text-red-600">{{ form.errors.customer_id }}</p>
             </div>
@@ -196,6 +213,11 @@ const form = useForm({
   expected_delivery:          props.order?.expected_delivery ?? '',
   notes:                      props.order?.notes ?? '',
   items:                      props.order?.items ? props.order.items.map(i => ({ ...i })) : [],
+});
+
+const selectedCustomerIsFdi = computed(() => {
+  if (!form.customer_id) return false;
+  return props.customers.find(c => c.id === Number(form.customer_id))?.is_fdi ?? false;
 });
 
 const onQuotationChange = () => {

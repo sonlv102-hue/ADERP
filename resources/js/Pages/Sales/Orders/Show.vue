@@ -183,6 +183,71 @@
         </div>
       </div>
 
+      <!-- Khai báo hải quan (chỉ hiện khi khách hàng FDI) -->
+      <div v-if="order.customer.is_fdi" class="rounded-xl border p-5 space-y-3"
+        :class="order.customs_status === 'declared'
+          ? 'bg-green-50 border-green-200'
+          : 'bg-amber-50 border-amber-300'">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <svg class="w-5 h-5 flex-shrink-0" :class="order.customs_status === 'declared' ? 'text-green-500' : 'text-amber-500'"
+              fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+            </svg>
+            <h2 class="text-base font-semibold" :class="order.customs_status === 'declared' ? 'text-green-800' : 'text-amber-800'">
+              Khai báo hải quan
+              <span class="ml-2 text-xs font-medium px-2 py-0.5 rounded-full"
+                :class="order.customs_status === 'declared' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'">
+                {{ order.customs_status_label }}
+              </span>
+            </h2>
+          </div>
+        </div>
+
+        <!-- Đã khai báo -->
+        <div v-if="order.customs_status === 'declared'" class="space-y-2 text-sm">
+          <p class="text-green-700">
+            <strong>Ngày khai báo:</strong> {{ order.customs_declared_at }}
+          </p>
+          <div v-if="order.customs_document_name" class="flex items-center gap-3 px-3 py-2 bg-white rounded-lg border border-green-200">
+            <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
+            </svg>
+            <span class="text-sm text-gray-800 flex-1 truncate">{{ order.customs_document_name }}</span>
+            <a :href="order.customs_document_url" target="_blank" download
+              class="text-green-600 hover:text-green-800 text-xs font-medium whitespace-nowrap">Tải tờ khai</a>
+          </div>
+          <p v-if="order.customs_notes" class="text-green-700 italic text-xs">Ghi chú: {{ order.customs_notes }}</p>
+        </div>
+
+        <!-- Chờ khai báo — hiện form upload -->
+        <div v-else class="space-y-3">
+          <p class="text-sm text-amber-700">
+            Khách hàng này là doanh nghiệp FDI. Vui lòng đính kèm <strong>tờ khai hải quan</strong> trước khi giao hàng.
+          </p>
+          <div class="space-y-2">
+            <label class="block cursor-pointer">
+              <input type="file" class="hidden" ref="customsFileInput" @change="onCustomsFileSelected">
+              <div class="px-3 py-2 text-sm bg-white border border-dashed border-amber-300 rounded-lg hover:bg-amber-50 text-center text-amber-700">
+                {{ customsFile ? customsFile.name : 'Nhấn để chọn tờ khai hải quan (PDF/ảnh)...' }}
+              </div>
+            </label>
+            <textarea v-model="customsNotes" placeholder="Ghi chú (số tờ khai, ngày nộp...)" rows="2"
+              class="w-full px-3 py-2 text-sm border border-amber-200 rounded-lg focus:ring-2 focus:ring-amber-400 outline-none bg-white" />
+            <div v-if="customsFile" class="flex justify-end">
+              <button @click="submitCustoms" :disabled="declaringCustoms"
+                class="px-4 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white text-sm font-medium rounded-lg flex items-center gap-2">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                {{ declaringCustoms ? 'Đang lưu...' : 'Xác nhận đã khai báo hải quan' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Tài liệu đính kèm -->
       <div class="bg-white rounded-xl border border-gray-200 p-5">
         <p class="text-sm font-semibold text-gray-700 mb-3">Tài liệu đính kèm</p>
@@ -304,6 +369,28 @@ const canCreateExit = computed(() =>
 
 const action = (act) => {
   router.post(route(`sales.orders.${act}`, props.order.id));
+};
+
+// Customs declaration
+const customsFileInput = ref(null);
+const customsFile = ref(null);
+const customsNotes = ref('');
+const declaringCustoms = ref(false);
+
+const onCustomsFileSelected = (e) => {
+  customsFile.value = e.target.files[0] ?? null;
+};
+
+const submitCustoms = () => {
+  if (!customsFile.value) return;
+  const formData = new FormData();
+  formData.append('file', customsFile.value);
+  if (customsNotes.value) formData.append('customs_notes', customsNotes.value);
+  declaringCustoms.value = true;
+  router.post(route('sales.orders.customs.declare', props.order.id), formData, {
+    preserveScroll: true,
+    onFinish: () => { declaringCustoms.value = false; },
+  });
 };
 
 const fileInput = ref(null);
