@@ -22,7 +22,7 @@ class InvoiceController extends Controller
 
     public function index(Request $request): Response
     {
-        $query = Invoice::with(['customer'])
+        $query = Invoice::with(['customer' => fn ($q) => $q->withTrashed()])
             ->orderByDesc('id');
 
         if ($request->filled('status')) {
@@ -41,7 +41,7 @@ class InvoiceController extends Controller
             'invoices' => $query->paginate(20)->through(fn ($inv) => [
                 'id'           => $inv->id,
                 'code'         => $inv->code,
-                'customer'     => $inv->customer->name,
+                'customer'     => $inv->customer?->name ?? '—',
                 'issue_date'   => $inv->issue_date->format('d/m/Y'),
                 'due_date'     => $inv->due_date?->format('d/m/Y'),
                 'total'        => (float) $inv->total,
@@ -92,13 +92,13 @@ class InvoiceController extends Controller
 
     public function show(Invoice $invoice): Response
     {
-        $invoice->load(['customer', 'order', 'contract', 'creator', 'payments.creator']);
+        $invoice->load(['customer' => fn ($q) => $q->withTrashed(), 'order', 'contract', 'creator', 'payments.creator']);
 
         return Inertia::render('Accounting/Invoices/Show', [
             'invoice' => [
                 'id'           => $invoice->id,
                 'code'         => $invoice->code,
-                'customer'     => ['id' => $invoice->customer->id, 'name' => $invoice->customer->name],
+                'customer'     => $invoice->customer ? ['id' => $invoice->customer->id, 'name' => $invoice->customer->name] : null,
                 'order'        => $invoice->order ? ['id' => $invoice->order->id, 'code' => $invoice->order->code] : null,
                 'contract'     => $invoice->contract ? ['id' => $invoice->contract->id, 'code' => $invoice->contract->code, 'title' => $invoice->contract->title] : null,
                 'issue_date'   => $invoice->issue_date->format('d/m/Y'),
