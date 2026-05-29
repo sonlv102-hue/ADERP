@@ -20,70 +20,109 @@ class BalanceSheetExport implements FromCollection, WithHeadings, WithMapping, W
     public function collection(): Collection
     {
         $asOf = $this->filters['as_of'] ?? now()->toDateString();
+        $bal  = $this->accountBalancesAsOf($asOf);
+        $b    = fn(string $code) => $bal[$code] ?? 0.0;
 
-        $cashIn  = (float) DB::table('payments')->where('payment_date', '<=', $asOf)->sum('amount');
-        $cashOut = (float) DB::table('purchase_invoice_payments')->where('payment_date', '<=', $asOf)->sum('amount');
-        $cash    = $cashIn - $cashOut;
+        $cashOnHand  = $b('111');
+        $bankBalance = $b('112');
+        $ar          = $b('131');
+        $prepaidST   = $b('142');
+        $inventory   = $b('156') + $b('155') + $b('152') + $b('153');
+        $faGross     = $b('211') + $b('213');
+        $faAccDep    = $b('214');
+        $faNet       = max(0.0, $faGross - $faAccDep);
+        $prepaidLT   = $b('242');
 
-        $ar = max(0, (float) DB::table('invoices')
-            ->whereNotIn('status', ['cancelled'])->where('issue_date', '<=', $asOf)->sum('total') - $cashIn);
+        $cash                  = $cashOnHand + $bankBalance;
+        $totalCurrentAssets    = $cash + $ar + $prepaidST + $inventory;
+        $totalNonCurrentAssets = $faNet + $prepaidLT;
+        $totalAssets           = $totalCurrentAssets + $totalNonCurrentAssets;
 
-        $stockIn  = (float) DB::table('stock_movements')
-            ->join('products', 'products.id', '=', 'stock_movements.product_id')
-            ->where('type', 'in')->where('stock_movements.created_at', '<=', $asOf . ' 23:59:59')
-            ->sum(DB::raw('stock_movements.quantity * COALESCE(products.cost_price, 0)'));
-        $stockOut = (float) DB::table('stock_movements')
-            ->join('products', 'products.id', '=', 'stock_movements.product_id')
-            ->where('type', 'out')->where('stock_movements.created_at', '<=', $asOf . ' 23:59:59')
-            ->sum(DB::raw('stock_movements.quantity * COALESCE(products.cost_price, 0)'));
-        $inventory = max(0, $stockIn - $stockOut);
+        $ap            = $b('331');
+        $vatPayable    = $b('3331') + $b('3332') + $b('3333');
+        $citPayable    = $b('3334');
+        $pitPayable    = $b('3335');
+        $bhxhPayable   = $b('3383') + $b('3384') + $b('3389');
+        $salaryPayable = $b('334');
+        $totalLiabilities = $ap + $vatPayable + $citPayable + $pitPayable + $bhxhPayable + $salaryPayable;
 
-        $faGross  = (float) DB::table('fixed_assets')->whereNull('deleted_at')->where('acquisition_date', '<=', $asOf)->sum('acquisition_cost');
-        $faAccDep = (float) DB::table('fixed_assets')->whereNull('deleted_at')->where('acquisition_date', '<=', $asOf)->sum('accumulated_depreciation');
-        $faNet    = max(0, $faGross - $faAccDep);
-
-        $ap = (float) DB::table('purchase_invoices')
-            ->whereNotIn('status', ['cancelled'])->where('invoice_date', '<=', $asOf)
-            ->sum(DB::raw('GREATEST(0, total - paid_amount)'));
-
-        $vatOut = (float) DB::table('invoices')->whereNotIn('status', ['draft', 'cancelled'])->where('issue_date', '<=', $asOf)->sum('tax_amount');
-        $vatIn  = (float) DB::table('purchase_invoices')->whereNotNull('invoice_date')->where('invoice_date', '<=', $asOf)->sum('tax_amount');
-        $vatPayable = max(0, $vatOut - $vatIn);
-
-        $revenue = (float) DB::table('invoices')->whereNotIn('status', ['draft', 'cancelled'])->where('issue_date', '<=', $asOf)->sum('subtotal');
-        $cogs    = (float) DB::table('order_items')
-            ->join('orders', 'orders.id', '=', 'order_items.order_id')
-            ->join('products', 'products.id', '=', 'order_items.product_id')
-            ->where('orders.order_date', '<=', $asOf)->whereNotIn('orders.status', ['draft', 'cancelled'])
-            ->sum(DB::raw('order_items.quantity * COALESCE(products.cost_price, 0)'));
-        $retained = $revenue - $cogs;
-
-        $totalAssets  = $cash + $ar + $inventory + $faNet;
-        $totalLiabEq  = $ap + $vatPayable + $retained;
+        $charterCapital = $b('411');
+        $revenue  = $this->sumPrefix($bal, '5');
+        $expenses = $this->sumPrefix($bal, '6') + $this->sumPrefix($bal, '8');
+        $retainedEarnings = $revenue - $expenses;
+        $totalEquity     = $charterCapital + $retainedEarnings;
+        $totalLiabEquity = $totalLiabilities + $totalEquity;
 
         return collect([
-            (object)['label' => '=== TÀI SẢN ===',                  'amount' => null],
-            (object)['label' => 'A. Tài sản ngắn hạn',               'amount' => $cash + $ar + $inventory],
-            (object)['label' => '  I. Tiền gửi ngân hàng (TK 112)', 'amount' => $cash],
-            (object)['label' => '  II. Phải thu KH (TK 131)',        'amount' => $ar],
-            (object)['label' => '  III. Hàng tồn kho (TK 156)',     'amount' => $inventory],
-            (object)['label' => 'B. Tài sản dài hạn',                'amount' => $faNet],
-            (object)['label' => '  I. TSCĐ - Nguyên giá (TK 211)',  'amount' => $faGross],
-            (object)['label' => '     Hao mòn (TK 214)',             'amount' => -$faAccDep],
-            (object)['label' => '     Giá trị còn lại',              'amount' => $faNet],
-            (object)['label' => 'TỔNG CỘNG TÀI SẢN',                'amount' => $totalAssets],
-            (object)['label' => '',                                   'amount' => null],
-            (object)['label' => '=== NGUỒN VỐN ===',                 'amount' => null],
-            (object)['label' => 'A. Nợ phải trả',                    'amount' => $ap + $vatPayable],
-            (object)['label' => '  I. Phải trả NCC (TK 331)',        'amount' => $ap],
-            (object)['label' => '  II. Thuế GTGT phải nộp (3331)',   'amount' => $vatPayable],
-            (object)['label' => 'B. Vốn chủ sở hữu',                'amount' => $retained],
-            (object)['label' => '  Lợi nhuận chưa phân phối',       'amount' => $retained],
-            (object)['label' => 'TỔNG CỘNG NGUỒN VỐN',              'amount' => $totalLiabEq],
+            (object)['label' => 'BẢNG CÂN ĐỐI KẾ TOÁN tại ' . $asOf, 'amount' => null],
+            (object)['label' => '', 'amount' => null],
+            (object)['label' => 'A. TÀI SẢN NGẮN HẠN',                       'amount' => $totalCurrentAssets],
+            (object)['label' => '  I. Tiền và tương đương tiền',               'amount' => $cash],
+            (object)['label' => '     - Tiền mặt (TK 111)',                    'amount' => $cashOnHand],
+            (object)['label' => '     - Tiền gửi ngân hàng (TK 112)',          'amount' => $bankBalance],
+            (object)['label' => '  II. Phải thu ngắn hạn – KH (TK 131)',      'amount' => $ar],
+            (object)['label' => '  III. Hàng tồn kho (TK 152/153/155/156)',   'amount' => $inventory],
+            (object)['label' => '  IV. Chi phí trả trước ngắn hạn (TK 142)', 'amount' => $prepaidST],
+            (object)['label' => 'B. TÀI SẢN DÀI HẠN',                        'amount' => $totalNonCurrentAssets],
+            (object)['label' => '  I. TSCĐ – Nguyên giá (TK 211)',            'amount' => $faGross],
+            (object)['label' => '     Hao mòn lũy kế (TK 214)',               'amount' => -$faAccDep],
+            (object)['label' => '     Giá trị còn lại',                       'amount' => $faNet],
+            (object)['label' => '  II. Chi phí trả trước dài hạn (TK 242)',   'amount' => $prepaidLT],
+            (object)['label' => 'TỔNG CỘNG TÀI SẢN (A+B)',                    'amount' => $totalAssets],
+            (object)['label' => '', 'amount' => null],
+            (object)['label' => 'A. NỢ PHẢI TRẢ',                             'amount' => $totalLiabilities],
+            (object)['label' => '  I. Phải trả người bán (TK 331)',            'amount' => $ap],
+            (object)['label' => '  II. Thuế GTGT phải nộp (TK 3331)',         'amount' => $vatPayable],
+            (object)['label' => '  III. Thuế TNDN (TK 3334)',                  'amount' => $citPayable],
+            (object)['label' => '  IV. Thuế TNCN (TK 3335)',                   'amount' => $pitPayable],
+            (object)['label' => '  V. Phải trả NLĐ (TK 334)',                  'amount' => $salaryPayable],
+            (object)['label' => '  VI. BHXH/BHYT/BHTN (TK 338)',               'amount' => $bhxhPayable],
+            (object)['label' => 'B. VỐN CHỦ SỞ HỮU',                          'amount' => $totalEquity],
+            (object)['label' => '  Vốn đầu tư của CSH (TK 411)',               'amount' => $charterCapital],
+            (object)['label' => '  Lợi nhuận chưa phân phối',                  'amount' => $retainedEarnings],
+            (object)['label' => 'TỔNG CỘNG NGUỒN VỐN (A+B)',                   'amount' => $totalLiabEquity],
         ]);
     }
 
+    private function accountBalancesAsOf(string $asOf): array
+    {
+        $rows = DB::table('journal_entry_lines as jel')
+            ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
+            ->join('account_codes as ac', 'ac.code', '=', 'jel.account_code')
+            ->where('je.status', 'posted')
+            ->where('je.entry_date', '<=', $asOf)
+            ->select('jel.account_code', 'ac.normal_balance',
+                DB::raw('SUM(jel.debit) as dr'),
+                DB::raw('SUM(jel.credit) as cr'))
+            ->groupBy('jel.account_code', 'ac.normal_balance')
+            ->get();
+
+        $result = [];
+        foreach ($rows as $r) {
+            $result[$r->account_code] = $r->normal_balance === 'debit'
+                ? (float) $r->dr - (float) $r->cr
+                : (float) $r->cr - (float) $r->dr;
+        }
+        return $result;
+    }
+
+    private function sumPrefix(array $balances, string $prefix): float
+    {
+        $total = 0.0;
+        foreach ($balances as $code => $balance) {
+            if (str_starts_with((string) $code, $prefix)) {
+                $total += $balance;
+            }
+        }
+        return $total;
+    }
+
     public function headings(): array { return ['Chỉ tiêu', 'Số tiền (VND)']; }
-    public function map($row): array  { return [$row->label, $row->amount]; }
+
+    public function map($row): array
+    {
+        return [$row->label, $row->amount !== null ? $row->amount : ''];
+    }
+
     public function styles(Worksheet $sheet): array { return [1 => ['font' => ['bold' => true]]]; }
 }

@@ -371,7 +371,9 @@ Route::middleware('auth')->group(function () {
         Route::get('fixed-assets/export',     [FixedAssetReportController::class,'export'])->name('fixed_assets.export');
         Route::get('fund-ledger',             [FundLedgerController::class,      'index'])->name('fund-ledger.index');
         Route::get('ar-detail',               [ArDetailController::class,        'index'])->name('ar.detail');
+        Route::get('ar-detail/export',        [ArDetailController::class,        'export'])->name('ar.detail.export');
         Route::get('ap-detail',               [ApDetailController::class,        'index'])->name('ap.detail');
+        Route::get('ap-detail/export',        [ApDetailController::class,        'export'])->name('ap.detail.export');
         Route::get('document-checklist',      [DocumentChecklistController::class,'index'])->name('document_checklist');
     });
 

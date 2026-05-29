@@ -22,47 +22,81 @@ class TrialBalanceExport implements FromCollection, WithHeadings, WithMapping, W
         $year = (int) ($this->filters['year'] ?? now()->year);
         $from = $this->filters['date_from'] ?? "{$year}-01-01";
         $to   = $this->filters['date_to']   ?? "{$year}-12-31";
-        $prev = date('Y-m-d', strtotime($from . ' -1 day'));
 
-        $accounts = $this->buildAccounts($from, $to, $prev);
-
+        $accounts = $this->buildAccounts($from, $to);
         return collect($accounts);
     }
 
-    private function buildAccounts(string $from, string $to, string $prev): array
+    private function buildAccounts(string $from, string $to): array
     {
-        // Simplified re-implementation for export; mirrors TrialBalanceController::buildAccounts
-        $data = [];
+        $opening = DB::table('journal_entry_lines as jel')
+            ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
+            ->where('je.status', 'posted')
+            ->where('je.entry_date', '<', $from)
+            ->select('jel.account_code',
+                DB::raw('SUM(jel.debit) as total_debit'),
+                DB::raw('SUM(jel.credit) as total_credit'))
+            ->groupBy('jel.account_code')
+            ->get()->keyBy('account_code');
 
-        // TK 112
-        $cashIn  = (float) DB::table('payments')->whereBetween('payment_date', [$from, $to])->sum('amount');
-        $cashOut = (float) DB::table('purchase_invoice_payments')->whereBetween('payment_date', [$from, $to])->sum('amount');
-        $data[]  = (object)['code' => '112', 'name' => 'Tiền gửi ngân hàng', 'opening_debit' => 0, 'opening_credit' => 0, 'dr' => $cashIn, 'cr' => $cashOut, 'closing_debit' => max(0, $cashIn - $cashOut), 'closing_credit' => max(0, $cashOut - $cashIn)];
+        $period = DB::table('journal_entry_lines as jel')
+            ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
+            ->where('je.status', 'posted')
+            ->whereBetween('je.entry_date', [$from, $to])
+            ->select('jel.account_code',
+                DB::raw('SUM(jel.debit) as total_debit'),
+                DB::raw('SUM(jel.credit) as total_credit'))
+            ->groupBy('jel.account_code')
+            ->get()->keyBy('account_code');
 
-        // TK 131
-        $arDr = (float) DB::table('invoices')->whereNotIn('status', ['cancelled'])->whereBetween('issue_date', [$from, $to])->sum('total');
-        $arCr = (float) DB::table('payments')->whereBetween('payment_date', [$from, $to])->sum('amount');
-        $data[] = (object)['code' => '131', 'name' => 'Phải thu của khách hàng', 'opening_debit' => 0, 'opening_credit' => 0, 'dr' => $arDr, 'cr' => $arCr, 'closing_debit' => max(0, $arDr - $arCr), 'closing_credit' => max(0, $arCr - $arDr)];
+        $allCodes = $opening->keys()->merge($period->keys())->unique()->sort()->values();
 
-        // TK 156
-        $stIn  = (float) DB::table('stock_movements')->join('products', 'products.id', '=', 'stock_movements.product_id')->where('type', 'in')->whereBetween('stock_movements.created_at', [$from . ' 00:00:00', $to . ' 23:59:59'])->sum(DB::raw('stock_movements.quantity * COALESCE(products.cost_price, 0)'));
-        $stOut = (float) DB::table('stock_movements')->join('products', 'products.id', '=', 'stock_movements.product_id')->where('type', 'out')->whereBetween('stock_movements.created_at', [$from . ' 00:00:00', $to . ' 23:59:59'])->sum(DB::raw('stock_movements.quantity * COALESCE(products.cost_price, 0)'));
-        $data[] = (object)['code' => '156', 'name' => 'Hàng hóa', 'opening_debit' => 0, 'opening_credit' => 0, 'dr' => $stIn, 'cr' => $stOut, 'closing_debit' => max(0, $stIn - $stOut), 'closing_credit' => max(0, $stOut - $stIn)];
+        $accountInfo = DB::table('account_codes')
+            ->whereIn('code', $allCodes)
+            ->select('code', 'name', 'normal_balance')
+            ->get()->keyBy('code');
 
-        // TK 331
-        $apCr = (float) DB::table('purchase_invoices')->whereNotIn('status', ['cancelled'])->whereBetween('invoice_date', [$from, $to])->sum('total');
-        $apDr = (float) DB::table('purchase_invoice_payments')->whereBetween('payment_date', [$from, $to])->sum('amount');
-        $data[] = (object)['code' => '331', 'name' => 'Phải trả người bán', 'opening_debit' => 0, 'opening_credit' => 0, 'dr' => $apDr, 'cr' => $apCr, 'closing_debit' => max(0, $apDr - $apCr), 'closing_credit' => max(0, $apCr - $apDr)];
+        $result = [];
+        foreach ($allCodes as $code) {
+            $acc    = $accountInfo->get($code);
+            $openDr = (float) ($opening->get($code)?->total_debit ?? 0);
+            $openCr = (float) ($opening->get($code)?->total_credit ?? 0);
+            $dr     = (float) ($period->get($code)?->total_debit ?? 0);
+            $cr     = (float) ($period->get($code)?->total_credit ?? 0);
 
-        // TK 511
-        $rev  = (float) DB::table('invoices')->whereNotIn('status', ['draft', 'cancelled'])->whereBetween('issue_date', [$from, $to])->sum('subtotal');
-        $data[] = (object)['code' => '511', 'name' => 'Doanh thu bán hàng', 'opening_debit' => 0, 'opening_credit' => 0, 'dr' => 0, 'cr' => $rev, 'closing_debit' => 0, 'closing_credit' => $rev];
+            $normalBalance = $acc?->normal_balance ?? 'debit';
+            $openingNet    = $openDr - $openCr;
 
-        // TK 632
-        $cogs = (float) DB::table('order_items')->join('orders', 'orders.id', '=', 'order_items.order_id')->join('products', 'products.id', '=', 'order_items.product_id')->whereBetween('orders.order_date', [$from, $to])->whereNotIn('orders.status', ['draft', 'cancelled'])->sum(DB::raw('order_items.quantity * COALESCE(products.cost_price, 0)'));
-        $data[] = (object)['code' => '632', 'name' => 'Giá vốn hàng bán', 'opening_debit' => 0, 'opening_credit' => 0, 'dr' => $cogs, 'cr' => 0, 'closing_debit' => $cogs, 'closing_credit' => 0];
+            if ($normalBalance === 'debit') {
+                $openingDebit  = max(0.0, $openingNet);
+                $openingCredit = max(0.0, -$openingNet);
+            } else {
+                $openingDebit  = max(0.0, -$openingNet);
+                $openingCredit = max(0.0, $openingNet);
+            }
 
-        return $data;
+            $closingNet = $openingNet + $dr - $cr;
+            if ($normalBalance === 'debit') {
+                $closingDebit  = max(0.0, $closingNet);
+                $closingCredit = max(0.0, -$closingNet);
+            } else {
+                $closingDebit  = max(0.0, -$closingNet);
+                $closingCredit = max(0.0, $closingNet);
+            }
+
+            $result[] = (object) [
+                'code'           => $code,
+                'name'           => $acc?->name ?? '—',
+                'opening_debit'  => $openingDebit,
+                'opening_credit' => $openingCredit,
+                'dr'             => $dr,
+                'cr'             => $cr,
+                'closing_debit'  => $closingDebit,
+                'closing_credit' => $closingCredit,
+            ];
+        }
+
+        return $result;
     }
 
     public function headings(): array
@@ -72,7 +106,16 @@ class TrialBalanceExport implements FromCollection, WithHeadings, WithMapping, W
 
     public function map($row): array
     {
-        return [$row->code, $row->name, $row->opening_debit, $row->opening_credit, $row->dr, $row->cr, $row->closing_debit, $row->closing_credit];
+        return [
+            $row->code,
+            $row->name,
+            $row->opening_debit  > 0 ? $row->opening_debit  : '',
+            $row->opening_credit > 0 ? $row->opening_credit : '',
+            $row->dr  > 0 ? $row->dr  : '',
+            $row->cr  > 0 ? $row->cr  : '',
+            $row->closing_debit  > 0 ? $row->closing_debit  : '',
+            $row->closing_credit > 0 ? $row->closing_credit : '',
+        ];
     }
 
     public function styles(Worksheet $sheet): array { return [1 => ['font' => ['bold' => true]]]; }

@@ -42,7 +42,7 @@ class Order extends Model
 
     public function total(): float
     {
-        return (float) $this->items->sum(fn ($item) => $item->quantity * $item->unit_price);
+        return (float) $this->items->sum(fn ($item) => $item->lineTotal());
     }
 
     public function customer(): BelongsTo

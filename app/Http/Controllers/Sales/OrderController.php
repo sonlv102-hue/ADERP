@@ -27,7 +27,7 @@ class OrderController extends Controller
             'orders' => Order::with(['customer', 'creator', 'quotation'])
                 ->withCount('items')
                 ->addSelect([
-                    'items_total' => OrderItem::selectRaw('COALESCE(SUM(quantity * unit_price), 0)')
+                    'items_total' => OrderItem::selectRaw('COALESCE(SUM(quantity * unit_price * (1 - COALESCE(discount_percent, 0) / 100)), 0)')
                         ->whereColumn('order_id', 'orders.id'),
                     'has_contract' => \App\Models\Contract::selectRaw('COUNT(*)')
                         ->whereColumn('order_id', 'orders.id')
@@ -103,6 +103,7 @@ class OrderController extends Controller
             'items.*.unit'                => ['nullable', 'string'],
             'items.*.quantity'            => ['required', 'integer', 'min:1'],
             'items.*.unit_price'          => ['required', 'numeric', 'min:0'],
+            'items.*.discount_percent'    => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
         $isFdi = Customer::where('id', $data['customer_id'])->value('is_fdi');
@@ -164,6 +165,7 @@ class OrderController extends Controller
                     'remaining'          => max(0, (float)$item->quantity - (float)$item->delivered_quantity),
                     'current_stock'      => (int) ($stocks[$item->product_id] ?? 0),
                     'unit_price'         => $item->unit_price,
+                    'discount_percent'   => (float) $item->discount_percent,
                     'line_total'         => $item->lineTotal(),
                 ]),
                 'contracts' => $order->contracts->map(fn ($c) => [
@@ -203,13 +205,14 @@ class OrderController extends Controller
                 'expected_delivery' => $order->expected_delivery?->format('Y-m-d'),
                 'notes'             => $order->notes,
                 'items'             => $order->items->map(fn ($item) => [
-                    'product_id' => $item->product_id,
-                    'service_id' => $item->service_id,
-                    'name'       => $item->name,
-                    'unit'       => $item->unit,
-                    'quantity'   => $item->quantity,
-                    'unit_price' => $item->unit_price,
-                    '_type'      => $item->product_id ? 'product' : 'service',
+                    'product_id'       => $item->product_id,
+                    'service_id'       => $item->service_id,
+                    'name'             => $item->name,
+                    'unit'             => $item->unit,
+                    'quantity'         => $item->quantity,
+                    'unit_price'       => $item->unit_price,
+                    'discount_percent' => (float) $item->discount_percent,
+                    '_type'            => $item->product_id ? 'product' : 'service',
                 ]),
             ],
             'customers'  => Customer::orderBy('name')->get(['id', 'code', 'name', 'is_fdi']),
@@ -236,8 +239,9 @@ class OrderController extends Controller
             'items.*.service_id'  => ['nullable', 'exists:services,id'],
             'items.*.name'        => ['required', 'string'],
             'items.*.unit'        => ['nullable', 'string'],
-            'items.*.quantity'    => ['required', 'integer', 'min:1'],
-            'items.*.unit_price'  => ['required', 'numeric', 'min:0'],
+            'items.*.quantity'         => ['required', 'integer', 'min:1'],
+            'items.*.unit_price'       => ['required', 'numeric', 'min:0'],
+            'items.*.discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
         $order->update([

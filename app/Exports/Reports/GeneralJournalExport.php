@@ -23,67 +23,66 @@ class GeneralJournalExport implements FromCollection, WithHeadings, WithMapping,
         $from = $this->filters['date_from'] ?? "{$year}-01-01";
         $to   = $this->filters['date_to']   ?? "{$year}-12-31";
 
-        $controller = new GeneralJournalController();
-        $entries = [];
-
-        // Invoices
-        $invs = DB::table('invoices')
-            ->join('customers', 'customers.id', '=', 'invoices.customer_id')
-            ->whereNotIn('invoices.status', ['draft', 'cancelled'])
-            ->whereBetween('invoices.issue_date', [$from, $to])
-            ->select('invoices.issue_date as date', 'invoices.code as ref', 'customers.name as partner', 'invoices.total')
+        $journalEntries = DB::table('journal_entries as je')
+            ->where('je.status', 'posted')
+            ->whereBetween('je.entry_date', [$from, $to])
+            ->orderBy('je.entry_date')
+            ->orderBy('je.id')
+            ->select('je.id', 'je.code', 'je.entry_date', 'je.description')
             ->get();
-        foreach ($invs as $r) {
-            $entries[] = (object)['date' => $r->date, 'ref' => $r->ref, 'description' => 'Xuất HĐ bán: ' . $r->ref, 'partner' => $r->partner, 'debit_tk' => '131', 'credit_tk' => '511/3331', 'amount' => (float)$r->total];
+
+        if ($journalEntries->isEmpty()) {
+            return collect();
         }
 
-        // Payments received
-        $pmts = DB::table('payments')
-            ->join('invoices', 'invoices.id', '=', 'payments.invoice_id')
-            ->join('customers', 'customers.id', '=', 'invoices.customer_id')
-            ->whereBetween('payments.payment_date', [$from, $to])
-            ->select('payments.payment_date as date', 'invoices.code as ref', 'customers.name as partner', 'payments.amount')
-            ->get();
-        foreach ($pmts as $r) {
-            $entries[] = (object)['date' => $r->date, 'ref' => $r->ref, 'description' => 'Thu tiền / HĐ: ' . $r->ref, 'partner' => $r->partner, 'debit_tk' => '112', 'credit_tk' => '131', 'amount' => (float)$r->amount];
+        $entryIds = $journalEntries->pluck('id');
+
+        $lines = DB::table('journal_entry_lines as jel')
+            ->whereIn('jel.journal_entry_id', $entryIds)
+            ->orderBy('jel.journal_entry_id')
+            ->orderBy('jel.sort_order')
+            ->select('jel.journal_entry_id', 'jel.account_code', 'jel.debit', 'jel.credit')
+            ->get()->groupBy('journal_entry_id');
+
+        $result = [];
+        $seq    = 1;
+
+        foreach ($journalEntries as $e) {
+            $entryLines  = $lines->get($e->id, collect());
+            $debitCodes  = $entryLines->where('debit', '>', 0)->pluck('account_code')->join(' / ');
+            $creditCodes = $entryLines->where('credit', '>', 0)->pluck('account_code')->join(' / ');
+            $totalDebit  = (float) $entryLines->sum('debit');
+
+            $result[] = (object) [
+                'seq'         => $seq++,
+                'date'        => $e->entry_date,
+                'ref'         => $e->code,
+                'description' => $e->description,
+                'debit_tk'    => $debitCodes ?: '—',
+                'credit_tk'   => $creditCodes ?: '—',
+                'amount'      => $totalDebit,
+            ];
         }
 
-        // Purchase invoices
-        $piList = DB::table('purchase_invoices')
-            ->join('suppliers', 'suppliers.id', '=', 'purchase_invoices.supplier_id')
-            ->whereNotIn('purchase_invoices.status', ['cancelled'])
-            ->whereNotNull('purchase_invoices.invoice_date')
-            ->whereBetween('purchase_invoices.invoice_date', [$from, $to])
-            ->select('purchase_invoices.invoice_date as date', 'purchase_invoices.code as ref', 'suppliers.name as partner', 'purchase_invoices.total')
-            ->get();
-        foreach ($piList as $r) {
-            $entries[] = (object)['date' => $r->date, 'ref' => $r->ref, 'description' => 'Nhận HĐ mua: ' . $r->ref, 'partner' => $r->partner, 'debit_tk' => '156/133', 'credit_tk' => '331', 'amount' => (float)$r->total];
-        }
-
-        // AP payments
-        $appmts = DB::table('purchase_invoice_payments')
-            ->join('purchase_invoices', 'purchase_invoices.id', '=', 'purchase_invoice_payments.purchase_invoice_id')
-            ->join('suppliers', 'suppliers.id', '=', 'purchase_invoices.supplier_id')
-            ->whereBetween('purchase_invoice_payments.payment_date', [$from, $to])
-            ->select('purchase_invoice_payments.payment_date as date', 'purchase_invoices.code as ref', 'suppliers.name as partner', 'purchase_invoice_payments.amount')
-            ->get();
-        foreach ($appmts as $r) {
-            $entries[] = (object)['date' => $r->date, 'ref' => $r->ref, 'description' => 'Trả NCC / HĐ: ' . $r->ref, 'partner' => $r->partner, 'debit_tk' => '331', 'credit_tk' => '112', 'amount' => (float)$r->amount];
-        }
-
-        usort($entries, fn($a, $b) => strcmp($a->date, $b->date));
-
-        return collect(array_map(fn($e, $i) => (object)array_merge((array)$e, ['seq' => $i + 1]), $entries, array_keys($entries)));
+        return collect($result);
     }
 
     public function headings(): array
     {
-        return ['STT', 'Ngày', 'Chứng từ', 'Diễn giải', 'Đối tác', 'TK Nợ', 'TK Có', 'Số tiền'];
+        return ['STT', 'Ngày', 'Số chứng từ', 'Diễn giải', 'TK Nợ', 'TK Có', 'Số tiền (VND)'];
     }
 
     public function map($row): array
     {
-        return [$row->seq, $row->date, $row->ref, $row->description, $row->partner, $row->debit_tk, $row->credit_tk, $row->amount];
+        return [
+            $row->seq,
+            $row->date,
+            $row->ref,
+            $row->description,
+            $row->debit_tk,
+            $row->credit_tk,
+            $row->amount,
+        ];
     }
 
     public function styles(Worksheet $sheet): array { return [1 => ['font' => ['bold' => true]]]; }

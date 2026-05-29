@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers\Reports;
 
+use App\Exports\Reports\ArDetailExport;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ArDetailController extends Controller
 {
@@ -76,6 +79,15 @@ class ArDetailController extends Controller
             'total_credit' => $totalCredit,
             'filters'      => $request->only(['customer_id', 'date_from', 'date_to']),
         ]);
+    }
+
+    public function export(Request $request): BinaryFileResponse
+    {
+        $customerId = $request->input('customer_id', 'all');
+        return Excel::download(
+            new ArDetailExport($request->all()),
+            "ar-detail-tk131-{$customerId}.xlsx"
+        );
     }
 
     private function balanceFor131(int $customerId, ?string $from, ?string $to, bool $exclude = false): float

@@ -9,7 +9,7 @@ class OrderItem extends Model
 {
     protected $fillable = [
         'order_id', 'product_id', 'service_id',
-        'name', 'unit', 'quantity', 'delivered_quantity', 'unit_price',
+        'name', 'unit', 'quantity', 'delivered_quantity', 'unit_price', 'discount_percent',
     ];
 
     protected function casts(): array
@@ -18,12 +18,13 @@ class OrderItem extends Model
             'quantity'           => 'decimal:2',
             'delivered_quantity' => 'decimal:2',
             'unit_price'         => 'decimal:2',
+            'discount_percent'   => 'decimal:2',
         ];
     }
 
     public function lineTotal(): float
     {
-        return (float) ($this->quantity * $this->unit_price);
+        return (float) ($this->quantity * $this->unit_price * (1 - $this->discount_percent / 100));
     }
 
     public function order(): BelongsTo

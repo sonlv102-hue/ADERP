@@ -22,8 +22,15 @@
           <label class="block text-xs font-medium text-gray-600 mb-1">Đến ngày</label>
           <input v-model="filters.date_to" type="date" class="form-input text-sm" />
         </div>
-        <div class="flex items-end">
+        <div class="flex items-end gap-2">
           <button @click="applyFilters" class="btn-primary text-sm">Xem</button>
+          <a v-if="filters.supplier_id" :href="exportUrl" target="_blank"
+            class="px-3 py-2 bg-green-600 hover:bg-green-700 text-white text-sm rounded-lg font-medium flex items-center gap-1">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Xuất Excel
+          </a>
         </div>
       </div>
 
@@ -110,7 +117,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 
@@ -133,6 +140,12 @@ const filters = ref({
 function applyFilters() {
   router.get(route('reports.ap.detail'), filters.value, { preserveState: true });
 }
+
+const exportUrl = computed(() => {
+  const p = new URLSearchParams();
+  Object.entries(filters.value).forEach(([k, v]) => { if (v) p.set(k, v); });
+  return route('reports.ap.detail.export') + '?' + p.toString();
+});
 
 function formatVnd(val) {
   return new Intl.NumberFormat('vi-VN').format(val || 0) + ' ₫';

@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers\Reports;
 
+use App\Exports\Reports\ApDetailExport;
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class ApDetailController extends Controller
 {
@@ -75,6 +78,15 @@ class ApDetailController extends Controller
             'total_credit' => $totalCredit,
             'filters'      => $request->only(['supplier_id', 'date_from', 'date_to']),
         ]);
+    }
+
+    public function export(Request $request): BinaryFileResponse
+    {
+        $supplierId = $request->input('supplier_id', 'all');
+        return Excel::download(
+            new ApDetailExport($request->all()),
+            "ap-detail-tk331-{$supplierId}.xlsx"
+        );
     }
 
     private function balanceFor331(int $supplierId, ?string $from, ?string $to, bool $exclude = false): float

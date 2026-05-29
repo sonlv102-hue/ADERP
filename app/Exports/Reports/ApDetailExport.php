@@ -11,88 +11,69 @@ use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class AccountLedgerExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithTitle
+class ApDetailExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithTitle
 {
     public function __construct(private array $filters = []) {}
 
-    public function title(): string
-    {
-        $account = $this->filters['account'] ?? '';
-        return $account ? "Sổ chi tiết TK {$account}" : 'Sổ chi tiết tài khoản';
-    }
+    public function title(): string { return 'Sổ CT TK 331'; }
 
     public function collection(): Collection
     {
-        $account  = $this->filters['account'] ?? '131';
-        $year     = (int) ($this->filters['year'] ?? now()->year);
-        $from     = $this->filters['date_from'] ?? "{$year}-01-01";
-        $to       = $this->filters['date_to']   ?? "{$year}-12-31";
+        $supplierId = $this->filters['supplier_id'] ?? null;
+        $from       = $this->filters['date_from'] ?? now()->startOfMonth()->toDateString();
+        $to         = $this->filters['date_to']   ?? now()->toDateString();
 
-        $normalBalance = DB::table('account_codes')
-            ->where('code', $account)->value('normal_balance') ?? 'debit';
+        if (!$supplierId) {
+            return collect();
+        }
 
-        // Số dư đầu kỳ
         $openingData = DB::table('journal_entry_lines as jel')
             ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
             ->where('je.status', 'posted')
-            ->where('jel.account_code', $account)
+            ->where('jel.account_code', 'like', '331%')
+            ->where('jel.partner_type', 'supplier')
+            ->where('jel.partner_id', $supplierId)
             ->where('je.entry_date', '<', $from)
             ->selectRaw('SUM(jel.debit) as dr, SUM(jel.credit) as cr')
             ->first();
 
-        $openingBalance = $normalBalance === 'debit'
-            ? (float)($openingData?->dr ?? 0) - (float)($openingData?->cr ?? 0)
-            : (float)($openingData?->cr ?? 0) - (float)($openingData?->dr ?? 0);
+        // TK 331 credit-normal
+        $openingBalance = (float)($openingData?->cr ?? 0) - (float)($openingData?->dr ?? 0);
 
-        // Phát sinh trong kỳ
-        $lineRows = DB::table('journal_entry_lines as jel')
+        $lines = DB::table('journal_entry_lines as jel')
             ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
             ->where('je.status', 'posted')
-            ->where('jel.account_code', $account)
+            ->where('jel.account_code', 'like', '331%')
+            ->where('jel.partner_type', 'supplier')
+            ->where('jel.partner_id', $supplierId)
             ->whereBetween('je.entry_date', [$from, $to])
             ->orderBy('je.entry_date')
             ->orderBy('je.id')
             ->orderBy('jel.sort_order')
             ->select('je.entry_date as date', 'je.code as ref',
-                'je.description as entry_desc', 'jel.description as line_desc',
+                DB::raw("COALESCE(jel.description, je.description, '') as description"),
                 'jel.debit', 'jel.credit')
             ->get();
 
         $result  = [];
         $balance = $openingBalance;
 
-        $result[] = (object)[
-            'date'        => '',
-            'ref'         => '',
-            'description' => 'Số dư đầu kỳ',
-            'debit'       => 0,
-            'credit'      => 0,
-            'balance'     => $openingBalance,
-        ];
+        $result[] = (object)['date' => '', 'ref' => '', 'description' => 'Số dư đầu kỳ', 'debit' => 0, 'credit' => 0, 'balance' => $openingBalance];
 
-        foreach ($lineRows as $l) {
-            $balance += $normalBalance === 'debit'
-                ? ((float)$l->debit - (float)$l->credit)
-                : ((float)$l->credit - (float)$l->debit);
-
+        foreach ($lines as $l) {
+            // TK 331: credit tăng nợ phải trả, debit giảm
+            $balance += (float)$l->credit - (float)$l->debit;
             $result[] = (object)[
                 'date'        => $l->date,
                 'ref'         => $l->ref,
-                'description' => $l->line_desc ?? $l->entry_desc,
+                'description' => $l->description,
                 'debit'       => (float) $l->debit,
                 'credit'      => (float) $l->credit,
                 'balance'     => $balance,
             ];
         }
 
-        $result[] = (object)[
-            'date'        => '',
-            'ref'         => '',
-            'description' => 'Số dư cuối kỳ',
-            'debit'       => 0,
-            'credit'      => 0,
-            'balance'     => $balance,
-        ];
+        $result[] = (object)['date' => '', 'ref' => '', 'description' => 'Số dư cuối kỳ', 'debit' => 0, 'credit' => 0, 'balance' => $balance];
 
         return collect($result);
     }

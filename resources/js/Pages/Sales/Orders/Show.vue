@@ -73,6 +73,7 @@
               <th v-if="hasDeliveryTracking" class="text-right px-5 py-3 font-semibold text-gray-600">Đã giao</th>
               <th v-if="hasDeliveryTracking" class="text-right px-5 py-3 font-semibold text-orange-600">Còn lại</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">Đơn giá</th>
+              <th class="text-right px-5 py-3 font-semibold text-gray-600">CK (%)</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">Thành tiền</th>
             </tr>
           </thead>
@@ -91,12 +92,16 @@
                 {{ item.remaining > 0 ? item.remaining : '✓' }}
               </td>
               <td class="px-5 py-3 text-right text-gray-700">{{ formatVnd(item.unit_price) }}</td>
+              <td class="px-5 py-3 text-right">
+                <span v-if="item.discount_percent > 0" class="text-green-600 font-medium">{{ item.discount_percent }}%</span>
+                <span v-else class="text-gray-400">—</span>
+              </td>
               <td class="px-5 py-3 text-right font-medium text-gray-800">{{ formatVnd(item.line_total) }}</td>
             </tr>
           </tbody>
           <tfoot class="bg-gray-50 border-t border-gray-200">
             <tr>
-              <td :colspan="hasDeliveryTracking ? 7 : 5" class="px-5 py-3 text-right font-bold text-gray-800">TỔNG CỘNG:</td>
+              <td :colspan="hasDeliveryTracking ? 8 : 6" class="px-5 py-3 text-right font-bold text-gray-800">TỔNG CỘNG:</td>
               <td class="px-5 py-3 text-right font-bold text-primary-700 text-base">{{ formatVnd(order.total) }}</td>
             </tr>
           </tfoot>

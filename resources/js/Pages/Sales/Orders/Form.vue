@@ -112,8 +112,9 @@
               <tr>
                 <th class="text-left px-4 py-3 font-semibold text-gray-600">Sản phẩm/Dịch vụ</th>
                 <th class="text-left px-4 py-3 font-semibold text-gray-600 w-20">ĐVT</th>
-                <th class="text-left px-4 py-3 font-semibold text-gray-600 w-24">SL</th>
+                <th class="text-left px-4 py-3 font-semibold text-gray-600 w-20">SL</th>
                 <th class="text-left px-4 py-3 font-semibold text-gray-600 w-32">Đơn giá</th>
+                <th class="text-left px-4 py-3 font-semibold text-gray-600 w-24">CK (%)</th>
                 <th class="text-right px-4 py-3 font-semibold text-gray-600 w-32">Thành tiền</th>
                 <th class="w-10 px-4 py-3" />
               </tr>
@@ -148,8 +149,16 @@
                   <input v-model.number="item.unit_price" type="number" min="0"
                     class="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-xs" />
                 </td>
+                <td class="px-4 py-3">
+                  <input v-model.number="item.discount_percent" type="number" min="0" max="100" step="0.01"
+                    placeholder="0"
+                    class="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-xs" />
+                </td>
                 <td class="px-4 py-3 text-right font-medium text-gray-700 text-xs">
-                  {{ formatVnd(item.quantity * item.unit_price) }}
+                  <span>{{ formatVnd(itemLineTotal(item)) }}</span>
+                  <span v-if="item.discount_percent > 0" class="block text-xs text-green-600 mt-0.5">
+                    -{{ item.discount_percent }}%
+                  </span>
                 </td>
                 <td class="px-4 py-3 text-center">
                   <button type="button" @click="removeRow(idx)" class="text-red-500 hover:text-red-700">
@@ -160,12 +169,12 @@
                 </td>
               </tr>
               <tr v-if="!form.items.length">
-                <td colspan="6" class="px-5 py-8 text-center text-gray-400">Chưa có hàng hóa. Nhấn "+ Sản phẩm" hoặc "+ Dịch vụ".</td>
+                <td colspan="7" class="px-5 py-8 text-center text-gray-400">Chưa có hàng hóa. Nhấn "+ Sản phẩm" hoặc "+ Dịch vụ".</td>
               </tr>
             </tbody>
             <tfoot v-if="form.items.length" class="bg-gray-50 border-t border-gray-200">
               <tr>
-                <td colspan="4" class="px-4 py-3 text-right font-bold text-gray-800">Tổng cộng:</td>
+                <td colspan="5" class="px-4 py-3 text-right font-bold text-gray-800">Tổng cộng:</td>
                 <td class="px-4 py-3 text-right font-bold text-primary-700 text-base">{{ formatVnd(grandTotal) }}</td>
                 <td />
               </tr>
@@ -237,13 +246,14 @@ onMounted(() => {
 
 const addRow = (type) => {
   form.items.push({
-    _type:      type,
-    product_id: type === 'product' ? '' : null,
-    service_id: type === 'service' ? '' : null,
-    name:       '',
-    unit:       '',
-    quantity:   1,
-    unit_price: 0,
+    _type:            type,
+    product_id:       type === 'product' ? '' : null,
+    service_id:       type === 'service' ? '' : null,
+    name:             '',
+    unit:             '',
+    quantity:         1,
+    unit_price:       0,
+    discount_percent: 0,
   });
 };
 
@@ -260,8 +270,13 @@ const onItemChange = (idx) => {
   }
 };
 
+const itemLineTotal = (item) => {
+  const disc = item.discount_percent || 0;
+  return (item.quantity || 0) * (item.unit_price || 0) * (1 - disc / 100);
+};
+
 const grandTotal = computed(() =>
-  form.items.reduce((s, i) => s + (i.quantity * i.unit_price), 0)
+  form.items.reduce((s, i) => s + itemLineTotal(i), 0)
 );
 
 const { formatVnd } = useCurrency();
