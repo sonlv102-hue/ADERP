@@ -126,7 +126,7 @@ Route::middleware('auth')->group(function () {
     Route::prefix('warehouse')->name('warehouse.')->middleware('can:warehouse.view')->group(function () {
         Route::resource('warehouses', WarehouseController::class)->except(['show']);
         // Import routes must be before resource to avoid {supplier} wildcard conflict
-        Route::post('suppliers/import', [SupplierController::class, 'import'])->name('suppliers.import')->middleware('can:suppliers.create');
+        Route::post('suppliers/import', [SupplierController::class, 'import'])->name('suppliers.import')->middleware('can:warehouse.manage');
         Route::get('suppliers/import-template', [SupplierController::class, 'importTemplate'])->name('suppliers.import-template');
         Route::resource('suppliers', SupplierController::class)->except(['show']);
 
