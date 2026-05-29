@@ -26,7 +26,8 @@ class DemoDataSeeder extends Seeder
             // Initialize IDs needed by seedProjects/seedTickets
             $this->adminId = (int) DB::table('users')->where('email', 'admin@minierp.local')->value('id');
             $this->salesId = (int) DB::table('users')->where('email', 'sales@minierp.local')->value('id');
-            // Only re-run projects/tickets if missing
+            // Ensure extended customers exist (KH-0003..5 needed by projects/tickets)
+            $this->ensureExtendedCustomers();
             if (!$hasProjects) $this->seedProjects();
             if (!$hasTickets)  $this->seedTickets();
             $this->command->info('Demo data (projects/tickets) updated.');
@@ -647,6 +648,23 @@ class DemoDataSeeder extends Seeder
                     'created_at'       => $now,
                     'updated_at'       => $now,
                 ]);
+            }
+        }
+    }
+
+    // ─── Ensure extended customers (KH-0003..5) exist ────────────────────────
+
+    private function ensureExtendedCustomers(): void
+    {
+        $now = now();
+        $customers = [
+            ['code'=>'KH-0003','name'=>'Ngân hàng CP Phương Đông','company'=>'OCB','tax_code'=>'0300456789','phone'=>'028.3822.8899','address'=>'45 Lê Duẩn, Quận 1, TP.HCM','credit_limit'=>1500000000],
+            ['code'=>'KH-0004','name'=>'Trường ĐH Bách Khoa Hà Nội','company'=>'HUST','tax_code'=>'0100101459','phone'=>'024.3869.3939','address'=>'1 Đại Cồ Việt, Hai Bà Trưng, Hà Nội','credit_limit'=>500000000],
+            ['code'=>'KH-0005','name'=>'Tập đoàn VietTech Corp','company'=>'VTC','tax_code'=>'0102030405','phone'=>'024.3944.5566','address'=>'55 Giải Phóng, Đống Đa, Hà Nội','credit_limit'=>2000000000],
+        ];
+        foreach ($customers as $c) {
+            if (!DB::table('customers')->where('code', $c['code'])->exists()) {
+                DB::table('customers')->insert(array_merge($c, ['created_at'=>$now,'updated_at'=>$now]));
             }
         }
     }
