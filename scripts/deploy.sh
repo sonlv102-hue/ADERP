@@ -21,8 +21,10 @@ git pull --ff-only
 
 # ── Build images ─────────────────────────────────────────────────────────────
 if [[ "${1:-}" != "--skip-build" ]]; then
-    log "Building Docker images..."
-    $COMPOSE build --no-cache app queue scheduler
+    log "Building Docker images (cache bust: $(git rev-parse --short HEAD))..."
+    CACHE_BUST=$(git rev-parse HEAD) $COMPOSE build \
+        --build-arg CACHE_BUST="$(git rev-parse HEAD)" \
+        app queue scheduler
 fi
 
 # ── Database backup before migration ─────────────────────────────────────────

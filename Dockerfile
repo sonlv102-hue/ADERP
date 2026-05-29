@@ -13,6 +13,7 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci
 
+ARG CACHE_BUST=1
 COPY . .
 # Copy vendor so Vite can resolve vendor/tightenco/ziggy
 COPY --from=composer-deps /app/vendor ./vendor
@@ -59,6 +60,7 @@ WORKDIR /var/www/html
 # Copy vendor from composer-deps stage
 COPY --from=composer-deps /app/vendor ./vendor
 
+ARG CACHE_BUST=1
 # Copy application source
 COPY . .
 
