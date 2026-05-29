@@ -101,6 +101,7 @@
 
         <NavGroup v-if="can('reports.view')"
           label="Báo cáo" icon="chart-bar" prefix="/reports">
+          <NavItem :href="route('reports.document_checklist')" icon="clipboard-check"  sub>Bảng kê chứng từ</NavItem>
           <NavItem :href="route('reports.profit.orders')"    icon="trending-up"     sub>Lợi nhuận đơn hàng</NavItem>
           <NavItem :href="route('reports.profit.projects')"  icon="trending-up"     sub>Lợi nhuận dự án</NavItem>
           <NavItem :href="route('reports.ar.aging')"         icon="users"           sub>Công nợ phải thu (AR)</NavItem>

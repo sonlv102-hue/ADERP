@@ -66,6 +66,7 @@ use App\Http\Controllers\Reports\GeneralJournalController;
 use App\Http\Controllers\Reports\AccountLedgerController;
 use App\Http\Controllers\Reports\ExpenseDetailController;
 use App\Http\Controllers\Reports\FixedAssetReportController;
+use App\Http\Controllers\Reports\DocumentChecklistController;
 use App\Http\Controllers\Admin\FixedAssetController;
 use App\Http\Controllers\Admin\ActivityLogController;
 use Illuminate\Support\Facades\Route;
@@ -371,6 +372,7 @@ Route::middleware('auth')->group(function () {
         Route::get('fund-ledger',             [FundLedgerController::class,      'index'])->name('fund-ledger.index');
         Route::get('ar-detail',               [ArDetailController::class,        'index'])->name('ar.detail');
         Route::get('ap-detail',               [ApDetailController::class,        'index'])->name('ap.detail');
+        Route::get('document-checklist',      [DocumentChecklistController::class,'index'])->name('document_checklist');
     });
 
     // Documents - quản lý hồ sơ chứng từ
