@@ -15,8 +15,13 @@ class PurchaseInvoicePaymentController extends Controller
 
     public function store(Request $request, PurchaseInvoice $purchaseInvoice): RedirectResponse
     {
+        $amountDue = $purchaseInvoice->amountDue();
+        if ($amountDue <= 0) {
+            return back()->with('error', 'Hóa đơn NCC đã được thanh toán đầy đủ.');
+        }
+
         $data = $request->validate([
-            'amount'       => ['required', 'numeric', 'min:0.01'],
+            'amount'       => ['required', 'numeric', 'min:0.01', 'max:' . $amountDue],
             'payment_date' => ['required', 'date'],
             'method'       => ['required', 'in:cash,bank_transfer,other'],
             'reference'    => ['nullable', 'string', 'max:100'],

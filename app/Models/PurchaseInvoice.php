@@ -57,8 +57,18 @@ class PurchaseInvoice extends Model
         return $this->hasMany(PurchaseInvoicePayment::class);
     }
 
+    public function amountPaid(): float
+    {
+        return (float) $this->payments()->sum('amount');
+    }
+
+    public function amountDue(): float
+    {
+        return max(0.0, (float) $this->total - $this->amountPaid());
+    }
+
     public function getRemainingAttribute(): float
     {
-        return (float) $this->total - (float) $this->paid_amount;
+        return $this->amountDue();
     }
 }

@@ -16,7 +16,6 @@ class ArCollectionController extends Controller
     {
         $query = Invoice::with([
             'customer' => fn ($q) => $q->withTrashed(),
-            'payments',
         ])
         ->whereIn('status', [InvoiceStatus::Sent, InvoiceStatus::Overdue])
         ->orderBy('due_date')

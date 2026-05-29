@@ -7,6 +7,7 @@ use App\Models\Invoice;
 use App\Models\JournalEntry;
 use App\Models\Payment;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 
 class InvoiceService
 {
@@ -41,21 +42,55 @@ class InvoiceService
 
     public function addPayment(Invoice $invoice, array $data): Payment
     {
-        $payment = $invoice->payments()->create([
-            ...$data,
-            'created_by' => auth()->id(),
-        ]);
+        $payment = DB::transaction(function () use ($invoice, $data) {
+            $payment = $invoice->payments()->create([
+                ...$data,
+                'created_by' => auth()->id(),
+            ]);
 
-        // Auto-mark paid if fully settled
-        if ($invoice->amountPaid() >= (float) $invoice->total
-            && in_array($invoice->status, [InvoiceStatus::Sent, InvoiceStatus::Overdue])) {
-            $invoice->update(['status' => InvoiceStatus::Paid]);
-        }
+            // Auto-mark paid if fully settled
+            $paid = (float) $invoice->payments()->sum('amount');
+            if ($paid >= (float) $invoice->total
+                && in_array($invoice->status, [InvoiceStatus::Sent, InvoiceStatus::Overdue])) {
+                $invoice->update(['status' => InvoiceStatus::Paid]);
+            }
 
-        // Hạch toán thanh toán: Dr 111/112 / Cr 131
+            return $payment;
+        });
+
+        // Hạch toán thanh toán: Dr 111/112 / Cr 131 (ngoài transaction — lỗi kế toán không roll back payment)
         $this->postPaymentEntry($payment, $invoice);
 
         return $payment;
+    }
+
+    public function removePayment(Invoice $invoice, Payment $payment): void
+    {
+        DB::transaction(function () use ($invoice, $payment) {
+            // Đảo bút toán thanh toán nếu đã hạch toán
+            $entry = JournalEntry::where('reference_type', 'payment')
+                ->where('reference_id', $payment->id)
+                ->where('status', 'posted')
+                ->first();
+
+            if ($entry) {
+                try {
+                    $this->accounting->reverse($entry, "Đảo: Thu tiền {$invoice->code}");
+                } catch (\Exception $e) {
+                    \Log::warning("Reverse payment entry failed [{$invoice->code}]: " . $e->getMessage());
+                }
+            }
+
+            $payment->delete();
+
+            // Nếu hóa đơn đang là Paid, hoàn về Sent/Overdue
+            if ($invoice->status === InvoiceStatus::Paid) {
+                $newStatus = $invoice->due_date && now()->gt($invoice->due_date)
+                    ? InvoiceStatus::Overdue
+                    : InvoiceStatus::Sent;
+                $invoice->update(['status' => $newStatus]);
+            }
+        });
     }
 
     // ─── Private helpers ────────────────────────────────────────────────────
@@ -104,7 +139,10 @@ class InvoiceService
         $amount = (float) $payment->amount;
         if ($amount <= 0) return;
 
-        $cashAccount = $this->resolvePaymentAccount($payment->payment_method ?? 'cash');
+        $method = $payment->method instanceof \App\Enums\PaymentMethod
+            ? $payment->method->value
+            : ($payment->method ?? 'cash');
+        $cashAccount = $this->resolvePaymentAccount($method);
 
         $this->tryPost(
             "Thu tiền {$invoice->code}",

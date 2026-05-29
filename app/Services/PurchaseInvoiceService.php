@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\PurchaseInvoiceStatus;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoicePayment;
+use Illuminate\Support\Facades\DB;
 
 class PurchaseInvoiceService
 {
@@ -34,14 +35,16 @@ class PurchaseInvoiceService
             throw new \RuntimeException('Hóa đơn đã hủy, không thể ghi nhận thanh toán.');
         }
 
-        $payment = $invoice->payments()->create([
-            ...$data,
-            'created_by' => auth()->id(),
-        ]);
+        return DB::transaction(function () use ($invoice, $data) {
+            $payment = $invoice->payments()->create([
+                ...$data,
+                'created_by' => auth()->id(),
+            ]);
 
-        $this->recalculatePaid($invoice);
+            $this->recalculatePaid($invoice);
 
-        return $payment;
+            return $payment;
+        });
     }
 
     public function removePayment(PurchaseInvoice $invoice, PurchaseInvoicePayment $payment): void

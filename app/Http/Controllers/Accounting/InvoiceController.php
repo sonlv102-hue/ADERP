@@ -187,6 +187,9 @@ class InvoiceController extends Controller
 
     public function destroy(Invoice $invoice): RedirectResponse
     {
+        if ($invoice->status !== InvoiceStatus::Draft) {
+            return back()->with('error', 'Chỉ có thể xóa hóa đơn ở trạng thái Nháp. Hóa đơn đã gửi có bút toán kế toán liên quan.');
+        }
         if ($invoice->payments()->exists()) {
             return back()->with('error', 'Không thể xóa hóa đơn đã có thanh toán.');
         }

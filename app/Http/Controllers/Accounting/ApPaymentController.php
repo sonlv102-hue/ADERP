@@ -16,7 +16,6 @@ class ApPaymentController extends Controller
     {
         $query = PurchaseInvoice::with([
             'supplier' => fn ($q) => $q->withTrashed(),
-            'payments',
         ])
         ->whereIn('status', [PurchaseInvoiceStatus::Valid, PurchaseInvoiceStatus::PartialPaid])
         ->orderBy('due_date')
@@ -38,8 +37,8 @@ class ApPaymentController extends Controller
             'invoice_date' => $pi->invoice_date?->format('d/m/Y'),
             'due_date'     => $pi->due_date?->format('d/m/Y'),
             'total'        => (float) $pi->total,
-            'amount_paid'  => (float) $pi->payments->sum('amount'),
-            'amount_due'   => max(0, (float) $pi->total - (float) $pi->payments->sum('amount')),
+            'amount_paid'  => $pi->amountPaid(),
+            'amount_due'   => $pi->amountDue(),
             'status'       => $pi->status->value,
             'status_label' => $pi->status->label(),
             'status_color' => $pi->status->color(),

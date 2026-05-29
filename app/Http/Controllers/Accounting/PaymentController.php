@@ -17,15 +17,24 @@ class PaymentController extends Controller
     {
         $this->authorize('accounting.manage');
 
+        $amountDue = $invoice->amountDue();
+        if ($amountDue <= 0) {
+            return back()->with('error', 'Hóa đơn đã được thanh toán đầy đủ.');
+        }
+
         $data = $request->validate([
-            'amount'       => ['required', 'numeric', 'min:0.01'],
+            'amount'       => ['required', 'numeric', 'min:0.01', 'max:' . $amountDue],
             'payment_date' => ['required', 'date'],
-            'method'       => ['required', 'string'],
+            'method'       => ['required', 'string', 'in:cash,bank_transfer,other'],
             'reference'    => ['nullable', 'string', 'max:100'],
             'notes'        => ['nullable', 'string'],
         ]);
 
-        $this->service->addPayment($invoice, $data);
+        try {
+            $this->service->addPayment($invoice, $data);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return back()->with('success', 'Đã ghi nhận thanh toán.');
     }
@@ -38,7 +47,11 @@ class PaymentController extends Controller
             abort(404);
         }
 
-        $payment->delete();
+        try {
+            $this->service->removePayment($invoice, $payment);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return back()->with('success', 'Đã xóa thanh toán.');
     }
