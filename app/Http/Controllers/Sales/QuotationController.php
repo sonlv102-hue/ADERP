@@ -154,7 +154,7 @@ class QuotationController extends Controller
                 'assigned_to'    => $quotation->assigned_to,
                 'valid_until'    => $quotation->valid_until?->format('Y-m-d'),
                 'discount_type'  => $quotation->discount_type,
-                'discount_value' => $quotation->discount_value,
+                'discount_value' => (float) $quotation->discount_value,
                 'notes'          => $quotation->notes,
                 'items'          => $quotation->items->map(fn ($item) => [
                     'id'               => $item->id,
@@ -163,15 +163,16 @@ class QuotationController extends Controller
                     'service_id'       => $item->service_id,
                     'name'             => $item->name,
                     'unit'             => $item->unit,
-                    'quantity'         => $item->quantity,
-                    'unit_price'       => $item->unit_price,
-                    'discount_percent' => $item->discount_percent,
+                    'quantity'         => (float) $item->quantity,
+                    'unit_price'       => (float) $item->unit_price,
+                    'discount_percent' => (float) $item->discount_percent,
                     'discount_amount'  => (int) $item->discount_amount,
                 ]),
             ],
-            'customers' => Customer::orderBy('name')->get(['id', 'code', 'name']),
-            'products'  => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'sell_price']),
-            'services'  => Service::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'price']),
+            'customers'  => Customer::orderBy('name')->get(['id', 'code', 'name']),
+            'products'   => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'sell_price']),
+            'services'   => Service::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'price']),
+            'priceLists' => PriceList::select('id', 'code', 'name')->orderBy('name')->get(),
         ]);
     }
 

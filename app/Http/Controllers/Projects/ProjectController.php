@@ -33,7 +33,7 @@ class ProjectController extends Controller
                     'id'                => $p->id,
                     'code'              => $p->code,
                     'name'              => $p->name,
-                    'customer'          => $p->customer->name,
+                    'customer'          => $p->customer?->name ?? '—',
                     'manager'           => $p->manager?->name,
                     'start_date'        => $p->start_date?->format('d/m/Y'),
                     'expected_end_date' => $p->expected_end_date?->format('d/m/Y'),

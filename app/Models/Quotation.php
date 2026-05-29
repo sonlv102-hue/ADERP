@@ -34,7 +34,7 @@ class Quotation extends Model
     public function subtotal(): float
     {
         return (float) $this->items->sum(fn ($item) =>
-            $item->quantity * $item->unit_price * (1 - $item->discount_percent / 100)
+            $item->quantity * $item->unit_price - $item->discount_amount
         );
     }
 
