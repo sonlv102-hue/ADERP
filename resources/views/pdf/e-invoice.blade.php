@@ -2,9 +2,8 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
+@include('pdf._font')
 <style>
-  @font-face { font-family: 'DejaVu Sans'; src: url('{{ public_path("fonts/DejaVuSans.ttf") }}') format('truetype'); }
-  @font-face { font-family: 'DejaVu Sans'; font-weight: bold; src: url('{{ public_path("fonts/DejaVuSans-Bold.ttf") }}') format('truetype'); }
   * { font-family: 'DejaVu Sans', sans-serif; font-size: 10pt; margin: 0; padding: 0; box-sizing: border-box; }
   body { margin: 20px 30px; color: #111; }
   .header { text-align: center; margin-bottom: 8px; }

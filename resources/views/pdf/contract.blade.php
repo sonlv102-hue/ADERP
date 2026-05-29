@@ -2,9 +2,10 @@
 <html lang="vi">
 <head>
 <meta charset="utf-8">
+@include('pdf._font')
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: DejaVu Sans, sans-serif; font-size: 12px; color: #1f2937; }
+  body { font-family: 'DejaVu Sans', sans-serif; font-size: 12px; color: #1f2937; }
   .page { padding: 40px 50px; }
   .header { text-align: center; margin-bottom: 32px; border-bottom: 2px solid #1f2937; padding-bottom: 20px; }
   .header h1 { font-size: 22px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
