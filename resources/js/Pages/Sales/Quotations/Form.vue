@@ -134,7 +134,7 @@
                 <th class="text-left px-4 py-3 font-semibold text-gray-600 w-20">ĐVT</th>
                 <th class="text-left px-4 py-3 font-semibold text-gray-600 w-24">SL</th>
                 <th class="text-left px-4 py-3 font-semibold text-gray-600 w-32">Đơn giá</th>
-                <th class="text-left px-4 py-3 font-semibold text-gray-600 w-24">CK%</th>
+                <th class="text-left px-4 py-3 font-semibold text-gray-600 w-28">CK (VND)</th>
                 <th class="text-right px-4 py-3 font-semibold text-gray-600 w-32">Thành tiền</th>
                 <th class="w-10 px-4 py-3" />
               </tr>
@@ -163,15 +163,22 @@
                 </td>
                 <td class="px-4 py-3">
                   <input v-model.number="item.quantity" type="number" min="1" step="1"
+                    @input="recalcCkPercent(idx)"
                     class="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-xs" />
                 </td>
                 <td class="px-4 py-3">
                   <input v-model.number="item.unit_price" type="number" min="0"
+                    @input="recalcCkPercent(idx)"
                     class="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-xs" />
                 </td>
                 <td class="px-4 py-3">
-                  <input v-model.number="item.discount_percent" type="number" min="0" max="100"
+                  <input v-model.number="item._ck_amount" type="number" min="0" step="1000"
+                    @input="onCkAmountChange(idx)"
+                    placeholder="0"
                     class="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-xs" />
+                  <p v-if="item.discount_percent > 0" class="mt-0.5 text-xs text-green-600 text-center">
+                    = {{ item.discount_percent.toFixed(2) }}%
+                  </p>
                 </td>
                 <td class="px-4 py-3 text-right font-medium text-gray-700 text-xs">
                   {{ formatVnd(item.quantity * item.unit_price * (1 - item.discount_percent / 100)) }}
@@ -272,7 +279,10 @@ const form = useForm({
   discount_type:  props.quotation?.discount_type ?? 'percent',
   discount_value: props.quotation?.discount_value ?? 0,
   notes:          props.quotation?.notes ?? '',
-  items:          props.quotation?.items?.map(i => ({ ...i })) ?? [],
+  items:          props.quotation?.items?.map(i => ({
+    ...i,
+    _ck_amount: Math.round((i.quantity || 0) * (i.unit_price || 0) * (i.discount_percent || 0) / 100),
+  })) ?? [],
 });
 
 const addRow = (type) => {
@@ -285,6 +295,7 @@ const addRow = (type) => {
     quantity:         1,
     unit_price:       0,
     discount_percent: 0,
+    _ck_amount:       0,
   });
 };
 
@@ -299,9 +310,32 @@ const onItemChange = (idx) => {
     const s = props.services.find(s => s.id === item.service_id);
     if (s) { item.name = s.name; item.unit = s.unit ?? ''; item.unit_price = s.price ?? 0; }
   }
-  // Xóa tổng tiền mong muốn và số tiền chiết khấu khi thay đổi item vì subtotal thay đổi
-  desiredTotal.value = null;
+  // Reset chiết khấu khi đổi sản phẩm
+  item._ck_amount       = 0;
+  item.discount_percent = 0;
+  desiredTotal.value    = null;
   discountAmountInput.value = null;
+};
+
+// Khi nhập số tiền CK (VND) → tính lại %
+const onCkAmountChange = (idx) => {
+  const item      = form.items[idx];
+  const lineAmt   = (item.quantity || 0) * (item.unit_price || 0);
+  const ckAmt     = item._ck_amount || 0;
+  if (ckAmt <= 0 || lineAmt <= 0) {
+    item.discount_percent = 0;
+    return;
+  }
+  const capped = Math.min(ckAmt, lineAmt);
+  if (capped < ckAmt) item._ck_amount = capped;
+  item.discount_percent = Math.round((capped / lineAmt) * 10000) / 100; // làm tròn 2 chữ số
+};
+
+// Khi SL hoặc đơn giá thay đổi → giữ nguyên số tiền CK, tính lại %
+const recalcCkPercent = (idx) => {
+  const item = form.items[idx];
+  if (!item._ck_amount || item._ck_amount <= 0) return;
+  onCkAmountChange(idx);
 };
 
 const subtotal = computed(() =>
@@ -379,10 +413,11 @@ const roundPrice = () => {
 
 
 const submit = () => {
+  const cleanItems = form.items.map(({ _ck_amount, ...rest }) => rest);
   if (isEdit) {
-    form.put(route('sales.quotations.update', props.quotation.id));
+    form.transform(d => ({ ...d, items: cleanItems })).put(route('sales.quotations.update', props.quotation.id));
   } else {
-    form.post(route('sales.quotations.store'));
+    form.transform(d => ({ ...d, items: cleanItems })).post(route('sales.quotations.store'));
   }
 };
 </script>
