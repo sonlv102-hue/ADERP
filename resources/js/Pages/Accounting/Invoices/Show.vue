@@ -193,8 +193,10 @@
               <form @submit.prevent="submitPayment" class="grid grid-cols-2 gap-4">
                 <div>
                   <label class="block text-xs font-medium text-gray-600 mb-1">Số tiền <span class="text-red-500">*</span></label>
-                  <input v-model.number="payForm.amount" type="number" min="0.01" step="1000"
-                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+                  <input v-model.number="payForm.amount" type="number" @invalid.prevent
+                    :class="payAmountError ? 'border-red-400 focus:ring-red-400' : 'border-gray-300 focus:ring-primary-500'"
+                    class="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2" />
+                  <p v-if="payAmountError" class="mt-1 text-xs text-red-600">{{ payAmountError }}</p>
                 </div>
                 <div>
                   <label class="block text-xs font-medium text-gray-600 mb-1">Ngày thanh toán <span class="text-red-500">*</span></label>
@@ -306,6 +308,7 @@ const can = hasPermission;
 const { formatVnd } = useCurrency();
 
 const showPaymentForm = ref(false);
+const payAmountError = ref('');
 const today = new Date().toISOString().split('T')[0];
 
 const payForm = useForm({
@@ -327,9 +330,19 @@ function deleteInvoice() {
 }
 
 function submitPayment() {
+  payAmountError.value = '';
+  if (!payForm.amount || payForm.amount <= 0) {
+    payAmountError.value = 'Vui lòng nhập số tiền hợp lệ (lớn hơn 0).';
+    return;
+  }
+  if (payForm.amount > props.invoice.amount_due) {
+    payAmountError.value = `Số tiền không được vượt quá số còn lại (${new Intl.NumberFormat('vi-VN').format(props.invoice.amount_due)} ₫).`;
+    return;
+  }
   payForm.post(route('accounting.invoices.payments.store', props.invoice.id), {
     onSuccess: () => {
       showPaymentForm.value = false;
+      payAmountError.value = '';
       payForm.reset();
     },
   });

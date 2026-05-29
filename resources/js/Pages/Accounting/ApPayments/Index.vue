@@ -83,8 +83,10 @@
         <div class="grid grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Số tiền trả <span class="text-red-500">*</span></label>
-            <input v-model.number="payForm.amount" type="number" min="0.01" :max="payModal.amount_due" step="1000"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm" />
+            <input v-model.number="payForm.amount" type="number" @invalid.prevent
+              :class="payAmountError ? 'border-red-400 focus:ring-red-400' : 'border-gray-300 focus:ring-primary-500'"
+              class="w-full px-3 py-2 border rounded-lg focus:ring-2 outline-none text-sm" />
+            <p v-if="payAmountError" class="mt-1 text-xs text-red-600">{{ payAmountError }}</p>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Ngày trả <span class="text-red-500">*</span></label>
@@ -145,8 +147,9 @@ const filters = ref({
   status:      props.filters.status ?? '',
 });
 
-const payModal   = ref(null);
-const submitting = ref(false);
+const payModal       = ref(null);
+const submitting     = ref(false);
+const payAmountError = ref('');
 const payForm = ref({ amount: 0, payment_date: new Date().toISOString().slice(0, 10), method: 'bank_transfer', reference: '', notes: '' });
 
 const totalDue = computed(() => props.invoices.reduce((s, i) => s + i.amount_due, 0));
@@ -170,7 +173,19 @@ function openPayment(inv) {
 }
 
 function submitPayment() {
-  if (!payForm.value.amount || !payForm.value.payment_date) return;
+  payAmountError.value = '';
+  if (!payForm.value.amount || payForm.value.amount <= 0) {
+    payAmountError.value = 'Vui lòng nhập số tiền hợp lệ (lớn hơn 0).';
+    return;
+  }
+  if (payForm.value.amount > payModal.value.amount_due) {
+    payAmountError.value = `Số tiền không được vượt quá số còn lại (${new Intl.NumberFormat('vi-VN').format(payModal.value.amount_due)} ₫).`;
+    return;
+  }
+  if (!payForm.value.payment_date) {
+    payAmountError.value = 'Vui lòng chọn ngày trả.';
+    return;
+  }
   submitting.value = true;
   router.post(route('purchasing.purchase-invoices.payments.store', payModal.value.id), {
     amount:       payForm.value.amount,
@@ -179,7 +194,7 @@ function submitPayment() {
     reference:    payForm.value.reference || null,
     notes:        payForm.value.notes || null,
   }, {
-    onSuccess: () => { payModal.value = null; submitting.value = false; },
+    onSuccess: () => { payModal.value = null; submitting.value = false; payAmountError.value = ''; },
     onError:   () => { submitting.value = false; },
   });
 }
