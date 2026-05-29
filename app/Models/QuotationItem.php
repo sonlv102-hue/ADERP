@@ -9,7 +9,7 @@ class QuotationItem extends Model
 {
     protected $fillable = [
         'quotation_id', 'item_type', 'product_id', 'service_id',
-        'name', 'unit', 'quantity', 'unit_price', 'discount_percent',
+        'name', 'unit', 'quantity', 'unit_price', 'discount_percent', 'discount_amount',
     ];
 
     protected function casts(): array
@@ -18,12 +18,13 @@ class QuotationItem extends Model
             'quantity'         => 'decimal:2',
             'unit_price'       => 'decimal:2',
             'discount_percent' => 'decimal:2',
+            'discount_amount'  => 'integer',
         ];
     }
 
     public function lineTotal(): float
     {
-        return (float) ($this->quantity * $this->unit_price * (1 - $this->discount_percent / 100));
+        return (float) ($this->quantity * $this->unit_price - $this->discount_amount);
     }
 
     public function quotation(): BelongsTo

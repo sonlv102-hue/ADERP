@@ -93,7 +93,10 @@
               </td>
               <td class="px-5 py-3 text-right text-gray-700">{{ formatVnd(item.unit_price) }}</td>
               <td class="px-5 py-3 text-right">
-                <span v-if="item.discount_percent > 0" class="text-green-600 font-medium">{{ item.discount_percent }}%</span>
+                <template v-if="item.discount_amount > 0">
+                  <span class="text-red-600 font-medium">-{{ formatVnd(item.discount_amount) }}</span>
+                  <span class="block text-xs text-gray-400">{{ item.discount_percent > 0 ? item.discount_percent + '%' : '' }}</span>
+                </template>
                 <span v-else class="text-gray-400">—</span>
               </td>
               <td class="px-5 py-3 text-right font-medium text-gray-800">{{ formatVnd(item.line_total) }}</td>

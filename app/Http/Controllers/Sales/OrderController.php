@@ -27,7 +27,7 @@ class OrderController extends Controller
             'orders' => Order::with(['customer', 'creator', 'quotation'])
                 ->withCount('items')
                 ->addSelect([
-                    'items_total' => OrderItem::selectRaw('COALESCE(SUM(quantity * unit_price * (1 - COALESCE(discount_percent, 0) / 100)), 0)')
+                    'items_total' => OrderItem::selectRaw('COALESCE(SUM(quantity * unit_price - COALESCE(discount_amount, 0)), 0)')
                         ->whereColumn('order_id', 'orders.id'),
                     'has_contract' => \App\Models\Contract::selectRaw('COUNT(*)')
                         ->whereColumn('order_id', 'orders.id')
@@ -104,6 +104,7 @@ class OrderController extends Controller
             'items.*.quantity'            => ['required', 'integer', 'min:1'],
             'items.*.unit_price'          => ['required', 'numeric', 'min:0'],
             'items.*.discount_percent'    => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'items.*.discount_amount'     => ['nullable', 'integer', 'min:0'],
         ]);
 
         $isFdi = Customer::where('id', $data['customer_id'])->value('is_fdi');
@@ -166,6 +167,7 @@ class OrderController extends Controller
                     'current_stock'      => (int) ($stocks[$item->product_id] ?? 0),
                     'unit_price'         => $item->unit_price,
                     'discount_percent'   => (float) $item->discount_percent,
+                    'discount_amount'    => (int) $item->discount_amount,
                     'line_total'         => $item->lineTotal(),
                 ]),
                 'contracts' => $order->contracts->map(fn ($c) => [
@@ -212,6 +214,7 @@ class OrderController extends Controller
                     'quantity'         => $item->quantity,
                     'unit_price'       => $item->unit_price,
                     'discount_percent' => (float) $item->discount_percent,
+                    'discount_amount'  => (int) $item->discount_amount,
                     '_type'            => $item->product_id ? 'product' : 'service',
                 ]),
             ],
@@ -242,6 +245,7 @@ class OrderController extends Controller
             'items.*.quantity'         => ['required', 'integer', 'min:1'],
             'items.*.unit_price'       => ['required', 'numeric', 'min:0'],
             'items.*.discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'items.*.discount_amount'  => ['nullable', 'integer', 'min:0'],
         ]);
 
         $order->update([

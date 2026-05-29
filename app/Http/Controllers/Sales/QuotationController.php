@@ -72,7 +72,8 @@ class QuotationController extends Controller
             'items.*.unit'            => ['nullable', 'string'],
             'items.*.quantity'        => ['required', 'integer', 'min:1'],
             'items.*.unit_price'      => ['required', 'numeric', 'min:0'],
-            'items.*.discount_percent'=> ['required', 'numeric', 'min:0', 'max:100'],
+            'items.*.discount_percent'=> ['nullable', 'numeric', 'min:0', 'max:100'],
+            'items.*.discount_amount' => ['nullable', 'integer', 'min:0'],
         ]);
 
         $quotation = Quotation::create([
@@ -126,6 +127,7 @@ class QuotationController extends Controller
                     'quantity'         => $item->quantity,
                     'unit_price'       => $item->unit_price,
                     'discount_percent' => $item->discount_percent,
+                    'discount_amount'  => (int) $item->discount_amount,
                     'line_total'       => $item->lineTotal(),
                 ]),
                 'orders' => $quotation->orders->map(fn ($o) => [
@@ -164,6 +166,7 @@ class QuotationController extends Controller
                     'quantity'         => $item->quantity,
                     'unit_price'       => $item->unit_price,
                     'discount_percent' => $item->discount_percent,
+                    'discount_amount'  => (int) $item->discount_amount,
                 ]),
             ],
             'customers' => Customer::orderBy('name')->get(['id', 'code', 'name']),
@@ -191,7 +194,8 @@ class QuotationController extends Controller
             'items.*.unit'            => ['nullable', 'string'],
             'items.*.quantity'        => ['required', 'integer', 'min:1'],
             'items.*.unit_price'      => ['required', 'numeric', 'min:0'],
-            'items.*.discount_percent'=> ['required', 'numeric', 'min:0', 'max:100'],
+            'items.*.discount_percent'=> ['nullable', 'numeric', 'min:0', 'max:100'],
+            'items.*.discount_amount' => ['nullable', 'integer', 'min:0'],
         ]);
 
         $quotation->update([

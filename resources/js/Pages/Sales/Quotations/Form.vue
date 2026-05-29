@@ -181,7 +181,7 @@
                   </p>
                 </td>
                 <td class="px-4 py-3 text-right font-medium text-gray-700 text-xs">
-                  {{ formatVnd(item.quantity * item.unit_price * (1 - item.discount_percent / 100)) }}
+                  {{ formatVnd(item.quantity * item.unit_price - (item._ck_amount || 0)) }}
                 </td>
                 <td class="px-4 py-3 text-center">
                   <button type="button" @click="removeRow(idx)" class="text-red-500 hover:text-red-700">
@@ -281,7 +281,7 @@ const form = useForm({
   notes:          props.quotation?.notes ?? '',
   items:          props.quotation?.items?.map(i => ({
     ...i,
-    _ck_amount: Math.round((i.quantity || 0) * (i.unit_price || 0) * (i.discount_percent || 0) / 100),
+    _ck_amount: i.discount_amount || 0,
   })) ?? [],
 });
 
@@ -339,7 +339,7 @@ const recalcCkPercent = (idx) => {
 };
 
 const subtotal = computed(() =>
-  form.items.reduce((s, i) => s + (i.quantity * i.unit_price * (1 - i.discount_percent / 100)), 0)
+  form.items.reduce((s, i) => s + (i.quantity * i.unit_price - (i._ck_amount || 0)), 0)
 );
 
 const discountAmount = computed(() => {
@@ -413,7 +413,10 @@ const roundPrice = () => {
 
 
 const submit = () => {
-  const cleanItems = form.items.map(({ _ck_amount, ...rest }) => rest);
+  const cleanItems = form.items.map(({ _ck_amount, ...rest }) => ({
+    ...rest,
+    discount_amount: Math.round(_ck_amount || 0),
+  }));
   if (isEdit) {
     form.transform(d => ({ ...d, items: cleanItems })).put(route('sales.quotations.update', props.quotation.id));
   } else {

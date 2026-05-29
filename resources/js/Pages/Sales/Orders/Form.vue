@@ -271,8 +271,9 @@ const onItemChange = (idx) => {
 };
 
 const itemLineTotal = (item) => {
-  const disc = item.discount_percent || 0;
-  return (item.quantity || 0) * (item.unit_price || 0) * (1 - disc / 100);
+  const lineAmt = (item.quantity || 0) * (item.unit_price || 0);
+  const disc    = item.discount_percent || 0;
+  return lineAmt - Math.round(lineAmt * disc / 100);
 };
 
 const grandTotal = computed(() =>
@@ -282,7 +283,10 @@ const grandTotal = computed(() =>
 const { formatVnd } = useCurrency();
 
 const submit = () => {
-  const payload = form.items.map(({ _type, ...rest }) => rest);
+  const payload = form.items.map(({ _type, ...rest }) => ({
+    ...rest,
+    discount_amount: Math.round((rest.quantity || 0) * (rest.unit_price || 0) * (rest.discount_percent || 0) / 100),
+  }));
   if (props.order) {
     form.transform(data => ({ ...data, items: payload })).put(route('sales.orders.update', props.order.id));
   } else {
