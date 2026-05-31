@@ -35,6 +35,7 @@
           <NavItem :href="route('sales.quotations.index')" icon="document-text" sub>Báo giá</NavItem>
           <NavItem :href="route('sales.orders.index')" icon="shopping-bag" sub>Đơn hàng</NavItem>
           <NavItem :href="route('sales.contracts.index')" icon="document" sub>Hợp đồng bán</NavItem>
+          <NavItem :href="route('accounting.invoices.index')" icon="document-text" sub>Hóa đơn bán</NavItem>
           <NavItem v-if="can('commissions.view')" :href="route('sales.commissions.index')" icon="currency-dollar" sub>Hoa hồng</NavItem>
           <NavItem v-if="can('sales-returns.view')" :href="route('sales.sales-returns.index')" icon="reply" sub>Trả hàng bán</NavItem>
         </NavGroup>
@@ -78,7 +79,6 @@
 
         <NavGroup v-if="can('accounting.view')"
           label="Kế toán" icon="currency-dollar" prefix="/accounting">
-          <NavItem :href="route('accounting.invoices.index')"            icon="document-text"  sub>Hóa đơn bán</NavItem>
           <NavItem :href="route('accounting.ar-collections.index')"      icon="inbox-in"       sub>Thu nợ KH (TK 131)</NavItem>
           <NavItem :href="route('accounting.ap-payments.index')"         icon="inbox"          sub>Trả NCC (TK 331)</NavItem>
           <NavItem :href="route('accounting.funds.index')"               icon="library"        sub>Quản lý quỹ</NavItem>
