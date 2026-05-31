@@ -39,9 +39,11 @@
               <td class="px-5 py-3">
                 <StatusBadge :color="c.status_color">{{ c.status_label }}</StatusBadge>
               </td>
-              <td class="px-5 py-3 text-right">
+              <td class="px-5 py-3 text-right flex items-center justify-end gap-3">
                 <Link :href="route('sales.contracts.show', c.id)"
                   class="text-primary-600 hover:text-primary-800 font-medium">Xem</Link>
+                <button v-if="c.status === 'draft'" @click="deleteContract(c)"
+                  class="text-red-500 hover:text-red-700 font-medium">Xóa</button>
               </td>
             </tr>
             <tr v-if="!contracts.data?.length">
@@ -57,7 +59,7 @@
 </template>
 
 <script setup>
-import { Link } from '@inertiajs/vue3';
+import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
@@ -66,4 +68,10 @@ import { useCurrency } from '@/composables/useCurrency';
 defineProps({ contracts: Object });
 
 const { formatVnd } = useCurrency();
+
+const deleteContract = (c) => {
+  if (confirm(`Xóa hợp đồng ${c.code}? Thao tác không thể hoàn tác.`)) {
+    router.delete(route('sales.contracts.destroy', c.id));
+  }
+};
 </script>
