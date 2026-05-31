@@ -85,6 +85,7 @@
           <NavItem :href="route('accounting.cash-vouchers.index')"       icon="cash"           sub>Phiếu thu / chi</NavItem>
           <NavItem :href="route('accounting.payrolls.index')"            icon="clipboard-list" sub>Bảng lương</NavItem>
           <NavItem :href="route('accounting.taxes.index')"               icon="receipt-tax"    sub>Kê khai thuế</NavItem>
+          <NavItem v-if="can('accounting.manage')" :href="route('accounting.opening-balance.index')" icon="database" sub>Số dư đầu kỳ</NavItem>
           <NavItem :href="route('accounting.journal-entries.index')"     icon="pencil-alt"     sub>Phiếu kế toán</NavItem>
           <NavItem :href="route('accounting.prepaid-expenses.index')"                                     icon="clock"     sub>Chi phí trả trước</NavItem>
           <NavItem :href="route('accounting.bank-accounts.index')"                                       icon="library"   sub>Tài khoản ngân hàng</NavItem>

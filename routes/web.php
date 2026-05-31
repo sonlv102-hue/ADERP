@@ -41,6 +41,7 @@ use App\Http\Controllers\Accounting\CashVoucherController;
 use App\Http\Controllers\Accounting\FundController;
 use App\Http\Controllers\Accounting\InvoiceController;
 use App\Http\Controllers\Accounting\JournalEntryController;
+use App\Http\Controllers\Accounting\OpeningBalanceController;
 use App\Http\Controllers\Accounting\PaymentController;
 use App\Http\Controllers\Accounting\PrepaidExpenseController;
 use App\Http\Controllers\Accounting\PaymentTermController;
@@ -276,6 +277,10 @@ Route::middleware('auth')->group(function () {
         Route::post('accounting-periods/{accountingPeriod}/close', [AccountingPeriodController::class, 'close'])->name('accounting-periods.close')->middleware('can:accounting.manage');
         Route::post('accounting-periods/{accountingPeriod}/lock', [AccountingPeriodController::class, 'lock'])->name('accounting-periods.lock')->middleware('can:accounting.manage');
         Route::post('accounting-periods/{accountingPeriod}/reopen', [AccountingPeriodController::class, 'reopen'])->name('accounting-periods.reopen')->middleware('can:accounting.manage');
+
+        // Số dư đầu kỳ
+        Route::get('opening-balance',  [OpeningBalanceController::class, 'index'])->name('opening-balance.index');
+        Route::post('opening-balance', [OpeningBalanceController::class, 'store'])->name('opening-balance.store')->middleware('can:accounting.manage');
 
         // Phiếu kế toán / Bút toán (Journal Entries)
         Route::resource('journal-entries', JournalEntryController::class)->only(['index', 'create', 'store', 'show']);
