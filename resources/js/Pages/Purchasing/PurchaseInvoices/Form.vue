@@ -78,18 +78,18 @@
         <div class="grid grid-cols-3 gap-4 pt-2 border-t border-gray-100">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Trước thuế <span class="text-red-500">*</span></label>
-            <input v-model.number="form.subtotal" type="number" min="0" step="1" @input="updateTotal"
+            <input v-model.number="form.subtotal" type="number" min="0" step="any" @input="updateTotal"
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <p v-if="form.errors.subtotal" class="text-red-500 text-xs mt-1">{{ form.errors.subtotal }}</p>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Thuế VAT</label>
-            <input v-model.number="form.tax_amount" type="number" min="0" step="1" @input="updateTotal"
+            <input v-model.number="form.tax_amount" type="number" min="0" step="any" @input="updateTotal"
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Tổng cộng <span class="text-red-500">*</span></label>
-            <input v-model.number="form.total" type="number" min="0" step="1"
+            <input v-model.number="form.total" type="number" min="0" step="any"
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-bold focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <p v-if="form.errors.total" class="text-red-500 text-xs mt-1">{{ form.errors.total }}</p>
           </div>

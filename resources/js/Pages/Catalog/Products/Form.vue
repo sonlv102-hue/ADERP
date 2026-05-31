@@ -96,7 +96,7 @@
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Giá nhập (đã gồm VAT) <span class="text-red-500">*</span></label>
               <div class="relative">
-                <input v-model.number="form.cost_price" type="number" min="0" step="1"
+                <input v-model.number="form.cost_price" type="number" min="0" step="any"
                   class="w-full px-3 py-2 pr-14 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                   :class="{ 'border-red-500': form.errors.cost_price }" />
                 <span class="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400">VNĐ</span>
@@ -108,7 +108,7 @@
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Chi phí kinh doanh</label>
               <div class="relative">
-                <input v-model.number="form.business_cost" type="number" min="0" step="1"
+                <input v-model.number="form.business_cost" type="number" min="0" step="any"
                   class="w-full px-3 py-2 pr-14 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                   :class="{ 'border-red-500': form.errors.business_cost }"
                   placeholder="0" />

@@ -50,7 +50,7 @@
           <!-- Số tiền -->
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Số tiền <span class="text-red-500">*</span></label>
-            <input v-model.number="form.amount" type="number" min="0" step="1"
+            <input v-model.number="form.amount" type="number" min="0" step="any"
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <p v-if="form.errors.amount" class="text-red-500 text-xs mt-1">{{ form.errors.amount }}</p>
           </div>

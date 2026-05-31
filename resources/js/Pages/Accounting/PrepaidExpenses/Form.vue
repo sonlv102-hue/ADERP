@@ -56,7 +56,7 @@
         <div class="grid grid-cols-3 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Tổng tiền (VND) *</label>
-            <input v-model.number="form.total_amount" type="number" min="1" step="1" required
+            <input v-model.number="form.total_amount" type="number" min="1" step="any" required
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
           </div>
           <div>

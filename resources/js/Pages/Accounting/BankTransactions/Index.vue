@@ -31,11 +31,11 @@
           </div>
           <div>
             <label class="form-label text-xs">Số tiền vào (Có)</label>
-            <input v-model.number="addForm.credit" type="number" min="0" step="1" class="form-input text-sm" placeholder="0" />
+            <input v-model.number="addForm.credit" type="number" min="0" step="any" class="form-input text-sm" placeholder="0" />
           </div>
           <div>
             <label class="form-label text-xs">Số tiền ra (Nợ)</label>
-            <input v-model.number="addForm.debit" type="number" min="0" step="1" class="form-input text-sm" placeholder="0" />
+            <input v-model.number="addForm.debit" type="number" min="0" step="any" class="form-input text-sm" placeholder="0" />
           </div>
           <div>
             <button type="submit" :disabled="addForm.processing" class="btn-primary text-sm w-full">

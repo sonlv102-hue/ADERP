@@ -83,7 +83,7 @@
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Hoặc nhập số tiền chiết khấu → Tính % tự động</label>
               <div class="flex gap-2">
-                <input v-model.number="discountAmountInput" type="number" min="0" step="1"
+                <input v-model.number="discountAmountInput" type="number" min="0" step="any"
                   placeholder="Nhập số tiền chiết khấu (VND), hệ thống sẽ tính %"
                   @input="calculateDiscountPercent"
                   class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" />
@@ -162,7 +162,7 @@
                     class="w-full px-2 py-1.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 outline-none text-xs" />
                 </td>
                 <td class="px-4 py-3">
-                  <input v-model.number="item.quantity" type="number" min="1" step="1"
+                  <input v-model.number="item.quantity" type="number" min="1" step="any"
                     @input="recalcCkPercent(idx)"
                     class="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-xs" />
                 </td>
@@ -172,7 +172,7 @@
                     class="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-xs" />
                 </td>
                 <td class="px-4 py-3">
-                  <input v-model.number="item._ck_amount" type="number" min="0" step="1"
+                  <input v-model.number="item._ck_amount" type="number" min="0" step="any"
                     @input="onCkAmountChange(idx)"
                     placeholder="0"
                     class="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-xs" />

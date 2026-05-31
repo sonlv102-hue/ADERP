@@ -90,7 +90,7 @@
                 <input
                   v-model.number="lines[acc.code].debit"
                   @focus="clearCredit(acc.code)"
-                  type="number" min="0" step="1"
+                  type="number" min="0" step="any"
                   class="w-full text-right px-2 py-1 border border-transparent rounded focus:border-blue-400 focus:ring-1 focus:ring-blue-400 outline-none text-sm bg-transparent focus:bg-white"
                   :class="{ 'border-blue-300 bg-blue-50 font-medium': lines[acc.code]?.debit > 0 }"
                   placeholder="0" />
@@ -99,7 +99,7 @@
                 <input
                   v-model.number="lines[acc.code].credit"
                   @focus="clearDebit(acc.code)"
-                  type="number" min="0" step="1"
+                  type="number" min="0" step="any"
                   class="w-full text-right px-2 py-1 border border-transparent rounded focus:border-green-400 focus:ring-1 focus:ring-green-400 outline-none text-sm bg-transparent focus:bg-white"
                   :class="{ 'border-green-300 bg-green-50 font-medium': lines[acc.code]?.credit > 0 }"
                   placeholder="0" />

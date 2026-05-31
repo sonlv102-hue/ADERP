@@ -65,12 +65,12 @@
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Lương cơ bản (₫)</label>
-              <input v-model.number="form.base_salary" type="number" min="0" step="1"
+              <input v-model.number="form.base_salary" type="number" min="0" step="any"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none font-mono text-right" />
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Phụ cấp (₫)</label>
-              <input v-model.number="form.allowance" type="number" min="0" step="1"
+              <input v-model.number="form.allowance" type="number" min="0" step="any"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none font-mono text-right" />
             </div>
             <div>

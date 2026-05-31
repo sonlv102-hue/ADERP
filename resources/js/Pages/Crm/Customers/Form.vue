@@ -93,7 +93,7 @@
 
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Hạn mức tín dụng (₫)</label>
-            <input v-model.number="form.credit_limit" type="number" min="0" step="1"
+            <input v-model.number="form.credit_limit" type="number" min="0" step="any"
               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
               placeholder="0 = không giới hạn" />
             <p class="mt-1 text-xs text-gray-400">0 hoặc bỏ trống = không giới hạn</p>

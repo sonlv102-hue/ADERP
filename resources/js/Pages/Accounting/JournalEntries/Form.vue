@@ -71,11 +71,11 @@
                       class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary-500" />
                   </td>
                   <td class="px-3 py-2">
-                    <input v-model.number="line.debit" type="number" min="0" step="1" @input="line.credit = 0"
+                    <input v-model.number="line.debit" type="number" min="0" step="any" @input="line.credit = 0"
                       class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-primary-500" />
                   </td>
                   <td class="px-3 py-2">
-                    <input v-model.number="line.credit" type="number" min="0" step="1" @input="line.debit = 0"
+                    <input v-model.number="line.credit" type="number" min="0" step="any" @input="line.debit = 0"
                       class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-primary-500" />
                   </td>
                   <td class="px-3 py-2 text-center">

@@ -159,7 +159,7 @@
           <form @submit.prevent="submitPayment" class="grid grid-cols-2 sm:grid-cols-4 gap-3 items-start">
             <div>
               <label class="block text-xs font-medium text-gray-600 mb-1">Số tiền <span class="text-red-500">*</span></label>
-              <input v-model.number="payForm.amount" type="number" min="1" step="1" :max="invoice.remaining"
+              <input v-model.number="payForm.amount" type="number" min="1" step="any" :max="invoice.remaining"
                 class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
               <p class="text-xs text-green-700 font-medium mt-0.5">{{ formatVnd(payForm.amount || 0) }}</p>
               <div class="flex gap-1 mt-1.5">

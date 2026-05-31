@@ -92,7 +92,7 @@
                 <td class="px-4 py-2 text-right">
                   <input v-if="count.status === 'draft'"
                     v-model.number="localItems[idx].counted_quantity"
-                    type="number" min="0" step="1"
+                    type="number" min="0" step="any"
                     @input="recalcDiff(idx)"
                     class="w-20 text-right border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-500" />
                   <span v-else class="text-xs">{{ item.counted_quantity ?? '—' }}</span>

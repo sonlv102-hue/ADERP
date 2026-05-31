@@ -142,7 +142,7 @@
                     class="w-full px-2 py-1.5 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 outline-none text-xs" />
                 </td>
                 <td class="px-4 py-3">
-                  <input v-model.number="item.quantity" type="number" min="1" step="1"
+                  <input v-model.number="item.quantity" type="number" min="1" step="any"
                     class="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-xs" />
                 </td>
                 <td class="px-4 py-3">
