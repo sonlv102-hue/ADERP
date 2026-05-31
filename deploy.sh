@@ -5,9 +5,8 @@ cd /var/www/web_erp
 echo "[1/6] Pulling latest code..."
 git pull origin master
 
-CACHE_BUST=$(date +%s)
-echo "[2/6] Rebuilding Docker images (cache bust: $CACHE_BUST)..."
-docker compose build --build-arg CACHE_BUST=$CACHE_BUST app scheduler queue
+echo "[2/6] Rebuilding Docker images (no-cache)..."
+docker compose build --no-cache app scheduler queue
 
 echo "[3/6] Extracting frontend assets to host..."
 rm -rf /var/www/web_erp/public/build
