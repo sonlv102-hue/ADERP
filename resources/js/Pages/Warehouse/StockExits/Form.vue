@@ -172,7 +172,7 @@
                     <div class="flex items-start gap-3">
                       <span class="text-xs font-medium text-blue-700 mt-1 shrink-0">
                         Serial
-                        <span :class="item.serial_ids.length === item.quantity && item.quantity > 0 ? 'text-green-600' : 'text-amber-600'">
+                        <span class="text-gray-500">
                           ({{ item.serial_ids.length }}/{{ item.quantity }})
                         </span>:
                       </span>
@@ -354,7 +354,7 @@ const toggleSerial = (index, serialId) => {
   const pos = item.serial_ids.indexOf(serialId);
   if (pos >= 0) {
     item.serial_ids.splice(pos, 1);
-  } else if (item.serial_ids.length < item.quantity) {
+  } else {
     item.serial_ids.push(serialId);
   }
 };

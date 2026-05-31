@@ -130,15 +130,11 @@ class StockExitController extends Controller
             'items.*.serial_ids.*'    => ['integer', 'exists:product_serials,id'],
         ]);
 
-        // Validate serial cho tất cả sản phẩm
+        // Validate serial (tùy chọn — không bắt buộc phải chọn đủ số lượng)
         $allSerialIds = [];
         foreach ($data['items'] as $index => $itemData) {
             $serialIds = $itemData['serial_ids'] ?? [];
-            if (count($serialIds) !== (int) $itemData['quantity']) {
-                return back()->withErrors([
-                    "items.{$index}.serial_ids" => "Phải chọn đúng {$itemData['quantity']} serial.",
-                ])->withInput();
-            }
+            if (empty($serialIds)) continue;
 
             $duplicates = array_intersect($serialIds, $allSerialIds);
             if (! empty($duplicates)) {
@@ -294,11 +290,7 @@ class StockExitController extends Controller
         $allSerialIds = [];
         foreach ($data['items'] as $index => $itemData) {
             $serialIds = $itemData['serial_ids'] ?? [];
-            if (count($serialIds) !== (int) $itemData['quantity']) {
-                return back()->withErrors([
-                    "items.{$index}.serial_ids" => "Phải chọn đúng {$itemData['quantity']} serial.",
-                ])->withInput();
-            }
+            if (empty($serialIds)) continue;
 
             $duplicates = array_intersect($serialIds, $allSerialIds);
             if (! empty($duplicates)) {
