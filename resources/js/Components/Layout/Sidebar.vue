@@ -124,6 +124,7 @@
         <!-- Admin -->
         <div v-if="isAdmin" class="mt-3 pt-3 border-t border-gray-700">
           <p class="px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Quản trị</p>
+          <NavItem :href="route('admin.employees.index')" icon="identification">Cán bộ CNV</NavItem>
           <NavItem :href="route('admin.users.index')" icon="users">Người dùng</NavItem>
           <NavItem :href="route('admin.roles.index')" icon="shield-check">Phân quyền</NavItem>
           <NavItem :href="route('admin.settings.index')" icon="cog">Cài đặt công ty</NavItem>

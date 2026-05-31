@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\Admin\EmployeeController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SettingsController;
@@ -93,6 +94,7 @@ Route::middleware('auth')->group(function () {
         Route::resource('fixed-assets', FixedAssetController::class);
         Route::post('fixed-assets/depreciate', [FixedAssetController::class, 'depreciate'])->name('fixed-assets.depreciate');
         Route::get('activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
+        Route::resource('employees', EmployeeController::class);
     });
 
     // Catalog - danh mục sản phẩm và dịch vụ
