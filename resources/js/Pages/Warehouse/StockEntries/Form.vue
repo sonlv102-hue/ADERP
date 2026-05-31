@@ -143,17 +143,15 @@
                               d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 3.5V16M4 16v.5M4 9v.5M4 6h.01M4 3h.01M12 3h.01M20 3h.01M20 6h.01M20 9h.01" />
                           </svg>
                           <span class="text-sm font-semibold text-blue-800">Kiểm soát Serial</span>
-                          <span class="px-2 py-0.5 rounded-full text-xs font-bold"
-                            :class="item.serials.length === item.quantity ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'">
-                            {{ item.serials.length }}/{{ item.quantity }}
+                          <span class="px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-700">
+                            {{ item.serials.length }} serial
                           </span>
-                          <span v-if="item.serials.length === item.quantity" class="text-xs text-green-600 font-medium">✓ Đủ serial</span>
                         </div>
                         <button v-if="item.serials.length > 0" type="button" @click="clearSerials(index)"
                           class="text-xs text-gray-400 hover:text-red-500 transition-colors">Xóa tất cả</button>
                       </div>
 
-                      <div v-if="item.serials.length < item.quantity" class="flex gap-2 items-center">
+                      <div class="flex gap-2 items-center">
                         <div class="relative flex-1 max-w-sm">
                           <svg class="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-blue-400 pointer-events-none"
                             fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -280,10 +278,6 @@ const addSerial = (index) => {
   const val = (scanInputs[index] ?? '').trim();
   if (!val) return;
   const item = form.items[index];
-  if (item.serials.length >= item.quantity) {
-    scanErrors[index] = `Đã đủ ${item.quantity} serial.`;
-    return;
-  }
   if (item.serials.includes(val)) {
     scanErrors[index] = `Serial "${val}" đã được nhập trong dòng này.`;
     return;
@@ -320,7 +314,6 @@ const handlePaste = (index, event) => {
   const otherSerials = form.items.flatMap((it, i) => i !== index ? it.serials : []);
   const duplicates = [];
   for (const line of lines) {
-    if (item.serials.length >= item.quantity) break;
     if (item.serials.includes(line) || otherSerials.includes(line)) {
       duplicates.push(line);
       continue;

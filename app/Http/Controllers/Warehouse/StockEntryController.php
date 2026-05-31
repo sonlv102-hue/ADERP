@@ -163,9 +163,6 @@ class StockEntryController extends Controller
             $product = Product::find($item['product_id']);
             if ($product) {
                 $serials = array_values(array_filter($item['serials'] ?? [], fn ($s) => $s !== '' && $s !== null));
-                if (count($serials) !== (int) $item['quantity']) {
-                    $errors["items.{$idx}.serials"] = "Cần nhập đúng {$item['quantity']} số serial cho \"{$product->name}\".";
-                }
                 foreach ($serials as $serial) {
                     if (in_array($serial, $allSerials)) {
                         $errors["items.{$idx}.serials"] = "Số serial \"{$serial}\" bị trùng trong phiếu này.";
@@ -342,10 +339,6 @@ class StockEntryController extends Controller
             }
 
             $serials = array_values(array_filter($item['serials'] ?? [], fn ($s) => $s !== '' && $s !== null));
-            if (count($serials) !== (int) $item['quantity']) {
-                $errors["items.{$idx}.serials"] = "Cần nhập đúng {$item['quantity']} số serial cho \"{$poItem->product->name}\".";
-            }
-
             foreach ($serials as $serial) {
                 if (in_array($serial, $allSerials)) {
                     $errors["items.{$idx}.serials"] = "Số serial \"{$serial}\" bị trùng trong phiếu này.";
