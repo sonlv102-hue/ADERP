@@ -43,7 +43,7 @@
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Nguyên giá (VND) <span class="text-red-500">*</span></label>
-            <input v-model="form.acquisition_cost" type="number" min="0" step="1000" required
+            <input v-model="form.acquisition_cost" type="number" min="0" step="1" required
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <p v-if="errors.acquisition_cost" class="mt-1 text-xs text-red-600">{{ errors.acquisition_cost }}</p>
           </div>
@@ -58,7 +58,7 @@
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Hao mòn lũy kế (VND)</label>
-            <input v-model="form.accumulated_depreciation" type="number" min="0" step="1000"
+            <input v-model="form.accumulated_depreciation" type="number" min="0" step="1"
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
           </div>
         </div>

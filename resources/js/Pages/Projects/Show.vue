@@ -176,7 +176,7 @@
             </select>
             <input v-model="materialForm.quantity" type="number" min="0.01" step="0.01" placeholder="Số lượng"
               class="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
-            <input v-model="materialForm.unit_price" type="number" min="0" step="1000" placeholder="Đơn giá"
+            <input v-model="materialForm.unit_price" type="number" min="0" step="1" placeholder="Đơn giá"
               class="w-36 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
             <button type="submit" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
               Thêm
@@ -230,7 +230,7 @@
             </select>
             <input v-model="expenseForm.description" type="text" placeholder="Mô tả chi phí"
               class="col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
-            <input v-model="expenseForm.amount" type="number" min="0" step="1000" placeholder="Số tiền"
+            <input v-model="expenseForm.amount" type="number" min="0" step="1" placeholder="Số tiền"
               class="border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
             <div class="flex gap-2">
               <input v-model="expenseForm.expense_date" type="date"

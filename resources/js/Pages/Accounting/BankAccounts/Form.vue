@@ -38,7 +38,7 @@
 
           <div>
             <label class="form-label">Số dư ban đầu (₫)</label>
-            <input v-model.number="form.opening_balance" type="number" step="1000" class="form-input" />
+            <input v-model.number="form.opening_balance" type="number" step="1" class="form-input" />
           </div>
         </div>
 

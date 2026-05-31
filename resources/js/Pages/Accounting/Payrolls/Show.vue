@@ -155,17 +155,17 @@
           <div class="grid grid-cols-2 gap-4">
             <div>
               <label class="form-label text-xs">Lương cơ bản</label>
-              <input type="number" v-model.number="editForm.base_salary" min="0" step="100000"
+              <input type="number" v-model.number="editForm.base_salary" min="0" step="1"
                 class="form-input text-right font-mono text-sm" />
             </div>
             <div>
               <label class="form-label text-xs">Phụ cấp</label>
-              <input type="number" v-model.number="editForm.allowance" min="0" step="100000"
+              <input type="number" v-model.number="editForm.allowance" min="0" step="1"
                 class="form-input text-right font-mono text-sm" />
             </div>
             <div>
               <label class="form-label text-xs">Thưởng</label>
-              <input type="number" v-model.number="editForm.bonus" min="0" step="100000"
+              <input type="number" v-model.number="editForm.bonus" min="0" step="1"
                 class="form-input text-right font-mono text-sm" />
             </div>
             <div>
