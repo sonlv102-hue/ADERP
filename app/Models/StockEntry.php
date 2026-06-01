@@ -7,10 +7,20 @@ use App\Models\Concerns\GeneratesCode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class StockEntry extends Model
 {
-    use GeneratesCode;
+    use GeneratesCode, LogsActivity;
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly(['code', 'status', 'warehouse_id', 'supplier_id', 'entry_date'])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
+    }
 
     protected static string $codePrefix = 'NK-';
     protected static int    $codePad    = 4;
