@@ -6,6 +6,7 @@ echo "[1/6] Pulling latest code..."
 git pull origin master
 
 echo "[2/6] Rebuilding Docker images (no-cache)..."
+docker image prune -f
 docker compose build --no-cache app scheduler queue
 
 echo "[3/6] Extracting frontend assets to host..."
