@@ -187,8 +187,8 @@ class InvoiceController extends Controller
 
     public function destroy(Invoice $invoice): RedirectResponse
     {
-        if ($invoice->status !== InvoiceStatus::Draft) {
-            return back()->with('error', 'Chỉ có thể xóa hóa đơn ở trạng thái Nháp. Hóa đơn đã gửi có bút toán kế toán liên quan.');
+        if (!in_array($invoice->status, [InvoiceStatus::Draft, InvoiceStatus::Cancelled])) {
+            return back()->with('error', 'Chỉ có thể xóa hóa đơn ở trạng thái Nháp hoặc Đã hủy.');
         }
         if ($invoice->payments()->exists()) {
             return back()->with('error', 'Không thể xóa hóa đơn đã có thanh toán.');
@@ -198,6 +198,17 @@ class InvoiceController extends Controller
 
         return redirect()->route('accounting.invoices.index')
             ->with('success', 'Đã xóa hóa đơn.');
+    }
+
+    public function cancel(Invoice $invoice): RedirectResponse
+    {
+        try {
+            $this->service->cancel($invoice);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Đã hủy hóa đơn.');
     }
 
     public function markSent(Invoice $invoice): RedirectResponse
@@ -294,10 +305,11 @@ class InvoiceController extends Controller
     private function allowedActions(Invoice $invoice): array
     {
         return match($invoice->status) {
-            InvoiceStatus::Draft   => ['mark_sent', 'edit', 'delete'],
-            InvoiceStatus::Sent    => ['mark_overdue', 'add_payment'],
-            InvoiceStatus::Overdue => ['add_payment'],
-            InvoiceStatus::Paid    => [],
+            InvoiceStatus::Draft     => ['mark_sent', 'edit', 'delete'],
+            InvoiceStatus::Sent      => ['mark_overdue', 'add_payment', 'cancel'],
+            InvoiceStatus::Overdue   => ['add_payment', 'cancel'],
+            InvoiceStatus::Paid      => [],
+            InvoiceStatus::Cancelled => [],
         };
     }
 

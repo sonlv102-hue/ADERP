@@ -32,8 +32,8 @@
             class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
             Xác nhận
           </button>
-          <button v-if="exit.status === 'draft'" @click="cancelExit"
-            class="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50">
+          <button v-if="['draft','confirmed'].includes(exit.status)" @click="cancelExit"
+            class="px-4 py-2 border border-orange-300 text-orange-700 rounded-lg text-sm font-medium hover:bg-orange-50">
             Hủy phiếu
           </button>
           <button v-if="['draft','cancelled'].includes(exit.status)" @click="showDeleteModal = true"
@@ -238,7 +238,12 @@ const doConfirmExit = () => {
   router.post(route('warehouse.stock-exits.confirm', props.exit.id));
 };
 
-const cancelExit = () => router.post(route('warehouse.stock-exits.cancel', props.exit.id));
+const cancelExit = () => {
+  const msg = props.exit.status === 'confirmed'
+    ? 'Hủy phiếu đã xác nhận sẽ đảo ngược tồn kho và bút toán giá vốn. Xác nhận?'
+    : 'Xác nhận hủy phiếu xuất kho?';
+  if (confirm(msg)) router.post(route('warehouse.stock-exits.cancel', props.exit.id));
+};
 const doDelete   = () => {
   showDeleteModal.value = false;
   router.delete(route('warehouse.stock-exits.destroy', props.exit.id));

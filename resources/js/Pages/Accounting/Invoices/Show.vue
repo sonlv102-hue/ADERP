@@ -42,8 +42,20 @@
             class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
             Đánh dấu đã TT
           </button>
+          <!-- Cancel -->
+          <button v-if="invoice.allowed_actions.includes('cancel') && can('accounting.manage')"
+            @click="cancelInvoice"
+            class="bg-orange-50 hover:bg-orange-100 text-orange-700 px-3 py-2 rounded-lg text-sm font-medium border border-orange-200">
+            Hủy hóa đơn
+          </button>
           <!-- Delete -->
           <button v-if="invoice.allowed_actions.includes('delete') && can('accounting.manage')"
+            @click="deleteInvoice"
+            class="bg-red-50 hover:bg-red-100 text-red-700 px-3 py-2 rounded-lg text-sm font-medium">
+            Xóa
+          </button>
+          <!-- Delete cancelled -->
+          <button v-if="invoice.status === 'cancelled' && can('accounting.manage')"
             @click="deleteInvoice"
             class="bg-red-50 hover:bg-red-100 text-red-700 px-3 py-2 rounded-lg text-sm font-medium">
             Xóa
@@ -323,8 +335,14 @@ function action(act) {
   router.post(route(`accounting.invoices.${act}`, props.invoice.id));
 }
 
+function cancelInvoice() {
+  if (confirm('Hủy hóa đơn này? Bút toán hạch toán sẽ được đảo ngược tự động.')) {
+    action('cancel');
+  }
+}
+
 function deleteInvoice() {
-  if (confirm('Xóa hóa đơn này?')) {
+  if (confirm('Xóa vĩnh viễn hóa đơn này?')) {
     router.delete(route('accounting.invoices.destroy', props.invoice.id));
   }
 }

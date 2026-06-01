@@ -219,7 +219,11 @@ class QuotationController extends Controller
 
     public function destroy(Quotation $quotation): RedirectResponse
     {
-        abort_if($quotation->status !== QuotationStatus::Draft, 403, 'Chỉ có thể xóa báo giá ở trạng thái nháp.');
+        abort_if(
+            !in_array($quotation->status, [QuotationStatus::Draft, QuotationStatus::Cancelled]),
+            403,
+            'Chỉ có thể xóa báo giá ở trạng thái nháp hoặc đã hủy.'
+        );
         $quotation->delete();
 
         return redirect()->route('sales.quotations.index')
@@ -257,6 +261,17 @@ class QuotationController extends Controller
         }
 
         return back()->with('success', 'Đã từ chối báo giá.');
+    }
+
+    public function cancel(Quotation $quotation): RedirectResponse
+    {
+        try {
+            $this->quotationService->cancel($quotation);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Đã hủy báo giá.');
     }
 
     public function convertToOrder(Quotation $quotation): RedirectResponse

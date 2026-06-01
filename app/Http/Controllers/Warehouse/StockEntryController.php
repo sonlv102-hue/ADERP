@@ -476,8 +476,8 @@ class StockEntryController extends Controller
 
     public function destroy(StockEntry $stockEntry): RedirectResponse
     {
-        if ($stockEntry->status !== StockEntryStatus::Cancelled) {
-            return back()->with('error', 'Chỉ có thể xóa phiếu đã hủy.');
+        if (!in_array($stockEntry->status, [StockEntryStatus::Draft, StockEntryStatus::Cancelled])) {
+            return back()->with('error', 'Chỉ có thể xóa phiếu ở trạng thái nháp hoặc đã hủy.');
         }
 
         $purchaseOrderId = $stockEntry->purchase_order_id;

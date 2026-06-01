@@ -166,11 +166,14 @@
             Tạo đơn hàng
           </button>
         </form>
-        <form v-if="quotation.status === 'draft'" @submit.prevent="deleteQuotation" method="post">
-          <button type="submit" class="px-4 py-2 border border-red-300 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium">
-            Xóa
-          </button>
-        </form>
+        <button v-if="!['approved','cancelled'].includes(quotation.status)" @click="cancelQuotation"
+          class="px-4 py-2 border border-orange-300 text-orange-700 hover:bg-orange-50 rounded-lg text-sm font-medium">
+          Hủy báo giá
+        </button>
+        <button v-if="['draft','cancelled'].includes(quotation.status)" @click="deleteQuotation"
+          class="px-4 py-2 border border-red-300 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium">
+          Xóa
+        </button>
       </div>
     </div>
   </AppLayout>
@@ -191,8 +194,14 @@ const action = (act) => {
   router.post(route(`sales.quotations.${act}`, props.quotation.id));
 };
 
+const cancelQuotation = () => {
+  if (confirm('Xác nhận hủy báo giá này? Trạng thái sẽ chuyển sang "Đã hủy".')) {
+    action('cancel');
+  }
+};
+
 const deleteQuotation = () => {
-  if (confirm('Xác nhận xóa báo giá này?')) {
+  if (confirm('Xác nhận xóa vĩnh viễn báo giá này?')) {
     router.delete(route('sales.quotations.destroy', props.quotation.id));
   }
 };

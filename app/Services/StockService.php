@@ -6,6 +6,7 @@ use App\Enums\SerialStatus;
 use App\Enums\StockEntryStatus;
 use App\Enums\StockExitStatus;
 use App\Jobs\NotifyLowStockJob;
+use App\Models\JournalEntry;
 use App\Models\ProductSerial;
 use App\Models\PurchaseOrder;
 use App\Models\StockEntry;
@@ -211,19 +212,76 @@ class StockService
 
     public function cancelExit(StockExit $exit): void
     {
-        if ($exit->status === StockExitStatus::Confirmed) {
-            throw new RuntimeException('Không thể hủy phiếu đã xác nhận.');
+        if ($exit->status === StockExitStatus::Cancelled) {
+            throw new RuntimeException('Phiếu đã bị hủy trước đó.');
+        }
+
+        if ($exit->status === StockExitStatus::Draft) {
+            DB::transaction(function () use ($exit) {
+                $exit->load('items');
+                foreach ($exit->items as $item) {
+                    ProductSerial::where('stock_exit_item_id', $item->id)
+                        ->update(['stock_exit_item_id' => null]);
+                }
+                $exit->update(['status' => StockExitStatus::Cancelled]);
+            });
+            return;
+        }
+
+        // Confirmed: kiểm tra serial chưa bị chuyển trạng thái thêm
+        $exit->load('items.serials');
+        foreach ($exit->items as $item) {
+            foreach ($item->serials as $serial) {
+                if ($serial->status !== SerialStatus::Sold) {
+                    throw new RuntimeException(
+                        "Không thể hủy: serial [{$serial->serial_number}] đang ở trạng thái \"{$serial->status->label()}\", không thể hoàn về kho."
+                    );
+                }
+            }
         }
 
         DB::transaction(function () use ($exit) {
-            // Trả lại serial về trạng thái chưa gắn
-            $exit->load('items');
+            // Tạo movement dương để đảo ngược tồn kho (giữ audit trail)
             foreach ($exit->items as $item) {
-                ProductSerial::where('stock_exit_item_id', $item->id)
-                    ->update(['stock_exit_item_id' => null]);
+                StockMovement::create([
+                    'product_id'   => $item->product_id,
+                    'warehouse_id' => $exit->warehouse_id,
+                    'type'         => 'in',
+                    'quantity'     => $item->quantity,
+                    'source_type'  => StockExit::class,
+                    'source_id'    => $exit->id,
+                    'created_by'   => auth()->id(),
+                    'notes'        => "Hủy phiếu xuất kho {$exit->code}",
+                ]);
             }
+
+            // Hoàn serial về InStock
+            foreach ($exit->items as $item) {
+                foreach ($item->serials as $serial) {
+                    $serial->transition(SerialStatus::InStock);
+                }
+            }
+
             $exit->update(['status' => StockExitStatus::Cancelled]);
         });
+
+        // Đảo bút toán giá vốn nếu đã hạch toán
+        $entry = JournalEntry::where('reference_type', 'stock_exit')
+            ->where('reference_id', $exit->id)
+            ->where('status', 'posted')
+            ->whereRaw("description NOT LIKE 'Đảo:%'")
+            ->first();
+
+        if ($entry) {
+            try {
+                $this->accounting->reverse($entry, "Đảo: Hủy phiếu xuất kho {$exit->code}");
+            } catch (\Exception $e) {
+                \Log::warning("Reverse exit journal failed [{$exit->code}]: " . $e->getMessage());
+            }
+        }
+
+        Cache::forget('dashboard.stock_overview');
+        Cache::forget('dashboard.stats');
     }
 
     public function getStockQuantity(int $productId, int $warehouseId): int

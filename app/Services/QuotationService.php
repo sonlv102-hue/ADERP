@@ -35,6 +35,14 @@ class QuotationService
         $quotation->update(['status' => QuotationStatus::Sent]);
     }
 
+    public function cancel(Quotation $quotation): void
+    {
+        if (in_array($quotation->status, [QuotationStatus::Approved, QuotationStatus::Cancelled])) {
+            throw new RuntimeException('Không thể hủy báo giá đã duyệt hoặc đã hủy.');
+        }
+        $quotation->update(['status' => QuotationStatus::Cancelled]);
+    }
+
     public function convertToOrder(Quotation $quotation): Order
     {
         if ($quotation->status !== QuotationStatus::Approved) {

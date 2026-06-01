@@ -36,7 +36,7 @@
             class="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50">
             Hủy phiếu
           </button>
-          <button v-if="entry.status === 'cancelled'" @click="showDeleteModal = true"
+          <button v-if="['draft','cancelled'].includes(entry.status)" @click="showDeleteModal = true"
             class="px-4 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 flex items-center gap-1.5">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

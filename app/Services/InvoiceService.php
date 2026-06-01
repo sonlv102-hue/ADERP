@@ -13,6 +13,38 @@ class InvoiceService
 {
     public function __construct(private AccountingService $accounting) {}
 
+    public function cancel(Invoice $invoice): void
+    {
+        if ($invoice->status === InvoiceStatus::Paid) {
+            throw new \RuntimeException('Không thể hủy hóa đơn đã thanh toán.');
+        }
+        if ($invoice->status === InvoiceStatus::Cancelled) {
+            throw new \RuntimeException('Hóa đơn đã được hủy trước đó.');
+        }
+        if ($invoice->payments()->exists()) {
+            throw new \RuntimeException('Không thể hủy hóa đơn đã có thanh toán. Vui lòng xóa các khoản thanh toán trước.');
+        }
+
+        DB::transaction(function () use ($invoice) {
+            // Đảo bút toán hóa đơn nếu đã hạch toán
+            $entry = JournalEntry::where('reference_type', 'invoice')
+                ->where('reference_id', $invoice->id)
+                ->where('status', 'posted')
+                ->whereRaw("description NOT LIKE 'Đảo:%'")
+                ->first();
+
+            if ($entry) {
+                try {
+                    $this->accounting->reverse($entry, "Đảo: Hủy hóa đơn {$invoice->code}");
+                } catch (\Exception $e) {
+                    \Log::warning("Reverse invoice entry failed [{$invoice->code}]: " . $e->getMessage());
+                }
+            }
+
+            $invoice->update(['status' => InvoiceStatus::Cancelled]);
+        });
+    }
+
     public function markSent(Invoice $invoice): void
     {
         if ($invoice->status !== InvoiceStatus::Draft) {
