@@ -109,7 +109,7 @@ class PurchaseInvoiceController extends Controller
 
     public function show(PurchaseInvoice $purchaseInvoice): Response
     {
-        $purchaseInvoice->load(['supplier', 'purchaseOrder.items.product', 'creator', 'payments.creator']);
+        $purchaseInvoice->load(['supplier', 'purchaseOrder.items.product', 'creator', 'payments.creator', 'attachments.creator']);
 
         return Inertia::render('Purchasing/PurchaseInvoices/Show', [
             'invoice' => [
@@ -131,8 +131,14 @@ class PurchaseInvoiceController extends Controller
                 'paid_amount'       => $purchaseInvoice->paid_amount,
                 'remaining'         => $purchaseInvoice->remaining,
                 'notes'             => $purchaseInvoice->notes,
-                'file_name'         => $purchaseInvoice->file_name,
-                'file_url'          => $purchaseInvoice->file_path ? Storage::disk('public')->url($purchaseInvoice->file_path) : null,
+                'attachments' => $purchaseInvoice->attachments->map(fn ($a) => [
+                    'id'        => $a->id,
+                    'file_name' => $a->file_name,
+                    'file_url'  => Storage::disk('public')->url($a->file_path),
+                    'file_size' => $a->file_size,
+                    'mime_type' => $a->mime_type,
+                    'created_by'=> $a->creator->name,
+                ]),
                 'creator'           => $purchaseInvoice->creator->name,
                 'payments'          => $purchaseInvoice->payments->map(fn ($p) => [
                     'id'           => $p->id,

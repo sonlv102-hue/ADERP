@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Purchasing;
 
+use App\Enums\PurchaseOrderInvoiceType;
 use App\Enums\PurchaseOrderStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Product;
@@ -50,8 +51,11 @@ class PurchaseOrderController extends Controller
                     'creator'        => $po->creator->name,
                     'items_count'    => $po->items_count,
                     'total'          => (float) $po->items_total,
-                    'receipt_status' => $this->resolveReceiptStatus($po->status->value),
-                    'invoice_status' => $po->invoice_status,
+                    'receipt_status'      => $this->resolveReceiptStatus($po->status->value),
+                    'invoice_status'      => $po->invoice_status,
+                    'invoice_type'        => $po->invoice_type->value,
+                    'invoice_type_label'  => $po->invoice_type->label(),
+                    'invoice_type_color'  => $po->invoice_type->color(),
                 ]),
         ]);
     }
@@ -59,10 +63,13 @@ class PurchaseOrderController extends Controller
     public function create(): Response
     {
         return Inertia::render('Purchasing/PurchaseOrders/Form', [
-            'nextCode'   => PurchaseOrder::generateCode(),
-            'suppliers'  => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
-            'warehouses' => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'products'   => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'cost_price', 'vat_percent']),
+            'nextCode'     => PurchaseOrder::generateCode(),
+            'suppliers'    => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
+            'warehouses'   => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'products'     => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'cost_price', 'vat_percent']),
+            'invoiceTypes' => collect(PurchaseOrderInvoiceType::cases())->map(fn ($e) => [
+                'value' => $e->value, 'label' => $e->label(),
+            ]),
         ]);
     }
 
@@ -75,6 +82,7 @@ class PurchaseOrderController extends Controller
             'order_date'    => ['required', 'date'],
             'expected_date' => ['nullable', 'date', 'after_or_equal:order_date'],
             'notes'         => ['nullable', 'string'],
+            'invoice_type'  => ['nullable', Rule::in(array_column(PurchaseOrderInvoiceType::cases(), 'value'))],
             'items'         => ['required', 'array', 'min:1'],
             'items.*.product_id'  => ['required', 'exists:products,id'],
             'items.*.quantity'    => ['required', 'integer', 'min:1'],
@@ -89,6 +97,7 @@ class PurchaseOrderController extends Controller
             'order_date'    => $data['order_date'],
             'expected_date' => $data['expected_date'] ?? null,
             'notes'         => $data['notes'] ?? null,
+            'invoice_type'  => $data['invoice_type'] ?? PurchaseOrderInvoiceType::Vat->value,
         ]);
 
         foreach ($data['items'] as $item) {
@@ -116,11 +125,14 @@ class PurchaseOrderController extends Controller
                 'status'        => $purchaseOrder->status->value,
                 'status_label'  => $purchaseOrder->status->label(),
                 'status_color'  => $purchaseOrder->status->color(),
-                'supplier'      => $purchaseOrder->supplier->name,
-                'supplier_id'   => $purchaseOrder->supplier_id,
-                'warehouse'     => $purchaseOrder->warehouse->name,
-                'creator'       => $purchaseOrder->creator->name,
-                'notes'         => $purchaseOrder->notes,
+                'supplier'           => $purchaseOrder->supplier->name,
+                'supplier_id'        => $purchaseOrder->supplier_id,
+                'warehouse'          => $purchaseOrder->warehouse->name,
+                'creator'            => $purchaseOrder->creator->name,
+                'notes'              => $purchaseOrder->notes,
+                'invoice_type'       => $purchaseOrder->invoice_type->value,
+                'invoice_type_label' => $purchaseOrder->invoice_type->label(),
+                'invoice_type_color' => $purchaseOrder->invoice_type->color(),
                 'items'         => $purchaseOrder->items->map(fn ($item) => [
                     'id'           => $item->id,
                     'product_code' => $item->product?->code ?? '—',
@@ -169,15 +181,19 @@ class PurchaseOrderController extends Controller
                 'order_date'    => $purchaseOrder->order_date->format('Y-m-d'),
                 'expected_date' => $purchaseOrder->expected_date?->format('Y-m-d'),
                 'notes'         => $purchaseOrder->notes,
+                'invoice_type'  => $purchaseOrder->invoice_type->value,
                 'items'         => $purchaseOrder->items->map(fn ($item) => [
                     'product_id' => $item->product_id,
                     'quantity'   => $item->quantity,
                     'unit_price' => (float) $item->unit_price,
                 ])->values(),
             ],
-            'suppliers'  => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
-            'warehouses' => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'products'   => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'cost_price', 'vat_percent']),
+            'suppliers'    => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
+            'warehouses'   => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'products'     => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'cost_price', 'vat_percent']),
+            'invoiceTypes' => collect(PurchaseOrderInvoiceType::cases())->map(fn ($e) => [
+                'value' => $e->value, 'label' => $e->label(),
+            ]),
         ]);
     }
 
@@ -193,6 +209,7 @@ class PurchaseOrderController extends Controller
             'order_date'    => ['required', 'date'],
             'expected_date' => ['nullable', 'date', 'after_or_equal:order_date'],
             'notes'         => ['nullable', 'string'],
+            'invoice_type'  => ['nullable', Rule::in(array_column(PurchaseOrderInvoiceType::cases(), 'value'))],
             'items'         => ['required', 'array', 'min:1'],
             'items.*.product_id'  => ['required', 'exists:products,id'],
             'items.*.quantity'    => ['required', 'integer', 'min:1'],
@@ -205,6 +222,7 @@ class PurchaseOrderController extends Controller
             'order_date'    => $data['order_date'],
             'expected_date' => $data['expected_date'] ?? null,
             'notes'         => $data['notes'] ?? null,
+            'invoice_type'  => $data['invoice_type'] ?? $purchaseOrder->invoice_type->value,
         ]);
 
         $purchaseOrder->items()->delete();

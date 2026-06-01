@@ -62,6 +62,14 @@
             </div>
 
             <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Loại hóa đơn đầu vào</label>
+              <select v-model="form.invoice_type"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                <option v-for="t in invoiceTypes" :key="t.value" :value="t.value">{{ t.label }}</option>
+              </select>
+            </div>
+
+            <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
               <textarea v-model="form.notes" rows="2"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" />
@@ -164,6 +172,7 @@ const props = defineProps({
   suppliers: Array,
   warehouses: Array,
   products: Array,
+  invoiceTypes: Array,
   purchaseOrder: Object,
 });
 
@@ -178,6 +187,7 @@ const form = useForm({
   order_date:    props.purchaseOrder?.order_date     ?? today,
   expected_date: props.purchaseOrder?.expected_date  ?? '',
   notes:         props.purchaseOrder?.notes          ?? '',
+  invoice_type:  props.purchaseOrder?.invoice_type   ?? 'vat',
   items:         props.purchaseOrder?.items          ?? [],
 });
 

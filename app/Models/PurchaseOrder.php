@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\PurchaseOrderInvoiceType;
 use App\Enums\PurchaseOrderStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -11,15 +12,16 @@ class PurchaseOrder extends Model
 {
     protected $fillable = [
         'code', 'supplier_id', 'warehouse_id', 'created_by',
-        'order_date', 'expected_date', 'status', 'notes',
+        'order_date', 'expected_date', 'status', 'notes', 'invoice_type',
     ];
 
     protected function casts(): array
     {
         return [
-            'status' => PurchaseOrderStatus::class,
-            'order_date' => 'date',
-            'expected_date' => 'date',
+            'status'       => PurchaseOrderStatus::class,
+            'invoice_type' => PurchaseOrderInvoiceType::class,
+            'order_date'   => 'date',
+            'expected_date'=> 'date',
         ];
     }
 

@@ -116,33 +116,10 @@
       </div>
 
       <!-- Tài liệu đính kèm -->
-      <div class="bg-white rounded-xl border border-gray-200 p-5">
-        <p class="text-sm font-semibold text-gray-700 mb-3">Tài liệu đính kèm</p>
-        <div v-if="quotation.file_name" class="flex items-center gap-3 px-3 py-2 bg-gray-50 rounded-lg">
-          <svg class="w-5 h-5 text-gray-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
-          </svg>
-          <span class="text-sm text-gray-800 flex-1 truncate">{{ quotation.file_name }}</span>
-          <a :href="quotation.file_url" target="_blank" download
-            class="text-primary-600 hover:text-primary-800 text-xs font-medium whitespace-nowrap">Tải xuống</a>
-          <button @click="deleteFile"
-            class="text-red-500 hover:text-red-700 text-xs font-medium whitespace-nowrap">Xóa</button>
-        </div>
-        <div v-else class="space-y-2">
-          <label class="block cursor-pointer">
-            <input type="file" class="hidden" ref="fileInput" @change="onFileSelected">
-            <div class="px-3 py-2 text-sm text-gray-500 bg-gray-50 border border-dashed border-gray-300 rounded-lg hover:bg-gray-100 text-center">
-              {{ attachForm.file ? attachForm.file.name : 'Nhấn để chọn file...' }}
-            </div>
-          </label>
-          <div v-if="attachForm.file" class="flex justify-end">
-            <button @click="uploadFile" :disabled="attachForm.processing"
-              class="px-4 py-1.5 bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white text-sm rounded-lg">
-              {{ attachForm.processing ? 'Đang tải...' : 'Đính kèm' }}
-            </button>
-          </div>
-        </div>
-      </div>
+      <FileAttachments
+        :attachments="quotation.attachments ?? []"
+        :upload-url="route('attachments.store', { type: 'quotation', id: quotation.id })"
+      />
 
       <!-- Action buttons -->
       <div class="flex flex-wrap gap-2">
@@ -181,9 +158,10 @@
 
 <script setup>
 import { ref } from 'vue';
-import { Link, router, useForm } from '@inertiajs/vue3';
+import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
+import FileAttachments from '@/Components/Shared/FileAttachments.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({ quotation: Object });
@@ -206,24 +184,4 @@ const deleteQuotation = () => {
   }
 };
 
-const fileInput = ref(null);
-const attachForm = useForm({ file: null });
-
-const onFileSelected = (e) => {
-  attachForm.file = e.target.files[0] ?? null;
-};
-
-const uploadFile = () => {
-  attachForm.post(route('sales.quotations.attachment.upload', props.quotation.id), {
-    forceFormData: true,
-    preserveScroll: true,
-    onSuccess: () => { attachForm.reset(); if (fileInput.value) fileInput.value.value = ''; },
-  });
-};
-
-const deleteFile = () => {
-  if (confirm('Xóa file đính kèm?')) {
-    router.delete(route('sales.quotations.attachment.delete', props.quotation.id));
-  }
-};
 </script>

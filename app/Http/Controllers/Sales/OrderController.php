@@ -132,7 +132,7 @@ class OrderController extends Controller
 
     public function show(Order $order): Response
     {
-        $order->load(['customer', 'creator', 'quotation', 'items.product', 'items.service', 'contracts']);
+        $order->load(['customer', 'creator', 'quotation', 'items.product', 'items.service', 'contracts', 'attachments.creator']);
 
         // Tồn kho hiện tại cho từng sản phẩm trong đơn
         $productIds = $order->items->whereNotNull('product_id')->pluck('product_id');
@@ -174,8 +174,14 @@ class OrderController extends Controller
                     'id'   => $c->id,
                     'code' => $c->code,
                 ]),
-                'file_name' => $order->file_name,
-                'file_url'  => $order->file_path ? Storage::disk('public')->url($order->file_path) : null,
+                'attachments' => $order->attachments->map(fn ($a) => [
+                    'id'        => $a->id,
+                    'file_name' => $a->file_name,
+                    'file_url'  => Storage::disk('public')->url($a->file_path),
+                    'file_size' => $a->file_size,
+                    'mime_type' => $a->mime_type,
+                    'created_by'=> $a->creator->name,
+                ]),
                 'customs_status'        => $order->customs_status->value,
                 'customs_status_label'  => $order->customs_status->label(),
                 'customs_status_color'  => $order->customs_status->color(),
@@ -310,8 +316,9 @@ class OrderController extends Controller
     public function declareCustoms(Request $request, Order $order): RedirectResponse
     {
         $request->validate([
-            'file'           => ['required', 'file', 'max:20480'],
-            'customs_notes'  => ['nullable', 'string', 'max:500'],
+            'file'                => ['required', 'file', 'max:20480'],
+            'customs_notes'       => ['nullable', 'string', 'max:500'],
+            'customs_declared_at' => ['nullable', 'date'],
         ]);
 
         if ($order->customs_document_path) {
@@ -323,7 +330,9 @@ class OrderController extends Controller
 
         $order->update([
             'customs_status'        => CustomsStatus::Declared,
-            'customs_declared_at'   => now(),
+            'customs_declared_at'   => $request->filled('customs_declared_at')
+                ? \Carbon\Carbon::parse($request->input('customs_declared_at'))
+                : now(),
             'customs_document_path' => $path,
             'customs_document_name' => $file->getClientOriginalName(),
             'customs_notes'         => $request->input('customs_notes'),

@@ -78,7 +78,7 @@ class ContractController extends Controller
 
     public function show(Contract $contract): Response
     {
-        $contract->load(['customer', 'order', 'creator']);
+        $contract->load(['customer', 'order', 'creator', 'attachments.creator']);
 
         return Inertia::render('Sales/Contracts/Show', [
             'contract' => [
@@ -93,8 +93,14 @@ class ContractController extends Controller
                 'status'       => $contract->status->value,
                 'status_label' => $contract->status->label(),
                 'status_color' => $contract->status->color(),
-                'file_name'    => $contract->file_name,
-                'file_url'     => $contract->file_path ? Storage::disk('public')->url($contract->file_path) : null,
+                'attachments' => $contract->attachments->map(fn ($a) => [
+                    'id'        => $a->id,
+                    'file_name' => $a->file_name,
+                    'file_url'  => Storage::disk('public')->url($a->file_path),
+                    'file_size' => $a->file_size,
+                    'mime_type' => $a->mime_type,
+                    'created_by'=> $a->creator->name,
+                ]),
                 'notes'        => $contract->notes,
                 'creator'      => $contract->creator->name,
                 'created_at'   => $contract->created_at->format('d/m/Y'),

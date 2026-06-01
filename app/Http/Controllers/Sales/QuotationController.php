@@ -98,7 +98,7 @@ class QuotationController extends Controller
 
     public function show(Quotation $quotation): Response
     {
-        $quotation->load(['customer', 'assignedTo', 'creator', 'items.product', 'items.service', 'orders']);
+        $quotation->load(['customer', 'assignedTo', 'creator', 'items.product', 'items.service', 'orders', 'attachments.creator']);
 
         return Inertia::render('Sales/Quotations/Show', [
             'quotation' => [
@@ -134,8 +134,14 @@ class QuotationController extends Controller
                     'id'   => $o->id,
                     'code' => $o->code,
                 ]),
-                'file_name' => $quotation->file_name,
-                'file_url'  => $quotation->file_path ? Storage::disk('public')->url($quotation->file_path) : null,
+                'attachments' => $quotation->attachments->map(fn ($a) => [
+                    'id'        => $a->id,
+                    'file_name' => $a->file_name,
+                    'file_url'  => Storage::disk('public')->url($a->file_path),
+                    'file_size' => $a->file_size,
+                    'mime_type' => $a->mime_type,
+                    'created_by'=> $a->creator->name,
+                ]),
             ],
         ]);
     }

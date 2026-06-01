@@ -73,6 +73,17 @@
             <p class="text-gray-500 mb-1">Người tạo</p>
             <p class="font-medium text-gray-900">{{ order.creator }}</p>
           </div>
+          <div>
+            <p class="text-gray-500 mb-1">Loại hóa đơn đầu vào</p>
+            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+              :class="{
+                'bg-green-100 text-green-700': order.invoice_type === 'vat',
+                'bg-amber-100 text-amber-700': order.invoice_type === 'retail',
+                'bg-gray-100 text-gray-600':   order.invoice_type === 'no_invoice',
+              }">
+              {{ order.invoice_type_label }}
+            </span>
+          </div>
           <div v-if="order.notes" class="col-span-3">
             <p class="text-gray-500 mb-1">Ghi chú</p>
             <p class="text-gray-800">{{ order.notes }}</p>

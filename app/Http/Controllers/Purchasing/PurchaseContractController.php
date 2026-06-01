@@ -80,7 +80,7 @@ class PurchaseContractController extends Controller
 
     public function show(PurchaseContract $purchaseContract): Response
     {
-        $purchaseContract->load(['supplier', 'purchaseOrder', 'creator', 'paymentSchedules']);
+        $purchaseContract->load(['supplier', 'purchaseOrder', 'creator', 'paymentSchedules', 'attachments.creator']);
 
         $contractValue = (float) $purchaseContract->value;
 
@@ -119,8 +119,14 @@ class PurchaseContractController extends Controller
                 'status'       => $purchaseContract->status->value,
                 'status_label' => $purchaseContract->status->label(),
                 'status_color' => $purchaseContract->status->color(),
-                'file_name'    => $purchaseContract->file_name,
-                'file_url'     => $purchaseContract->file_path ? Storage::disk('public')->url($purchaseContract->file_path) : null,
+                'attachments' => $purchaseContract->attachments->map(fn ($a) => [
+                    'id'        => $a->id,
+                    'file_name' => $a->file_name,
+                    'file_url'  => Storage::disk('public')->url($a->file_path),
+                    'file_size' => $a->file_size,
+                    'mime_type' => $a->mime_type,
+                    'created_by'=> $a->creator->name,
+                ]),
                 'notes'        => $purchaseContract->notes,
                 'creator'      => $purchaseContract->creator->name,
                 'created_at'   => $purchaseContract->created_at->format('d/m/Y'),

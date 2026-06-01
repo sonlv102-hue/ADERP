@@ -92,7 +92,7 @@ class InvoiceController extends Controller
 
     public function show(Invoice $invoice): Response
     {
-        $invoice->load(['customer' => fn ($q) => $q->withTrashed(), 'order', 'contract', 'creator', 'payments.creator']);
+        $invoice->load(['customer' => fn ($q) => $q->withTrashed(), 'order', 'contract', 'creator', 'payments.creator', 'attachments.creator']);
 
         return Inertia::render('Accounting/Invoices/Show', [
             'invoice' => [
@@ -130,6 +130,14 @@ class InvoiceController extends Controller
                     'notes'        => $p->notes,
                     'creator'      => $p->creator->name,
                     'created_at'   => $p->created_at->format('d/m/Y H:i'),
+                ]),
+                'attachments'     => $invoice->attachments->map(fn ($a) => [
+                    'id'         => $a->id,
+                    'file_name'  => $a->file_name,
+                    'file_url'   => \Illuminate\Support\Facades\Storage::disk('public')->url($a->file_path),
+                    'file_size'  => $a->file_size,
+                    'mime_type'  => $a->mime_type,
+                    'created_by' => $a->creator->name,
                 ]),
                 'allowed_actions' => $this->allowedActions($invoice),
             ],

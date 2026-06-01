@@ -270,6 +270,12 @@
 
         <!-- Summary -->
         <div class="space-y-4">
+          <!-- Tài liệu đính kèm -->
+          <FileAttachments
+            :attachments="invoice.attachments ?? []"
+            :upload-url="route('attachments.store', { type: 'invoice', id: invoice.id })"
+          />
+
           <div class="bg-white rounded-xl border border-gray-200 p-5">
             <h2 class="text-base font-semibold text-gray-900 mb-4">Tổng kết</h2>
             <dl class="space-y-2 text-sm">
@@ -307,6 +313,7 @@ import { ref } from 'vue';
 import { Link, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
+import FileAttachments from '@/Components/Shared/FileAttachments.vue';
 import { usePermission } from '@/composables/usePermission';
 import { useCurrency } from '@/composables/useCurrency';
 

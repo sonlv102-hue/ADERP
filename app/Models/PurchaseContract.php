@@ -6,6 +6,7 @@ use App\Enums\PurchaseContractStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphMany;
 
 class PurchaseContract extends Model
 {
@@ -50,5 +51,10 @@ class PurchaseContract extends Model
     public function paymentSchedules(): HasMany
     {
         return $this->hasMany(PurchaseContractPaymentSchedule::class)->orderBy('id');
+    }
+
+    public function attachments(): MorphMany
+    {
+        return $this->morphMany(Attachment::class, 'attachable')->latest();
     }
 }

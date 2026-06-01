@@ -262,7 +262,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, h } from 'vue';
 import { Bar, Doughnut } from 'vue-chartjs';
 import {
   Chart as ChartJS,
@@ -293,14 +293,14 @@ const fmtVnd = (v) => new Intl.NumberFormat('vi-VN').format(v || 0) + ' ₫';
 // ----- KPI card -----
 const KpiCard = {
   props: ['title', 'value', 'color'],
-  template: `
-    <div class="bg-white rounded-xl border border-gray-200 p-5 flex items-center gap-4">
-      <div :class="[color, 'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0']">
-        <span class="text-white font-bold text-lg">{{ value ?? 0 }}</span>
-      </div>
-      <p class="text-sm text-gray-600 font-medium">{{ title }}</p>
-    </div>
-  `,
+  setup(props) {
+    return () => h('div', { class: 'bg-white rounded-xl border border-gray-200 p-5 flex items-center gap-4' }, [
+      h('div', { class: [props.color, 'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0'] }, [
+        h('span', { class: 'text-white font-bold text-lg' }, String(props.value ?? 0)),
+      ]),
+      h('p', { class: 'text-sm text-gray-600 font-medium' }, props.title),
+    ]);
+  },
 };
 
 // ----- Revenue chart -----

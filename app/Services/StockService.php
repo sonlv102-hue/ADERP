@@ -317,7 +317,7 @@ class StockService
         try {
             $this->accounting->post(
                 "Nhập kho hàng hóa {$entry->code}",
-                Carbon::parse($entry->created_at),
+                Carbon::parse($entry->entry_date),
                 $lines, 'stock_entry', $entry->id, true
             );
         } catch (\Exception $e) {
@@ -348,7 +348,7 @@ class StockService
         try {
             $this->accounting->post(
                 "Giá vốn hàng bán {$exit->code}",
-                Carbon::parse($exit->created_at),
+                Carbon::parse($exit->exit_date),
                 $lines, 'stock_exit', $exit->id, true
             );
         } catch (\Exception $e) {

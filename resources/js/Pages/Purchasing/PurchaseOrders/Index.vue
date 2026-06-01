@@ -86,10 +86,20 @@
                   class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-yellow-50 text-yellow-700 border border-yellow-200">
                   Có HĐ / Chưa TT
                 </span>
-                <span v-else-if="po.status !== 'cancelled'"
-                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
-                  Chưa lập HĐ
-                </span>
+                <template v-else-if="po.status !== 'cancelled'">
+                  <span v-if="po.invoice_type === 'retail'"
+                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700 border border-orange-200">
+                    Cần bổ sung HĐ bán lẻ
+                  </span>
+                  <span v-else-if="po.invoice_type === 'no_invoice'"
+                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                    Không cần HĐ
+                  </span>
+                  <span v-else
+                    class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                    Chưa lập HĐ
+                  </span>
+                </template>
                 <span v-else class="text-gray-300 text-xs">—</span>
               </td>
 

@@ -72,6 +72,7 @@ use App\Http\Controllers\Reports\DocumentChecklistController;
 use App\Http\Controllers\Admin\FixedAssetController;
 use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\BackupController;
+use App\Http\Controllers\AttachmentController;
 use Illuminate\Support\Facades\Route;
 
 // Auth routes (guest only)
@@ -84,6 +85,10 @@ Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 
     Route::get('/', [DashboardController::class, 'index'])->name('dashboard');
+
+    // Shared attachments
+    Route::post('attachments/{type}/{id}', [AttachmentController::class, 'store'])->name('attachments.store');
+    Route::delete('attachments/{attachment}', [AttachmentController::class, 'destroy'])->name('attachments.destroy');
 
     // Admin - quản lý users và roles
     Route::prefix('admin')->name('admin.')->middleware('role:admin')->group(function () {
