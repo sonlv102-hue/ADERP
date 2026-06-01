@@ -71,6 +71,7 @@ use App\Http\Controllers\Reports\FixedAssetReportController;
 use App\Http\Controllers\Reports\DocumentChecklistController;
 use App\Http\Controllers\Admin\FixedAssetController;
 use App\Http\Controllers\Admin\ActivityLogController;
+use App\Http\Controllers\Admin\BackupController;
 use Illuminate\Support\Facades\Route;
 
 // Auth routes (guest only)
@@ -96,6 +97,10 @@ Route::middleware('auth')->group(function () {
         Route::post('fixed-assets/depreciate', [FixedAssetController::class, 'depreciate'])->name('fixed-assets.depreciate');
         Route::get('activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
         Route::resource('employees', EmployeeController::class);
+        Route::get('backups', [BackupController::class, 'index'])->name('backups.index');
+        Route::post('backups', [BackupController::class, 'store'])->name('backups.store');
+        Route::get('backups/{name}/download', [BackupController::class, 'download'])->name('backups.download');
+        Route::delete('backups/{name}', [BackupController::class, 'destroy'])->name('backups.destroy');
     });
 
     // Catalog - danh mục sản phẩm và dịch vụ

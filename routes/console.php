@@ -14,3 +14,6 @@ Schedule::command('accounting:mark-overdue')->dailyAt('01:00');
 
 // Ngày cuối tháng: chạy toàn bộ nghiệp vụ đóng tháng
 Schedule::command('accounting:month-end')->monthlyOn(28, '02:00');
+
+// Backup database hàng ngày lúc 02:30, giữ 14 ngày
+Schedule::command('db:backup --keep=14')->dailyAt('02:30');

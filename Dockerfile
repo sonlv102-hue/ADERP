@@ -35,6 +35,7 @@ RUN apk add --no-cache \
     oniguruma-dev \
     icu-dev \
     postgresql-dev \
+    postgresql17-client \
     supervisor
 
 # Install PHP extensions
