@@ -133,6 +133,7 @@
                       class="w-20 px-2 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-center text-sm">
                       <option :value="0">0%</option>
                       <option :value="5">5%</option>
+                      <option :value="8">8%</option>
                       <option :value="10">10%</option>
                     </select>
                   </td>
@@ -259,7 +260,7 @@ const form = useForm({
         product_id: item.product_id,
         quantity:   ei?.quantity   ?? 0,
         unit_price: ei?.unit_price ?? item.unit_price,
-        tax_rate:   ei?.tax_rate   ?? 10,
+        tax_rate:   ei?.tax_rate   ?? item.vat_percent ?? 10,
         serials:    ei?.serials    ?? [],
       };
     }
@@ -267,7 +268,7 @@ const form = useForm({
       product_id: item.product_id,
       quantity:   item.remaining_qty,
       unit_price: item.unit_price,
-      tax_rate:   10,
+      tax_rate:   item.vat_percent ?? 10,
       serials:    [],
     };
   }),

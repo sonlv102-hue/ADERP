@@ -347,9 +347,11 @@ class StockService
         $lines     = [];
 
         foreach ($exit->items as $item) {
-            // cost_price = giá nhập đã gồm VAT 10% (quy ước dự án)
+            // cost_price = giá nhập đã gồm VAT (quy ước dự án); tách ra theo vat_percent trên sản phẩm
+            $vatRate     = (float) ($item->product?->vat_percent ?? 10);
             $costInclTax = (float) ($item->product?->cost_price ?? 0);
-            $costExclTax = $costInclTax / 1.1;
+            $divisor     = $vatRate > 0 ? (1 + $vatRate / 100) : 1;
+            $costExclTax = $costInclTax / $divisor;
             $cogs        = $costExclTax * $item->quantity;
             $totalCogs  += $cogs;
 
