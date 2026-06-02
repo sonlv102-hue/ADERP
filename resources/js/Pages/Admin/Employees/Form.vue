@@ -106,6 +106,33 @@
           <textarea v-model="form.notes" rows="3" class="form-input" />
         </div>
 
+        <!-- ─── Thông tin lương & thuế ─── -->
+        <div class="border-t border-gray-200 pt-5">
+          <h2 class="text-sm font-semibold text-gray-700 mb-4">Thông tin lương & thuế</h2>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="form-label">Lương cơ bản (VNĐ/tháng)</label>
+              <input v-model.number="form.base_salary" type="number" min="0" step="100000"
+                class="form-input text-right font-mono" placeholder="0" />
+            </div>
+            <div>
+              <label class="form-label">Phụ cấp (VNĐ/tháng)</label>
+              <input v-model.number="form.allowance" type="number" min="0" step="100000"
+                class="form-input text-right font-mono" placeholder="0" />
+            </div>
+            <div>
+              <label class="form-label">Số người phụ thuộc (giảm trừ PIT)</label>
+              <input v-model.number="form.dependents_count" type="number" min="0" max="20"
+                class="form-input text-right" placeholder="0" />
+            </div>
+            <div>
+              <label class="form-label">Mã số thuế TNCN</label>
+              <input v-model="form.pit_tax_code" type="text" class="form-input"
+                placeholder="VD: 8123456789" />
+            </div>
+          </div>
+        </div>
+
         <div class="flex justify-end gap-3 pt-2">
           <Link :href="route('admin.employees.index')"
             class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50">
@@ -133,19 +160,23 @@ const props = defineProps({
 });
 
 const form = useForm({
-  code:             props.employee?.code            ?? props.nextCode ?? '',
-  name:             props.employee?.name            ?? '',
-  department:       props.employee?.department      ?? '',
-  position:         props.employee?.position        ?? '',
-  phone:            props.employee?.phone           ?? '',
-  email:            props.employee?.email           ?? '',
-  birth_date:       props.employee?.birth_date      ?? '',
-  gender:           props.employee?.gender          ?? '',
-  hire_date:        props.employee?.hire_date       ?? '',
-  status:           props.employee?.status          ?? 'active',
-  employment_type:  props.employee?.employment_type ?? 'full_time',
-  address:          props.employee?.address         ?? '',
-  notes:            props.employee?.notes           ?? '',
+  code:              props.employee?.code             ?? props.nextCode ?? '',
+  name:              props.employee?.name             ?? '',
+  department:        props.employee?.department       ?? '',
+  position:          props.employee?.position         ?? '',
+  phone:             props.employee?.phone            ?? '',
+  email:             props.employee?.email            ?? '',
+  birth_date:        props.employee?.birth_date       ?? '',
+  gender:            props.employee?.gender           ?? '',
+  hire_date:         props.employee?.hire_date        ?? '',
+  status:            props.employee?.status           ?? 'active',
+  employment_type:   props.employee?.employment_type  ?? 'full_time',
+  base_salary:       props.employee?.base_salary      ?? 0,
+  allowance:         props.employee?.allowance        ?? 0,
+  dependents_count:  props.employee?.dependents_count ?? 0,
+  pit_tax_code:      props.employee?.pit_tax_code     ?? '',
+  address:           props.employee?.address          ?? '',
+  notes:             props.employee?.notes            ?? '',
 });
 
 const submit = () => {

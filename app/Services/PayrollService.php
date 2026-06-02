@@ -6,6 +6,7 @@ use App\Enums\CashVoucherType;
 use App\Enums\PayrollItemStatus;
 use App\Enums\PayrollStatus;
 use App\Models\CashVoucher;
+use App\Models\Employee;
 use App\Models\Payroll;
 use App\Models\PayrollItem;
 use App\Models\User;
@@ -45,8 +46,9 @@ class PayrollService
                 'notes'                    => $notes,
             ]);
 
-            foreach (User::where('is_active', true)->get() as $user) {
-                $this->buildItem($payroll, $user, 0);
+            // Lấy từ Cán bộ CNV (employees) đang làm việc
+            foreach (Employee::whereIn('status', ['active', 'probation'])->orderBy('name')->get() as $employee) {
+                $this->buildItem($payroll, $employee, 0);
             }
 
             $this->recalculateTotals($payroll);
@@ -79,6 +81,7 @@ class PayrollService
         }
 
         DB::transaction(function () use ($item, $payroll, $fundId) {
+            $employeeName = $item->employee?->name ?? $item->user?->name ?? 'Nhân viên';
             $voucher = CashVoucher::create([
                 'code'         => CashVoucher::generateCode(CashVoucherType::Payment),
                 'type'         => 'payment',
@@ -86,8 +89,8 @@ class PayrollService
                 'fund_id'      => $fundId,
                 'amount'       => $item->net_salary,
                 'voucher_date' => now(),
-                'counterparty' => $item->user->name,
-                'description'  => "Chi lương {$item->user->name} tháng {$payroll->period}",
+                'counterparty' => $employeeName,
+                'description'  => "Chi lương {$employeeName} tháng {$payroll->period}",
                 'created_by'   => auth()->id() ?? throw new RuntimeException('Chưa đăng nhập.'),
             ]);
 
@@ -131,20 +134,20 @@ class PayrollService
         ]);
     }
 
-    /** Rebuild a single PayrollItem with given bonus */
-    public function buildItem(Payroll $payroll, User $user, float $bonus = 0): PayrollItem
+    /** Rebuild a single PayrollItem from Employee */
+    public function buildItem(Payroll $payroll, Employee $employee, float $bonus = 0): PayrollItem
     {
-        $base       = (float)($user->base_salary ?? 0);
-        $allowance  = (float)($user->allowance   ?? 0);
+        $base       = (float)($employee->base_salary ?? 0);
+        $allowance  = (float)($employee->allowance   ?? 0);
         $gross      = $base + $allowance + $bonus;
-        $dependents = (int)($user->dependents_count ?? 0);
+        $dependents = (int)($employee->dependents_count ?? 0);
 
         $bd = $this->pit->breakdown($gross, $dependents);
 
         $deductions = $bd['ins_employee'] + $bd['pit'];
 
         return $payroll->items()->create([
-            'user_id'          => $user->id,
+            'employee_id'      => $employee->id,
             'base_salary'      => $base,
             'allowance'        => $allowance,
             'bonus'            => $bonus,

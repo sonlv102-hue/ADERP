@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class PayrollItem extends Model
 {
     protected $fillable = [
-        'payroll_id', 'user_id',
+        'payroll_id', 'employee_id', 'user_id',
         'base_salary', 'allowance', 'bonus',
         'gross_salary', 'insurance_base',
         'bhxh_employee', 'bhyt_employee', 'bhtn_employee',
@@ -46,6 +46,11 @@ class PayrollItem extends Model
     public function payroll(): BelongsTo
     {
         return $this->belongsTo(Payroll::class);
+    }
+
+    public function employee(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Employee::class);
     }
 
     public function user(): BelongsTo

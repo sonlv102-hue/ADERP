@@ -16,14 +16,18 @@ class Employee extends Model
         'code', 'name', 'department', 'position',
         'phone', 'email', 'birth_date', 'gender',
         'hire_date', 'status', 'employment_type',
+        'base_salary', 'allowance', 'dependents_count', 'pit_tax_code',
         'address', 'notes', 'created_by',
     ];
 
     protected $casts = [
-        'birth_date' => 'date',
-        'hire_date'  => 'date',
-        'status'     => EmployeeStatus::class,
-        'employment_type' => EmploymentType::class,
+        'birth_date'       => 'date',
+        'hire_date'        => 'date',
+        'status'           => EmployeeStatus::class,
+        'employment_type'  => EmploymentType::class,
+        'base_salary'      => 'decimal:0',
+        'allowance'        => 'decimal:0',
+        'dependents_count' => 'integer',
     ];
 
     public function creator(): BelongsTo

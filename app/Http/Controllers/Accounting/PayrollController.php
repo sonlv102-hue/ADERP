@@ -73,11 +73,14 @@ class PayrollController extends Controller
     {
         $payroll->load('creator');
 
-        $items = $payroll->items()->with('user', 'cashVoucher')->get()->map(fn (PayrollItem $item) => [
+        $items = $payroll->items()->with('employee', 'user', 'cashVoucher')->get()->map(fn (PayrollItem $item) => [
             'id'              => $item->id,
-            'employee_name'   => $item->user?->name,
-            'pit_tax_code'    => $item->user?->pit_tax_code,
-            'role_label'      => $item->user?->roles?->first()?->name ?? 'Nhân viên',
+            'employee_name'   => $item->employee?->name ?? $item->user?->name,
+            'employee_code'   => $item->employee?->code,
+            'department'      => $item->employee?->department,
+            'position'        => $item->employee?->position,
+            'pit_tax_code'    => $item->employee?->pit_tax_code ?? $item->user?->pit_tax_code,
+            'role_label'      => $item->employee?->position ?? $item->user?->roles?->first()?->name ?? 'Nhân viên',
             'base_salary'     => (float) $item->base_salary,
             'allowance'       => (float) $item->allowance,
             'bonus'           => (float) $item->bonus,
