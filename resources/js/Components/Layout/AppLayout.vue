@@ -1,14 +1,17 @@
 <template>
   <div class="min-h-screen bg-gray-100 flex">
+
     <!-- Sidebar -->
-    <Sidebar :open="sidebarOpen" @close="sidebarOpen = false" />
+    <Sidebar :open="sidebarOpen" :is-mobile="isMobile" @close="sidebarOpen = false" />
+
+    <!-- Mobile backdrop -->
+    <div v-if="isMobile && sidebarOpen"
+      class="fixed inset-0 bg-black/50 z-20"
+      @click="sidebarOpen = false" />
 
     <!-- Main content -->
     <div class="flex-1 flex flex-col min-w-0">
-      <!-- Top bar -->
-      <TopBar @toggle-sidebar="sidebarOpen = !sidebarOpen" />
-
-      <!-- Tab bar -->
+      <TopBar @toggle-sidebar="toggleSidebar" />
       <TabBar />
 
       <!-- Flash messages -->
@@ -45,7 +48,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { ref, watch, onMounted, onBeforeUnmount } from 'vue';
 import { router, usePage } from '@inertiajs/vue3';
 import Sidebar from '@/Components/Layout/Sidebar.vue';
 import TopBar from '@/Components/Layout/TopBar.vue';
@@ -53,19 +56,60 @@ import TabBar from '@/Components/Layout/TabBar.vue';
 import { useFlash } from '@/composables/useFlash';
 import { useTabs } from '@/composables/useTabs';
 
-const sidebarOpen = ref(true);
-const { flash } = useFlash();
-const page = usePage();
+const SIDEBAR_KEY = 'erp_sidebar_open';
+
+const isMobile   = ref(false);
+const sidebarOpen = ref(true); // corrected in onMounted
+const { flash }  = useFlash();
+const page       = usePage();
 const { openTab } = useTabs();
+
+function initSidebar() {
+  isMobile.value   = window.innerWidth < 768;
+  sidebarOpen.value = isMobile.value
+    ? false
+    : localStorage.getItem(SIDEBAR_KEY) !== 'false';
+}
+
+function toggleSidebar() {
+  sidebarOpen.value = !sidebarOpen.value;
+}
+
+// Persist desktop state
+watch(sidebarOpen, (val) => {
+  if (!isMobile.value) localStorage.setItem(SIDEBAR_KEY, String(val));
+});
+
+// Debounced resize handler
+let resizeTimer = null;
+function handleResize() {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    const wasMobile  = isMobile.value;
+    isMobile.value   = window.innerWidth < 768;
+    if (!wasMobile && isMobile.value) {
+      sidebarOpen.value = false; // switched to mobile → close
+    } else if (wasMobile && !isMobile.value) {
+      sidebarOpen.value = localStorage.getItem(SIDEBAR_KEY) !== 'false'; // switched to desktop → restore
+    }
+  }, 100);
+}
 
 let removeNavigateListener = null;
 
 onMounted(() => {
+  initSidebar();
+  window.addEventListener('resize', handleResize);
   openTab(page.url);
-  removeNavigateListener = router.on('navigate', (event) => openTab(event.detail.page.url));
+  removeNavigateListener = router.on('navigate', (event) => {
+    openTab(event.detail.page.url);
+    if (isMobile.value) sidebarOpen.value = false; // auto-close on mobile navigation
+  });
 });
 
 onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleResize);
+  clearTimeout(resizeTimer);
   if (removeNavigateListener) removeNavigateListener();
 });
 </script>

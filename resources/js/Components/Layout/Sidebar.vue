@@ -1,18 +1,23 @@
 <template>
-  <!-- Outer aside animates width; inner div keeps fixed w-64 so content doesn't reflow -->
-  <aside class="bg-gray-900 text-white flex-shrink-0 overflow-hidden transition-[width] duration-300 ease-in-out"
-    :class="open ? 'w-64' : 'w-0'">
+  <aside
+    :class="[
+      'bg-gray-900 text-white overflow-hidden transition-[width] duration-300 ease-in-out',
+      isMobile ? 'fixed inset-y-0 left-0 z-30' : 'flex-shrink-0',
+      open ? 'w-64' : 'w-0',
+    ]">
     <div class="w-64 h-full flex flex-col">
 
       <!-- Logo -->
       <div class="h-16 flex items-center px-4 border-b border-gray-700 flex-shrink-0">
         <template v-if="companyLogo">
-          <img :src="companyLogo" :alt="companyName" class="h-9 w-9 rounded-lg object-contain mr-3 bg-white p-0.5 flex-shrink-0" />
+          <img :src="companyLogo" :alt="companyName"
+            class="h-9 w-9 rounded-lg object-contain mr-3 bg-white p-0.5 flex-shrink-0" />
         </template>
         <template v-else>
           <div class="w-9 h-9 bg-primary-500 rounded-lg flex items-center justify-center mr-3 flex-shrink-0">
             <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5" />
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5" />
             </svg>
           </div>
         </template>
@@ -87,8 +92,8 @@
           <NavItem :href="route('accounting.taxes.index')"               icon="receipt-tax"    sub>Kê khai thuế</NavItem>
           <NavItem v-if="can('accounting.manage')" :href="route('accounting.opening-balance.index')" icon="database" sub>Số dư đầu kỳ</NavItem>
           <NavItem :href="route('accounting.journal-entries.index')"     icon="pencil-alt"     sub>Phiếu kế toán</NavItem>
-          <NavItem :href="route('accounting.prepaid-expenses.index')"                                     icon="clock"     sub>Chi phí trả trước</NavItem>
-          <NavItem :href="route('accounting.bank-accounts.index')"                                       icon="library"   sub>Tài khoản ngân hàng</NavItem>
+          <NavItem :href="route('accounting.prepaid-expenses.index')"    icon="clock"          sub>Chi phí trả trước</NavItem>
+          <NavItem :href="route('accounting.bank-accounts.index')"       icon="library"        sub>Tài khoản ngân hàng</NavItem>
           <NavItem v-if="can('accounting.manage')" :href="route('accounting.payment-terms.index')"       icon="tag"       sub>Điều khoản TT</NavItem>
           <NavItem v-if="can('accounting.manage')" :href="route('accounting.account-codes.index')"       icon="view-list" sub>Hệ thống tài khoản</NavItem>
           <NavItem v-if="can('accounting.manage')" :href="route('accounting.accounting-periods.index')"  icon="calendar"  sub>Kỳ kế toán</NavItem>
@@ -140,21 +145,31 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, provide, ref } from 'vue';
 import { usePage } from '@inertiajs/vue3';
 import { usePermission } from '@/composables/usePermission';
 import NavItem from './NavItem.vue';
 import NavGroup from './NavGroup.vue';
 
-defineProps({ open: Boolean });
+const props = defineProps({
+  open:     Boolean,
+  isMobile: Boolean,
+});
 defineEmits(['close']);
 
 const { hasPermission, hasRole } = usePermission();
-const can = hasPermission;
+const can     = hasPermission;
 const isAdmin = computed(() => hasRole('admin'));
 
-const page = usePage();
-const company = computed(() => page.props.company ?? {});
+const page        = usePage();
+const company     = computed(() => page.props.company ?? {});
 const companyName = computed(() => company.value.company_name || 'Mini ERP');
 const companyLogo = computed(() => company.value.company_logo || null);
+
+// Accordion context: only one NavGroup open at a time
+const openPrefix = ref(null);
+provide('sidebarAccordion', {
+  openPrefix,
+  setOpen: (prefix) => { openPrefix.value = prefix; },
+});
 </script>
