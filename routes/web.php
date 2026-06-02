@@ -150,6 +150,7 @@ Route::middleware('auth')->group(function () {
         Route::resource('stock-entries', StockEntryController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
         Route::post('stock-entries/{stockEntry}/confirm', [StockEntryController::class, 'confirm'])->name('stock-entries.confirm');
         Route::post('stock-entries/{stockEntry}/cancel', [StockEntryController::class, 'cancel'])->name('stock-entries.cancel');
+        Route::post('stock-entries/{stockEntry}/recall', [StockEntryController::class, 'recall'])->name('stock-entries.recall');
         Route::get('stock-entries/{stockEntry}/pdf', [StockEntryController::class, 'pdf'])->name('stock-entries.pdf');
 
         Route::resource('stock-exits', StockExitController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);

@@ -484,6 +484,22 @@ class StockEntryController extends Controller
         return back()->with('success', 'Đã hủy phiếu nhập kho.');
     }
 
+    public function recall(StockEntry $stockEntry): RedirectResponse
+    {
+        try {
+            $this->stockService->recallEntry($stockEntry);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        if ($stockEntry->purchase_order_id) {
+            $po = PurchaseOrder::find($stockEntry->purchase_order_id);
+            if ($po) $this->purchaseOrderService->syncReceiveStatus($po);
+        }
+
+        return back()->with('success', 'Đã thu hồi phiếu về trạng thái Nháp. Bạn có thể chỉnh sửa rồi xác nhận lại.');
+    }
+
     public function destroy(StockEntry $stockEntry): RedirectResponse
     {
         if (!in_array($stockEntry->status, [StockEntryStatus::Draft, StockEntryStatus::Cancelled])) {
@@ -492,8 +508,9 @@ class StockEntryController extends Controller
 
         $purchaseOrderId = $stockEntry->purchase_order_id;
 
-        // Chặn nếu PO liên kết còn hóa đơn đầu vào chưa hủy
-        if ($purchaseOrderId) {
+        // Chỉ chặn xóa phiếu Nháp nếu PO còn hóa đơn đầu vào chưa hủy
+        // Phiếu đã Hủy thì tồn kho đã được đảo ngược rồi — xóa an toàn
+        if ($stockEntry->status === StockEntryStatus::Draft && $purchaseOrderId) {
             $activeInvoices = PurchaseInvoice::where('purchase_order_id', $purchaseOrderId)
                 ->where('status', '!=', PurchaseInvoiceStatus::Cancelled->value)
                 ->count();

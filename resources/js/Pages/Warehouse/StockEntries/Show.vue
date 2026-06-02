@@ -44,6 +44,14 @@
             </svg>
             Xóa phiếu
           </button>
+          <button v-if="entry.status === 'confirmed'" @click="showRecallModal = true"
+            class="px-4 py-2 border border-amber-300 text-amber-700 rounded-lg text-sm font-medium hover:bg-amber-50 flex items-center gap-1.5">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M11 15l-3-3m0 0l3-3m-3 3h8M3 12a9 9 0 1118 0 9 9 0 01-18 0z" />
+            </svg>
+            Thu hồi để sửa
+          </button>
           <button v-if="entry.status === 'confirmed'" @click="showReverseModal = true"
             class="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50 flex items-center gap-1.5">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -113,6 +121,42 @@
           </div>
         </div>
       </div>
+
+      <!-- Modal xác nhận thu hồi về Nháp -->
+      <Teleport to="body">
+        <div v-if="showRecallModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div class="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
+            <div class="flex items-start gap-3 mb-4">
+              <div class="flex-shrink-0 w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                <svg class="w-5 h-5 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M11 15l-3-3m0 0l3-3m-3 3h8M3 12a9 9 0 1118 0 9 9 0 01-18 0z" />
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-base font-semibold text-gray-900">Thu hồi phiếu về trạng thái Nháp</h3>
+                <p class="mt-1 text-sm text-gray-600">
+                  Phiếu sẽ được <strong>đưa về Nháp</strong> để chỉnh sửa giá, VAT hoặc số lượng.
+                  Tồn kho và bút toán kế toán sẽ được <strong>tạm đảo ngược</strong> và tạo lại sau khi xác nhận lại.
+                </p>
+                <p class="mt-2 text-sm text-amber-700 bg-amber-50 rounded-lg px-3 py-2">
+                  Chỉ thực hiện được khi <strong>tất cả serial còn trong kho</strong> (chưa bán, chưa xuất).
+                </p>
+              </div>
+            </div>
+            <div class="flex justify-end gap-2 mt-5">
+              <button @click="showRecallModal = false"
+                class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+                Không
+              </button>
+              <button @click="recallEntry"
+                class="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm font-medium">
+                Thu hồi về Nháp
+              </button>
+            </div>
+          </div>
+        </div>
+      </Teleport>
 
       <!-- Modal xác nhận hủy phiếu đã xác nhận -->
       <Teleport to="body">
@@ -224,7 +268,8 @@ const props = defineProps({ entry: Object });
 
 const { formatVnd } = useCurrency();
 const showReverseModal = ref(false);
-const showDeleteModal = ref(false);
+const showRecallModal  = ref(false);
+const showDeleteModal  = ref(false);
 
 const grandTotal = computed(() => (props.entry.items ?? []).reduce((sum, item) => sum + item.total, 0));
 const totalExcl  = computed(() => (props.entry.items ?? []).reduce((sum, item) => sum + (item.subtotal_excl ?? 0), 0));
@@ -241,6 +286,11 @@ const cancelEntry = () => {
 const cancelConfirmedEntry = () => {
   showReverseModal.value = false;
   router.post(route('warehouse.stock-entries.cancel', props.entry.id));
+};
+
+const recallEntry = () => {
+  showRecallModal.value = false;
+  router.post(route('warehouse.stock-entries.recall', props.entry.id));
 };
 
 const deleteEntry = () => {

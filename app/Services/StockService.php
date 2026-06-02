@@ -143,6 +143,80 @@ class StockService
 
             $entry->update(['status' => StockEntryStatus::Cancelled]);
         });
+
+        // Đảo bút toán nhập kho nếu đã hạch toán
+        $journalEntry = JournalEntry::where('reference_type', 'stock_entry')
+            ->where('reference_id', $entry->id)
+            ->where('status', 'posted')
+            ->whereRaw("description NOT LIKE 'Đảo:%'")
+            ->first();
+
+        if ($journalEntry) {
+            try {
+                $this->accounting->reverse($journalEntry, "Đảo: Hủy phiếu nhập kho {$entry->code}");
+            } catch (\Exception $e) {
+                \Log::warning("Reverse entry journal failed [{$entry->code}]: " . $e->getMessage());
+            }
+        }
+
+        Cache::forget('dashboard.stock_overview');
+        Cache::forget('dashboard.stats');
+    }
+
+    public function recallEntry(StockEntry $entry): void
+    {
+        if ($entry->status !== StockEntryStatus::Confirmed) {
+            throw new RuntimeException('Chỉ có thể thu hồi phiếu đã xác nhận.');
+        }
+
+        // Kiểm tra không có serial nào đã rời kho
+        $entry->load('items.serials');
+        foreach ($entry->items as $item) {
+            foreach ($item->serials as $serial) {
+                if ($serial->status !== SerialStatus::InStock) {
+                    throw new RuntimeException(
+                        "Không thể thu hồi: serial [{$serial->serial_number}] đang ở trạng thái \"{$serial->status->label()}\". Chỉ thu hồi được khi tất cả serial còn trong kho."
+                    );
+                }
+            }
+        }
+
+        DB::transaction(function () use ($entry) {
+            // Tạo movement âm để đảo ngược tồn kho tạm thời (sẽ được tạo lại khi confirm)
+            foreach ($entry->items as $item) {
+                StockMovement::create([
+                    'product_id'  => $item->product_id,
+                    'warehouse_id' => $entry->warehouse_id,
+                    'type'        => 'out',
+                    'quantity'    => -$item->quantity,
+                    'source_type' => StockEntry::class,
+                    'source_id'   => $entry->id,
+                    'created_by'  => auth()->id(),
+                    'notes'       => "Thu hồi phiếu nhập kho {$entry->code} để chỉnh sửa",
+                ]);
+            }
+
+            // Serial giữ nguyên InStock (hàng vẫn đang trong kho vật lý)
+            $entry->update(['status' => StockEntryStatus::Draft]);
+        });
+
+        // Đảo bút toán nhập kho để tạo lại sau khi confirm
+        $journalEntry = JournalEntry::where('reference_type', 'stock_entry')
+            ->where('reference_id', $entry->id)
+            ->where('status', 'posted')
+            ->whereRaw("description NOT LIKE 'Đảo:%'")
+            ->first();
+
+        if ($journalEntry) {
+            try {
+                $this->accounting->reverse($journalEntry, "Đảo: Thu hồi phiếu nhập kho {$entry->code} để chỉnh sửa");
+            } catch (\Exception $e) {
+                \Log::warning("Reverse entry journal failed on recall [{$entry->code}]: " . $e->getMessage());
+            }
+        }
+
+        Cache::forget('dashboard.stock_overview');
+        Cache::forget('dashboard.stats');
     }
 
     public function confirmExit(StockExit $exit): void
