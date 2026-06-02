@@ -139,27 +139,27 @@ class InvoiceService
 
         $subtotal = (float) $invoice->subtotal;
         $tax      = (float) $invoice->tax_amount;
-        $total    = (float) $invoice->total;
 
-        if ($total <= 0) return;
+        $creditSubtotal = (int) round($subtotal);
+        $creditTax      = (int) round($tax);
+        $totalCredit    = $creditSubtotal + $creditTax;
 
+        if ($totalCredit <= 0) return;
+
+        // Dr 131 = tổng Có đã round — đảm bảo bút toán cân bằng
         $lines = [
-            ['account' => '131', 'debit' => $total, 'credit' => 0,
+            ['account' => '131', 'debit' => $totalCredit, 'credit' => 0,
              'description' => "Phải thu KH - {$invoice->code}"],
         ];
 
         // Doanh thu: hàng hóa → 5111, dịch vụ → 5113 (phân tách đơn giản dựa subtotal)
-        if ($subtotal > 0) {
-            $lines[] = ['account' => '5111', 'debit' => 0, 'credit' => $subtotal,
+        if ($creditSubtotal > 0) {
+            $lines[] = ['account' => '5111', 'debit' => 0, 'credit' => $creditSubtotal,
                         'description' => "Doanh thu - {$invoice->code}"];
         }
-        if ($tax > 0) {
-            $lines[] = ['account' => '33311', 'debit' => 0, 'credit' => $tax,
+        if ($creditTax > 0) {
+            $lines[] = ['account' => '33311', 'debit' => 0, 'credit' => $creditTax,
                         'description' => "Thuế GTGT đầu ra - {$invoice->code}"];
-        }
-        // Nếu không có VAT (tax=0), tổng debit=subtotal=total
-        if ($tax == 0) {
-            $lines[0]['debit'] = $subtotal;
         }
 
         $this->tryPost("Ghi nhận doanh thu {$invoice->code}", Carbon::parse($invoice->issue_date),

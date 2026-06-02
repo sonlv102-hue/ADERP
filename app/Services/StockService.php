@@ -296,10 +296,7 @@ class StockService
     private function postEntryJournal(StockEntry $entry): void
     {
         $entry->load('items.product');
-        $totalInclTax = 0;
-        $totalExclTax = 0;
-        $totalTax     = 0;
-        $lines        = [];
+        $lines = [];
 
         foreach ($entry->items as $item) {
             $unitInclTax = (float) ($item->unit_price ?? $item->product?->cost_price ?? 0);
@@ -310,23 +307,26 @@ class StockService
             $lineExclTax = $lineInclTax / $divisor;
             $lineTax     = $lineInclTax - $lineExclTax;
 
-            $totalInclTax += $lineInclTax;
-            $totalExclTax += $lineExclTax;
-            $totalTax     += $lineTax;
+            $exclRounded = (int) round($lineExclTax);
+            $taxRounded  = (int) round($lineTax);
 
-            if ($lineExclTax > 0) {
-                $lines[] = ['account' => '156', 'debit' => (int) round($lineExclTax), 'credit' => 0,
+            if ($exclRounded > 0) {
+                $lines[] = ['account' => '156', 'debit' => $exclRounded, 'credit' => 0,
                             'description' => "Nhập kho {$item->product?->name}"];
             }
-            if ($lineTax > 0) {
-                $lines[] = ['account' => '1331', 'debit' => (int) round($lineTax), 'credit' => 0,
+            if ($taxRounded > 0) {
+                $lines[] = ['account' => '1331', 'debit' => $taxRounded, 'credit' => 0,
                             'description' => "Thuế GTGT đầu vào {$item->product?->name}"];
             }
         }
 
-        if ($totalInclTax <= 0 || empty($lines)) return;
+        if (empty($lines)) return;
 
-        $lines[] = ['account' => '331', 'debit' => 0, 'credit' => (int) round($totalInclTax),
+        // Cr 331 = tổng các dòng Nợ đã round — đảm bảo bút toán luôn cân bằng
+        $totalCredit = array_sum(array_column($lines, 'debit'));
+        if ($totalCredit <= 0) return;
+
+        $lines[] = ['account' => '331', 'debit' => 0, 'credit' => $totalCredit,
                     'description' => "Phải trả NCC - phiếu {$entry->code}"];
 
         try {
