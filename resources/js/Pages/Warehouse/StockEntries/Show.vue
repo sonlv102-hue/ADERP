@@ -160,10 +160,13 @@
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã SP</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Tên sản phẩm</th>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">Đơn vị</th>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">SL</th>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">Đơn giá</th>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">Thành tiền</th>
+              <th class="text-left px-5 py-3 font-semibold text-gray-600">ĐVT</th>
+              <th class="text-right px-5 py-3 font-semibold text-gray-600">SL</th>
+              <th class="text-right px-5 py-3 font-semibold text-gray-600">Đơn giá (gồm VAT)</th>
+              <th class="text-center px-3 py-3 font-semibold text-gray-600">% VAT</th>
+              <th class="text-right px-5 py-3 font-semibold text-gray-600">Chưa thuế</th>
+              <th class="text-right px-5 py-3 font-semibold text-gray-600">Thuế GTGT</th>
+              <th class="text-right px-5 py-3 font-semibold text-gray-600">Tổng cộng</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
@@ -172,12 +175,15 @@
                 <td class="px-5 py-3 font-mono text-xs text-gray-700">{{ item.product_code }}</td>
                 <td class="px-5 py-3 font-medium text-gray-900">{{ item.product_name }}</td>
                 <td class="px-5 py-3 text-gray-600">{{ item.unit }}</td>
-                <td class="px-5 py-3 text-gray-600">{{ item.quantity.toLocaleString('vi-VN') }}</td>
-                <td class="px-5 py-3 text-gray-600">{{ formatVnd(item.unit_price) }}</td>
-                <td class="px-5 py-3 font-medium text-gray-900">{{ formatVnd(item.total) }}</td>
+                <td class="px-5 py-3 text-right text-gray-600">{{ item.quantity.toLocaleString('vi-VN') }}</td>
+                <td class="px-5 py-3 text-right text-gray-600">{{ formatVnd(item.unit_price) }}</td>
+                <td class="px-3 py-3 text-center text-gray-600">{{ item.tax_rate }}%</td>
+                <td class="px-5 py-3 text-right text-gray-700">{{ formatVnd(item.subtotal_excl) }}</td>
+                <td class="px-5 py-3 text-right text-blue-600">{{ formatVnd(item.tax_amount) }}</td>
+                <td class="px-5 py-3 text-right font-medium text-gray-900">{{ formatVnd(item.total) }}</td>
               </tr>
               <tr v-if="item.serials?.length" class="bg-blue-50">
-                <td colspan="6" class="px-5 py-2">
+                <td colspan="9" class="px-5 py-2">
                   <span class="text-xs font-medium text-blue-700 mr-2">Serials:</span>
                   <span v-for="s in item.serials" :key="s.serial_number"
                     class="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-white border border-blue-200 mr-1 mb-1 font-mono text-xs text-gray-800">
@@ -190,12 +196,14 @@
               </tr>
             </template>
             <tr v-if="!entry.items?.length">
-              <td colspan="6" class="px-5 py-10 text-center text-gray-400">Không có hàng hóa</td>
+              <td colspan="9" class="px-5 py-10 text-center text-gray-400">Không có hàng hóa</td>
             </tr>
           </tbody>
           <tfoot v-if="entry.items?.length" class="bg-gray-50 border-t border-gray-200">
             <tr>
-              <td colspan="5" class="px-5 py-3 text-right font-semibold text-gray-700">Tổng cộng:</td>
+              <td colspan="6" class="px-5 py-3 text-right font-semibold text-gray-700">Tổng cộng:</td>
+              <td class="px-5 py-3 text-right font-semibold text-gray-700">{{ formatVnd(totalExcl) }}</td>
+              <td class="px-5 py-3 text-right font-semibold text-blue-600">{{ formatVnd(totalTax) }}</td>
               <td class="px-5 py-3 font-bold text-gray-900">{{ formatVnd(grandTotal) }}</td>
             </tr>
           </tfoot>
@@ -218,9 +226,9 @@ const { formatVnd } = useCurrency();
 const showReverseModal = ref(false);
 const showDeleteModal = ref(false);
 
-const grandTotal = computed(() => {
-  return (props.entry.items ?? []).reduce((sum, item) => sum + item.total, 0);
-});
+const grandTotal = computed(() => (props.entry.items ?? []).reduce((sum, item) => sum + item.total, 0));
+const totalExcl  = computed(() => (props.entry.items ?? []).reduce((sum, item) => sum + (item.subtotal_excl ?? 0), 0));
+const totalTax   = computed(() => (props.entry.items ?? []).reduce((sum, item) => sum + (item.tax_amount ?? 0), 0));
 
 const confirmEntry = () => {
   router.post(route('warehouse.stock-entries.confirm', props.entry.id));

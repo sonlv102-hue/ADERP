@@ -8,11 +8,11 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class StockEntryItem extends Model
 {
-    protected $fillable = ['stock_entry_id', 'product_id', 'quantity', 'unit_price'];
+    protected $fillable = ['stock_entry_id', 'product_id', 'quantity', 'unit_price', 'tax_rate'];
 
     protected function casts(): array
     {
-        return ['unit_price' => 'decimal:2'];
+        return ['unit_price' => 'decimal:2', 'tax_rate' => 'decimal:2'];
     }
 
     public function stockEntry(): BelongsTo

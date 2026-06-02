@@ -296,22 +296,37 @@ class StockService
     private function postEntryJournal(StockEntry $entry): void
     {
         $entry->load('items.product');
-        $totalCost = 0;
-        $lines = [];
+        $totalInclTax = 0;
+        $totalExclTax = 0;
+        $totalTax     = 0;
+        $lines        = [];
 
         foreach ($entry->items as $item) {
-            $costPerUnit = (float) ($item->cost_price ?? $item->product?->cost_price ?? 0);
-            $cost = $costPerUnit * $item->quantity;
-            $totalCost += $cost;
-            if ($cost > 0) {
-                $lines[] = ['account' => '156', 'debit' => (int) $cost, 'credit' => 0,
+            $unitInclTax = (float) ($item->unit_price ?? $item->product?->cost_price ?? 0);
+            $taxRate     = (float) ($item->tax_rate ?? 10);
+            $divisor     = 1 + $taxRate / 100;
+
+            $lineInclTax = $unitInclTax * $item->quantity;
+            $lineExclTax = $lineInclTax / $divisor;
+            $lineTax     = $lineInclTax - $lineExclTax;
+
+            $totalInclTax += $lineInclTax;
+            $totalExclTax += $lineExclTax;
+            $totalTax     += $lineTax;
+
+            if ($lineExclTax > 0) {
+                $lines[] = ['account' => '156', 'debit' => (int) round($lineExclTax), 'credit' => 0,
                             'description' => "Nhập kho {$item->product?->name}"];
+            }
+            if ($lineTax > 0) {
+                $lines[] = ['account' => '1331', 'debit' => (int) round($lineTax), 'credit' => 0,
+                            'description' => "Thuế GTGT đầu vào {$item->product?->name}"];
             }
         }
 
-        if ($totalCost <= 0 || empty($lines)) return;
+        if ($totalInclTax <= 0 || empty($lines)) return;
 
-        $lines[] = ['account' => '331', 'debit' => 0, 'credit' => (int) $totalCost,
+        $lines[] = ['account' => '331', 'debit' => 0, 'credit' => (int) round($totalInclTax),
                     'description' => "Phải trả NCC - phiếu {$entry->code}"];
 
         try {
@@ -328,22 +343,25 @@ class StockService
     private function postExitJournal(StockExit $exit): void
     {
         $exit->load('items.product');
-        $totalCost = 0;
-        $lines = [];
+        $totalCogs = 0;
+        $lines     = [];
 
         foreach ($exit->items as $item) {
-            $costPerUnit = (float) ($item->product?->cost_price ?? 0);
-            $cost = $costPerUnit * $item->quantity;
-            $totalCost += $cost;
-            if ($cost > 0) {
-                $lines[] = ['account' => '632', 'debit' => (int) $cost, 'credit' => 0,
+            // cost_price = giá nhập đã gồm VAT 10% (quy ước dự án)
+            $costInclTax = (float) ($item->product?->cost_price ?? 0);
+            $costExclTax = $costInclTax / 1.1;
+            $cogs        = $costExclTax * $item->quantity;
+            $totalCogs  += $cogs;
+
+            if ($cogs > 0) {
+                $lines[] = ['account' => '632', 'debit' => (int) round($cogs), 'credit' => 0,
                             'description' => "Giá vốn {$item->product?->name}"];
-                $lines[] = ['account' => '156', 'debit' => 0, 'credit' => (int) $cost,
+                $lines[] = ['account' => '156', 'debit' => 0, 'credit' => (int) round($cogs),
                             'description' => "Xuất kho {$item->product?->name}"];
             }
         }
 
-        if ($totalCost <= 0 || empty($lines)) return;
+        if ($totalCogs <= 0 || empty($lines)) return;
 
         try {
             $this->accounting->post(

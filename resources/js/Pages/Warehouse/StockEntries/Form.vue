@@ -92,7 +92,8 @@
                 <th class="text-right px-5 py-3 font-semibold text-gray-600">Đã nhận</th>
                 <th class="text-right px-5 py-3 font-semibold text-gray-600">Còn lại</th>
                 <th class="text-right px-5 py-3 font-semibold text-gray-600">Nhận lần này</th>
-                <th class="text-right px-5 py-3 font-semibold text-gray-600">Đơn giá</th>
+                <th class="text-right px-5 py-3 font-semibold text-gray-600">Đơn giá (gồm VAT)</th>
+                <th class="text-center px-3 py-3 font-semibold text-gray-600">% VAT</th>
                 <th class="text-right px-5 py-3 font-semibold text-gray-600">Thành tiền</th>
               </tr>
             </thead>
@@ -126,6 +127,14 @@
                     <input v-model.number="item.unit_price" type="number" min="0"
                       class="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-right"
                       :class="{ 'border-red-500': form.errors[`items.${index}.unit_price`] }" />
+                  </td>
+                  <td class="px-3 py-3 text-center">
+                    <select v-model.number="item.tax_rate"
+                      class="w-20 px-2 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-center text-sm">
+                      <option :value="0">0%</option>
+                      <option :value="5">5%</option>
+                      <option :value="10">10%</option>
+                    </select>
                   </td>
                   <td class="px-5 py-3 text-right font-medium text-gray-900">
                     {{ formatVnd(item.quantity * item.unit_price) }}
@@ -250,6 +259,7 @@ const form = useForm({
         product_id: item.product_id,
         quantity:   ei?.quantity   ?? 0,
         unit_price: ei?.unit_price ?? item.unit_price,
+        tax_rate:   ei?.tax_rate   ?? 10,
         serials:    ei?.serials    ?? [],
       };
     }
@@ -257,6 +267,7 @@ const form = useForm({
       product_id: item.product_id,
       quantity:   item.remaining_qty,
       unit_price: item.unit_price,
+      tax_rate:   10,
       serials:    [],
     };
   }),

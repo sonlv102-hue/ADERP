@@ -130,6 +130,7 @@ class StockEntryController extends Controller
             'items.*.product_id'  => ['required', 'exists:products,id'],
             'items.*.quantity'    => ['required', 'integer', 'min:1'],
             'items.*.unit_price'  => ['required', 'numeric', 'min:0'],
+            'items.*.tax_rate'    => ['nullable', 'numeric', 'in:0,5,10'],
             'items.*.serials'     => ['nullable', 'array'],
             'items.*.serials.*'   => ['nullable', 'string', 'max:100'],
         ]);
@@ -197,6 +198,7 @@ class StockEntryController extends Controller
                     'product_id' => $item['product_id'],
                     'quantity'   => $item['quantity'],
                     'unit_price' => $item['unit_price'],
+                    'tax_rate'   => $item['tax_rate'] ?? 10,
                 ]);
 
                 $serials = array_values(array_filter($item['serials'] ?? [], fn ($s) => $s !== '' && $s !== null));
@@ -303,6 +305,7 @@ class StockEntryController extends Controller
             'items.*.product_id'  => ['required', 'exists:products,id'],
             'items.*.quantity'    => ['required', 'integer', 'min:1'],
             'items.*.unit_price'  => ['required', 'numeric', 'min:0'],
+            'items.*.tax_rate'    => ['nullable', 'numeric', 'in:0,5,10'],
             'items.*.serials'     => ['nullable', 'array'],
             'items.*.serials.*'   => ['nullable', 'string', 'max:100'],
         ]);
@@ -372,6 +375,7 @@ class StockEntryController extends Controller
                     'product_id' => $item['product_id'],
                     'quantity'   => $item['quantity'],
                     'unit_price' => $item['unit_price'],
+                    'tax_rate'   => $item['tax_rate'] ?? 10,
                 ]);
 
                 $serials = array_values(array_filter($item['serials'] ?? [], fn ($s) => $s !== '' && $s !== null));
@@ -411,9 +415,12 @@ class StockEntryController extends Controller
                     'product_name' => $item->product->name,
                     'unit' => $item->product->unit,
                     'has_serial' => $item->product->has_serial,
-                    'quantity' => $item->quantity,
-                    'unit_price' => $item->unit_price,
-                    'total' => $item->quantity * $item->unit_price,
+                    'quantity'   => $item->quantity,
+                    'unit_price' => (float) $item->unit_price,
+                    'tax_rate'   => (float) $item->tax_rate,
+                    'subtotal_excl' => round($item->quantity * $item->unit_price / (1 + $item->tax_rate / 100)),
+                    'tax_amount'    => round($item->quantity * $item->unit_price - $item->quantity * $item->unit_price / (1 + $item->tax_rate / 100)),
+                    'total'      => $item->quantity * $item->unit_price,
                     'serials' => $item->serials->map(fn ($s) => [
                         'serial_number' => $s->serial_number,
                         'status' => $s->status->value,
