@@ -3,12 +3,16 @@
 namespace App\Services;
 
 use App\Enums\PurchaseInvoiceStatus;
+use App\Models\JournalEntry;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoicePayment;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class PurchaseInvoiceService
 {
+    public function __construct(private AccountingService $accounting) {}
+
     private const TRANSITIONS = [
         'pending'        => ['received', 'cancelled'],
         'received'       => ['reviewing', 'cancelled'],
@@ -35,7 +39,7 @@ class PurchaseInvoiceService
             throw new \RuntimeException('Hóa đơn đã hủy, không thể ghi nhận thanh toán.');
         }
 
-        return DB::transaction(function () use ($invoice, $data) {
+        $payment = DB::transaction(function () use ($invoice, $data) {
             $payment = $invoice->payments()->create([
                 ...$data,
                 'created_by' => auth()->id(),
@@ -45,12 +49,63 @@ class PurchaseInvoiceService
 
             return $payment;
         });
+
+        // Hạch toán thanh toán NCC: Dr 331 / Cr 111/112 (ngoài transaction)
+        $this->postPaymentEntry($payment, $invoice);
+
+        return $payment;
     }
 
     public function removePayment(PurchaseInvoice $invoice, PurchaseInvoicePayment $payment): void
     {
-        $payment->delete();
-        $this->recalculatePaid($invoice);
+        DB::transaction(function () use ($invoice, $payment) {
+            // Đảo bút toán thanh toán nếu đã hạch toán
+            $entry = JournalEntry::where('reference_type', 'purchase_invoice_payment')
+                ->where('reference_id', $payment->id)
+                ->where('status', 'posted')
+                ->whereRaw("description NOT LIKE 'Đảo:%'")
+                ->first();
+
+            if ($entry) {
+                try {
+                    $this->accounting->reverse($entry, "Đảo: Trả NCC {$invoice->code}");
+                } catch (\Exception $e) {
+                    \Log::warning("Reverse purchase payment entry failed [{$invoice->code}]: " . $e->getMessage());
+                }
+            }
+
+            $payment->delete();
+            $this->recalculatePaid($invoice);
+        });
+    }
+
+    // ─── Private helpers ────────────────────────────────────────────────────
+
+    private function postPaymentEntry(PurchaseInvoicePayment $payment, PurchaseInvoice $invoice): void
+    {
+        $amount = (float) $payment->amount;
+        if ($amount <= 0) return;
+
+        $cashAccount = match($payment->method) {
+            'bank_transfer', 'bank' => '112',
+            default                 => '111',
+        };
+
+        try {
+            $this->accounting->post(
+                "Trả tiền NCC {$invoice->code}",
+                Carbon::parse($payment->payment_date),
+                [
+                    ['account' => '331',        'debit' => (int) $amount, 'credit' => 0,
+                     'description' => "Xóa công nợ NCC - {$invoice->code}"],
+                    ['account' => $cashAccount, 'debit' => 0, 'credit' => (int) $amount,
+                     'description' => "Trả tiền NCC - {$invoice->code}"],
+                ],
+                'purchase_invoice_payment', $payment->id, true
+            );
+        } catch (\Exception $e) {
+            \Log::warning("Auto-posting failed [PurchasePayment {$invoice->code}]: " . $e->getMessage());
+        }
     }
 
     private function recalculatePaid(PurchaseInvoice $invoice): void
