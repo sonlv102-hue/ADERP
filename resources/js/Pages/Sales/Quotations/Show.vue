@@ -57,6 +57,7 @@
               <th class="text-left px-5 py-3 font-semibold text-gray-600">ĐVT</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">SL</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">Đơn giá</th>
+              <th class="text-right px-5 py-3 font-semibold text-gray-600">VAT (%)</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">CK%</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">Thành tiền</th>
             </tr>
@@ -71,6 +72,10 @@
               <td class="px-5 py-3 text-gray-600">{{ item.unit ?? '—' }}</td>
               <td class="px-5 py-3 text-right text-gray-700">{{ item.quantity }}</td>
               <td class="px-5 py-3 text-right text-gray-700">{{ formatVnd(item.unit_price) }}</td>
+              <td class="px-5 py-3 text-right">
+                <span v-if="item.vat_rate != null" class="text-blue-600 font-medium">{{ item.vat_rate }}%</span>
+                <span v-else class="text-gray-400">—</span>
+              </td>
               <td class="px-5 py-3 text-right text-gray-600">
                 <template v-if="item.discount_amount > 0">
                   <span class="text-red-600">-{{ formatVnd(item.discount_amount) }}</span>
@@ -83,15 +88,29 @@
           </tbody>
           <tfoot class="bg-gray-50 border-t border-gray-200">
             <tr>
-              <td colspan="6" class="px-5 py-2 text-right text-sm text-gray-600">Tổng trước chiết khấu:</td>
+              <td colspan="7" class="px-5 py-2 text-right text-sm text-gray-600">Tổng trước chiết khấu:</td>
               <td class="px-5 py-2 text-right font-medium text-gray-700">{{ formatVnd(quotation.subtotal) }}</td>
             </tr>
             <tr v-if="quotation.discount_amount > 0">
-              <td colspan="6" class="px-5 py-2 text-right text-sm text-gray-600">Chiết khấu ({{ quotation.discount_percent }}%):</td>
+              <td colspan="7" class="px-5 py-2 text-right text-sm text-gray-600">Chiết khấu ({{ quotation.discount_percent }}%):</td>
               <td class="px-5 py-2 text-right font-medium text-red-600">- {{ formatVnd(quotation.discount_amount) }}</td>
             </tr>
-            <tr>
-              <td colspan="6" class="px-5 py-3 text-right font-bold text-gray-800">TỔNG CỘNG:</td>
+            <template v-if="totalVat > 0">
+              <tr>
+                <td colspan="7" class="px-5 py-2 text-right text-sm text-gray-600">Cộng hàng (chưa VAT):</td>
+                <td class="px-5 py-2 text-right font-medium text-gray-700">{{ formatVnd(quotation.total) }}</td>
+              </tr>
+              <tr>
+                <td colspan="7" class="px-5 py-2 text-right text-sm text-gray-600">Thuế VAT:</td>
+                <td class="px-5 py-2 text-right font-medium text-blue-600">{{ formatVnd(totalVat) }}</td>
+              </tr>
+              <tr class="border-t border-gray-200">
+                <td colspan="7" class="px-5 py-3 text-right font-bold text-gray-800">TỔNG CỘNG:</td>
+                <td class="px-5 py-3 text-right font-bold text-primary-700 text-base">{{ formatVnd(grandTotal) }}</td>
+              </tr>
+            </template>
+            <tr v-else>
+              <td colspan="7" class="px-5 py-3 text-right font-bold text-gray-800">TỔNG CỘNG:</td>
               <td class="px-5 py-3 text-right font-bold text-primary-700 text-base">{{ formatVnd(quotation.total) }}</td>
             </tr>
           </tfoot>
@@ -157,7 +176,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { computed, ref } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
@@ -167,6 +186,11 @@ import { useCurrency } from '@/composables/useCurrency';
 const props = defineProps({ quotation: Object });
 
 const { formatVnd } = useCurrency();
+
+const totalVat = computed(() =>
+  (props.quotation.items ?? []).reduce((s, i) => s + (i.vat_amount ?? 0), 0)
+);
+const grandTotal = computed(() => (props.quotation.total ?? 0) + totalVat.value);
 
 const action = (act) => {
   router.post(route(`sales.quotations.${act}`, props.quotation.id));

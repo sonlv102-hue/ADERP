@@ -74,6 +74,7 @@ class QuotationController extends Controller
             'items.*.unit_price'      => ['required', 'numeric', 'min:0'],
             'items.*.discount_percent'=> ['nullable', 'numeric', 'min:0', 'max:100'],
             'items.*.discount_amount' => ['nullable', 'integer', 'min:0'],
+            'items.*.vat_rate'        => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
         $quotation = Quotation::create([
@@ -126,6 +127,8 @@ class QuotationController extends Controller
                     'unit'             => $item->unit,
                     'quantity'         => $item->quantity,
                     'unit_price'       => $item->unit_price,
+                    'vat_rate'         => $item->vat_rate !== null ? (float) $item->vat_rate : null,
+                    'vat_amount'       => $item->vat_rate !== null ? (int) round($item->lineTotal() * $item->vat_rate / 100) : 0,
                     'discount_percent' => $item->discount_percent,
                     'discount_amount'  => (int) $item->discount_amount,
                     'line_total'       => $item->lineTotal(),
@@ -203,6 +206,7 @@ class QuotationController extends Controller
             'items.*.unit_price'      => ['required', 'numeric', 'min:0'],
             'items.*.discount_percent'=> ['nullable', 'numeric', 'min:0', 'max:100'],
             'items.*.discount_amount' => ['nullable', 'integer', 'min:0'],
+            'items.*.vat_rate'        => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
         $quotation->update([
