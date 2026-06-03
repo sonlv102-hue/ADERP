@@ -83,7 +83,7 @@ class AccountingService
 
         $reversal = $this->post(
             description: 'Đảo: ' . $entry->description,
-            date: now()->toImmutable(),
+            date: now(),
             lines: $reversedLines,
             referenceType: $entry->reference_type,
             referenceId: $entry->reference_id,

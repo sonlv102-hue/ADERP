@@ -236,12 +236,14 @@ class PayrollService
         }
 
         try {
-            $this->accounting->post([
-                'description'  => "Bảng lương tháng {$payroll->period} ({$payroll->code})",
-                'reference_type' => Payroll::class,
-                'reference_id'   => $payroll->id,
-                'lines'          => $lines,
-            ]);
+            $this->accounting->post(
+                description: "Bảng lương tháng {$payroll->period} ({$payroll->code})",
+                date: \Carbon\Carbon::createFromFormat('Y-m', $payroll->period)->startOfMonth(),
+                lines: $lines,
+                referenceType: Payroll::class,
+                referenceId: $payroll->id,
+                isAuto: true,
+            );
         } catch (\Throwable $e) {
             Log::warning("PayrollService: journal entry failed for payroll #{$payroll->id}: " . $e->getMessage());
         }
