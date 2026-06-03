@@ -112,10 +112,11 @@
             <thead class="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th class="text-left px-5 py-3 font-semibold text-gray-600">Sản phẩm</th>
-                <th class="text-left px-5 py-3 font-semibold text-gray-600">Đơn vị</th>
-                <th class="text-left px-5 py-3 font-semibold text-gray-600">SL</th>
-                <th class="text-left px-5 py-3 font-semibold text-gray-600">Đơn giá</th>
-                <th class="text-right px-5 py-3 font-semibold text-gray-600">Thành tiền</th>
+                <th class="text-left px-5 py-3 font-semibold text-gray-600">ĐVT</th>
+                <th class="text-left px-5 py-3 font-semibold text-gray-600 w-20">SL</th>
+                <th class="text-left px-5 py-3 font-semibold text-gray-600 w-36">Đơn giá</th>
+                <th class="text-left px-5 py-3 font-semibold text-gray-600 w-24">VAT (%)</th>
+                <th class="text-right px-5 py-3 font-semibold text-gray-600 w-36">Thành tiền</th>
                 <th class="px-5 py-3" />
               </tr>
             </thead>
@@ -131,18 +132,31 @@
                 </td>
                 <td class="px-5 py-3">
                   <input :value="itemUnit(item.product_id)" type="text" readonly
-                    class="w-24 px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 outline-none" />
+                    class="w-20 px-3 py-2 border border-gray-200 rounded-lg bg-gray-50 text-gray-500 outline-none" />
                 </td>
                 <td class="px-5 py-3">
                   <input v-model.number="item.quantity" type="number" min="1"
-                    class="w-24 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" />
+                    class="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" />
                 </td>
                 <td class="px-5 py-3">
                   <input v-model.number="item.unit_price" type="number" min="0"
-                    class="w-36 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" />
+                    class="w-32 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" />
+                </td>
+                <td class="px-5 py-3">
+                  <select v-model.number="item.vat_rate"
+                    class="w-20 px-2 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-white text-sm">
+                    <option :value="null">—</option>
+                    <option :value="0">0%</option>
+                    <option :value="5">5%</option>
+                    <option :value="8">8%</option>
+                    <option :value="10">10%</option>
+                  </select>
                 </td>
                 <td class="px-5 py-3 text-right text-gray-700 font-medium">
-                  {{ formatVnd(item.quantity * item.unit_price) }}
+                  <span>{{ formatVnd(itemTotalWithVat(item)) }}</span>
+                  <span v-if="item.vat_rate" class="block text-xs text-blue-600 mt-0.5">
+                    +{{ item.vat_rate }}% VAT
+                  </span>
                 </td>
                 <td class="px-5 py-3 text-right">
                   <button type="button" @click="removeRow(index)" class="text-red-500 hover:text-red-700">
@@ -153,12 +167,22 @@
                 </td>
               </tr>
               <tr v-if="!form.items.length">
-                <td colspan="6" class="px-5 py-8 text-center text-gray-400">Nhấn "Thêm dòng" để thêm hàng hóa</td>
+                <td colspan="7" class="px-5 py-8 text-center text-gray-400">Nhấn "Thêm dòng" để thêm hàng hóa</td>
               </tr>
             </tbody>
             <tfoot v-if="form.items.length" class="bg-gray-50 border-t border-gray-200">
               <tr>
-                <td colspan="4" class="px-5 py-3 text-right font-semibold text-gray-700">Tổng cộng:</td>
+                <td colspan="5" class="px-5 py-2 text-right text-sm text-gray-500">Cộng hàng (chưa VAT):</td>
+                <td class="px-5 py-2 text-right text-sm text-gray-700">{{ formatVnd(subtotal) }}</td>
+                <td />
+              </tr>
+              <tr v-if="totalVat > 0">
+                <td colspan="5" class="px-5 py-2 text-right text-sm text-gray-500">Thuế VAT:</td>
+                <td class="px-5 py-2 text-right text-sm text-blue-600">{{ formatVnd(totalVat) }}</td>
+                <td />
+              </tr>
+              <tr>
+                <td colspan="5" class="px-5 py-3 text-right font-semibold text-gray-700">Tổng cộng:</td>
                 <td class="px-5 py-3 text-right font-bold text-gray-900">{{ formatVnd(grandTotal) }}</td>
                 <td />
               </tr>
@@ -217,7 +241,7 @@ const form = useForm({
 });
 
 const addRow = () => {
-  form.items.push({ product_id: '', quantity: 1, unit_price: 0 });
+  form.items.push({ product_id: '', quantity: 1, unit_price: 0, vat_rate: 10 });
 };
 
 const removeRow = (index) => {
@@ -230,9 +254,13 @@ const onProductSelect = (index, product) => {
 
 const itemUnit = (productId) => props.products.find(p => p.id === productId)?.unit ?? '';
 
-const grandTotal = computed(() =>
-  form.items.reduce((sum, item) => sum + item.quantity * item.unit_price, 0)
-);
+const itemBase = (item) => (item.quantity || 0) * (item.unit_price || 0);
+const itemVat  = (item) => Math.round(itemBase(item) * (item.vat_rate || 0) / 100);
+const itemTotalWithVat = (item) => itemBase(item) + itemVat(item);
+
+const subtotal = computed(() => form.items.reduce((s, i) => s + itemBase(i), 0));
+const totalVat = computed(() => form.items.reduce((s, i) => s + itemVat(i), 0));
+const grandTotal = computed(() => subtotal.value + totalVat.value);
 
 const submit = () => {
   if (props.purchaseOrder) {

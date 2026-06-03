@@ -109,6 +109,13 @@ Tài liệu: `C:\Mini_erp\Plan.docx` | `C:\Mini_erp\P2.docx`
   - PO Show: hiển thị "Đơn hàng bán liên kết" kèm link click-through ✅
   - Order Show: section "Đơn mua hàng liên kết" — bảng PO kèm NCC/ngày/trạng thái/tổng tiền ✅
   - Nút "Mua hàng" trong Order/Show: truyền ?order_id=xxx → PO create tự điền sẵn ✅
+- **Cột VAT per dòng hàng (2026-06-03):**
+  - Migration 900041: purchase_order_items.vat_rate nullable decimal(5,2) ✅
+  - Migration 900042: order_items.vat_rate nullable decimal(5,2) ✅
+  - PO Form + Order Form: cột "VAT (%)" dropdown (—/0/5/8/10), mặc định 10% khi thêm dòng mới ✅
+  - Thành tiền = qty × unit_price × (1 + vat_rate/100) − CK; dưới ô: "+X% VAT" (xanh nhỏ) ✅
+  - Footer: Cộng hàng (chưa VAT) + Thuế VAT + Tổng cộng ✅
+  - Controller (PO + Order): validation vat_rate nullable 0–100; DTO include vat_rate + vat_amount ✅
 
 ## Quy tắc quan trọng
 - `cost_price` trên sản phẩm = giá **đã gồm VAT** (tổng trả NCC)

@@ -103,6 +103,7 @@ class OrderController extends Controller
             'items.*.unit'                => ['nullable', 'string'],
             'items.*.quantity'            => ['required', 'integer', 'min:1'],
             'items.*.unit_price'          => ['required', 'numeric', 'min:0'],
+            'items.*.vat_rate'            => ['nullable', 'numeric', 'min:0', 'max:100'],
             'items.*.discount_percent'    => ['nullable', 'numeric', 'min:0', 'max:100'],
             'items.*.discount_amount'     => ['nullable', 'integer', 'min:0'],
         ]);
@@ -166,9 +167,11 @@ class OrderController extends Controller
                     'remaining'          => max(0, (float)$item->quantity - (float)$item->delivered_quantity),
                     'current_stock'      => (int) ($stocks[$item->product_id] ?? 0),
                     'unit_price'         => $item->unit_price,
+                    'vat_rate'           => $item->vat_rate !== null ? (float) $item->vat_rate : null,
                     'discount_percent'   => (float) $item->discount_percent,
                     'discount_amount'    => (int) $item->discount_amount,
                     'line_total'         => $item->lineTotal(),
+                    'vat_amount'         => round($item->lineTotal() * (float)($item->vat_rate ?? 0) / 100),
                 ]),
                 'contracts' => $order->contracts->map(fn ($c) => [
                     'id'   => $c->id,
@@ -229,6 +232,7 @@ class OrderController extends Controller
                     'unit'             => $item->unit,
                     'quantity'         => $item->quantity,
                     'unit_price'       => $item->unit_price,
+                    'vat_rate'         => $item->vat_rate !== null ? (float) $item->vat_rate : null,
                     'discount_percent' => (float) $item->discount_percent,
                     'discount_amount'  => (int) $item->discount_amount,
                     '_type'            => $item->product_id ? 'product' : 'service',
@@ -260,6 +264,7 @@ class OrderController extends Controller
             'items.*.unit'        => ['nullable', 'string'],
             'items.*.quantity'         => ['required', 'integer', 'min:1'],
             'items.*.unit_price'       => ['required', 'numeric', 'min:0'],
+            'items.*.vat_rate'         => ['nullable', 'numeric', 'min:0', 'max:100'],
             'items.*.discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
             'items.*.discount_amount'  => ['nullable', 'integer', 'min:0'],
         ]);

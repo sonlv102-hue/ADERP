@@ -98,6 +98,7 @@ class PurchaseOrderController extends Controller
             'items.*.product_id'  => ['required', 'exists:products,id'],
             'items.*.quantity'    => ['required', 'integer', 'min:1'],
             'items.*.unit_price'  => ['required', 'numeric', 'min:0'],
+            'items.*.vat_rate'    => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
         $po = PurchaseOrder::create([
@@ -163,7 +164,9 @@ class PurchaseOrderController extends Controller
                     'unit'         => $item->product?->unit ?? '',
                     'quantity'     => $item->quantity,
                     'unit_price'   => $item->unit_price,
+                    'vat_rate'     => $item->vat_rate,
                     'total'        => $item->quantity * $item->unit_price,
+                    'vat_amount'   => $item->quantity * $item->unit_price * (float)($item->vat_rate ?? 0) / 100,
                 ]),
                 'stock_entries' => $purchaseOrder->stockEntries->map(fn ($e) => [
                     'id'   => $e->id,
@@ -211,6 +214,7 @@ class PurchaseOrderController extends Controller
                     'product_id' => $item->product_id,
                     'quantity'   => $item->quantity,
                     'unit_price' => (float) $item->unit_price,
+                    'vat_rate'   => $item->vat_rate !== null ? (float) $item->vat_rate : null,
                 ])->values(),
             ],
             'suppliers'      => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
@@ -248,6 +252,7 @@ class PurchaseOrderController extends Controller
             'items.*.product_id'  => ['required', 'exists:products,id'],
             'items.*.quantity'    => ['required', 'integer', 'min:1'],
             'items.*.unit_price'  => ['required', 'numeric', 'min:0'],
+            'items.*.vat_rate'    => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
         $purchaseOrder->update([

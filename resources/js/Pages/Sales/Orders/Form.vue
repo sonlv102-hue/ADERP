@@ -111,10 +111,11 @@
             <thead class="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th class="text-left px-4 py-3 font-semibold text-gray-600">Sản phẩm/Dịch vụ</th>
-                <th class="text-left px-4 py-3 font-semibold text-gray-600 w-20">ĐVT</th>
-                <th class="text-left px-4 py-3 font-semibold text-gray-600 w-20">SL</th>
-                <th class="text-left px-4 py-3 font-semibold text-gray-600 w-32">Đơn giá</th>
-                <th class="text-left px-4 py-3 font-semibold text-gray-600 w-24">CK (%)</th>
+                <th class="text-left px-4 py-3 font-semibold text-gray-600 w-16">ĐVT</th>
+                <th class="text-left px-4 py-3 font-semibold text-gray-600 w-16">SL</th>
+                <th class="text-left px-4 py-3 font-semibold text-gray-600 w-28">Đơn giá</th>
+                <th class="text-left px-4 py-3 font-semibold text-gray-600 w-20">VAT (%)</th>
+                <th class="text-left px-4 py-3 font-semibold text-gray-600 w-20">CK (%)</th>
                 <th class="text-right px-4 py-3 font-semibold text-gray-600 w-32">Thành tiền</th>
                 <th class="w-10 px-4 py-3" />
               </tr>
@@ -150,14 +151,27 @@
                     class="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-xs" />
                 </td>
                 <td class="px-4 py-3">
+                  <select v-model.number="item.vat_rate"
+                    class="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-white text-xs">
+                    <option :value="null">—</option>
+                    <option :value="0">0%</option>
+                    <option :value="5">5%</option>
+                    <option :value="8">8%</option>
+                    <option :value="10">10%</option>
+                  </select>
+                </td>
+                <td class="px-4 py-3">
                   <input v-model.number="item.discount_percent" type="number" min="0" max="100" step="0.01"
                     placeholder="0"
                     class="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-xs" />
                 </td>
                 <td class="px-4 py-3 text-right font-medium text-gray-700 text-xs">
-                  <span>{{ formatVnd(itemLineTotal(item)) }}</span>
+                  <span>{{ formatVnd(itemTotalWithVat(item)) }}</span>
                   <span v-if="item.discount_percent > 0" class="block text-xs text-green-600 mt-0.5">
                     -{{ item.discount_percent }}%
+                  </span>
+                  <span v-if="item.vat_rate" class="block text-xs text-blue-600 mt-0.5">
+                    +{{ item.vat_rate }}% VAT
                   </span>
                 </td>
                 <td class="px-4 py-3 text-center">
@@ -169,12 +183,22 @@
                 </td>
               </tr>
               <tr v-if="!form.items.length">
-                <td colspan="7" class="px-5 py-8 text-center text-gray-400">Chưa có hàng hóa. Nhấn "+ Sản phẩm" hoặc "+ Dịch vụ".</td>
+                <td colspan="8" class="px-5 py-8 text-center text-gray-400">Chưa có hàng hóa. Nhấn "+ Sản phẩm" hoặc "+ Dịch vụ".</td>
               </tr>
             </tbody>
             <tfoot v-if="form.items.length" class="bg-gray-50 border-t border-gray-200">
               <tr>
-                <td colspan="5" class="px-4 py-3 text-right font-bold text-gray-800">Tổng cộng:</td>
+                <td colspan="6" class="px-4 py-2 text-right text-sm text-gray-500">Cộng hàng (chưa VAT):</td>
+                <td class="px-4 py-2 text-right text-sm text-gray-700">{{ formatVnd(subtotal) }}</td>
+                <td />
+              </tr>
+              <tr v-if="totalVat > 0">
+                <td colspan="6" class="px-4 py-2 text-right text-sm text-gray-500">Thuế VAT:</td>
+                <td class="px-4 py-2 text-right text-sm text-blue-600">{{ formatVnd(totalVat) }}</td>
+                <td />
+              </tr>
+              <tr>
+                <td colspan="6" class="px-4 py-3 text-right font-bold text-gray-800">Tổng cộng:</td>
                 <td class="px-4 py-3 text-right font-bold text-primary-700 text-base">{{ formatVnd(grandTotal) }}</td>
                 <td />
               </tr>
@@ -234,7 +258,7 @@ const onQuotationChange = () => {
   const q = props.quotations.find(q => q.id === form.quotation_id);
   if (!q) return;
   form.customer_id = q.customer_id;
-  form.items = q.items.map(i => ({ ...i }));
+  form.items = q.items.map(i => ({ ...i, vat_rate: i.vat_rate ?? 10 }));
 };
 
 onMounted(() => {
@@ -253,6 +277,7 @@ const addRow = (type) => {
     unit:             '',
     quantity:         1,
     unit_price:       0,
+    vat_rate:         10,
     discount_percent: 0,
   });
 };
@@ -276,15 +301,19 @@ const itemLineTotal = (item) => {
   return lineAmt - Math.round(lineAmt * disc / 100);
 };
 
-const grandTotal = computed(() =>
-  form.items.reduce((s, i) => s + itemLineTotal(i), 0)
-);
+const itemVatAmount   = (item) => Math.round(itemLineTotal(item) * (item.vat_rate || 0) / 100);
+const itemTotalWithVat = (item) => itemLineTotal(item) + itemVatAmount(item);
+
+const subtotal  = computed(() => form.items.reduce((s, i) => s + itemLineTotal(i), 0));
+const totalVat  = computed(() => form.items.reduce((s, i) => s + itemVatAmount(i), 0));
+const grandTotal = computed(() => subtotal.value + totalVat.value);
 
 const { formatVnd } = useCurrency();
 
 const submit = () => {
   const payload = form.items.map(({ _type, ...rest }) => ({
     ...rest,
+    vat_rate:        rest.vat_rate ?? null,
     discount_amount: Math.round((rest.quantity || 0) * (rest.unit_price || 0) * (rest.discount_percent || 0) / 100),
   }));
   if (props.order) {
