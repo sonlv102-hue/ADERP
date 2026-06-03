@@ -7,6 +7,7 @@ use App\Models\AccountingPeriod;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
 class AccountingService
@@ -22,7 +23,7 @@ class AccountingService
      */
     public function post(
         string $description,
-        Carbon $date,
+        CarbonInterface $date,
         array $lines,
         ?string $referenceType = null,
         ?int $referenceId = null,
@@ -100,7 +101,7 @@ class AccountingService
      * Số dư tài khoản trong khoảng thời gian.
      * Trả về: ['debit' => float, 'credit' => float, 'balance' => float]
      */
-    public function getAccountBalance(string $accountCode, ?Carbon $from = null, ?Carbon $to = null): array
+    public function getAccountBalance(string $accountCode, ?CarbonInterface $from = null, ?CarbonInterface $to = null): array
     {
         $query = JournalEntryLine::where('account_code', $accountCode)
             ->whereHas('entry', fn ($q) => $q->where('status', 'posted'));
@@ -127,7 +128,7 @@ class AccountingService
      * Số dư nhiều tài khoản cùng lúc (tránh N+1).
      * Trả về: ['111' => ['debit'=>..., 'credit'=>..., 'balance'=>...], ...]
      */
-    public function getMultipleBalances(array $accountCodes, ?Carbon $from = null, ?Carbon $to = null): array
+    public function getMultipleBalances(array $accountCodes, ?CarbonInterface $from = null, ?CarbonInterface $to = null): array
     {
         $query = JournalEntryLine::whereIn('account_code', $accountCodes)
             ->whereHas('entry', fn ($q) => $q->where('status', 'posted'))
@@ -177,7 +178,7 @@ class AccountingService
         }
     }
 
-    private function checkPeriodOpen(Carbon $date): void
+    private function checkPeriodOpen(CarbonInterface $date): void
     {
         $period = AccountingPeriod::where('year', $date->year)
             ->where('month', $date->month)
