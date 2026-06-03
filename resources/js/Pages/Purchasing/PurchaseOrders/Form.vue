@@ -70,6 +70,15 @@
             </div>
 
             <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Đơn hàng bán liên kết</label>
+              <select v-model="form.order_id"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-white">
+                <option :value="null">-- Không liên kết đơn hàng --</option>
+                <option v-for="o in orders" :key="o.id" :value="o.id">{{ o.label }}</option>
+              </select>
+            </div>
+
+            <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Dự án liên kết</label>
               <select v-model="form.project_id"
                 class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-white">
@@ -184,6 +193,8 @@ const props = defineProps({
   warehouses: Array,
   products: Array,
   projects: { type: Array, default: () => [] },
+  orders: { type: Array, default: () => [] },
+  prefillOrderId: { type: Number, default: null },
   invoiceTypes: Array,
   purchaseOrder: Object,
 });
@@ -197,6 +208,7 @@ const form = useForm({
   supplier_id:   props.purchaseOrder?.supplier_id   ?? '',
   warehouse_id:  props.purchaseOrder?.warehouse_id  ?? '',
   project_id:    props.purchaseOrder?.project_id    ?? null,
+  order_id:      props.purchaseOrder?.order_id      ?? props.prefillOrderId ?? null,
   order_date:    props.purchaseOrder?.order_date     ?? today,
   expected_date: props.purchaseOrder?.expected_date  ?? '',
   notes:         props.purchaseOrder?.notes          ?? '',

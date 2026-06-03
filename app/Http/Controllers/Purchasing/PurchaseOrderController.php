@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Purchasing;
 use App\Enums\PurchaseOrderInvoiceType;
 use App\Enums\PurchaseOrderStatus;
 use App\Http\Controllers\Controller;
+use App\Models\Order;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\PurchaseOrder;
@@ -61,15 +62,21 @@ class PurchaseOrderController extends Controller
         ]);
     }
 
-    public function create(): Response
+    public function create(Request $request): Response
     {
         return Inertia::render('Purchasing/PurchaseOrders/Form', [
-            'nextCode'     => PurchaseOrder::generateCode(),
-            'suppliers'    => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
-            'warehouses'   => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'products'     => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'cost_price', 'vat_percent']),
-            'projects'     => Project::whereIn('status', ['planning', 'in_progress'])->orderByDesc('id')->get(['id', 'code', 'name']),
-            'invoiceTypes' => collect(PurchaseOrderInvoiceType::cases())->map(fn ($e) => [
+            'nextCode'       => PurchaseOrder::generateCode(),
+            'suppliers'      => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
+            'warehouses'     => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'products'       => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'cost_price', 'vat_percent']),
+            'projects'       => Project::whereIn('status', ['planning', 'in_progress'])->orderByDesc('id')->get(['id', 'code', 'name']),
+            'orders'         => Order::whereNotIn('status', ['cancelled'])->with('customer')->orderByDesc('id')->get()->map(fn ($o) => [
+                'id'   => $o->id,
+                'code' => $o->code,
+                'label'=> $o->code . ' — ' . $o->customer->name,
+            ]),
+            'prefillOrderId' => $request->query('order_id') ? (int) $request->query('order_id') : null,
+            'invoiceTypes'   => collect(PurchaseOrderInvoiceType::cases())->map(fn ($e) => [
                 'value' => $e->value, 'label' => $e->label(),
             ]),
         ]);
@@ -82,6 +89,7 @@ class PurchaseOrderController extends Controller
             'supplier_id'   => ['required', 'exists:suppliers,id'],
             'warehouse_id'  => ['required', 'exists:warehouses,id'],
             'project_id'    => ['nullable', 'exists:projects,id'],
+            'order_id'      => ['nullable', 'exists:orders,id'],
             'order_date'    => ['required', 'date'],
             'expected_date' => ['nullable', 'date', 'after_or_equal:order_date'],
             'notes'         => ['nullable', 'string'],
@@ -97,6 +105,7 @@ class PurchaseOrderController extends Controller
             'supplier_id'   => $data['supplier_id'],
             'warehouse_id'  => $data['warehouse_id'],
             'project_id'    => $data['project_id'] ?? null,
+            'order_id'      => $data['order_id'] ?? null,
             'created_by'    => auth()->id(),
             'order_date'    => $data['order_date'],
             'expected_date' => $data['expected_date'] ?? null,
@@ -115,7 +124,7 @@ class PurchaseOrderController extends Controller
     public function show(PurchaseOrder $purchaseOrder): Response
     {
         $purchaseOrder->load([
-            'supplier', 'warehouse', 'creator', 'project',
+            'supplier', 'warehouse', 'creator', 'project', 'order.customer',
             'items.product' => fn ($q) => $q->withTrashed(),
             'stockEntries', 'purchaseInvoices',
         ]);
@@ -141,6 +150,11 @@ class PurchaseOrderController extends Controller
                     'id'   => $purchaseOrder->project->id,
                     'code' => $purchaseOrder->project->code,
                     'name' => $purchaseOrder->project->name,
+                ] : null,
+                'linked_order'       => $purchaseOrder->order ? [
+                    'id'            => $purchaseOrder->order->id,
+                    'code'          => $purchaseOrder->order->code,
+                    'customer_name' => $purchaseOrder->order->customer->name,
                 ] : null,
                 'items'         => $purchaseOrder->items->map(fn ($item) => [
                     'id'           => $item->id,
@@ -188,6 +202,7 @@ class PurchaseOrderController extends Controller
                 'supplier_id'   => $purchaseOrder->supplier_id,
                 'warehouse_id'  => $purchaseOrder->warehouse_id,
                 'project_id'    => $purchaseOrder->project_id,
+                'order_id'      => $purchaseOrder->order_id,
                 'order_date'    => $purchaseOrder->order_date->format('Y-m-d'),
                 'expected_date' => $purchaseOrder->expected_date?->format('Y-m-d'),
                 'notes'         => $purchaseOrder->notes,
@@ -198,11 +213,17 @@ class PurchaseOrderController extends Controller
                     'unit_price' => (float) $item->unit_price,
                 ])->values(),
             ],
-            'suppliers'    => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
-            'warehouses'   => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'products'     => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'cost_price', 'vat_percent']),
-            'projects'     => Project::whereIn('status', ['planning', 'in_progress'])->orderByDesc('id')->get(['id', 'code', 'name']),
-            'invoiceTypes' => collect(PurchaseOrderInvoiceType::cases())->map(fn ($e) => [
+            'suppliers'      => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
+            'warehouses'     => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'products'       => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'cost_price', 'vat_percent']),
+            'projects'       => Project::whereIn('status', ['planning', 'in_progress'])->orderByDesc('id')->get(['id', 'code', 'name']),
+            'orders'         => Order::whereNotIn('status', ['cancelled'])->with('customer')->orderByDesc('id')->get()->map(fn ($o) => [
+                'id'   => $o->id,
+                'code' => $o->code,
+                'label'=> $o->code . ' — ' . $o->customer->name,
+            ]),
+            'prefillOrderId' => null,
+            'invoiceTypes'   => collect(PurchaseOrderInvoiceType::cases())->map(fn ($e) => [
                 'value' => $e->value, 'label' => $e->label(),
             ]),
         ]);
@@ -218,6 +239,7 @@ class PurchaseOrderController extends Controller
             'supplier_id'   => ['required', 'exists:suppliers,id'],
             'warehouse_id'  => ['required', 'exists:warehouses,id'],
             'project_id'    => ['nullable', 'exists:projects,id'],
+            'order_id'      => ['nullable', 'exists:orders,id'],
             'order_date'    => ['required', 'date'],
             'expected_date' => ['nullable', 'date', 'after_or_equal:order_date'],
             'notes'         => ['nullable', 'string'],
@@ -232,6 +254,7 @@ class PurchaseOrderController extends Controller
             'supplier_id'   => $data['supplier_id'],
             'warehouse_id'  => $data['warehouse_id'],
             'project_id'    => $data['project_id'] ?? null,
+            'order_id'      => $data['order_id'] ?? null,
             'order_date'    => $data['order_date'],
             'expected_date' => $data['expected_date'] ?? null,
             'notes'         => $data['notes'] ?? null,

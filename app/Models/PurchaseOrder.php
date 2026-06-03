@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class PurchaseOrder extends Model
 {
     protected $fillable = [
-        'code', 'supplier_id', 'warehouse_id', 'project_id', 'created_by',
+        'code', 'supplier_id', 'warehouse_id', 'project_id', 'order_id', 'created_by',
         'order_date', 'expected_date', 'status', 'notes', 'invoice_type',
     ];
 
@@ -30,6 +30,11 @@ class PurchaseOrder extends Model
         $last = self::orderByDesc('id')->value('code');
         $num = $last ? ((int) substr($last, 3)) + 1 : 1;
         return 'MH-' . str_pad($num, 4, '0', STR_PAD_LEFT);
+    }
+
+    public function order(): BelongsTo
+    {
+        return $this->belongsTo(Order::class);
     }
 
     public function project(): BelongsTo

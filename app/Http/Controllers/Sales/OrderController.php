@@ -132,7 +132,7 @@ class OrderController extends Controller
 
     public function show(Order $order): Response
     {
-        $order->load(['customer', 'creator', 'quotation', 'items.product', 'items.service', 'contracts', 'attachments.creator']);
+        $order->load(['customer', 'creator', 'quotation', 'items.product', 'items.service', 'contracts', 'attachments.creator', 'purchaseOrders.supplier']);
 
         // Tồn kho hiện tại cho từng sản phẩm trong đơn
         $productIds = $order->items->whereNotNull('product_id')->pluck('product_id');
@@ -189,6 +189,16 @@ class OrderController extends Controller
                 'customs_document_name' => $order->customs_document_name,
                 'customs_document_url'  => $order->customs_document_path ? Storage::disk('public')->url($order->customs_document_path) : null,
                 'customs_notes'         => $order->customs_notes,
+                'purchase_orders'       => $order->purchaseOrders->map(fn ($po) => [
+                    'id'            => $po->id,
+                    'code'          => $po->code,
+                    'supplier'      => $po->supplier->name,
+                    'order_date'    => $po->order_date->format('d/m/Y'),
+                    'status'        => $po->status->value,
+                    'status_label'  => $po->status->label(),
+                    'status_color'  => $po->status->color(),
+                    'total'         => (float) $po->items()->sum(\Illuminate\Support\Facades\DB::raw('quantity * unit_price')),
+                ]),
             ],
         ]);
     }

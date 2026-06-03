@@ -91,6 +91,11 @@ class Order extends Model
         return $this->hasMany(StockExit::class);
     }
 
+    public function purchaseOrders(): HasMany
+    {
+        return $this->hasMany(PurchaseOrder::class);
+    }
+
     public function attachments(): MorphMany
     {
         return $this->morphMany(Attachment::class, 'attachable')->latest();

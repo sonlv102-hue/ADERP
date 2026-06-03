@@ -101,6 +101,14 @@ Tài liệu: `C:\Mini_erp\Plan.docx` | `C:\Mini_erp\P2.docx`
   - PO Form: dropdown chọn dự án (lọc planning/in_progress) ✅
   - PO Show: hiển thị dự án liên kết kèm link click-through ✅
   - Project Show: tab "Đơn mua hàng" — danh sách PO của dự án + tổng tiền ✅
+- **Liên kết PO → Đơn hàng bán (2026-06-03):**
+  - Migration 900040: purchase_orders.order_id nullable FK → orders ✅
+  - PurchaseOrder model: thêm order() BelongsTo + order_id fillable ✅
+  - Order model: thêm purchaseOrders() HasMany ✅
+  - PO Form: dropdown chọn đơn hàng bán (DH-); tự điền sẵn khi đến từ Order/Show ✅
+  - PO Show: hiển thị "Đơn hàng bán liên kết" kèm link click-through ✅
+  - Order Show: section "Đơn mua hàng liên kết" — bảng PO kèm NCC/ngày/trạng thái/tổng tiền ✅
+  - Nút "Mua hàng" trong Order/Show: truyền ?order_id=xxx → PO create tự điền sẵn ✅
 
 ## Quy tắc quan trọng
 - `cost_price` trên sản phẩm = giá **đã gồm VAT** (tổng trả NCC)

@@ -151,7 +151,7 @@
                   class="px-2 py-1.5 bg-yellow-50 border border-yellow-200 text-yellow-700 text-xs rounded-lg">
                   Kho chỉ còn {{ item.current_stock }}
                 </span>
-                <Link :href="route('purchasing.purchase-orders.create')"
+                <Link :href="route('purchasing.purchase-orders.create') + '?order_id=' + order.id"
                   class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium rounded-lg flex items-center gap-1">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-9H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -189,6 +189,45 @@
             {{ c.code }}
           </Link>
         </div>
+      </div>
+
+      <!-- Đơn mua hàng liên kết -->
+      <div v-if="order.purchase_orders?.length" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
+          <p class="text-sm font-semibold text-gray-700">Đơn mua hàng liên kết ({{ order.purchase_orders.length }})</p>
+          <Link :href="route('purchasing.purchase-orders.create') + '?order_id=' + order.id"
+            class="text-xs px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium flex items-center gap-1">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Thêm đơn mua
+          </Link>
+        </div>
+        <table class="w-full text-sm">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã đơn</th>
+              <th class="text-left px-5 py-3 font-semibold text-gray-600">Nhà cung cấp</th>
+              <th class="text-left px-5 py-3 font-semibold text-gray-600">Ngày đặt</th>
+              <th class="text-left px-5 py-3 font-semibold text-gray-600">Trạng thái</th>
+              <th class="text-right px-5 py-3 font-semibold text-gray-600">Tổng tiền</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <tr v-for="po in order.purchase_orders" :key="po.id">
+              <td class="px-5 py-3">
+                <Link :href="route('purchasing.purchase-orders.show', po.id)"
+                  class="font-mono text-primary-600 hover:underline">{{ po.code }}</Link>
+              </td>
+              <td class="px-5 py-3 text-gray-700">{{ po.supplier }}</td>
+              <td class="px-5 py-3 text-gray-500">{{ po.order_date }}</td>
+              <td class="px-5 py-3">
+                <StatusBadge :color="po.status_color">{{ po.status_label }}</StatusBadge>
+              </td>
+              <td class="px-5 py-3 text-right font-medium text-gray-800">{{ formatVnd(po.total) }}</td>
+            </tr>
+          </tbody>
+        </table>
       </div>
 
       <!-- Khai báo hải quan (chỉ hiện khi khách hàng FDI) -->
