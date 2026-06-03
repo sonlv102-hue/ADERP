@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\ItemUsageType;
 use App\Enums\SerialStatus;
 use App\Enums\StockEntryStatus;
 use App\Enums\StockExitStatus;
@@ -13,6 +14,7 @@ use App\Models\StockEntry;
 use App\Models\StockEntryItem;
 use App\Models\StockExit;
 use App\Models\StockMovement;
+use App\Services\ProjectWipService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +22,10 @@ use RuntimeException;
 
 class StockService
 {
-    public function __construct(private AccountingService $accounting) {}
+    public function __construct(
+        private AccountingService $accounting,
+        private ProjectWipService $wip,
+    ) {}
     public function confirmEntry(StockEntry $entry): void
     {
         if ($entry->status !== StockEntryStatus::Draft) {
@@ -269,7 +274,7 @@ class StockService
         Cache::forget('dashboard.stock_overview');
         Cache::forget('dashboard.stats');
 
-        // Hạch toán giá vốn: Dr 632 / Cr 156
+        // Hạch toán: Dr 632/154 / Cr 156 tuỳ mục đích xuất
         $this->postExitJournal($exit);
 
         // After transaction: check low stock threshold and dispatch async notification job
@@ -417,11 +422,15 @@ class StockService
     private function postExitJournal(StockExit $exit): void
     {
         $exit->load('items.product');
+
+        $isProject = $exit->item_usage_type === ItemUsageType::Project;
+        $debitAccount = $isProject ? '154' : '632';
+        $projectId    = $isProject ? $exit->project_id : null;
+
         $totalCogs = 0;
         $lines     = [];
 
         foreach ($exit->items as $item) {
-            // cost_price = giá nhập đã gồm VAT (quy ước dự án); tách ra theo vat_percent trên sản phẩm
             $vatRate     = (float) ($item->product?->vat_percent ?? 10);
             $costInclTax = (float) ($item->product?->cost_price ?? 0);
             $divisor     = $vatRate > 0 ? (1 + $vatRate / 100) : 1;
@@ -430,21 +439,42 @@ class StockService
             $totalCogs  += $cogs;
 
             if ($cogs > 0) {
-                $lines[] = ['account' => '632', 'debit' => (int) round($cogs), 'credit' => 0,
-                            'description' => "Giá vốn {$item->product?->name}"];
-                $lines[] = ['account' => '156', 'debit' => 0, 'credit' => (int) round($cogs),
-                            'description' => "Xuất kho {$item->product?->name}"];
+                $lines[] = [
+                    'account'    => $debitAccount,
+                    'debit'      => (int) round($cogs),
+                    'credit'     => 0,
+                    'description' => $isProject
+                        ? "CP vật tư dự án {$item->product?->name}"
+                        : "Giá vốn {$item->product?->name}",
+                    'project_id' => $projectId,
+                ];
+                $lines[] = [
+                    'account'    => '156',
+                    'debit'      => 0,
+                    'credit'     => (int) round($cogs),
+                    'description' => "Xuất kho {$item->product?->name}",
+                    'project_id' => $projectId,
+                ];
             }
         }
 
         if ($totalCogs <= 0 || empty($lines)) return;
 
+        $description = $isProject
+            ? "Xuất vật tư dự án {$exit->code}"
+            : "Giá vốn hàng bán {$exit->code}";
+
         try {
-            $this->accounting->post(
-                "Giá vốn hàng bán {$exit->code}",
+            $journalEntry = $this->accounting->post(
+                $description,
                 Carbon::parse($exit->exit_date),
                 $lines, 'stock_exit', $exit->id, true
             );
+
+            // Tạo WIP entry để theo dõi chi phí dở dang theo dự án
+            if ($isProject) {
+                $this->wip->createFromStockExit($exit, $journalEntry->id);
+            }
         } catch (\Exception $e) {
             \Log::warning("Auto-posting failed [StockExit {$exit->code}]: " . $e->getMessage());
         }

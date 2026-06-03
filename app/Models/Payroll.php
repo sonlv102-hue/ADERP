@@ -15,12 +15,15 @@ class Payroll extends Model
         'total_gross', 'total_insurance_employee', 'total_insurance_employer',
         'total_pit', 'total_deductions', 'total_net_salary',
         'created_by', 'notes',
+        'is_locked', 'locked_by', 'locked_at',
     ];
 
     protected function casts(): array
     {
         return [
             'status'                   => PayrollStatus::class,
+            'is_locked'                => 'boolean',
+            'locked_at'                => 'datetime',
             'total_base_salary'        => 'decimal:0',
             'total_allowance'          => 'decimal:0',
             'total_bonus'              => 'decimal:0',
@@ -41,6 +44,11 @@ class Payroll extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function locker(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'locked_by');
     }
 
     public static function generateCode(string $period): string

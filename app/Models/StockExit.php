@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ItemUsageType;
 use App\Enums\StockExitStatus;
 use App\Models\Concerns\GeneratesCode;
 use Illuminate\Database\Eloquent\Model;
@@ -26,14 +27,17 @@ class StockExit extends Model
     protected static int    $codePad    = 4;
 
     protected $fillable = [
-        'code', 'warehouse_id', 'customer_id', 'order_id', 'created_by', 'exit_date', 'reason', 'status', 'notes',
+        'code', 'warehouse_id', 'customer_id', 'order_id', 'created_by',
+        'exit_date', 'reason', 'status', 'notes',
+        'item_usage_type', 'project_id',
     ];
 
     protected function casts(): array
     {
         return [
-            'status' => StockExitStatus::class,
-            'exit_date' => 'date',
+            'status'          => StockExitStatus::class,
+            'item_usage_type' => ItemUsageType::class,
+            'exit_date'       => 'date',
         ];
     }
 
@@ -61,6 +65,11 @@ class StockExit extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 
     public function items(): HasMany

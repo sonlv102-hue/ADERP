@@ -7,21 +7,28 @@ use App\Enums\ProjectStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Contract;
 use App\Models\Customer;
+use App\Models\Employee;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\ProjectExpense;
 use App\Models\ProjectMaterial;
 use App\Models\ProjectMember;
+use App\Models\PurchaseOrder;
 use App\Models\User;
 use App\Services\ProjectService;
+use App\Services\ProjectWipService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class ProjectController extends Controller
 {
-    public function __construct(private ProjectService $service) {}
+    public function __construct(
+        private ProjectService    $service,
+        private ProjectWipService $wip,
+    ) {}
 
     public function index(): Response
     {
@@ -87,7 +94,7 @@ class ProjectController extends Controller
         $project->load([
             'customer', 'contract', 'manager', 'creator',
             'tasks.assignee',
-            'members.user',
+            'members.employee',
             'materials.product',
             'expenses.creator',
         ]);
@@ -127,8 +134,14 @@ class ProjectController extends Controller
                     'sort_order'   => $t->sort_order,
                 ]),
                 'members'           => $project->members->map(fn ($m) => [
-                    'id'   => $m->id,
-                    'user' => ['id' => $m->user->id, 'name' => $m->user->name],
+                    'id'       => $m->id,
+                    'employee' => [
+                        'id'         => $m->employee->id,
+                        'code'       => $m->employee->code,
+                        'name'       => $m->employee->name,
+                        'position'   => $m->employee->position,
+                        'department' => $m->employee->department,
+                    ],
                     'role' => $m->role,
                 ]),
                 'materials'         => $project->materials->map(fn ($m) => [
@@ -151,9 +164,25 @@ class ProjectController extends Controller
                 ]),
                 'allowed_transitions' => $this->allowedTransitions($project),
             ],
-            'allUsers'    => User::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'allEmployees' => Employee::whereIn('status', ['active', 'probation'])->orderBy('name')->get(['id', 'code', 'name', 'position', 'department']),
             'allProducts' => Product::where('is_active', true)->orderBy('name')->get(['id', 'name', 'unit', 'cost_price']),
             'expenseCategories' => collect(ExpenseCategory::cases())->map(fn ($c) => ['value' => $c->value, 'label' => $c->label()]),
+            'wipSummary'     => $this->wip->getWipSummary($project->id),
+            'wipEntries'     => $this->wip->getWipEntries($project->id),
+            'wipTotal'       => (int) \App\Models\ProjectWipEntry::where('project_id', $project->id)->sum('amount'),
+            'purchaseOrders' => PurchaseOrder::with(['supplier'])
+                ->where('project_id', $project->id)
+                ->orderByDesc('id')
+                ->get()
+                ->map(fn ($po) => [
+                    'id'          => $po->id,
+                    'code'        => $po->code,
+                    'supplier'    => $po->supplier->name,
+                    'order_date'  => $po->order_date->format('d/m/Y'),
+                    'status'      => $po->status->value,
+                    'status_label'=> $po->status->label(),
+                    'total'       => (float) $po->items()->sum(\DB::raw('quantity * unit_price')),
+                ]),
         ]);
     }
 
@@ -216,12 +245,12 @@ class ProjectController extends Controller
     public function addMember(Request $request, Project $project): RedirectResponse
     {
         $data = $request->validate([
-            'user_id' => ['required', 'exists:users,id'],
-            'role'    => ['nullable', 'string', 'max:100'],
+            'employee_id' => ['required', 'exists:employees,id'],
+            'role'        => ['nullable', 'string', 'max:100'],
         ]);
 
         ProjectMember::firstOrCreate(
-            ['project_id' => $project->id, 'user_id' => $data['user_id']],
+            ['project_id' => $project->id, 'employee_id' => $data['employee_id']],
             ['role' => $data['role'] ?? null]
         );
 
@@ -283,6 +312,19 @@ class ProjectController extends Controller
         $expense->delete();
 
         return back()->with('success', 'Đã xóa chi phí.');
+    }
+
+    public function recognizeCost(Request $request, Project $project): RedirectResponse
+    {
+        $data = $request->validate(['notes' => ['nullable', 'string', 'max:500']]);
+
+        try {
+            $this->wip->recognizeCost($project, $data['notes'] ?? null);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', "Đã kết chuyển chi phí dự án {$project->code} vào giá vốn.");
     }
 
     private function allowedTransitions(Project $project): array

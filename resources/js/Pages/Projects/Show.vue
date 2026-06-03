@@ -138,9 +138,11 @@
         <!-- Members tab -->
         <div v-if="activeTab === 'members'" class="p-5 space-y-4">
           <form v-if="can('projects.manage')" @submit.prevent="addMember" class="flex gap-3">
-            <select v-model="memberForm.user_id" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" required>
-              <option value="">-- Chọn nhân viên --</option>
-              <option v-for="u in allUsers" :key="u.id" :value="u.id">{{ u.name }}</option>
+            <select v-model="memberForm.employee_id" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" required>
+              <option value="">-- Chọn cán bộ / CNV --</option>
+              <option v-for="e in allEmployees" :key="e.id" :value="e.id">
+                {{ e.code }} — {{ e.name }}<template v-if="e.position"> ({{ e.position }})</template>
+              </option>
             </select>
             <input v-model="memberForm.role" type="text" placeholder="Vai trò trong dự án..."
               class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
@@ -153,8 +155,16 @@
             <div v-for="m in project.members" :key="m.id"
               class="flex items-center justify-between p-3 rounded-lg border border-gray-100">
               <div>
-                <p class="text-sm font-medium text-gray-800">{{ m.user.name }}</p>
-                <p v-if="m.role" class="text-xs text-gray-500">{{ m.role }}</p>
+                <p class="text-sm font-medium text-gray-800">
+                  <span class="font-mono text-xs text-gray-400 mr-1">{{ m.employee.code }}</span>
+                  {{ m.employee.name }}
+                </p>
+                <p class="text-xs text-gray-400">
+                  <template v-if="m.employee.position">{{ m.employee.position }}</template>
+                  <template v-if="m.employee.position && m.employee.department"> · </template>
+                  <template v-if="m.employee.department">{{ m.employee.department }}</template>
+                </p>
+                <p v-if="m.role" class="text-xs text-primary-600 mt-0.5">Vai trò: {{ m.role }}</p>
               </div>
               <button v-if="can('projects.manage')" @click="removeMember(m.id)"
                 class="text-gray-400 hover:text-red-500">
@@ -282,6 +292,116 @@
           </table>
         </div>
 
+        <!-- WIP tab -->
+        <div v-if="activeTab === 'wip'" class="p-5 space-y-5">
+          <!-- Summary cards -->
+          <div class="grid grid-cols-5 gap-3">
+            <div v-for="row in wipSummary" :key="row.cost_type"
+              class="bg-gray-50 border border-gray-200 rounded-lg p-3 text-center">
+              <p class="text-xs text-gray-500 font-medium">{{ row.label }}</p>
+              <p class="text-base font-bold text-gray-900 mt-1">{{ formatVnd(row.total) }}</p>
+            </div>
+          </div>
+
+          <!-- Total + recognize action -->
+          <div class="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-xl px-5 py-4">
+            <div>
+              <p class="text-sm font-semibold text-purple-800">Tổng chi phí dở dang TK 154</p>
+              <p class="text-2xl font-bold text-purple-900 mt-1">{{ formatVnd(wipTotal) }}</p>
+              <p class="text-xs text-purple-600 mt-0.5">Khi dự án hoàn thành / nghiệm thu → kết chuyển sang Nợ 632 / Có 154</p>
+            </div>
+            <button v-if="can('accounting.manage') && wipTotal > 0"
+              @click="recognizeCost"
+              class="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-lg text-sm font-medium">
+              Kết chuyển vào giá vốn (632)
+            </button>
+          </div>
+
+          <!-- Entries table -->
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th class="text-left px-4 py-2.5 font-semibold text-gray-600">Ngày</th>
+                <th class="text-left px-4 py-2.5 font-semibold text-gray-600">Loại CP</th>
+                <th class="text-left px-4 py-2.5 font-semibold text-gray-600">Mô tả</th>
+                <th class="text-right px-4 py-2.5 font-semibold text-gray-600">Số tiền</th>
+                <th class="text-left px-4 py-2.5 font-semibold text-gray-600">Bút toán</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="e in wipEntries" :key="e.id" class="hover:bg-gray-50">
+                <td class="px-4 py-2 text-gray-600">{{ e.entry_date }}</td>
+                <td class="px-4 py-2">
+                  <span class="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs font-medium">{{ e.label }}</span>
+                </td>
+                <td class="px-4 py-2 text-gray-800">{{ e.description }}</td>
+                <td class="px-4 py-2 text-right font-medium text-gray-800">{{ formatVnd(e.amount) }}</td>
+                <td class="px-4 py-2 text-xs text-gray-500 font-mono">{{ e.journal_code ?? '—' }}</td>
+              </tr>
+              <tr v-if="!wipEntries.length">
+                <td colspan="5" class="px-4 py-10 text-center text-gray-400">
+                  Chưa có phiếu xuất kho nào cho dự án này.
+                  <br>
+                  <span class="text-xs">Tạo phiếu xuất kho với mục đích "Xuất cho dự án" để tích lũy TK 154.</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Tab: Đơn mua hàng -->
+        <div v-if="activeTab === 'purchase-orders'">
+          <table v-if="purchaseOrders.length" class="w-full text-sm">
+            <thead class="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã đơn</th>
+                <th class="text-left px-5 py-3 font-semibold text-gray-600">Nhà cung cấp</th>
+                <th class="text-left px-5 py-3 font-semibold text-gray-600">Ngày đặt</th>
+                <th class="text-left px-5 py-3 font-semibold text-gray-600">Trạng thái</th>
+                <th class="text-right px-5 py-3 font-semibold text-gray-600">Tổng tiền</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="po in purchaseOrders" :key="po.id" class="hover:bg-gray-50">
+                <td class="px-5 py-3">
+                  <Link :href="route('purchasing.purchase-orders.show', po.id)"
+                    class="font-mono text-sm text-primary-600 hover:underline">
+                    {{ po.code }}
+                  </Link>
+                </td>
+                <td class="px-5 py-3 text-gray-700">{{ po.supplier }}</td>
+                <td class="px-5 py-3 text-gray-600">{{ po.order_date }}</td>
+                <td class="px-5 py-3">
+                  <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                    :class="{
+                      'bg-gray-100 text-gray-600':   po.status === 'draft',
+                      'bg-blue-100 text-blue-700':   po.status === 'sent',
+                      'bg-yellow-100 text-yellow-700': po.status === 'partial_received',
+                      'bg-green-100 text-green-700': po.status === 'received',
+                      'bg-red-100 text-red-600':     po.status === 'cancelled',
+                    }">
+                    {{ po.status_label }}
+                  </span>
+                </td>
+                <td class="px-5 py-3 text-right font-medium text-gray-900">{{ formatVnd(po.total) }}</td>
+              </tr>
+            </tbody>
+            <tfoot class="bg-gray-50 border-t border-gray-200">
+              <tr>
+                <td colspan="4" class="px-5 py-3 text-right font-semibold text-gray-700">Tổng cộng:</td>
+                <td class="px-5 py-3 text-right font-bold text-gray-900">{{ formatVnd(purchaseOrderTotal) }}</td>
+              </tr>
+            </tfoot>
+          </table>
+          <div v-else class="p-10 text-center text-gray-400">
+            <p class="text-sm">Chưa có đơn mua hàng liên kết với dự án này.</p>
+            <Link :href="route('purchasing.purchase-orders.create')"
+              class="mt-3 inline-block text-sm text-primary-600 hover:underline">
+              Tạo đơn mua hàng mới →
+            </Link>
+          </div>
+        </div>
+
         <!-- Info tab -->
         <div v-if="activeTab === 'info'" class="p-5">
           <dl class="grid grid-cols-2 gap-x-8 gap-y-4 text-sm">
@@ -333,6 +453,11 @@ const props = defineProps({
   allUsers: Array,
   allProducts: Array,
   expenseCategories: Array,
+  wipSummary: { type: Array, default: () => [] },
+  wipEntries: { type: Array, default: () => [] },
+  wipTotal: { type: Number, default: 0 },
+  purchaseOrders: { type: Array, default: () => [] },
+  allEmployees: { type: Array, default: () => [] },
 });
 
 const { hasPermission } = usePermission();
@@ -341,15 +466,18 @@ const { formatVnd } = useCurrency();
 
 const activeTab = ref('tasks');
 const tabs = computed(() => [
-  { id: 'tasks',    label: 'Công việc',    count: props.project.tasks.length },
-  { id: 'members',  label: 'Nhân sự',      count: props.project.members.length },
-  { id: 'materials',label: 'Vật tư',       count: props.project.materials.length },
-  { id: 'expenses', label: 'Chi phí PS',   count: props.project.expenses.length },
-  { id: 'info',     label: 'Thông tin' },
+  { id: 'tasks',           label: 'Công việc',         count: props.project.tasks.length },
+  { id: 'members',         label: 'Nhân sự',            count: props.project.members.length },
+  { id: 'materials',       label: 'Vật tư',             count: props.project.materials.length },
+  { id: 'expenses',        label: 'Chi phí PS',         count: props.project.expenses.length },
+  { id: 'purchase-orders', label: 'Đơn mua hàng',      count: props.purchaseOrders.length },
+  { id: 'wip',             label: 'Chi phí dở dang (TK 154)' },
+  { id: 'info',            label: 'Thông tin' },
 ]);
 
 const doneTasks = computed(() => props.project.tasks.filter(t => t.status === 'done').length);
 const totalCost = computed(() => (props.project.total_expenses ?? 0) + (props.project.total_material_cost ?? 0));
+const purchaseOrderTotal = computed(() => props.purchaseOrders.reduce((s, po) => s + (po.total ?? 0), 0));
 
 
 // Task form
@@ -371,11 +499,11 @@ const cycleStatus = (task) => {
 };
 
 // Member form
-const memberForm = reactive({ user_id: '', role: '' });
+const memberForm = reactive({ employee_id: '', role: '' });
 const addMember = () => {
   router.post(route('projects.projects.members.store', props.project.id), memberForm, {
     preserveScroll: true,
-    onSuccess: () => { memberForm.user_id = ''; memberForm.role = ''; },
+    onSuccess: () => { memberForm.employee_id = ''; memberForm.role = ''; },
   });
 };
 const removeMember = (memberId) => {
@@ -412,6 +540,12 @@ const removeExpense = (expenseId) => {
 // Project transition
 const doTransition = (status) => {
   router.post(route('projects.projects.transition', props.project.id), { status }, { preserveScroll: true });
+};
+
+// WIP — kết chuyển giá thành
+const recognizeCost = () => {
+  if (!confirm(`Kết chuyển toàn bộ chi phí dở dang TK 154 của dự án ${props.project.code} vào giá vốn TK 632?\n\nHành động này tạo bút toán: Nợ 632 / Có 154.`)) return;
+  router.post(route('projects.projects.recognize-cost', props.project.id), {}, { preserveScroll: true });
 };
 
 // Style helpers

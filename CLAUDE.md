@@ -84,6 +84,23 @@ Tài liệu: `C:\Mini_erp\Plan.docx` | `C:\Mini_erp\P2.docx`
   - Credit limit: InvoiceController.store() kiểm tra hạn mức công nợ KH, trả warning nếu vượt ✅
   - Dashboard: accountingAlerts widget (overdue count+amount, pending overdue, unreconciled bank, pending payroll) ✅
   - Guidance banners trên báo cáo: TrialBalance (alert Nợ≠Có), BalanceSheet (green/red balance status), IncomeStatement (alert lỗ), VAT (hướng dẫn 01/GTGT), CashFlow (hướng dẫn) ✅
+- **Bảng chấm công (Attendance):** AttendanceSheet (CC-YYYYMM, 900032-33), AttendanceRecord (days jsonb), khóa tháng, nhập thủ công, chi tiết per NV ✅ (2026-06-03)
+- **Khóa bảng lương:** payrolls.is_locked + locked_by + locked_at (900034), chỉ Admin mở khóa, guard trong updateItem/confirm/destroy ✅ (2026-06-03)
+- **Phase PX — Tách luồng Dự án / Thương mại (2026-06-03):**
+  - Enum ItemUsageType (commercial|project); stock_exits.item_usage_type + project_id (900035) ✅
+  - JournalEntryLine.project_id — theo dõi chiều dự án trên sổ kế toán (900036) ✅
+  - project_wip_entries — chi phí dở dang TK 154 per dự án (900037) ✅
+  - ProjectWipService: createFromStockExit() / getWipSummary() / getWipEntries() / recognizeCost() ✅
+  - StockService::postExitJournal(): khi item_usage_type=project → Nợ 154 / Có 156 (thay vì 632) ✅
+  - AccountingService: project_id per line (truyền qua $line['project_id']) ✅
+  - StockExit Form: dropdown "Mục đích xuất kho" + project selector khi chọn project ✅
+  - Project Show: tab "Chi phí dở dang (TK 154)" với WIP summary, bảng entries, nút kết chuyển 632 ✅
+  - Route: POST projects/{project}/recognize-cost (can:accounting.manage) ✅
+- **Liên kết PO → Dự án (2026-06-03):**
+  - Migration 900038: purchase_orders.project_id nullable FK → projects ✅
+  - PO Form: dropdown chọn dự án (lọc planning/in_progress) ✅
+  - PO Show: hiển thị dự án liên kết kèm link click-through ✅
+  - Project Show: tab "Đơn mua hàng" — danh sách PO của dự án + tổng tiền ✅
 
 ## Quy tắc quan trọng
 - `cost_price` trên sản phẩm = giá **đã gồm VAT** (tổng trả NCC)

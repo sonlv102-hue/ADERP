@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Warehouse;
 
 use App\Enums\ContractStatus;
+use App\Enums\ItemUsageType;
 use App\Enums\OrderStatus;
 use App\Enums\SerialStatus;
 use App\Enums\StockExitStatus;
@@ -12,6 +13,7 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductSerial;
+use App\Models\Project;
 use App\Models\StockExit;
 use App\Models\Warehouse;
 use App\Services\OrderService;
@@ -57,15 +59,34 @@ class StockExitController extends Controller
     public function create(): Response
     {
         return Inertia::render('Warehouse/StockExits/Form', [
-            'nextCode'   => StockExit::generateCode(),
-            'warehouses' => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'customers'  => Customer::orderBy('name')->get(['id', 'code', 'name']),
-            'products'   => Product::where('is_active', true)->orderBy('name')
+            'nextCode'      => StockExit::generateCode(),
+            'warehouses'    => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'customers'     => Customer::orderBy('name')->get(['id', 'code', 'name']),
+            'products'      => Product::where('is_active', true)->orderBy('name')
                 ->get(['id', 'code', 'name', 'unit', 'sell_price', 'has_serial']),
-            'serials'    => ProductSerial::where('status', SerialStatus::InStock)
+            'serials'       => ProductSerial::where('status', SerialStatus::InStock)
                 ->get(['id', 'product_id', 'warehouse_id', 'serial_number']),
-            'orders'     => $this->pendingOrdersForDropdown(),
+            'orders'        => $this->pendingOrdersForDropdown(),
+            'projects'      => $this->activeProjectsForDropdown(),
+            'usageTypes'    => collect(ItemUsageType::cases())->map(fn ($t) => [
+                'value' => $t->value,
+                'label' => $t->label(),
+            ])->all(),
         ]);
+    }
+
+    private function activeProjectsForDropdown(): array
+    {
+        return Project::whereNotIn('status', ['completed', 'cancelled'])
+            ->orderByDesc('id')
+            ->get(['id', 'code', 'name', 'customer_id'])
+            ->map(fn ($p) => [
+                'id'          => $p->id,
+                'code'        => $p->code,
+                'name'        => $p->name,
+                'customer_id' => $p->customer_id,
+            ])
+            ->all();
     }
 
     private function pendingOrdersForDropdown(): array
@@ -119,6 +140,8 @@ class StockExitController extends Controller
             'warehouse_id'            => ['required', 'exists:warehouses,id'],
             'customer_id'             => ['nullable', 'exists:customers,id'],
             'order_id'                => ['nullable', 'exists:orders,id'],
+            'item_usage_type'         => ['required', 'string', 'in:commercial,project'],
+            'project_id'              => ['nullable', 'exists:projects,id'],
             'exit_date'               => ['required', 'date'],
             'reason'                  => ['nullable', 'string', 'max:255'],
             'notes'                   => ['nullable', 'string'],
@@ -129,6 +152,10 @@ class StockExitController extends Controller
             'items.*.serial_ids'      => ['sometimes', 'nullable', 'array'],
             'items.*.serial_ids.*'    => ['integer', 'exists:product_serials,id'],
         ]);
+
+        if ($data['item_usage_type'] === 'project' && empty($data['project_id'])) {
+            return back()->withErrors(['project_id' => 'Vui lòng chọn dự án khi xuất hàng cho dự án.'])->withInput();
+        }
 
         // Validate serial (tùy chọn — không bắt buộc phải chọn đủ số lượng)
         $allSerialIds = [];
@@ -158,14 +185,16 @@ class StockExitController extends Controller
         }
 
         $exit = StockExit::create([
-            'code'         => $data['code'],
-            'warehouse_id' => $data['warehouse_id'],
-            'customer_id'  => $data['customer_id'] ?? null,
-            'order_id'     => $data['order_id'] ?? null,
-            'created_by'   => auth()->id(),
-            'exit_date'    => $data['exit_date'],
-            'reason'       => $data['reason'] ?? null,
-            'notes'        => $data['notes'] ?? null,
+            'code'            => $data['code'],
+            'warehouse_id'    => $data['warehouse_id'],
+            'customer_id'     => $data['customer_id'] ?? null,
+            'order_id'        => $data['order_id'] ?? null,
+            'item_usage_type' => $data['item_usage_type'],
+            'project_id'      => $data['item_usage_type'] === 'project' ? ($data['project_id'] ?? null) : null,
+            'created_by'      => auth()->id(),
+            'exit_date'       => $data['exit_date'],
+            'reason'          => $data['reason'] ?? null,
+            'notes'           => $data['notes'] ?? null,
         ]);
 
         foreach ($data['items'] as $itemData) {
@@ -187,7 +216,7 @@ class StockExitController extends Controller
 
     public function show(StockExit $stockExit): Response
     {
-        $stockExit->load(['warehouse', 'customer', 'order', 'creator', 'items.product', 'items.serials']);
+        $stockExit->load(['warehouse', 'customer', 'order', 'creator', 'project', 'items.product', 'items.serials']);
 
         return Inertia::render('Warehouse/StockExits/Show', [
             'hasOrderContract' => $this->orderHasContract($stockExit->order_id),
@@ -205,6 +234,13 @@ class StockExitController extends Controller
                     'code'         => $stockExit->order->code,
                     'status_label' => $stockExit->order->status->label(),
                     'status_color' => $stockExit->order->status->color(),
+                ] : null,
+                'item_usage_type'       => $stockExit->item_usage_type?->value ?? 'commercial',
+                'item_usage_type_label' => $stockExit->item_usage_type?->label() ?? 'Bán thương mại',
+                'project'      => $stockExit->project ? [
+                    'id'   => $stockExit->project->id,
+                    'code' => $stockExit->project->code,
+                    'name' => $stockExit->project->name,
                 ] : null,
                 'reason'       => $stockExit->reason,
                 'creator'      => ['name' => $stockExit->creator->name],
@@ -240,28 +276,35 @@ class StockExitController extends Controller
 
         return Inertia::render('Warehouse/StockExits/Form', [
             'exit'       => [
-                'id'           => $stockExit->id,
-                'code'         => $stockExit->code,
-                'exit_date'    => $stockExit->exit_date->format('Y-m-d'),
-                'warehouse_id' => $stockExit->warehouse_id,
-                'customer_id'  => $stockExit->customer_id,
-                'order_id'     => $stockExit->order_id,
-                'reason'       => $stockExit->reason,
-                'notes'        => $stockExit->notes,
-                'items'        => $stockExit->items->map(fn ($item) => [
+                'id'              => $stockExit->id,
+                'code'            => $stockExit->code,
+                'exit_date'       => $stockExit->exit_date->format('Y-m-d'),
+                'warehouse_id'    => $stockExit->warehouse_id,
+                'customer_id'     => $stockExit->customer_id,
+                'order_id'        => $stockExit->order_id,
+                'item_usage_type' => $stockExit->item_usage_type?->value ?? 'commercial',
+                'project_id'      => $stockExit->project_id,
+                'reason'          => $stockExit->reason,
+                'notes'           => $stockExit->notes,
+                'items'           => $stockExit->items->map(fn ($item) => [
                     'product_id' => $item->product_id,
                     'quantity'   => $item->quantity,
                     'unit_price' => (float) $item->unit_price,
                     'serial_ids' => $item->serials->pluck('id')->toArray(),
                 ])->values(),
             ],
-            'warehouses' => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'customers'  => Customer::orderBy('name')->get(['id', 'code', 'name']),
-            'products'   => Product::where('is_active', true)->orderBy('name')
+            'warehouses'  => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'customers'   => Customer::orderBy('name')->get(['id', 'code', 'name']),
+            'products'    => Product::where('is_active', true)->orderBy('name')
                 ->get(['id', 'code', 'name', 'unit', 'sell_price', 'has_serial']),
-            'serials'    => ProductSerial::where('status', SerialStatus::InStock)
+            'serials'     => ProductSerial::where('status', SerialStatus::InStock)
                 ->get(['id', 'product_id', 'warehouse_id', 'serial_number']),
-            'orders'     => $this->pendingOrdersForDropdown(),
+            'orders'      => $this->pendingOrdersForDropdown(),
+            'projects'    => $this->activeProjectsForDropdown(),
+            'usageTypes'  => collect(ItemUsageType::cases())->map(fn ($t) => [
+                'value' => $t->value,
+                'label' => $t->label(),
+            ])->all(),
         ]);
     }
 
@@ -276,6 +319,8 @@ class StockExitController extends Controller
             'warehouse_id'         => ['required', 'exists:warehouses,id'],
             'customer_id'          => ['nullable', 'exists:customers,id'],
             'order_id'             => ['nullable', 'exists:orders,id'],
+            'item_usage_type'      => ['required', 'string', 'in:commercial,project'],
+            'project_id'           => ['nullable', 'exists:projects,id'],
             'exit_date'            => ['required', 'date'],
             'reason'               => ['nullable', 'string', 'max:255'],
             'notes'                => ['nullable', 'string'],
@@ -286,6 +331,10 @@ class StockExitController extends Controller
             'items.*.serial_ids'   => ['sometimes', 'nullable', 'array'],
             'items.*.serial_ids.*' => ['integer', 'exists:product_serials,id'],
         ]);
+
+        if ($data['item_usage_type'] === 'project' && empty($data['project_id'])) {
+            return back()->withErrors(['project_id' => 'Vui lòng chọn dự án khi xuất hàng cho dự án.'])->withInput();
+        }
 
         $allSerialIds = [];
         foreach ($data['items'] as $index => $itemData) {
@@ -321,13 +370,15 @@ class StockExitController extends Controller
             $stockExit->items()->delete();
 
             $stockExit->update([
-                'code'         => $data['code'],
-                'warehouse_id' => $data['warehouse_id'],
-                'customer_id'  => $data['customer_id'] ?? null,
-                'order_id'     => $data['order_id'] ?? null,
-                'exit_date'    => $data['exit_date'],
-                'reason'       => $data['reason'] ?? null,
-                'notes'        => $data['notes'] ?? null,
+                'code'            => $data['code'],
+                'warehouse_id'    => $data['warehouse_id'],
+                'customer_id'     => $data['customer_id'] ?? null,
+                'order_id'        => $data['order_id'] ?? null,
+                'item_usage_type' => $data['item_usage_type'],
+                'project_id'      => $data['item_usage_type'] === 'project' ? ($data['project_id'] ?? null) : null,
+                'exit_date'       => $data['exit_date'],
+                'reason'          => $data['reason'] ?? null,
+                'notes'           => $data['notes'] ?? null,
             ]);
 
             foreach ($data['items'] as $itemData) {

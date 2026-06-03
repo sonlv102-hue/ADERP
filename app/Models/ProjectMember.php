@@ -7,15 +7,15 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProjectMember extends Model
 {
-    protected $fillable = ['project_id', 'user_id', 'role'];
+    protected $fillable = ['project_id', 'employee_id', 'role'];
 
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
     }
 
-    public function user(): BelongsTo
+    public function employee(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(Employee::class);
     }
 }

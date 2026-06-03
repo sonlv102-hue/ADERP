@@ -54,6 +54,7 @@ class AccountingService
                     'debit'            => (int) ($line['debit'] ?? 0),
                     'credit'           => (int) ($line['credit'] ?? 0),
                     'sort_order'       => $i,
+                    'project_id'       => $line['project_id'] ?? null,
                 ]);
             }
 
@@ -77,6 +78,7 @@ class AccountingService
             'debit'       => (int) $l->credit,
             'credit'      => (int) $l->debit,
             'description' => $l->description,
+            'project_id'  => $l->project_id,
         ])->all();
 
         $reversal = $this->post(

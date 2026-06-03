@@ -72,6 +72,7 @@ use App\Http\Controllers\Reports\DocumentChecklistController;
 use App\Http\Controllers\Admin\FixedAssetController;
 use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\BackupController;
+use App\Http\Controllers\Admin\AttendanceController;
 use App\Http\Controllers\AttachmentController;
 use Illuminate\Support\Facades\Route;
 
@@ -102,6 +103,16 @@ Route::middleware('auth')->group(function () {
         Route::post('fixed-assets/depreciate', [FixedAssetController::class, 'depreciate'])->name('fixed-assets.depreciate');
         Route::get('activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
         Route::resource('employees', EmployeeController::class);
+
+        // Chấm công
+        Route::get('attendance', [AttendanceController::class, 'index'])->name('attendance.index');
+        Route::post('attendance', [AttendanceController::class, 'store'])->name('attendance.store');
+        Route::get('attendance/{attendance}', [AttendanceController::class, 'show'])->name('attendance.show');
+        Route::post('attendance/{attendance}/lock', [AttendanceController::class, 'lock'])->name('attendance.lock');
+        Route::post('attendance/{attendance}/unlock', [AttendanceController::class, 'unlock'])->name('attendance.unlock');
+        Route::delete('attendance/{attendance}', [AttendanceController::class, 'destroy'])->name('attendance.destroy');
+        Route::put('attendance/{attendance}/records/{record}', [AttendanceController::class, 'updateRecord'])->name('attendance.records.update');
+
         Route::get('backups', [BackupController::class, 'index'])->name('backups.index');
         Route::post('backups', [BackupController::class, 'store'])->name('backups.store');
         Route::get('backups/{name}/download', [BackupController::class, 'download'])->name('backups.download');
@@ -241,6 +252,10 @@ Route::middleware('auth')->group(function () {
         Route::put('projects/{project}/tasks/{task}', [TaskController::class, 'update'])->name('projects.tasks.update');
         Route::patch('projects/{project}/tasks/{task}/status', [TaskController::class, 'updateStatus'])->name('projects.tasks.status');
         Route::delete('projects/{project}/tasks/{task}', [TaskController::class, 'destroy'])->name('projects.tasks.destroy');
+
+        Route::post('projects/{project}/recognize-cost', [ProjectController::class, 'recognizeCost'])
+            ->middleware('can:accounting.manage')
+            ->name('projects.recognize-cost');
     });
 
     // Accounting - kế toán
@@ -273,6 +288,8 @@ Route::middleware('auth')->group(function () {
         Route::put('payrolls/{payroll}/items/{item}', [PayrollController::class, 'updateItem'])->name('payrolls.items.update');
         Route::post('payrolls/{payroll}/confirm', [PayrollController::class, 'confirm'])->name('payrolls.confirm');
         Route::post('payrolls/{payroll}/items/{item}/pay', [PayrollController::class, 'payEmployee'])->name('payrolls.items.pay');
+        Route::post('payrolls/{payroll}/lock', [PayrollController::class, 'lock'])->name('payrolls.lock')->middleware('can:accounting.manage');
+        Route::post('payrolls/{payroll}/unlock', [PayrollController::class, 'unlock'])->name('payrolls.unlock')->middleware('can:accounting.manage');
 
         // Kê khai thuế (Taxes)
         Route::get('taxes', [TaxController::class, 'index'])->name('taxes.index');

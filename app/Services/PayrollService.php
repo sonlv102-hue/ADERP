@@ -137,33 +137,62 @@ class PayrollService
     /** Rebuild a single PayrollItem from Employee */
     public function buildItem(Payroll $payroll, Employee $employee, float $bonus = 0): PayrollItem
     {
-        $base       = (float)($employee->base_salary ?? 0);
-        $allowance  = (float)($employee->allowance   ?? 0);
-        $gross      = $base + $allowance + $bonus;
-        $dependents = (int)($employee->dependents_count ?? 0);
+        $base                = (float)($employee->base_salary              ?? 0);
+        $allocResp           = (float)($employee->allowance_responsibility ?? 0);
+        $allocLunch          = (float)($employee->allowance_lunch          ?? 0);
+        $allocPhone          = (float)($employee->allowance_phone          ?? 0);
+        $allocTransport      = (float)($employee->allowance_transport      ?? 0);
+        $allocOther          = (float)($employee->allowance                ?? 0);
+        $totalAllowances     = $allocResp + $allocLunch + $allocPhone + $allocTransport + $allocOther;
+        $dependents          = (int)($employee->dependents_count  ?? 0);
+        $insuranceSubject    = (bool)($employee->insurance_subject ?? true);
+        $standardDays        = (int)($employee->standard_days    ?? 26);
 
-        $bd = $this->pit->breakdown($gross, $dependents);
+        // Phân loại theo Nghị định 158/2025:
+        //   BHXH-subject  : PC trách nhiệm/chức vụ (ổn định HĐLĐ) + phụ cấp cố định khác
+        //   Non-BHXH      : hỗ trợ ăn trưa, xăng xe, điện thoại (phúc lợi)
+        $bhxhAllowances    = $allocResp + $allocOther;                            // tính BHXH
+        $nonBhxhAllowances = $allocLunch + $allocPhone + $allocTransport + $bonus; // không BHXH
+
+        $bd = $this->pit->breakdown(
+            $base,
+            $bhxhAllowances,
+            $nonBhxhAllowances,
+            $dependents,
+            $insuranceSubject,
+            $standardDays,
+            $standardDays,
+        );
 
         $deductions = $bd['ins_employee'] + $bd['pit'];
 
         return $payroll->items()->create([
-            'employee_id'      => $employee->id,
-            'base_salary'      => $base,
-            'allowance'        => $allowance,
-            'bonus'            => $bonus,
-            'gross_salary'     => $bd['gross_salary'],
-            'insurance_base'   => $bd['insurance_base'],
-            'bhxh_employee'    => $bd['bhxh_employee'],
-            'bhyt_employee'    => $bd['bhyt_employee'],
-            'bhtn_employee'    => $bd['bhtn_employee'],
-            'bhxh_employer'    => $bd['bhxh_employer'],
-            'bhyt_employer'    => $bd['bhyt_employer'],
-            'bhtn_employer'    => $bd['bhtn_employer'],
-            'pit'              => $bd['pit'],
-            'dependents_count' => $dependents,
-            'deductions'       => $deductions,
-            'net_salary'       => $bd['net_salary'],
-            'status'           => PayrollItemStatus::Pending,
+            'employee_id'              => $employee->id,
+            'base_salary'              => $base,
+            'allowance'                => $allocOther,
+            'allowance_responsibility' => $allocResp,
+            'allowance_lunch'          => $allocLunch,
+            'allowance_phone'          => $allocPhone,
+            'allowance_transport'      => $allocTransport,
+            'allowance_performance'    => 0,
+            'bonus'                    => $bonus,
+            'gross_salary'             => $bd['gross_salary'],
+            'insurance_base'           => $bd['insurance_base'],
+            'bhxh_employee'            => $bd['bhxh_employee'],
+            'bhyt_employee'            => $bd['bhyt_employee'],
+            'bhtn_employee'            => $bd['bhtn_employee'],
+            'bhxh_employer'            => $bd['bhxh_employer'],
+            'bhyt_employer'            => $bd['bhyt_employer'],
+            'bhtn_employer'            => $bd['bhtn_employer'],
+            'pit'                      => $bd['pit'],
+            'dependents_count'         => $dependents,
+            'deductions'               => $deductions,
+            'net_salary'               => $bd['net_salary'],
+            'working_days'             => $standardDays,
+            'standard_days'            => $standardDays,
+            'advance'                  => 0,
+            'insurance_subject'        => $insuranceSubject,
+            'status'                   => PayrollItemStatus::Pending,
         ]);
     }
 

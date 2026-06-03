@@ -3,20 +3,45 @@
 namespace App\Services;
 
 /**
- * Vietnam Personal Income Tax (PIT) calculation per Luật số 04/2007/QH12 (sửa đổi 2012, 2014).
+ * Vietnam Personal Income Tax (PIT) + BHXH/BHYT/BHTN calculation.
  *
- * Rates (monthly taxable income — Biểu thuế lũy tiến từng phần):
- *   ≤  5,000,000           → 5%
- *   5M  – 10,000,000       → 10%
- *   10M – 18,000,000       → 15%
- *   18M – 32,000,000       → 20%
- *   32M – 52,000,000       → 25%
- *   52M – 80,000,000       → 30%
- *   > 80,000,000           → 35%
+ * Căn cứ pháp lý:
+ *   - Luật BHXH 2024 + Nghị định 158/2025/NĐ-CP (hiệu lực 01/07/2025)
+ *   - PIT: Luật số 04/2007/QH12 sửa đổi 2012, 2014 (biểu thuế lũy tiến 7 bậc)
  *
- * Personal deduction  : 11,000,000 VND / month
- * Dependent deduction : 4,400,000 VND / dependent / month
- * Insurance cap       : 20 × base salary (2,340,000) = 46,800,000 VND
+ * ==========================================================================
+ * PHÂN LOẠI KHOẢN THU NHẬP (Nghị định 158/2025/NĐ-CP)
+ * ==========================================================================
+ *
+ * TÍNH vào căn cứ đóng BHXH ($bhxhAllowances):
+ *   - Lương cơ bản theo công việc/chức danh          → $baseSalary
+ *   - Phụ cấp chức vụ/trách nhiệm (ổn định, HĐLĐ)   ┐
+ *   - Phụ cấp thâm niên, tay nghề, chuyên môn        ├ → $bhxhAllowances
+ *   - Khoản bổ sung cố định, xác định được số tiền   ┘
+ *
+ * KHÔNG tính vào căn cứ đóng BHXH ($nonBhxhAllowances):
+ *   - Hỗ trợ ăn trưa / ăn giữa ca
+ *   - Hỗ trợ xăng xe / đi lại
+ *   - Hỗ trợ điện thoại / liên lạc
+ *   - Hỗ trợ nhà ở, giữ trẻ, hiếu hỉ, sinh nhật…
+ *   - PC hiệu quả/KPI (biến động theo kết quả công việc)
+ *   - Thưởng các loại
+ *
+ * Căn cứ BHXH = min($baseSalary + $bhxhAllowances, INSURANCE_CAP) × rate
+ *
+ * ==========================================================================
+ * RATES (2025)
+ * ==========================================================================
+ *   Người lao động: BHXH 8%, BHYT 1.5%, BHTN 1%  → tổng 10.5%
+ *   Người sử dụng LĐ: BHXH 17.5%, BHYT 3%, BHTN 1% → tổng 21.5%
+ *     (BHXH 17.5% = 14% hưu trí/tử tuất + 3% ốm đau/thai sản + 0.5% TNLĐ-BNN)
+ *   Trần đóng BHXH: 20 × lương tối thiểu vùng I (≈ 46,800,000 VND/tháng 2025)
+ *
+ * ==========================================================================
+ * PIT DEDUCTIONS
+ * ==========================================================================
+ *   Bản thân: 11,000,000 VND/tháng
+ *   Người phụ thuộc: 4,400,000 VND/người/tháng
  */
 class PitCalculatorService
 {
@@ -24,7 +49,6 @@ class PitCalculatorService
     public const DEPENDENT_DEDUCTION = 4_400_000;
     public const INSURANCE_CAP       = 46_800_000;
 
-    // Rates: [upper_limit_inclusive, rate_percent]  (upper=null means no cap)
     private const BRACKETS = [
         [5_000_000,  5],
         [10_000_000, 10],
@@ -35,73 +59,81 @@ class PitCalculatorService
         [null,        35],
     ];
 
-    public function insuranceBase(float $grossSalary): float
-    {
-        return min($grossSalary, self::INSURANCE_CAP);
+    /**
+     * Full payroll breakdown theo Nghị định 158/2025/NĐ-CP.
+     *
+     * @param float $baseSalary       Lương cơ bản (luôn tính BHXH)
+     * @param float $bhxhAllowances   Phụ cấp lương ổn định (PC trách nhiệm, chức vụ, thâm niên…)
+     *                                → TÍNH vào căn cứ đóng BHXH
+     * @param float $nonBhxhAllowances Hỗ trợ & phúc lợi (ăn trưa, xăng xe, ĐT, hiệu quả KPI…)
+     *                                → KHÔNG tính vào căn cứ đóng BHXH
+     * @param int   $dependents       Số người phụ thuộc (tính giảm trừ thuế TNCN)
+     * @param bool  $insuranceSubject Có đóng BHXH không (false: thời vụ, HĐ < 3 tháng)
+     * @param int   $workingDays      Ngày công thực tế trong tháng
+     * @param int   $standardDays     Ngày công chuẩn theo hợp đồng (thường 26)
+     */
+    public function breakdown(
+        float $baseSalary,
+        float $bhxhAllowances    = 0,
+        float $nonBhxhAllowances = 0,
+        int   $dependents        = 0,
+        bool  $insuranceSubject  = true,
+        int   $workingDays       = 26,
+        int   $standardDays      = 26,
+    ): array {
+        $rate               = ($standardDays > 0) ? min($workingDays / $standardDays, 1.0) : 1.0;
+        $effectiveBase      = round($baseSalary       * $rate);
+        $effectiveBhxhAllw  = round($bhxhAllowances   * $rate);
+        $effectiveNonBhxh   = round($nonBhxhAllowances * $rate);
+        $gross              = $effectiveBase + $effectiveBhxhAllw + $effectiveNonBhxh;
+
+        // Căn cứ BHXH = lương cơ bản + phụ cấp lương ổn định (tính BHXH), capped
+        $insBase   = $insuranceSubject
+            ? min($effectiveBase + $effectiveBhxhAllw, self::INSURANCE_CAP)
+            : 0;
+
+        $bhxhEmp   = round($insBase * 0.08);
+        $bhytEmp   = round($insBase * 0.015);
+        $bhtnEmp   = round($insBase * 0.01);
+        $bhxhEmpl  = round($insBase * 0.175);
+        $bhytEmpl  = round($insBase * 0.03);
+        $bhtnEmpl  = round($insBase * 0.01);
+        $insEmp    = $bhxhEmp + $bhytEmp + $bhtnEmp;
+        $insEmpl   = $bhxhEmpl + $bhytEmpl + $bhtnEmpl;
+
+        // Thu nhập tính thuế TNCN = Gross - BHXH/BHYT/BHTN NV - Giảm trừ gia cảnh
+        $personalDed   = self::PERSONAL_DEDUCTION + ($dependents * self::DEPENDENT_DEDUCTION);
+        $taxableForPit = max(0, $gross - $insEmp - $personalDed);
+        $pit           = round($this->progressiveTax($taxableForPit));
+        $net           = round($gross - $insEmp - $pit);
+
+        return [
+            'gross_salary'        => round($gross),
+            'effective_base'      => round($effectiveBase),
+            'effective_bhxh_allw' => round($effectiveBhxhAllw),
+            'effective_non_bhxh'  => round($effectiveNonBhxh),
+            'insurance_base'      => round($insBase),          // "Lương đóng BH" trên bảng lương
+            'bhxh_employee'       => $bhxhEmp,
+            'bhyt_employee'       => $bhytEmp,
+            'bhtn_employee'       => $bhtnEmp,
+            'bhxh_employer'       => $bhxhEmpl,
+            'bhyt_employer'       => $bhytEmpl,
+            'bhtn_employer'       => $bhtnEmpl,
+            'ins_employee'        => $insEmp,
+            'ins_employer'        => $insEmpl,
+            'personal_deduction'  => round($personalDed),
+            'taxable_for_pit'     => round($taxableForPit),
+            'pit'                 => $pit,
+            'net_salary'          => $net,
+            'dependents_count'    => $dependents,
+        ];
     }
 
-    public function bhxhEmployee(float $grossSalary): float
-    {
-        return round($this->insuranceBase($grossSalary) * 0.08);
-    }
+    // ── Legacy helpers ────────────────────────────────────────────────────────
 
-    public function bhytEmployee(float $grossSalary): float
+    public function insuranceBase(float $baseSalary): float
     {
-        return round($this->insuranceBase($grossSalary) * 0.015);
-    }
-
-    public function bhtnEmployee(float $grossSalary): float
-    {
-        return round($this->insuranceBase($grossSalary) * 0.01);
-    }
-
-    public function bhxhEmployer(float $grossSalary): float
-    {
-        return round($this->insuranceBase($grossSalary) * 0.175);
-    }
-
-    public function bhytEmployer(float $grossSalary): float
-    {
-        return round($this->insuranceBase($grossSalary) * 0.03);
-    }
-
-    public function bhtnEmployer(float $grossSalary): float
-    {
-        return round($this->insuranceBase($grossSalary) * 0.01);
-    }
-
-    public function totalInsuranceEmployee(float $grossSalary): float
-    {
-        return $this->bhxhEmployee($grossSalary)
-            + $this->bhytEmployee($grossSalary)
-            + $this->bhtnEmployee($grossSalary);
-    }
-
-    public function totalInsuranceEmployer(float $grossSalary): float
-    {
-        return $this->bhxhEmployer($grossSalary)
-            + $this->bhytEmployer($grossSalary)
-            + $this->bhtnEmployer($grossSalary);
-    }
-
-    public function taxableIncome(float $grossSalary, int $dependents = 0): float
-    {
-        $insuranceEmp = $this->totalInsuranceEmployee($grossSalary);
-        $deductions   = self::PERSONAL_DEDUCTION + ($dependents * self::DEPENDENT_DEDUCTION);
-        return max(0, $grossSalary - $insuranceEmp - $deductions);
-    }
-
-    public function pit(float $grossSalary, int $dependents = 0): float
-    {
-        $taxable = $this->taxableIncome($grossSalary, $dependents);
-        return round($this->progressiveTax($taxable));
-    }
-
-    public function netSalary(float $grossSalary, int $dependents = 0): float
-    {
-        return $grossSalary
-            - $this->totalInsuranceEmployee($grossSalary)
-            - $this->pit($grossSalary, $dependents);
+        return min($baseSalary, self::INSURANCE_CAP);
     }
 
     private function progressiveTax(float $taxable): float
@@ -111,47 +143,13 @@ class PitCalculatorService
 
         foreach (self::BRACKETS as [$cap, $rate]) {
             if ($taxable <= $prev) break;
-
             $upper = $cap ?? PHP_FLOAT_MAX;
             $slice = min($taxable, $upper) - $prev;
             $tax  += $slice * ($rate / 100);
             $prev  = $upper;
-
             if ($cap === null || $taxable <= $cap) break;
         }
 
         return $tax;
-    }
-
-    /** Return full breakdown array for a given gross + dependents */
-    public function breakdown(float $grossSalary, int $dependents = 0): array
-    {
-        $base      = $this->insuranceBase($grossSalary);
-        $bhxhEmp   = $this->bhxhEmployee($grossSalary);
-        $bhytEmp   = $this->bhytEmployee($grossSalary);
-        $bhtnEmp   = $this->bhtnEmployee($grossSalary);
-        $bhxhEmpl  = $this->bhxhEmployer($grossSalary);
-        $bhytEmpl  = $this->bhytEmployer($grossSalary);
-        $bhtnEmpl  = $this->bhtnEmployer($grossSalary);
-        $insEmp    = $bhxhEmp + $bhytEmp + $bhtnEmp;
-        $insEmpl   = $bhxhEmpl + $bhytEmpl + $bhtnEmpl;
-        $pit       = $this->pit($grossSalary, $dependents);
-        $net       = $grossSalary - $insEmp - $pit;
-
-        return [
-            'gross_salary'     => round($grossSalary),
-            'insurance_base'   => round($base),
-            'bhxh_employee'    => $bhxhEmp,
-            'bhyt_employee'    => $bhytEmp,
-            'bhtn_employee'    => $bhtnEmp,
-            'bhxh_employer'    => $bhxhEmpl,
-            'bhyt_employer'    => $bhytEmpl,
-            'bhtn_employer'    => $bhtnEmpl,
-            'ins_employee'     => $insEmp,
-            'ins_employer'     => $insEmpl,
-            'pit'              => $pit,
-            'net_salary'       => round($net),
-            'dependents_count' => $dependents,
-        ];
     }
 }
