@@ -22,7 +22,17 @@
         <div class="bg-white rounded-xl border border-gray-200 p-4">
           <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Ngày đặt / Giao hàng</p>
           <p class="font-semibold text-gray-800">{{ order.order_date }}</p>
-          <p class="text-xs text-gray-500 mt-1">{{ order.expected_delivery ? 'Giao: ' + order.expected_delivery : 'Chưa có ngày giao' }}</p>
+          <div class="mt-1">
+            <template v-if="can('orders.manage') && order.status !== 'cancelled'">
+              <label class="block text-xs text-gray-500 mb-0.5">Ngày giao hàng:</label>
+              <input type="date" :value="order.expected_delivery_raw ?? ''"
+                @change="e => saveDates({ expected_delivery: e.target.value || null })"
+                class="text-sm border border-gray-200 rounded px-2 py-1 w-full focus:outline-none focus:ring-1 focus:ring-primary-400" />
+            </template>
+            <p v-else class="text-xs text-gray-500">
+              {{ order.expected_delivery ? 'Giao: ' + order.expected_delivery : 'Chưa có ngày giao' }}
+            </p>
+          </div>
         </div>
         <div class="bg-white rounded-xl border border-gray-200 p-4">
           <p class="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">Ngày tạo</p>
@@ -73,6 +83,7 @@
               <th v-if="hasDeliveryTracking" class="text-right px-5 py-3 font-semibold text-gray-600">Đã giao</th>
               <th v-if="hasDeliveryTracking" class="text-right px-5 py-3 font-semibold text-orange-600">Còn lại</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">Đơn giá</th>
+              <th class="text-right px-5 py-3 font-semibold text-gray-600">VAT (%)</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">CK (%)</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">Thành tiền</th>
             </tr>
@@ -93,6 +104,10 @@
               </td>
               <td class="px-5 py-3 text-right text-gray-700">{{ formatVnd(item.unit_price) }}</td>
               <td class="px-5 py-3 text-right">
+                <span v-if="item.vat_rate != null" class="text-blue-600 font-medium">{{ item.vat_rate }}%</span>
+                <span v-else class="text-gray-400">—</span>
+              </td>
+              <td class="px-5 py-3 text-right">
                 <template v-if="item.discount_amount > 0">
                   <span class="text-red-600 font-medium">-{{ formatVnd(item.discount_amount) }}</span>
                   <span class="block text-xs text-gray-400">{{ item.discount_percent > 0 ? item.discount_percent + '%' : '' }}</span>
@@ -103,9 +118,23 @@
             </tr>
           </tbody>
           <tfoot class="bg-gray-50 border-t border-gray-200">
-            <tr>
-              <td :colspan="hasDeliveryTracking ? 8 : 6" class="px-5 py-3 text-right font-bold text-gray-800">TỔNG CỘNG:</td>
-              <td class="px-5 py-3 text-right font-bold text-primary-700 text-base">{{ formatVnd(order.total) }}</td>
+            <template v-if="totalVat > 0">
+              <tr>
+                <td :colspan="hasDeliveryTracking ? 9 : 7" class="px-5 py-2 text-right text-sm text-gray-600">Cộng hàng (chưa VAT):</td>
+                <td class="px-5 py-2 text-right text-gray-700">{{ formatVnd(subtotalBeforeVat) }}</td>
+              </tr>
+              <tr>
+                <td :colspan="hasDeliveryTracking ? 9 : 7" class="px-5 py-2 text-right text-sm text-gray-600">Thuế VAT:</td>
+                <td class="px-5 py-2 text-right text-blue-600 font-medium">{{ formatVnd(totalVat) }}</td>
+              </tr>
+              <tr class="border-t border-gray-200">
+                <td :colspan="hasDeliveryTracking ? 9 : 7" class="px-5 py-3 text-right font-bold text-gray-800">TỔNG CỘNG:</td>
+                <td class="px-5 py-3 text-right font-bold text-primary-700 text-base">{{ formatVnd(grandTotal) }}</td>
+              </tr>
+            </template>
+            <tr v-else>
+              <td :colspan="hasDeliveryTracking ? 9 : 7" class="px-5 py-3 text-right font-bold text-gray-800">TỔNG CỘNG:</td>
+              <td class="px-5 py-3 text-right font-bold text-primary-700 text-base">{{ formatVnd(grandTotal) }}</td>
             </tr>
           </tfoot>
         </table>
@@ -254,9 +283,14 @@
 
         <!-- Đã khai báo -->
         <div v-if="order.customs_status === 'declared'" class="space-y-2 text-sm">
-          <p class="text-green-700">
-            <strong>Ngày khai báo:</strong> {{ order.customs_declared_at }}
-          </p>
+          <div class="flex items-center gap-3 flex-wrap">
+            <span class="text-green-700 font-semibold">Ngày khai HQ:</span>
+            <input v-if="can('orders.manage')"
+              type="date" :value="order.customs_declared_at_raw ?? ''"
+              @change="e => saveDates({ customs_declared_at: e.target.value || null })"
+              class="text-sm border border-green-200 rounded px-2 py-1 focus:outline-none focus:ring-1 focus:ring-green-400 bg-white" />
+            <span v-else class="text-green-700">{{ order.customs_declared_at }}</span>
+          </div>
           <div v-if="order.customs_document_name" class="flex items-center gap-3 px-3 py-2 bg-white rounded-lg border border-green-200">
             <svg class="w-4 h-4 text-green-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" />
@@ -367,10 +401,24 @@ import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import FileAttachments from '@/Components/Shared/FileAttachments.vue';
 import { useCurrency } from '@/composables/useCurrency';
+import { usePermission } from '@/composables/usePermission';
 
 const props = defineProps({ order: Object });
 
 const { formatVnd } = useCurrency();
+const { hasPermission: can } = usePermission();
+
+const subtotalBeforeVat = computed(() =>
+  (props.order.items ?? []).reduce((s, i) => s + (i.line_total ?? 0), 0)
+);
+const totalVat = computed(() =>
+  (props.order.items ?? []).reduce((s, i) => s + (i.vat_amount ?? 0), 0)
+);
+const grandTotal = computed(() => subtotalBeforeVat.value + totalVat.value);
+
+function saveDates(patch) {
+  router.patch(route('sales.orders.update-dates', props.order.id), patch, { preserveScroll: true });
+}
 const showDeleteModal = ref(false);
 const doDelete = () => {
   showDeleteModal.value = false;

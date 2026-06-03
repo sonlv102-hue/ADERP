@@ -148,8 +148,9 @@ class OrderController extends Controller
                 'code'              => $order->code,
                 'customer'          => ['id' => $order->customer->id, 'name' => $order->customer->name, 'is_fdi' => (bool) $order->customer->is_fdi],
                 'quotation'         => $order->quotation ? ['id' => $order->quotation->id, 'code' => $order->quotation->code] : null,
-                'order_date'        => $order->order_date->format('d/m/Y'),
-                'expected_delivery' => $order->expected_delivery?->format('d/m/Y'),
+                'order_date'           => $order->order_date->format('d/m/Y'),
+                'expected_delivery'    => $order->expected_delivery?->format('d/m/Y'),
+                'expected_delivery_raw'=> $order->expected_delivery?->format('Y-m-d'),
                 'status'            => $order->status->value,
                 'status_label'      => $order->status->label(),
                 'status_color'      => $order->status->color(),
@@ -188,7 +189,8 @@ class OrderController extends Controller
                 'customs_status'        => $order->customs_status->value,
                 'customs_status_label'  => $order->customs_status->label(),
                 'customs_status_color'  => $order->customs_status->color(),
-                'customs_declared_at'   => $order->customs_declared_at?->format('d/m/Y H:i'),
+                'customs_declared_at'     => $order->customs_declared_at?->format('d/m/Y H:i'),
+                'customs_declared_at_raw' => $order->customs_declared_at?->format('Y-m-d'),
                 'customs_document_name' => $order->customs_document_name,
                 'customs_document_url'  => $order->customs_document_path ? Storage::disk('public')->url($order->customs_document_path) : null,
                 'customs_notes'         => $order->customs_notes,
@@ -326,6 +328,30 @@ class OrderController extends Controller
 
         return redirect()->route('sales.orders.index')
             ->with('success', 'Đã xóa đơn hàng.');
+    }
+
+    public function updateDates(Request $request, Order $order): RedirectResponse
+    {
+        $this->authorize('orders.manage');
+
+        $data = $request->validate([
+            'expected_delivery'   => ['nullable', 'date'],
+            'customs_declared_at' => ['nullable', 'date'],
+        ]);
+
+        $update = [];
+        if (array_key_exists('expected_delivery', $data)) {
+            $update['expected_delivery'] = $data['expected_delivery'] ?? null;
+        }
+        if (array_key_exists('customs_declared_at', $data)) {
+            $update['customs_declared_at'] = $data['customs_declared_at'] ?? null;
+        }
+
+        if ($update) {
+            $order->update($update);
+        }
+
+        return back()->with('success', 'Đã cập nhật ngày.');
     }
 
     public function declareCustoms(Request $request, Order $order): RedirectResponse
