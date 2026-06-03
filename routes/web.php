@@ -313,7 +313,7 @@ Route::middleware('auth')->group(function () {
         Route::post('opening-balance', [OpeningBalanceController::class, 'store'])->name('opening-balance.store')->middleware('can:accounting.manage');
 
         // Phiếu kế toán / Bút toán (Journal Entries)
-        Route::resource('journal-entries', JournalEntryController::class)->only(['index', 'create', 'store', 'show']);
+        Route::resource('journal-entries', JournalEntryController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
         Route::post('journal-entries/{journalEntry}/reverse', [JournalEntryController::class, 'reverse'])->name('journal-entries.reverse')->middleware('can:accounting.manage');
 
         // Chi phí trả trước (Prepaid Expenses)

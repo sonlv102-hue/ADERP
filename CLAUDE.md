@@ -109,6 +109,13 @@ Tài liệu: `C:\Mini_erp\Plan.docx` | `C:\Mini_erp\P2.docx`
   - PO Show: hiển thị "Đơn hàng bán liên kết" kèm link click-through ✅
   - Order Show: section "Đơn mua hàng liên kết" — bảng PO kèm NCC/ngày/trạng thái/tổng tiền ✅
   - Nút "Mua hàng" trong Order/Show: truyền ?order_id=xxx → PO create tự điền sẵn ✅
+- **Xóa bút toán + Tìm kiếm sản phẩm (2026-06-03):**
+  - JournalEntryController: thêm destroy() — chặn is_auto+posted, cho phép draft/reversed/manual posted ✅
+  - JournalEntries/Index.vue: nút Xóa + modal cảnh báo bút toán tự động ✅
+  - ProductController.index(): search (name/code ilike), category_id, status filter ✅
+  - Products/Index.vue: thanh tìm kiếm debounce 300ms + dropdown danh mục + dropdown trạng thái + nút Xóa bộ lọc ✅
+  - Orphaned journal entries (NK-0001→NK-0013): đã reverse 13 entries mồ côi ✅
+  - StockEntryController/StockExitController destroy(): tự động reverse journal chưa đảo trước khi xóa ✅
 - **Cột VAT per dòng hàng (2026-06-03):**
   - Migration 900041: purchase_order_items.vat_rate nullable decimal(5,2) ✅
   - Migration 900042: order_items.vat_rate nullable decimal(5,2) ✅

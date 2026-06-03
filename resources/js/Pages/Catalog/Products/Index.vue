@@ -21,6 +21,32 @@
         </div>
       </div>
 
+      <!-- Filters -->
+      <div class="flex flex-wrap gap-3">
+        <div class="relative">
+          <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0" />
+          </svg>
+          <input v-model="search" @input="applyFilters" placeholder="Tìm mã, tên sản phẩm..."
+            class="pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm w-64 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+        </div>
+        <select v-model="categoryId" @change="applyFilters"
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
+          <option value="">Tất cả danh mục</option>
+          <option v-for="c in categories" :key="c.id" :value="c.id">{{ c.name }}</option>
+        </select>
+        <select v-model="status" @change="applyFilters"
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white">
+          <option value="">Tất cả trạng thái</option>
+          <option value="active">Hoạt động</option>
+          <option value="inactive">Dừng</option>
+        </select>
+        <button v-if="hasFilters" @click="clearFilters"
+          class="px-3 py-2 text-sm text-gray-500 hover:text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
+          Xóa bộ lọc
+        </button>
+      </div>
+
       <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table class="w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
@@ -62,7 +88,7 @@
               </td>
             </tr>
             <tr v-if="!products.data?.length">
-              <td colspan="8" class="px-5 py-10 text-center text-gray-400">Chưa có sản phẩm nào</td>
+              <td colspan="8" class="px-5 py-10 text-center text-gray-400">Không tìm thấy sản phẩm nào</td>
             </tr>
           </tbody>
         </table>
@@ -105,7 +131,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
@@ -113,12 +139,36 @@ import Pagination from '@/Components/Shared/Pagination.vue';
 import Modal from '@/Components/Shared/Modal.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
-defineProps({ products: Object, categories: Array });
+const props = defineProps({ products: Object, categories: Array, filters: Object });
 
 const { formatVnd } = useCurrency();
 
-const deleteTarget = ref(null);
-const showImport = ref(false);
+const search     = ref(props.filters?.search ?? '');
+const categoryId = ref(props.filters?.category_id ?? '');
+const status     = ref(props.filters?.status ?? '');
+
+const hasFilters = computed(() => search.value || categoryId.value || status.value);
+
+let searchTimer = null;
+function applyFilters() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    router.get(route('catalog.products.index'),
+      { search: search.value, category_id: categoryId.value, status: status.value },
+      { preserveState: true, replace: true }
+    );
+  }, 300);
+}
+
+function clearFilters() {
+  search.value = '';
+  categoryId.value = '';
+  status.value = '';
+  router.get(route('catalog.products.index'), {}, { preserveState: true, replace: true });
+}
+
+const deleteTarget    = ref(null);
+const showImport      = ref(false);
 const importFileInput = ref(null);
 
 const confirmDelete = (product) => { deleteTarget.value = product; };

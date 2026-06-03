@@ -15,23 +15,36 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class ProductController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $query = Product::with('category')->orderBy('code');
+
+        if ($request->filled('search')) {
+            $query->where(fn ($q) =>
+                $q->where('name', 'ilike', "%{$request->search}%")
+                  ->orWhere('code', 'ilike', "%{$request->search}%")
+            );
+        }
+        if ($request->filled('category_id')) {
+            $query->where('category_id', $request->category_id);
+        }
+        if ($request->filled('status')) {
+            $query->where('is_active', $request->status === 'active');
+        }
+
         return Inertia::render('Catalog/Products/Index', [
-            'products' => Product::with('category')
-                ->orderBy('code')
-                ->paginate(20)
-                ->through(fn ($p) => [
-                    'id' => $p->id,
-                    'code' => $p->code,
-                    'name' => $p->name,
-                    'unit' => $p->unit,
-                    'sell_price' => $p->sell_price,
-                    'has_serial' => $p->has_serial,
-                    'is_active' => $p->is_active,
-                    'category' => $p->category ? ['id' => $p->category->id, 'name' => $p->category->name] : null,
-                ]),
+            'products' => $query->paginate(20)->through(fn ($p) => [
+                'id'        => $p->id,
+                'code'      => $p->code,
+                'name'      => $p->name,
+                'unit'      => $p->unit,
+                'sell_price' => $p->sell_price,
+                'has_serial' => $p->has_serial,
+                'is_active' => $p->is_active,
+                'category'  => $p->category ? ['id' => $p->category->id, 'name' => $p->category->name] : null,
+            ]),
             'categories' => ProductCategory::orderBy('name')->get(['id', 'name']),
+            'filters'    => $request->only(['search', 'category_id', 'status']),
         ]);
     }
 

@@ -59,9 +59,11 @@
                   Thủ công
                 </span>
               </td>
-              <td class="px-5 py-3 text-right">
+              <td class="px-5 py-3 text-right whitespace-nowrap">
                 <Link :href="route('accounting.journal-entries.show', e.id)"
-                  class="text-primary-600 hover:text-primary-800 font-medium">Xem</Link>
+                  class="text-primary-600 hover:text-primary-800 font-medium mr-3">Xem</Link>
+                <button v-if="can('accounting.manage')" @click="confirmDelete(e)"
+                  class="text-red-500 hover:text-red-700 font-medium">Xóa</button>
               </td>
             </tr>
             <tr v-if="!entries.data?.length">
@@ -73,6 +75,21 @@
 
       <Pagination :links="entries.links" :meta="entries.meta" />
     </div>
+
+    <Modal :show="deleteTarget !== null" @close="deleteTarget = null">
+      <template #title>Xác nhận xóa bút toán</template>
+      <div class="space-y-2 text-sm text-gray-600">
+        <p>Bạn có chắc muốn xóa bút toán <strong>{{ deleteTarget?.code }}</strong>?</p>
+        <p class="italic text-gray-500">{{ deleteTarget?.description }}</p>
+        <p v-if="deleteTarget?.is_auto" class="text-amber-600 font-medium">
+          ⚠ Đây là bút toán tự động — xóa sẽ ảnh hưởng đến cân đối kế toán.
+        </p>
+      </div>
+      <template #footer>
+        <button @click="deleteTarget = null" class="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Hủy</button>
+        <button @click="doDelete" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700">Xóa</button>
+      </template>
+    </Modal>
   </AppLayout>
 </template>
 
@@ -82,6 +99,7 @@ import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
+import Modal from '@/Components/Shared/Modal.vue';
 import { usePermission } from '@/composables/usePermission';
 import { useCurrency } from '@/composables/useCurrency';
 
@@ -100,4 +118,12 @@ function applyFilters() {
     { preserveState: true }
   );
 }
+
+const deleteTarget = ref(null);
+const confirmDelete = (entry) => { deleteTarget.value = entry; };
+const doDelete = () => {
+  router.delete(route('accounting.journal-entries.destroy', deleteTarget.value.id), {
+    onSuccess: () => { deleteTarget.value = null; },
+  });
+};
 </script>

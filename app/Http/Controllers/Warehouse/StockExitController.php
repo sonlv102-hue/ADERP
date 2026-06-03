@@ -10,12 +10,14 @@ use App\Enums\StockExitStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Contract;
 use App\Models\Customer;
+use App\Models\JournalEntry;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductSerial;
 use App\Models\Project;
 use App\Models\StockExit;
 use App\Models\Warehouse;
+use App\Services\AccountingService;
 use App\Services\OrderService;
 use App\Services\StockService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -31,6 +33,7 @@ class StockExitController extends Controller
     public function __construct(
         private StockService $stockService,
         private OrderService $orderService,
+        private AccountingService $accounting,
     ) {}
 
     public function index(): Response
@@ -439,6 +442,20 @@ class StockExitController extends Controller
     {
         if (! in_array($stockExit->status, [StockExitStatus::Draft, StockExitStatus::Cancelled])) {
             return back()->with('error', 'Chỉ có thể xóa phiếu ở trạng thái nháp hoặc đã hủy.');
+        }
+
+        // Đảo journal chưa reversed (e.g. sau cancel nhưng reversal thất bại)
+        $postedJournal = JournalEntry::where('reference_type', 'stock_exit')
+            ->where('reference_id', $stockExit->id)
+            ->where('status', 'posted')
+            ->whereRaw("description NOT LIKE 'Đảo:%'")
+            ->first();
+        if ($postedJournal) {
+            try {
+                $this->accounting->reverse($postedJournal, "Dọn dẹp: xóa phiếu xuất kho {$stockExit->code}");
+            } catch (\Exception $e) {
+                \Log::warning("Cannot reverse journal on exit destroy [{$stockExit->code}]: " . $e->getMessage());
+            }
         }
 
         DB::transaction(function () use ($stockExit) {

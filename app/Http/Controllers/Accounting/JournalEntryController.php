@@ -140,6 +140,22 @@ class JournalEntryController extends Controller
         ]);
     }
 
+    public function destroy(JournalEntry $journalEntry): RedirectResponse
+    {
+        $this->authorize('accounting.manage');
+
+        // Không cho xóa bút toán tự động đang posted — phải dùng "Đảo bút toán"
+        if ($journalEntry->is_auto && $journalEntry->status === 'posted') {
+            return back()->with('error', 'Không thể xóa bút toán tự động đang hạch toán. Vui lòng dùng "Đảo bút toán" để hủy hiệu lực.');
+        }
+
+        $journalEntry->lines()->delete();
+        $journalEntry->delete();
+
+        return redirect()->route('accounting.journal-entries.index')
+            ->with('success', "Đã xóa bút toán {$journalEntry->code}.");
+    }
+
     public function reverse(JournalEntry $journalEntry, Request $request): RedirectResponse
     {
         $data = $request->validate(['reason' => ['nullable', 'string', 'max:500']]);

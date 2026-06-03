@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Warehouse;
 
 use App\Http\Controllers\Controller;
+use App\Models\JournalEntry;
 use App\Models\Product;
 use App\Models\ProductSerial;
 use App\Models\StockEntry;
 use App\Models\StockEntryItem;
 use App\Models\Supplier;
 use App\Models\Warehouse;
+use App\Services\AccountingService;
 use App\Services\PurchaseOrderService;
 use App\Services\StockService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -31,6 +33,7 @@ class StockEntryController extends Controller
     public function __construct(
         private StockService $stockService,
         private PurchaseOrderService $purchaseOrderService,
+        private AccountingService $accounting,
     ) {}
 
     public function index(): Response
@@ -518,6 +521,20 @@ class StockEntryController extends Controller
                 return back()->with('error',
                     "Không thể xóa: đơn mua hàng liên kết còn {$activeInvoices} hóa đơn đầu vào chưa hủy. Vui lòng hủy hóa đơn trước."
                 );
+            }
+        }
+
+        // Đảo journal chưa reversed (e.g. sau recall nhưng reversal thất bại)
+        $postedJournal = JournalEntry::where('reference_type', 'stock_entry')
+            ->where('reference_id', $stockEntry->id)
+            ->where('status', 'posted')
+            ->whereRaw("description NOT LIKE 'Đảo:%'")
+            ->first();
+        if ($postedJournal) {
+            try {
+                $this->accounting->reverse($postedJournal, "Dọn dẹp: xóa phiếu nhập kho {$stockEntry->code}");
+            } catch (\Exception $e) {
+                \Log::warning("Cannot reverse journal on entry destroy [{$stockEntry->code}]: " . $e->getMessage());
             }
         }
 
