@@ -16,24 +16,33 @@ class InventoryCountController extends Controller
 {
     public function __construct(private InventoryCountService $svc) {}
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $query = InventoryCount::with(['warehouse', 'countedBy'])
+            ->withCount('items')
+            ->orderByDesc('id');
+
+        if ($request->filled('warehouse_id')) {
+            $query->where('warehouse_id', $request->warehouse_id);
+        }
+        if ($request->filled('status')) {
+            $query->where('status', $request->status);
+        }
+
         return Inertia::render('Warehouse/InventoryCounts/Index', [
-            'counts' => InventoryCount::with(['warehouse', 'countedBy'])
-                ->withCount('items')
-                ->orderByDesc('id')
-                ->paginate(20)
-                ->through(fn ($c) => [
-                    'id'           => $c->id,
-                    'code'         => $c->code,
-                    'warehouse'    => $c->warehouse->name,
-                    'count_date'   => $c->count_date->format('d/m/Y'),
-                    'status'       => $c->status->value,
-                    'status_label' => $c->status->label(),
-                    'status_color' => $c->status->color(),
-                    'counted_by'   => $c->countedBy->name,
-                    'items_count'  => $c->items_count,
-                ]),
+            'counts'     => $query->paginate(20)->through(fn ($c) => [
+                'id'           => $c->id,
+                'code'         => $c->code,
+                'warehouse'    => $c->warehouse->name,
+                'count_date'   => $c->count_date->format('d/m/Y'),
+                'status'       => $c->status->value,
+                'status_label' => $c->status->label(),
+                'status_color' => $c->status->color(),
+                'counted_by'   => $c->countedBy->name,
+                'items_count'  => $c->items_count,
+            ]),
+            'warehouses' => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'filters'    => $request->only(['warehouse_id', 'status']),
         ]);
     }
 
@@ -158,8 +167,8 @@ class InventoryCountController extends Controller
 
     public function destroy(InventoryCount $inventoryCount): RedirectResponse
     {
-        if ($inventoryCount->status !== InventoryCountStatus::Cancelled) {
-            return back()->with('error', 'Chỉ có thể xóa phiếu kiểm kê đã hủy.');
+        if (!in_array($inventoryCount->status, [InventoryCountStatus::Draft, InventoryCountStatus::Cancelled])) {
+            return back()->with('error', 'Chỉ có thể xóa phiếu kiểm kê ở trạng thái Nháp hoặc Đã hủy.');
         }
 
         $inventoryCount->delete();

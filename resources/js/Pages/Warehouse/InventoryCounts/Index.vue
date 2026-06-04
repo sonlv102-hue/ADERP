@@ -14,6 +14,26 @@
         </Link>
       </div>
 
+      <!-- Filters -->
+      <div class="flex flex-wrap gap-3">
+        <select v-model="filterWarehouse" @change="applyFilters"
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+          <option value="">Tất cả kho</option>
+          <option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
+        </select>
+        <select v-model="filterStatus" @change="applyFilters"
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+          <option value="">Tất cả trạng thái</option>
+          <option value="draft">Nháp</option>
+          <option value="confirmed">Đã xác nhận</option>
+          <option value="cancelled">Đã hủy</option>
+        </select>
+        <button v-if="filterWarehouse || filterStatus" @click="clearFilters"
+          class="text-sm text-gray-500 hover:text-gray-700 underline">
+          Xóa bộ lọc
+        </button>
+      </div>
+
       <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table class="w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
@@ -38,10 +58,13 @@
                 <StatusBadge :color="c.status_color">{{ c.status_label }}</StatusBadge>
               </td>
               <td class="px-5 py-3 text-right">
-                <Link
-                  :href="route('warehouse.inventory-counts.show', c.id)"
-                  class="text-primary-600 hover:text-primary-800 font-medium"
-                >Xem</Link>
+                <div class="flex items-center justify-end gap-3">
+                  <Link :href="route('warehouse.inventory-counts.show', c.id)"
+                    class="text-primary-600 hover:text-primary-800 font-medium">Xem</Link>
+                  <button v-if="['draft','cancelled'].includes(c.status)"
+                    @click="deleteCount(c)"
+                    class="text-red-500 hover:text-red-700 font-medium">Xóa</button>
+                </div>
               </td>
             </tr>
             <tr v-if="!counts.data?.length">
@@ -57,10 +80,32 @@
 </template>
 
 <script setup>
-import { Link } from '@inertiajs/vue3';
+import { ref } from 'vue';
+import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
 
-defineProps({ counts: Object });
+const props = defineProps({ counts: Object, warehouses: Array, filters: Object });
+
+const filterWarehouse = ref(props.filters?.warehouse_id ?? '');
+const filterStatus = ref(props.filters?.status ?? '');
+
+function applyFilters() {
+  router.get(route('warehouse.inventory-counts.index'), {
+    warehouse_id: filterWarehouse.value || undefined,
+    status: filterStatus.value || undefined,
+  }, { preserveState: true, replace: true });
+}
+
+function clearFilters() {
+  filterWarehouse.value = '';
+  filterStatus.value = '';
+  applyFilters();
+}
+
+function deleteCount(c) {
+  if (!confirm(`Xóa phiếu kiểm kê ${c.code}?`)) return;
+  router.delete(route('warehouse.inventory-counts.destroy', c.id));
+}
 </script>

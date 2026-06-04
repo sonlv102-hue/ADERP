@@ -16,7 +16,7 @@
       </div>
 
       <!-- Info card -->
-      <div class="bg-white rounded-xl border border-gray-200 p-5 grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+      <div class="bg-white rounded-xl border border-gray-200 p-5 grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
         <div>
           <p class="text-gray-500 text-xs mb-0.5">Trạng thái</p>
           <StatusBadge :color="count.status_color">{{ count.status_label }}</StatusBadge>
@@ -26,16 +26,24 @@
           <p class="font-medium text-gray-800">{{ count.counted_by }}</p>
         </div>
         <div>
-          <p class="text-gray-500 text-xs mb-0.5">Tổng SP</p>
+          <p class="text-gray-500 text-xs mb-0.5">Tổng SP kiểm</p>
           <p class="font-medium text-gray-800">{{ items.length }}</p>
         </div>
         <div>
-          <p class="text-gray-500 text-xs mb-0.5">Chênh lệch</p>
-          <p class="font-medium" :class="totalDiff !== 0 ? 'text-red-600' : 'text-green-700'">
-            {{ totalDiff > 0 ? '+' : '' }}{{ totalDiff }}
+          <p class="text-gray-500 text-xs mb-0.5">SP có chênh lệch</p>
+          <p class="font-medium" :class="discrepantCount > 0 ? 'text-orange-600' : 'text-green-700'">
+            {{ discrepantCount }}
           </p>
         </div>
-        <div v-if="count.notes" class="col-span-2 md:col-span-4">
+        <div>
+          <p class="text-gray-500 text-xs mb-0.5">Thừa / Thiếu (số lượng)</p>
+          <p class="font-medium text-sm">
+            <span class="text-blue-600">+{{ surplusQty }}</span>
+            <span class="text-gray-400 mx-1">/</span>
+            <span class="text-red-600">{{ deficitQty }}</span>
+          </p>
+        </div>
+        <div v-if="count.notes" class="col-span-2 md:col-span-5">
           <p class="text-gray-500 text-xs mb-0.5">Ghi chú</p>
           <p class="text-gray-700">{{ count.notes }}</p>
         </div>
@@ -52,18 +60,32 @@
           Xác nhận & Điều chỉnh tồn kho
         </button>
         <button @click="cancelCount"
-          class="px-4 py-2 text-sm rounded-lg border border-red-300 text-red-600 hover:bg-red-50 font-medium">
+          class="px-4 py-2 text-sm rounded-lg border border-orange-300 text-orange-600 hover:bg-orange-50 font-medium">
           Hủy phiếu
+        </button>
+        <button @click="deleteCount"
+          class="px-4 py-2 text-sm rounded-lg border border-red-300 text-red-600 hover:bg-red-50 font-medium">
+          Xóa phiếu
+        </button>
+      </div>
+      <div v-else-if="count.status === 'cancelled'" class="flex gap-2">
+        <button @click="deleteCount"
+          class="px-4 py-2 text-sm rounded-lg border border-red-300 text-red-600 hover:bg-red-50 font-medium">
+          Xóa phiếu
         </button>
       </div>
 
       <!-- Items table -->
       <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+        <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
           <h2 class="font-semibold text-gray-800 text-sm">Danh sách sản phẩm kiểm kê</h2>
-          <span v-if="count.status === 'draft'" class="text-xs text-gray-400">
-            Nhập số lượng thực đếm cho từng sản phẩm
-          </span>
+          <div class="flex items-center gap-3">
+            <input v-model="searchText" type="text" placeholder="Tìm mã / tên SP..."
+              class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500 w-48" />
+            <span v-if="count.status === 'draft'" class="text-xs text-gray-400">
+              Nhập số lượng thực đếm cho từng sản phẩm
+            </span>
+          </div>
         </div>
 
         <div class="overflow-x-auto">
@@ -80,7 +102,7 @@
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
-              <tr v-for="(item, idx) in localItems" :key="item.id"
+              <tr v-for="(item, idx) in filteredItems" :key="item.id"
                 :class="{
                   'bg-red-50': item.difference !== null && item.difference < 0,
                   'bg-blue-50': item.difference !== null && item.difference > 0,
@@ -91,9 +113,9 @@
                 <td class="px-4 py-2 text-right text-gray-700 text-xs font-medium">{{ item.system_quantity }}</td>
                 <td class="px-4 py-2 text-right">
                   <input v-if="count.status === 'draft'"
-                    v-model.number="localItems[idx].counted_quantity"
+                    v-model.number="localItems[item._origIdx].counted_quantity"
                     type="number" min="0" step="any"
-                    @input="recalcDiff(idx)"
+                    @input="recalcDiff(item._origIdx)"
                     class="w-20 text-right border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-500" />
                   <span v-else class="text-xs">{{ item.counted_quantity ?? '—' }}</span>
                 </td>
@@ -110,16 +132,16 @@
                 </td>
                 <td class="px-4 py-2">
                   <input v-if="count.status === 'draft'"
-                    v-model="localItems[idx].notes"
+                    v-model="localItems[item._origIdx].notes"
                     type="text"
                     class="w-full border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-primary-500"
                     placeholder="Ghi chú..." />
                   <span v-else class="text-xs text-gray-500">{{ item.notes || '—' }}</span>
                 </td>
               </tr>
-              <tr v-if="!localItems.length">
+              <tr v-if="!filteredItems.length">
                 <td colspan="7" class="px-4 py-10 text-center text-gray-400">
-                  Không có sản phẩm nào đang có tồn kho tại kho này
+                  {{ searchText ? 'Không tìm thấy sản phẩm phù hợp' : 'Không có sản phẩm nào đang có tồn kho tại kho này' }}
                 </td>
               </tr>
             </tbody>
@@ -142,9 +164,18 @@ const props = defineProps({
 });
 
 const saving = ref(false);
+const searchText = ref('');
 
-// Deep clone items for local editing
+// Deep clone with original index tracked
 const localItems = ref(props.items.map(i => ({ ...i })));
+
+// Filtered + annotated with original index for editing
+const filteredItems = computed(() => {
+  const q = searchText.value.trim().toLowerCase();
+  return localItems.value
+    .map((item, idx) => ({ ...item, _origIdx: idx }))
+    .filter(item => !q || item.product_code?.toLowerCase().includes(q) || item.product_name?.toLowerCase().includes(q));
+});
 
 function recalcDiff(idx) {
   const item = localItems.value[idx];
@@ -153,8 +184,15 @@ function recalcDiff(idx) {
     : null;
 }
 
-const totalDiff = computed(() =>
-  localItems.value.reduce((sum, i) => sum + (i.difference ?? 0), 0)
+// Summary stats
+const discrepantCount = computed(() =>
+  localItems.value.filter(i => i.difference !== null && i.difference !== 0).length
+);
+const surplusQty = computed(() =>
+  localItems.value.reduce((sum, i) => sum + (i.difference !== null && i.difference > 0 ? i.difference : 0), 0)
+);
+const deficitQty = computed(() =>
+  localItems.value.reduce((sum, i) => sum + (i.difference !== null && i.difference < 0 ? i.difference : 0), 0)
 );
 
 function saveAll() {
@@ -167,7 +205,7 @@ function saveAll() {
 }
 
 function confirmCount() {
-  if (!confirm('Xác nhận kiểm kê? Hệ thống sẽ lưu và tạo bút toán điều chỉnh tồn kho cho các sản phẩm có chênh lệch.')) return;
+  if (!confirm('Xác nhận kiểm kê? Hệ thống sẽ lưu và điều chỉnh tồn kho + tạo bút toán kế toán cho các sản phẩm có chênh lệch.')) return;
   router.post(route('warehouse.inventory-counts.confirm', props.count.id), {
     items: localItems.value.map(i => ({ id: i.id, counted_quantity: i.counted_quantity, notes: i.notes })),
   });
@@ -176,5 +214,10 @@ function confirmCount() {
 function cancelCount() {
   if (!confirm('Hủy phiếu kiểm kê này?')) return;
   router.post(route('warehouse.inventory-counts.cancel', props.count.id));
+}
+
+function deleteCount() {
+  if (!confirm(`Xóa vĩnh viễn phiếu ${props.count.code}?`)) return;
+  router.delete(route('warehouse.inventory-counts.destroy', props.count.id));
 }
 </script>

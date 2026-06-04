@@ -8,6 +8,7 @@ use App\Models\InventoryCountItem;
 use App\Models\StockMovement;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
+use App\Services\AccountingService;
 
 class InventoryCountService
 {
@@ -73,7 +74,8 @@ class InventoryCountService
             throw new RuntimeException('Chỉ có thể xác nhận phiếu ở trạng thái nháp.');
         }
 
-        $count->load('items');
+        $count->load(['items', 'items.product']);
+
         $unentered = $count->items->whereNull('counted_quantity');
         if ($unentered->count() > 0) {
             throw new RuntimeException(
@@ -82,6 +84,8 @@ class InventoryCountService
         }
 
         DB::transaction(function () use ($count) {
+            $journalLines = [];
+
             foreach ($count->items as $item) {
                 $difference = $item->counted_quantity - $item->system_quantity;
                 if ($difference == 0) {
@@ -98,6 +102,34 @@ class InventoryCountService
                     'created_by'   => auth()->id(),
                     'notes'        => "Điều chỉnh kiểm kê {$count->code}",
                 ]);
+
+                // Tính giá trị chênh lệch theo cost_price sản phẩm
+                $costAmount = (int) round(abs($difference) * (float) ($item->product->cost_price ?? 0));
+                if ($costAmount <= 0) {
+                    continue;
+                }
+
+                $productLabel = $item->product->name;
+                if ($difference > 0) {
+                    // Thừa kho: Nợ 156 / Có 711 (Thu nhập khác)
+                    $journalLines[] = ['account' => '156', 'debit' => $costAmount, 'credit' => 0, 'description' => "Thừa kho: {$productLabel}"];
+                    $journalLines[] = ['account' => '711', 'debit' => 0, 'credit' => $costAmount, 'description' => "Thừa kho: {$productLabel}"];
+                } else {
+                    // Thiếu kho: Nợ 811 / Có 156 (Chi phí khác)
+                    $journalLines[] = ['account' => '811', 'debit' => $costAmount, 'credit' => 0, 'description' => "Thiếu kho: {$productLabel}"];
+                    $journalLines[] = ['account' => '156', 'debit' => 0, 'credit' => $costAmount, 'description' => "Thiếu kho: {$productLabel}"];
+                }
+            }
+
+            if (!empty($journalLines)) {
+                app(AccountingService::class)->post(
+                    "Điều chỉnh kiểm kê kho {$count->code}",
+                    $count->count_date,
+                    $journalLines,
+                    InventoryCount::class,
+                    $count->id,
+                    true
+                );
             }
 
             $count->update(['status' => InventoryCountStatus::Confirmed]);
