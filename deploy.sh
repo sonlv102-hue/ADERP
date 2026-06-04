@@ -14,15 +14,16 @@ rm -rf /var/www/web_erp/public/build
 docker run --rm -v /var/www/web_erp/public:/host_public web_erp-app sh -c 'cp -r /var/www/html/public/build /host_public/'
 
 echo "[4/6] Recreating app containers with new image..."
-docker compose up -d --force-recreate --remove-orphans
+docker compose down --remove-orphans
+docker compose up -d
 
 echo "[5/6] Restarting nginx..."
 docker restart mini_erp_nginx
 
-echo "[6/6] Migrations and cache clear..."
+echo "[6/6] Migrations and cache..."
 docker compose exec -T app php artisan migrate --force
-docker compose exec -T app php artisan config:clear
+docker compose exec -T app php artisan config:cache
+docker compose exec -T app php artisan route:cache
 docker compose exec -T app php artisan view:clear
-docker compose exec -T app php artisan route:clear
 
 echo "=== Deploy done at $(date '+%Y-%m-%d %H:%M:%S') ==="
