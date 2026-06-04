@@ -152,13 +152,17 @@
                 </td>
                 <td class="px-4 py-3">
                   <select v-model.number="item.vat_rate"
-                    class="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none bg-white text-xs">
-                    <option :value="null">—</option>
+                    :class="['w-full px-2 py-1.5 border rounded-lg focus:ring-2 outline-none bg-white text-xs',
+                      item.vat_rate === null
+                        ? 'border-amber-400 focus:ring-amber-400 bg-amber-50'
+                        : 'border-gray-300 focus:ring-primary-500']">
+                    <option :value="null">— (chưa chọn)</option>
                     <option :value="0">0%</option>
                     <option :value="5">5%</option>
                     <option :value="8">8%</option>
                     <option :value="10">10%</option>
                   </select>
+                  <p v-if="item.vat_rate === null" class="text-xs text-amber-600 mt-0.5">⚠ Chưa chọn VAT</p>
                 </td>
                 <td class="px-4 py-3">
                   <input v-model.number="item.discount_percent" type="number" min="0" max="100" step="0.01"
@@ -205,6 +209,18 @@
             </tfoot>
           </table>
           <p v-if="form.errors.items" class="px-5 py-2 text-xs text-red-600">{{ form.errors.items }}</p>
+        </div>
+
+        <!-- Cảnh báo VAT chưa chọn -->
+        <div v-if="hasNullVat" class="flex items-start gap-3 px-4 py-3 bg-amber-50 border border-amber-300 rounded-xl text-sm">
+          <svg class="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <span class="text-amber-800">
+            Có <strong>{{ form.items.filter(i => i.vat_rate === null).length }} mặt hàng</strong> chưa chọn mức VAT.
+            Vui lòng kiểm tra lại cột <strong>VAT (%)</strong> trước khi lưu (các ô đang hiện màu vàng).
+          </span>
         </div>
 
         <div class="flex gap-3">
@@ -307,6 +323,7 @@ const itemTotalWithVat = (item) => itemLineTotal(item) + itemVatAmount(item);
 const subtotal  = computed(() => form.items.reduce((s, i) => s + itemLineTotal(i), 0));
 const totalVat  = computed(() => form.items.reduce((s, i) => s + itemVatAmount(i), 0));
 const grandTotal = computed(() => subtotal.value + totalVat.value);
+const hasNullVat = computed(() => form.items.some(i => i.vat_rate === null));
 
 const { formatVnd } = useCurrency();
 
