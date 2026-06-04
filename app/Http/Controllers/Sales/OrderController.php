@@ -446,6 +446,7 @@ class OrderController extends Controller
                             (float) $i->unit_price * (1 - (float) $i->discount_percent / 100) * $docFactor,
                             0
                         ),
+                        'vat_rate'   => $i->vat_rate !== null ? (float) $i->vat_rate : null,
                         '_type'      => $i->product_id ? 'product' : 'service',
                     ])->values()->all(),
                 ];

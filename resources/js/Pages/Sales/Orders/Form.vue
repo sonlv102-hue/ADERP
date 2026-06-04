@@ -258,7 +258,7 @@ const onQuotationChange = () => {
   const q = props.quotations.find(q => q.id === form.quotation_id);
   if (!q) return;
   form.customer_id = q.customer_id;
-  form.items = q.items.map(i => ({ ...i, vat_rate: i.vat_rate ?? 10 }));
+  form.items = q.items.map(i => ({ ...i }));
 };
 
 onMounted(() => {
