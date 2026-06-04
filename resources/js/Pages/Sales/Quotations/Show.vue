@@ -159,15 +159,15 @@
           </button>
         </form>
 
-        <!-- Thu hồi: sent → draft (chỉ khi chưa có đơn hàng) -->
-        <button v-if="quotation.status === 'sent' && !quotation.orders?.length"
+        <!-- Thu hồi: sent → draft (chỉ khi chưa có đơn hàng) — admin only -->
+        <button v-if="can('admin.users') && quotation.status === 'sent' && !quotation.orders?.length"
           @click="recallQuotation"
           class="px-4 py-2 border border-yellow-400 text-yellow-700 hover:bg-yellow-50 rounded-lg text-sm font-medium">
           Thu hồi (về Nháp)
         </button>
 
-        <!-- Hủy duyệt: approved → sent (chỉ khi chưa có đơn hàng) -->
-        <button v-if="quotation.status === 'approved' && !quotation.orders?.length"
+        <!-- Hủy duyệt: approved → sent (chỉ khi chưa có đơn hàng) — admin only -->
+        <button v-if="can('admin.users') && quotation.status === 'approved' && !quotation.orders?.length"
           @click="unapproveQuotation"
           class="px-4 py-2 border border-yellow-400 text-yellow-700 hover:bg-yellow-50 rounded-lg text-sm font-medium">
           Hủy duyệt
@@ -180,14 +180,14 @@
           </button>
         </form>
 
-        <!-- Hủy: mọi trạng thái trừ cancelled; nếu approved thì chỉ khi chưa có đơn -->
-        <button v-if="canCancel" @click="cancelQuotation"
+        <!-- Hủy: mọi trạng thái trừ cancelled — admin only -->
+        <button v-if="can('admin.users') && canCancel" @click="cancelQuotation"
           class="px-4 py-2 border border-orange-300 text-orange-700 hover:bg-orange-50 rounded-lg text-sm font-medium">
           Hủy báo giá
         </button>
 
-        <!-- Xóa: draft, cancelled, rejected, expired -->
-        <button v-if="['draft','cancelled','rejected','expired'].includes(quotation.status)"
+        <!-- Xóa: draft, cancelled, rejected, expired — admin only -->
+        <button v-if="can('admin.users') && ['draft','cancelled','rejected','expired'].includes(quotation.status)"
           @click="deleteQuotation"
           class="px-4 py-2 border border-red-300 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium">
           Xóa
@@ -204,10 +204,12 @@ import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import FileAttachments from '@/Components/Shared/FileAttachments.vue';
 import { useCurrency } from '@/composables/useCurrency';
+import { usePermission } from '@/composables/usePermission';
 
 const props = defineProps({ quotation: Object });
 
 const { formatVnd } = useCurrency();
+const { hasPermission: can } = usePermission();
 
 const totalVat = computed(() =>
   (props.quotation.items ?? []).reduce((s, i) => s + (i.vat_amount ?? 0), 0)

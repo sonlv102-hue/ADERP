@@ -210,10 +210,16 @@ class OrderController extends Controller
 
     public function edit(Order $order): Response
     {
+        $isAdmin = auth()->user()->hasRole('admin');
         abort_if(
-            in_array($order->status, [OrderStatus::Completed, OrderStatus::Cancelled]),
+            $order->status === OrderStatus::Cancelled,
             403,
-            'Không thể sửa đơn hàng đã hoàn thành hoặc đã hủy.'
+            'Không thể sửa đơn hàng đã hủy.'
+        );
+        abort_if(
+            !$isAdmin && $order->status === OrderStatus::Completed,
+            403,
+            'Không thể sửa đơn hàng đã hoàn thành.'
         );
 
         $order->load('items');
@@ -319,8 +325,21 @@ class OrderController extends Controller
 
     public function destroy(Order $order): RedirectResponse
     {
+        $isAdmin = auth()->user()->hasRole('admin');
+
         if ($order->status !== OrderStatus::Cancelled) {
-            return back()->with('error', 'Chỉ có thể xóa đơn hàng đã hủy.');
+            if (!$isAdmin) {
+                return back()->with('error', 'Chỉ có thể xóa đơn hàng đã hủy.');
+            }
+            if ($order->status !== OrderStatus::Pending) {
+                return back()->with('error', 'Admin chỉ có thể xóa đơn hàng ở trạng thái Chờ xử lý hoặc Đã hủy.');
+            }
+            if ($order->stockExits()->exists()) {
+                return back()->with('error', 'Không thể xóa vì đơn hàng đã có phiếu xuất kho.');
+            }
+            if ($order->invoices()->exists()) {
+                return back()->with('error', 'Không thể xóa vì đơn hàng đã có hóa đơn.');
+            }
         }
 
         $order->items()->delete();
@@ -328,6 +347,33 @@ class OrderController extends Controller
 
         return redirect()->route('sales.orders.index')
             ->with('success', 'Đã xóa đơn hàng.');
+    }
+
+    public function forceRevert(Order $order): RedirectResponse
+    {
+        $this->authorize('admin.users');
+
+        if ($order->stockExits()->where('status', 'confirmed')->exists()) {
+            return back()->with('error', 'Không thể thu hồi — đơn hàng đã có phiếu xuất kho xác nhận. Vui lòng hủy phiếu xuất kho trước.');
+        }
+        if ($order->invoices()->whereNotIn('status', ['draft'])->exists()) {
+            return back()->with('error', 'Không thể thu hồi — đơn hàng đã có hóa đơn phát sinh.');
+        }
+
+        $previous = match($order->status) {
+            OrderStatus::Processing, OrderStatus::PartialDelivered => OrderStatus::Pending,
+            OrderStatus::Completed   => OrderStatus::Processing,
+            OrderStatus::Cancelled   => OrderStatus::Pending,
+            default => null,
+        };
+
+        if (!$previous) {
+            return back()->with('error', 'Không thể thu hồi đơn hàng ở trạng thái này.');
+        }
+
+        $order->update(['status' => $previous]);
+
+        return back()->with('success', "Đã thu hồi đơn hàng về trạng thái \"{$previous->label()}\".");
     }
 
     public function updateDates(Request $request, Order $order): RedirectResponse

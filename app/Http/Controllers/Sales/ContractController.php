@@ -110,7 +110,17 @@ class ContractController extends Controller
 
     public function edit(Contract $contract): Response
     {
-        abort_if($contract->status !== ContractStatus::Draft, 403, 'Chỉ có thể sửa hợp đồng ở trạng thái nháp.');
+        $isAdmin = auth()->user()->hasRole('admin');
+        abort_if(
+            !$isAdmin && $contract->status !== ContractStatus::Draft,
+            403,
+            'Chỉ có thể sửa hợp đồng ở trạng thái nháp.'
+        );
+        abort_if(
+            $isAdmin && in_array($contract->status, [ContractStatus::Completed, ContractStatus::Terminated]),
+            403,
+            'Không thể sửa hợp đồng đã hoàn thành hoặc chấm dứt.'
+        );
 
         return Inertia::render('Sales/Contracts/Form', [
             'contract' => [
@@ -156,11 +166,33 @@ class ContractController extends Controller
 
     public function destroy(Contract $contract): RedirectResponse
     {
-        abort_if($contract->status !== ContractStatus::Draft, 403, 'Chỉ có thể xóa hợp đồng ở trạng thái nháp.');
+        $isAdmin = auth()->user()->hasRole('admin');
+        $allowedStatuses = $isAdmin
+            ? [ContractStatus::Draft, ContractStatus::Terminated]
+            : [ContractStatus::Draft];
+
+        abort_if(
+            !in_array($contract->status, $allowedStatuses),
+            403,
+            'Không thể xóa hợp đồng ở trạng thái này.'
+        );
         $contract->delete();
 
         return redirect()->route('sales.contracts.index')
             ->with('success', 'Đã xóa hợp đồng.');
+    }
+
+    public function recall(Contract $contract): RedirectResponse
+    {
+        $this->authorize('admin.users');
+
+        if ($contract->status === ContractStatus::Draft) {
+            return back()->with('error', 'Hợp đồng đã ở trạng thái nháp.');
+        }
+
+        $contract->update(['status' => ContractStatus::Draft]);
+
+        return back()->with('success', 'Đã thu hồi hợp đồng về trạng thái Nháp.');
     }
 
     public function activate(Contract $contract): RedirectResponse

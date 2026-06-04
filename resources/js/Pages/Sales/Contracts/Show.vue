@@ -19,7 +19,8 @@
             </svg>
             Xuất PDF
           </a>
-          <Link v-if="contract.status === 'draft'" :href="route('sales.contracts.edit', contract.id)"
+          <Link v-if="contract.status === 'draft' || (can('admin.users') && contract.status === 'active')"
+            :href="route('sales.contracts.edit', contract.id)"
             class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
             Sửa
           </Link>
@@ -86,11 +87,18 @@
             Chấm dứt hợp đồng
           </button>
         </form>
-        <form v-if="contract.status === 'draft'" @submit.prevent="deleteContract">
-          <button type="submit" class="px-4 py-2 border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg text-sm font-medium">
-            Xóa
-          </button>
-        </form>
+        <!-- Thu hồi (admin): active/completed/terminated → draft -->
+        <button v-if="can('admin.users') && contract.status !== 'draft'"
+          @click="recallContract"
+          class="px-4 py-2 border border-yellow-400 text-yellow-700 hover:bg-yellow-50 rounded-lg text-sm font-medium">
+          Thu hồi (về Nháp)
+        </button>
+        <!-- Xóa: draft cho tất cả; terminated cho admin -->
+        <button v-if="contract.status === 'draft' || (can('admin.users') && contract.status === 'terminated')"
+          @click="deleteContract"
+          class="px-4 py-2 border border-gray-300 text-gray-600 hover:bg-gray-50 rounded-lg text-sm font-medium">
+          Xóa
+        </button>
       </div>
     </div>
   </AppLayout>
@@ -103,10 +111,12 @@ import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import FileAttachments from '@/Components/Shared/FileAttachments.vue';
 import { useCurrency } from '@/composables/useCurrency';
+import { usePermission } from '@/composables/usePermission';
 
 const props = defineProps({ contract: Object });
 
 const { formatVnd } = useCurrency();
+const { hasPermission: can } = usePermission();
 
 const action = (act) => {
   router.post(route(`sales.contracts.${act}`, props.contract.id));
@@ -116,6 +126,11 @@ const deleteContract = () => {
   if (confirm('Xác nhận xóa hợp đồng này?')) {
     router.delete(route('sales.contracts.destroy', props.contract.id));
   }
+};
+
+const recallContract = () => {
+  if (!confirm('Thu hồi hợp đồng về trạng thái Nháp? Lưu ý: hóa đơn liên kết (nếu có) không bị ảnh hưởng.')) return;
+  action('recall');
 };
 
 </script>

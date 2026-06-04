@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\CustomsStatus;
 use App\Enums\OrderStatus;
 use App\Models\Concerns\GeneratesCode;
+use App\Models\Invoice;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -86,6 +87,11 @@ class Order extends Model
     public function contracts(): HasMany
     {
         return $this->hasMany(Contract::class);
+    }
+
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
     }
 
     public function stockExits(): HasMany

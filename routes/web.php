@@ -201,11 +201,13 @@ Route::middleware('auth')->group(function () {
         Route::post('orders/{order}/customs', [OrderController::class, 'declareCustoms'])->name('orders.customs.declare');
         Route::post('orders/{order}/attachment', [OrderController::class, 'uploadAttachment'])->name('orders.attachment.upload');
         Route::delete('orders/{order}/attachment', [OrderController::class, 'deleteAttachment'])->name('orders.attachment.delete');
+        Route::post('orders/{order}/force-revert', [OrderController::class, 'forceRevert'])->name('orders.force-revert');
 
         Route::resource('contracts', ContractController::class);
         Route::post('contracts/{contract}/activate', [ContractController::class, 'activate'])->name('contracts.activate');
         Route::post('contracts/{contract}/complete', [ContractController::class, 'complete'])->name('contracts.complete');
         Route::post('contracts/{contract}/terminate', [ContractController::class, 'terminate'])->name('contracts.terminate');
+        Route::post('contracts/{contract}/recall', [ContractController::class, 'recall'])->name('contracts.recall');
         Route::get('contracts/{contract}/pdf', [ContractController::class, 'pdf'])->name('contracts.pdf');
         Route::post('contracts/{contract}/attachment', [ContractController::class, 'uploadAttachment'])->name('contracts.attachment.upload');
         Route::delete('contracts/{contract}/attachment', [ContractController::class, 'deleteAttachment'])->name('contracts.attachment.delete');

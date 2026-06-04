@@ -342,7 +342,8 @@
 
       <!-- Actions -->
       <div class="flex flex-wrap gap-2">
-        <Link v-if="['pending','processing'].includes(order.status)"
+        <!-- Sửa: pending/processing cho tất cả; completed/partial_delivered cho admin -->
+        <Link v-if="['pending','processing'].includes(order.status) || (can('admin.users') && ['completed','partial_delivered'].includes(order.status))"
           :href="route('sales.orders.edit', order.id)"
           class="px-4 py-2 bg-gray-700 hover:bg-gray-800 text-white rounded-lg text-sm font-medium">
           Sửa đơn hàng
@@ -362,7 +363,15 @@
             Hủy đơn hàng
           </button>
         </form>
-        <button v-if="order.status === 'cancelled'" @click="showDeleteModal = true"
+        <!-- Thu hồi (admin): revert về trạng thái trước -->
+        <button v-if="can('admin.users') && ['processing','partial_delivered','completed','cancelled'].includes(order.status)"
+          @click="forceRevertOrder"
+          class="px-4 py-2 border border-yellow-400 text-yellow-700 hover:bg-yellow-50 rounded-lg text-sm font-medium">
+          Thu hồi trạng thái
+        </button>
+        <!-- Xóa: cancelled cho tất cả; pending (no XK/HĐ) cho admin -->
+        <button v-if="order.status === 'cancelled' || (can('admin.users') && order.status === 'pending')"
+          @click="showDeleteModal = true"
           class="px-4 py-2 border border-red-400 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium">
           Xóa
         </button>
@@ -447,6 +456,11 @@ const canCreateExit = computed(() =>
 
 const action = (act) => {
   router.post(route(`sales.orders.${act}`, props.order.id));
+};
+
+const forceRevertOrder = () => {
+  if (!confirm('Thu hồi đơn hàng về trạng thái trước? Thao tác này chỉ được phép khi chưa có phiếu xuất kho hoặc hóa đơn phát sinh.')) return;
+  router.post(route('sales.orders.force-revert', props.order.id));
 };
 
 // Customs declaration

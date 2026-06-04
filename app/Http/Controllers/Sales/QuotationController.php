@@ -229,6 +229,8 @@ class QuotationController extends Controller
 
     public function destroy(Quotation $quotation): RedirectResponse
     {
+        $this->authorize('admin.users');
+
         abort_if(
             !in_array($quotation->status, [
                 QuotationStatus::Draft,
@@ -280,6 +282,7 @@ class QuotationController extends Controller
 
     public function cancel(Quotation $quotation): RedirectResponse
     {
+        $this->authorize('admin.users');
         try {
             $this->quotationService->cancel($quotation);
         } catch (\RuntimeException $e) {
@@ -291,6 +294,7 @@ class QuotationController extends Controller
 
     public function recall(Quotation $quotation): RedirectResponse
     {
+        $this->authorize('admin.users');
         try {
             $this->quotationService->recall($quotation);
         } catch (\RuntimeException $e) {
@@ -301,6 +305,7 @@ class QuotationController extends Controller
 
     public function unapprove(Quotation $quotation): RedirectResponse
     {
+        $this->authorize('admin.users');
         try {
             $this->quotationService->unapprove($quotation);
         } catch (\RuntimeException $e) {
