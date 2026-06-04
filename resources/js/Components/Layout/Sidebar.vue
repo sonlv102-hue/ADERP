@@ -1,14 +1,14 @@
 <template>
   <aside
     :class="[
-      'bg-gray-900 text-white overflow-hidden transition-[width] duration-300 ease-in-out',
+      'bg-slate-900 text-white overflow-hidden transition-[width] duration-300 ease-in-out',
       isMobile ? 'fixed inset-y-0 left-0 z-30' : 'flex-shrink-0',
       open ? 'w-64' : 'w-0',
     ]">
     <div class="w-64 h-full flex flex-col">
 
       <!-- Logo -->
-      <div class="h-16 flex items-center px-4 border-b border-gray-700 flex-shrink-0">
+      <div class="h-16 flex items-center px-4 border-b border-slate-800 flex-shrink-0">
         <template v-if="companyLogo">
           <img :src="companyLogo" :alt="companyName"
             class="h-9 w-9 rounded-lg object-contain mr-3 bg-white p-0.5 flex-shrink-0" />
@@ -128,8 +128,8 @@
         </NavGroup>
 
         <!-- Admin -->
-        <div v-if="isAdmin" class="mt-3 pt-3 border-t border-gray-700">
-          <p class="px-4 text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1">Quản trị</p>
+        <div v-if="isAdmin" class="mt-3 pt-3 border-t border-slate-800">
+          <p class="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Quản trị</p>
           <NavItem :href="route('admin.employees.index')" icon="identification">Cán bộ CNV</NavItem>
           <NavItem :href="route('admin.attendance.index')" icon="calendar">Bảng chấm công</NavItem>
           <NavItem :href="route('admin.users.index')" icon="users">Người dùng</NavItem>

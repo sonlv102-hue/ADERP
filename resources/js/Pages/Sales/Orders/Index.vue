@@ -2,9 +2,8 @@
   <AppLayout>
     <div class="space-y-5">
       <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-bold text-gray-900">Đơn hàng</h1>
-        <Link :href="route('sales.orders.create')"
-          class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+        <h1 class="text-2xl font-bold text-slate-900">Đơn hàng</h1>
+        <Link :href="route('sales.orders.create')" class="erp-btn-primary">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
           </svg>
@@ -12,32 +11,32 @@
         </Link>
       </div>
 
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <table class="w-full text-sm">
-          <thead class="bg-gray-50 border-b border-gray-200">
+          <thead class="bg-slate-50 border-b border-slate-200">
             <tr>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã ĐH</th>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">Khách hàng</th>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">Ngày đặt</th>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">BG liên kết</th>
-              <th class="text-right px-5 py-3 font-semibold text-gray-600">Tổng tiền</th>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">Duyệt đơn</th>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">Hợp đồng</th>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">Hải quan</th>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">Giao hàng</th>
+              <th class="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wide">Mã ĐH</th>
+              <th class="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wide">Khách hàng</th>
+              <th class="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wide">Ngày đặt</th>
+              <th class="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wide">BG liên kết</th>
+              <th class="text-right px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wide">Tổng tiền</th>
+              <th class="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wide">Duyệt đơn</th>
+              <th class="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wide">Hợp đồng</th>
+              <th class="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wide">Hải quan</th>
+              <th class="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wide">Giao hàng</th>
               <th class="px-5 py-3" />
             </tr>
           </thead>
-          <tbody class="divide-y divide-gray-100">
-            <tr v-for="o in orders.data" :key="o.id" class="hover:bg-gray-50">
-              <td class="px-5 py-3 font-mono text-xs text-gray-700">{{ o.code }}</td>
-              <td class="px-5 py-3 text-gray-800 font-medium">{{ o.customer }}</td>
-              <td class="px-5 py-3 text-gray-600 whitespace-nowrap">
+          <tbody class="divide-y divide-slate-100">
+            <tr v-for="o in orders.data" :key="o.id" class="hover:bg-slate-50/70 transition-colors">
+              <td class="px-5 py-3 font-mono text-xs font-semibold text-slate-700">{{ o.code }}</td>
+              <td class="px-5 py-3 text-slate-800 font-medium">{{ o.customer }}</td>
+              <td class="px-5 py-3 text-slate-600 whitespace-nowrap">
                 {{ o.order_date }}
-                <span v-if="o.expected_delivery" class="block text-xs text-gray-400">Giao: {{ o.expected_delivery }}</span>
+                <span v-if="o.expected_delivery" class="block text-xs text-slate-400">Giao: {{ o.expected_delivery }}</span>
               </td>
-              <td class="px-5 py-3 font-mono text-xs text-gray-500">{{ o.quotation_code ?? '—' }}</td>
-              <td class="px-5 py-3 text-right font-medium text-gray-800">{{ formatVnd(o.total) }}</td>
+              <td class="px-5 py-3 font-mono text-xs text-slate-500">{{ o.quotation_code ?? '—' }}</td>
+              <td class="px-5 py-3 text-right font-semibold text-slate-800">{{ formatVnd(o.total) }}</td>
 
               <!-- Duyệt đơn -->
               <td class="px-5 py-3">
@@ -57,7 +56,7 @@
                   class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700 border border-amber-200">
                   Chưa có HĐ
                 </span>
-                <span v-else class="text-gray-300 text-xs">—</span>
+                <span v-else class="text-slate-300 text-xs">—</span>
               </td>
 
               <!-- Hải quan -->
@@ -77,7 +76,7 @@
                   </svg>
                   Đã khai HQ
                 </span>
-                <span v-else class="text-gray-300 text-xs">—</span>
+                <span v-else class="text-slate-300 text-xs">—</span>
               </td>
 
               <!-- Giao hàng -->
@@ -97,19 +96,24 @@
                   Đang giao
                 </span>
                 <span v-else-if="o.delivery_status === 'none'"
-                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-500">
+                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-500">
                   Chưa giao
                 </span>
-                <span v-else class="text-gray-300 text-xs">—</span>
+                <span v-else class="text-slate-300 text-xs">—</span>
               </td>
 
               <td class="px-5 py-3 text-right">
                 <Link :href="route('sales.orders.show', o.id)"
-                  class="text-primary-600 hover:text-primary-800 font-medium">Xem</Link>
+                  class="text-primary-600 hover:text-primary-800 font-medium text-xs">Xem →</Link>
               </td>
             </tr>
             <tr v-if="!orders.data?.length">
-              <td colspan="10" class="px-5 py-10 text-center text-gray-400">Chưa có đơn hàng nào</td>
+              <td colspan="10" class="px-5 py-14 text-center text-slate-400">
+                <svg class="w-8 h-8 mx-auto mb-2 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                Chưa có đơn hàng nào
+              </td>
             </tr>
           </tbody>
         </table>

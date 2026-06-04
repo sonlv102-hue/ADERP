@@ -52,7 +52,7 @@ class JournalEntryController extends Controller
                 'is_auto'      => $e->is_auto,
                 'total_debit'  => (float) $e->total_debit,
                 'total_credit' => (float) $e->total_credit,
-                'creator'      => $e->creator->name,
+                'creator'      => $e->creator?->name ?? 'Hệ thống',
             ]),
             'filters' => $request->only(['search', 'status', 'from', 'to']),
         ]);
@@ -124,7 +124,7 @@ class JournalEntryController extends Controller
                 'status_color'   => $journalEntry->statusColor(),
                 'is_auto'        => $journalEntry->is_auto,
                 'notes'          => $journalEntry->notes,
-                'creator'        => $journalEntry->creator->name,
+                'creator'        => $journalEntry->creator?->name ?? 'Hệ thống',
                 'posted_at'      => $journalEntry->posted_at?->format('d/m/Y H:i'),
                 'total_debit'    => $journalEntry->totalDebit(),
                 'total_credit'   => $journalEntry->totalCredit(),

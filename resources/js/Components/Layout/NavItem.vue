@@ -2,7 +2,7 @@
   <Link :href="href" :class="[
     'flex items-center gap-2.5 px-3 py-2 text-sm transition-colors rounded-lg mx-2',
     sub ? 'pl-10' : '',
-    isActive ? 'bg-primary-600 text-white' : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+    isActive ? 'bg-primary-600/90 text-white shadow-sm' : 'text-slate-300 hover:bg-slate-700/60 hover:text-white'
   ]">
     <component v-if="!sub && iconComponent" :is="iconComponent" class="w-4 h-4 flex-shrink-0" />
     <slot />

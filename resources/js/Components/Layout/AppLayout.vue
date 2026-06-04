@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-gray-100 flex">
+  <div class="min-h-screen bg-slate-100 flex">
 
     <!-- Sidebar -->
     <Sidebar :open="sidebarOpen" :is-mobile="isMobile" @close="sidebarOpen = false" />
@@ -40,7 +40,7 @@
       </div>
 
       <!-- Page content -->
-      <main class="flex-1 p-6">
+      <main class="flex-1 p-4 lg:p-6">
         <slot />
       </main>
     </div>

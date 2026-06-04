@@ -1,6 +1,6 @@
 <template>
-  <header class="bg-white border-b border-gray-200 h-16 flex items-center px-6 gap-4">
-    <button @click="$emit('toggle-sidebar')" class="text-gray-500 hover:text-gray-700 p-1.5 rounded-md hover:bg-gray-100">
+  <header class="sticky top-0 z-40 bg-white/95 backdrop-blur-sm border-b border-slate-200/80 shadow-sm h-14 flex items-center px-4 lg:px-6 gap-4">
+    <button @click="$emit('toggle-sidebar')" class="text-slate-500 hover:text-slate-700 p-1.5 rounded-md hover:bg-slate-100">
       <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
       </svg>
@@ -14,21 +14,21 @@
     <!-- User menu -->
     <div class="relative" ref="menuRef">
       <button @click="menuOpen = !menuOpen"
-        class="flex items-center gap-2 text-sm text-gray-700 hover:text-gray-900 px-2 py-1.5 rounded-lg hover:bg-gray-100">
+        class="flex items-center gap-2 text-sm text-slate-700 hover:text-slate-900 px-2 py-1.5 rounded-lg hover:bg-slate-100">
         <div class="w-8 h-8 bg-primary-600 rounded-full flex items-center justify-center text-white font-semibold text-xs">
           {{ initials }}
         </div>
         <span class="hidden sm:block font-medium">{{ auth.user?.name }}</span>
-        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
         </svg>
       </button>
 
       <div v-if="menuOpen"
-        class="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-gray-100 py-1 z-50">
-        <div class="px-4 py-2 border-b border-gray-100">
-          <p class="text-sm font-medium text-gray-900">{{ auth.user?.name }}</p>
-          <p class="text-xs text-gray-500">{{ auth.roles?.[0] }}</p>
+        class="absolute right-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-slate-200 py-1 z-50">
+        <div class="px-4 py-2 border-b border-slate-100">
+          <p class="text-sm font-medium text-slate-900">{{ auth.user?.name }}</p>
+          <p class="text-xs text-slate-500">{{ auth.roles?.[0] }}</p>
         </div>
         <Link :href="route('logout')" method="post" as="button"
           class="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2">
