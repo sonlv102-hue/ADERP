@@ -142,6 +142,7 @@
 
       <!-- Action buttons -->
       <div class="flex flex-wrap gap-2">
+        <!-- Tiến trình thuận -->
         <form v-if="quotation.status === 'draft'" @submit.prevent="action('mark-sent')" method="post">
           <button type="submit" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">
             Đánh dấu đã gửi
@@ -152,21 +153,42 @@
             Duyệt báo giá
           </button>
         </form>
-        <form v-if="['draft','sent'].includes(quotation.status)" @submit.prevent="action('reject')" method="post">
-          <button type="submit" class="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-medium">
-            Từ chối
-          </button>
-        </form>
         <form v-if="quotation.status === 'approved'" @submit.prevent="action('convert-to-order')" method="post">
           <button type="submit" class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium">
             Tạo đơn hàng
           </button>
         </form>
-        <button v-if="!['approved','cancelled'].includes(quotation.status)" @click="cancelQuotation"
+
+        <!-- Thu hồi: sent → draft (chỉ khi chưa có đơn hàng) -->
+        <button v-if="quotation.status === 'sent' && !quotation.orders?.length"
+          @click="recallQuotation"
+          class="px-4 py-2 border border-yellow-400 text-yellow-700 hover:bg-yellow-50 rounded-lg text-sm font-medium">
+          Thu hồi (về Nháp)
+        </button>
+
+        <!-- Hủy duyệt: approved → sent (chỉ khi chưa có đơn hàng) -->
+        <button v-if="quotation.status === 'approved' && !quotation.orders?.length"
+          @click="unapproveQuotation"
+          class="px-4 py-2 border border-yellow-400 text-yellow-700 hover:bg-yellow-50 rounded-lg text-sm font-medium">
+          Hủy duyệt
+        </button>
+
+        <!-- Từ chối: draft hoặc sent -->
+        <form v-if="['draft','sent'].includes(quotation.status)" @submit.prevent="action('reject')" method="post">
+          <button type="submit" class="px-4 py-2 border border-red-300 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium">
+            Từ chối
+          </button>
+        </form>
+
+        <!-- Hủy: mọi trạng thái trừ cancelled; nếu approved thì chỉ khi chưa có đơn -->
+        <button v-if="canCancel" @click="cancelQuotation"
           class="px-4 py-2 border border-orange-300 text-orange-700 hover:bg-orange-50 rounded-lg text-sm font-medium">
           Hủy báo giá
         </button>
-        <button v-if="['draft','cancelled'].includes(quotation.status)" @click="deleteQuotation"
+
+        <!-- Xóa: draft, cancelled, rejected, expired -->
+        <button v-if="['draft','cancelled','rejected','expired'].includes(quotation.status)"
+          @click="deleteQuotation"
           class="px-4 py-2 border border-red-300 text-red-600 hover:bg-red-50 rounded-lg text-sm font-medium">
           Xóa
         </button>
@@ -198,9 +220,29 @@ const action = (act) => {
   router.post(route(`sales.quotations.${act}`, props.quotation.id));
 };
 
+// Có thể hủy: mọi trạng thái trừ cancelled;
+// nếu approved thì chỉ khi chưa có đơn hàng
+const canCancel = computed(() => {
+  if (props.quotation.status === 'cancelled') return false;
+  if (props.quotation.status === 'approved' && props.quotation.orders?.length) return false;
+  return true;
+});
+
 const cancelQuotation = () => {
   if (confirm('Xác nhận hủy báo giá này? Trạng thái sẽ chuyển sang "Đã hủy".')) {
     action('cancel');
+  }
+};
+
+const recallQuotation = () => {
+  if (confirm('Thu hồi báo giá về trạng thái Nháp để chỉnh sửa?')) {
+    action('recall');
+  }
+};
+
+const unapproveQuotation = () => {
+  if (confirm('Hủy duyệt báo giá? Trạng thái sẽ trở về "Đã gửi".')) {
+    action('unapprove');
   }
 };
 

@@ -37,10 +37,32 @@ class QuotationService
 
     public function cancel(Quotation $quotation): void
     {
-        if (in_array($quotation->status, [QuotationStatus::Approved, QuotationStatus::Cancelled])) {
-            throw new RuntimeException('Không thể hủy báo giá đã duyệt hoặc đã hủy.');
+        if (in_array($quotation->status, [QuotationStatus::Cancelled])) {
+            throw new RuntimeException('Báo giá đã ở trạng thái hủy.');
+        }
+        if ($quotation->status === QuotationStatus::Approved && $quotation->orders()->exists()) {
+            throw new RuntimeException('Không thể hủy báo giá đã duyệt và đã có đơn hàng liên kết.');
         }
         $quotation->update(['status' => QuotationStatus::Cancelled]);
+    }
+
+    public function recall(Quotation $quotation): void
+    {
+        if ($quotation->status !== QuotationStatus::Sent) {
+            throw new RuntimeException('Chỉ có thể thu hồi báo giá ở trạng thái "Đã gửi".');
+        }
+        $quotation->update(['status' => QuotationStatus::Draft]);
+    }
+
+    public function unapprove(Quotation $quotation): void
+    {
+        if ($quotation->status !== QuotationStatus::Approved) {
+            throw new RuntimeException('Chỉ có thể hủy duyệt báo giá ở trạng thái "Đã duyệt".');
+        }
+        if ($quotation->orders()->exists()) {
+            throw new RuntimeException('Không thể hủy duyệt báo giá đã có đơn hàng liên kết.');
+        }
+        $quotation->update(['status' => QuotationStatus::Sent]);
     }
 
     public function convertToOrder(Quotation $quotation): Order

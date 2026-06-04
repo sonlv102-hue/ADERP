@@ -186,6 +186,8 @@ Route::middleware('auth')->group(function () {
         Route::post('quotations/{quotation}/approve', [QuotationController::class, 'approve'])->name('quotations.approve');
         Route::post('quotations/{quotation}/reject', [QuotationController::class, 'reject'])->name('quotations.reject');
         Route::post('quotations/{quotation}/cancel', [QuotationController::class, 'cancel'])->name('quotations.cancel');
+        Route::post('quotations/{quotation}/recall', [QuotationController::class, 'recall'])->name('quotations.recall');
+        Route::post('quotations/{quotation}/unapprove', [QuotationController::class, 'unapprove'])->name('quotations.unapprove');
         Route::post('quotations/{quotation}/convert-to-order', [QuotationController::class, 'convertToOrder'])->name('quotations.convert-to-order');
         Route::get('quotations/{quotation}/pdf', [QuotationController::class, 'pdf'])->name('quotations.pdf');
         Route::post('quotations/{quotation}/attachment', [QuotationController::class, 'uploadAttachment'])->name('quotations.attachment.upload');

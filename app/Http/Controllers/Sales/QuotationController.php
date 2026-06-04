@@ -230,9 +230,14 @@ class QuotationController extends Controller
     public function destroy(Quotation $quotation): RedirectResponse
     {
         abort_if(
-            !in_array($quotation->status, [QuotationStatus::Draft, QuotationStatus::Cancelled]),
+            !in_array($quotation->status, [
+                QuotationStatus::Draft,
+                QuotationStatus::Cancelled,
+                QuotationStatus::Rejected,
+                QuotationStatus::Expired,
+            ]),
             403,
-            'Chỉ có thể xóa báo giá ở trạng thái nháp hoặc đã hủy.'
+            'Chỉ có thể xóa báo giá ở trạng thái nháp, đã hủy, từ chối hoặc hết hạn.'
         );
         $quotation->delete();
 
@@ -282,6 +287,26 @@ class QuotationController extends Controller
         }
 
         return back()->with('success', 'Đã hủy báo giá.');
+    }
+
+    public function recall(Quotation $quotation): RedirectResponse
+    {
+        try {
+            $this->quotationService->recall($quotation);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+        return back()->with('success', 'Đã thu hồi báo giá về trạng thái Nháp.');
+    }
+
+    public function unapprove(Quotation $quotation): RedirectResponse
+    {
+        try {
+            $this->quotationService->unapprove($quotation);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+        return back()->with('success', 'Đã hủy duyệt báo giá.');
     }
 
     public function convertToOrder(Quotation $quotation): RedirectResponse
