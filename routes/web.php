@@ -319,6 +319,7 @@ Route::middleware('auth')->group(function () {
 
         // Phiếu kế toán / Bút toán (Journal Entries)
         Route::resource('journal-entries', JournalEntryController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
+        Route::post('journal-entries/{journalEntry}/post', [JournalEntryController::class, 'markPosted'])->name('journal-entries.post')->middleware('can:accounting.manage');
         Route::post('journal-entries/{journalEntry}/reverse', [JournalEntryController::class, 'reverse'])->name('journal-entries.reverse')->middleware('can:accounting.manage');
 
         // Chi phí trả trước (Prepaid Expenses)

@@ -35,6 +35,12 @@ class CashVoucherService
         }
 
         $voucher->update(['status' => CashVoucherStatus::Cancelled]);
+
+        try {
+            $this->accounting->reverseOrDelete('cash_voucher', $voucher->id, "Hủy {$voucher->type->label()} {$voucher->code}");
+        } catch (\Exception $e) {
+            \Log::warning("Cancel voucher journal failed [{$voucher->code}]: " . $e->getMessage());
+        }
     }
 
     // ─── Private helpers ─────────────────────────────────────────────────────

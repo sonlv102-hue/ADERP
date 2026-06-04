@@ -19,6 +19,11 @@
           <span v-if="entry.is_auto" class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-600 border border-blue-200">
             Tự động
           </span>
+          <button v-if="entry.status === 'draft' && can('accounting.manage')"
+            @click="showPostModal = true"
+            class="text-sm px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700">
+            Duyệt & Hạch toán
+          </button>
           <button v-if="entry.status === 'posted' && can('accounting.manage')"
             @click="showReverseModal = true"
             class="text-sm px-3 py-1.5 border border-red-300 text-red-600 rounded-lg hover:bg-red-50">
@@ -100,6 +105,23 @@
       </div>
     </div>
 
+    <!-- Modal: Duyệt bút toán -->
+    <div v-if="showPostModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-sm">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="font-semibold text-gray-900">Duyệt bút toán {{ entry.code }}</h3>
+        </div>
+        <div class="p-6 space-y-3 text-sm text-gray-600">
+          <p>Xác nhận duyệt và hạch toán bút toán này?</p>
+          <p class="text-blue-600">Sau khi duyệt, bút toán sẽ có hiệu lực và ảnh hưởng đến báo cáo kế toán.</p>
+        </div>
+        <div class="px-6 py-4 flex justify-end gap-3 border-t border-gray-100">
+          <button @click="showPostModal = false" class="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700">Hủy</button>
+          <button @click="submitPost" class="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700">Duyệt & Hạch toán</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal: Đảo bút toán -->
     <div v-if="showReverseModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-xl shadow-xl w-full max-w-sm">
@@ -126,7 +148,7 @@
 
 <script setup>
 import { ref } from 'vue';
-import { Link, useForm } from '@inertiajs/vue3';
+import { Link, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import { usePermission } from '@/composables/usePermission';
@@ -135,6 +157,14 @@ import { useCurrency } from '@/composables/useCurrency';
 const props = defineProps({ entry: Object });
 const { hasPermission: can } = usePermission();
 const { formatVnd } = useCurrency();
+
+const showPostModal = ref(false);
+
+function submitPost() {
+  router.post(route('accounting.journal-entries.post', props.entry.id), {}, {
+    onSuccess: () => { showPostModal.value = false; },
+  });
+}
 
 const showReverseModal = ref(false);
 const reverseForm = useForm({ reason: '' });

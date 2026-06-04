@@ -7,7 +7,6 @@ use App\Enums\SerialStatus;
 use App\Enums\StockEntryStatus;
 use App\Enums\StockExitStatus;
 use App\Jobs\NotifyLowStockJob;
-use App\Models\JournalEntry;
 use App\Models\ProductSerial;
 use App\Models\PurchaseOrder;
 use App\Models\StockEntry;
@@ -149,19 +148,10 @@ class StockService
             $entry->update(['status' => StockEntryStatus::Cancelled]);
         });
 
-        // Đảo bút toán nhập kho nếu đã hạch toán
-        $journalEntry = JournalEntry::where('reference_type', 'stock_entry')
-            ->where('reference_id', $entry->id)
-            ->where('status', 'posted')
-            ->whereRaw("description NOT LIKE 'Đảo:%'")
-            ->first();
-
-        if ($journalEntry) {
-            try {
-                $this->accounting->reverse($journalEntry, "Đảo: Hủy phiếu nhập kho {$entry->code}");
-            } catch (\Exception $e) {
-                \Log::warning("Reverse entry journal failed [{$entry->code}]: " . $e->getMessage());
-            }
+        try {
+            $this->accounting->reverseOrDelete('stock_entry', $entry->id, "Hủy phiếu nhập kho {$entry->code}");
+        } catch (\Exception $e) {
+            \Log::warning("Reverse entry journal failed [{$entry->code}]: " . $e->getMessage());
         }
 
         Cache::forget('dashboard.stock_overview');
@@ -205,19 +195,10 @@ class StockService
             $entry->update(['status' => StockEntryStatus::Draft]);
         });
 
-        // Đảo bút toán nhập kho để tạo lại sau khi confirm
-        $journalEntry = JournalEntry::where('reference_type', 'stock_entry')
-            ->where('reference_id', $entry->id)
-            ->where('status', 'posted')
-            ->whereRaw("description NOT LIKE 'Đảo:%'")
-            ->first();
-
-        if ($journalEntry) {
-            try {
-                $this->accounting->reverse($journalEntry, "Đảo: Thu hồi phiếu nhập kho {$entry->code} để chỉnh sửa");
-            } catch (\Exception $e) {
-                \Log::warning("Reverse entry journal failed on recall [{$entry->code}]: " . $e->getMessage());
-            }
+        try {
+            $this->accounting->reverseOrDelete('stock_entry', $entry->id, "Thu hồi phiếu nhập kho {$entry->code} để chỉnh sửa");
+        } catch (\Exception $e) {
+            \Log::warning("Reverse entry journal failed on recall [{$entry->code}]: " . $e->getMessage());
         }
 
         Cache::forget('dashboard.stock_overview');
@@ -344,19 +325,10 @@ class StockService
             $exit->update(['status' => StockExitStatus::Cancelled]);
         });
 
-        // Đảo bút toán giá vốn nếu đã hạch toán
-        $entry = JournalEntry::where('reference_type', 'stock_exit')
-            ->where('reference_id', $exit->id)
-            ->where('status', 'posted')
-            ->whereRaw("description NOT LIKE 'Đảo:%'")
-            ->first();
-
-        if ($entry) {
-            try {
-                $this->accounting->reverse($entry, "Đảo: Hủy phiếu xuất kho {$exit->code}");
-            } catch (\Exception $e) {
-                \Log::warning("Reverse exit journal failed [{$exit->code}]: " . $e->getMessage());
-            }
+        try {
+            $this->accounting->reverseOrDelete('stock_exit', $exit->id, "Hủy phiếu xuất kho {$exit->code}");
+        } catch (\Exception $e) {
+            \Log::warning("Reverse exit journal failed [{$exit->code}]: " . $e->getMessage());
         }
 
         Cache::forget('dashboard.stock_overview');

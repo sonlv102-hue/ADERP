@@ -80,6 +80,22 @@ class InvoiceController extends Controller
             'notes'       => ['nullable', 'string'],
         ]);
 
+        // Kiểm tra tổng hóa đơn không vượt giá trị đơn hàng
+        if (!empty($data['order_id'])) {
+            $order = Order::find($data['order_id']);
+            if ($order) {
+                $existingTotal = Invoice::where('order_id', $data['order_id'])
+                    ->where('status', '!=', InvoiceStatus::Cancelled->value)
+                    ->sum('total');
+                $newTotal = (float) $data['total'];
+                if ($existingTotal + $newTotal > (float) $order->total * 1.001) {
+                    return back()
+                        ->withErrors(['total' => "Tổng hóa đơn (" . number_format($existingTotal + $newTotal, 0, ',', '.') . " ₫) vượt quá giá trị đơn hàng {$order->code} (" . number_format((float) $order->total, 0, ',', '.') . " ₫)."])
+                        ->withInput();
+                }
+            }
+        }
+
         $invoice = Invoice::create([...$data, 'created_by' => auth()->id()]);
 
         // Kiểm tra hạn mức công nợ khách hàng

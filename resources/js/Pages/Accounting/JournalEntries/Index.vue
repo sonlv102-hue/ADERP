@@ -62,6 +62,8 @@
               <td class="px-5 py-3 text-right whitespace-nowrap">
                 <Link :href="route('accounting.journal-entries.show', e.id)"
                   class="text-primary-600 hover:text-primary-800 font-medium mr-3">Xem</Link>
+                <button v-if="can('accounting.manage') && e.status === 'draft'" @click="confirmPost(e)"
+                  class="text-green-600 hover:text-green-800 font-medium mr-3">Duyệt</button>
                 <button v-if="can('accounting.manage')" @click="confirmDelete(e)"
                   class="text-red-500 hover:text-red-700 font-medium">Xóa</button>
               </td>
@@ -88,6 +90,19 @@
       <template #footer>
         <button @click="deleteTarget = null" class="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Hủy</button>
         <button @click="doDelete" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700">Xóa</button>
+      </template>
+    </Modal>
+
+    <Modal :show="postTarget !== null" @close="postTarget = null">
+      <template #title>Duyệt bút toán</template>
+      <div class="space-y-2 text-sm text-gray-600">
+        <p>Xác nhận duyệt và hạch toán bút toán <strong>{{ postTarget?.code }}</strong>?</p>
+        <p class="italic text-gray-500">{{ postTarget?.description }}</p>
+        <p class="text-blue-600">Sau khi duyệt, bút toán sẽ có hiệu lực và ảnh hưởng đến báo cáo kế toán.</p>
+      </div>
+      <template #footer>
+        <button @click="postTarget = null" class="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Hủy</button>
+        <button @click="doPost" class="px-4 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700">Duyệt & Hạch toán</button>
       </template>
     </Modal>
   </AppLayout>
@@ -124,6 +139,14 @@ const confirmDelete = (entry) => { deleteTarget.value = entry; };
 const doDelete = () => {
   router.delete(route('accounting.journal-entries.destroy', deleteTarget.value.id), {
     onSuccess: () => { deleteTarget.value = null; },
+  });
+};
+
+const postTarget = ref(null);
+const confirmPost = (entry) => { postTarget.value = entry; };
+const doPost = () => {
+  router.post(route('accounting.journal-entries.post', postTarget.value.id), {}, {
+    onSuccess: () => { postTarget.value = null; },
   });
 };
 </script>

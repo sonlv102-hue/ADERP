@@ -34,16 +34,19 @@ class AccountingService
         $this->checkPeriodOpen($date);
 
         return DB::transaction(function () use ($description, $date, $lines, $referenceType, $referenceId, $isAuto, $notes) {
+            // Bút toán tự động (is_auto=true) tạo ở trạng thái draft để kế toán duyệt trước khi hạch toán
+            $status = $isAuto ? 'draft' : 'posted';
+
             $entry = JournalEntry::create([
                 'code'           => JournalEntry::generateCode(),
                 'entry_date'     => $date,
                 'description'    => $description,
                 'reference_type' => $referenceType,
                 'reference_id'   => $referenceId,
-                'status'         => 'posted',
+                'status'         => $status,
                 'is_auto'        => $isAuto,
                 'created_by'     => auth()->id() ?? 1,
-                'posted_at'      => now(),
+                'posted_at'      => $isAuto ? null : now(),
                 'notes'          => $notes,
             ]);
 
@@ -64,6 +67,39 @@ class AccountingService
 
             return $entry;
         });
+    }
+
+    /** Duyệt bút toán nháp → posted */
+    public function markPosted(JournalEntry $entry): void
+    {
+        if ($entry->status !== 'draft') {
+            throw new \RuntimeException('Chỉ có thể duyệt bút toán đang ở trạng thái Nháp.');
+        }
+        $this->checkPeriodOpen(Carbon::parse($entry->entry_date));
+        $entry->update(['status' => 'posted', 'posted_at' => now()]);
+    }
+
+    /**
+     * Đảo bút toán nếu đã posted, hoặc xóa nếu vẫn còn draft.
+     * Dùng trong các nghiệp vụ hủy/thu hồi để xử lý cả 2 trạng thái.
+     */
+    public function reverseOrDelete(string $refType, int $refId, string $reason): void
+    {
+        $entry = JournalEntry::where('reference_type', $refType)
+            ->where('reference_id', $refId)
+            ->whereIn('status', ['posted', 'draft'])
+            ->whereRaw("description NOT LIKE 'Đảo:%'")
+            ->first();
+
+        if (! $entry) return;
+
+        if ($entry->status === 'draft') {
+            $entry->lines()->delete();
+            $entry->delete();
+            return;
+        }
+
+        $this->reverse($entry, $reason);
     }
 
     /** Đảo bút toán (tạo bút toán ngược) */

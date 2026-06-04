@@ -3,7 +3,6 @@
 namespace App\Services;
 
 use App\Enums\PurchaseInvoiceStatus;
-use App\Models\JournalEntry;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoicePayment;
 use Carbon\Carbon;
@@ -59,19 +58,10 @@ class PurchaseInvoiceService
     public function removePayment(PurchaseInvoice $invoice, PurchaseInvoicePayment $payment): void
     {
         DB::transaction(function () use ($invoice, $payment) {
-            // Đảo bút toán thanh toán nếu đã hạch toán
-            $entry = JournalEntry::where('reference_type', 'purchase_invoice_payment')
-                ->where('reference_id', $payment->id)
-                ->where('status', 'posted')
-                ->whereRaw("description NOT LIKE 'Đảo:%'")
-                ->first();
-
-            if ($entry) {
-                try {
-                    $this->accounting->reverse($entry, "Đảo: Trả NCC {$invoice->code}");
-                } catch (\Exception $e) {
-                    \Log::warning("Reverse purchase payment entry failed [{$invoice->code}]: " . $e->getMessage());
-                }
+            try {
+                $this->accounting->reverseOrDelete('purchase_invoice_payment', $payment->id, "Trả NCC {$invoice->code}");
+            } catch (\Exception $e) {
+                \Log::warning("Reverse purchase payment entry failed [{$invoice->code}]: " . $e->getMessage());
             }
 
             $payment->delete();

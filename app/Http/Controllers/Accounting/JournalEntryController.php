@@ -140,6 +140,19 @@ class JournalEntryController extends Controller
         ]);
     }
 
+    public function markPosted(JournalEntry $journalEntry): RedirectResponse
+    {
+        $this->authorize('accounting.manage');
+
+        try {
+            $this->accounting->markPosted($journalEntry);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', "Đã duyệt và hạch toán bút toán {$journalEntry->code}.");
+    }
+
     public function destroy(JournalEntry $journalEntry): RedirectResponse
     {
         $this->authorize('accounting.manage');

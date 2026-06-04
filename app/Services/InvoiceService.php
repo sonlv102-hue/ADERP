@@ -26,19 +26,10 @@ class InvoiceService
         }
 
         DB::transaction(function () use ($invoice) {
-            // Đảo bút toán hóa đơn nếu đã hạch toán
-            $entry = JournalEntry::where('reference_type', 'invoice')
-                ->where('reference_id', $invoice->id)
-                ->where('status', 'posted')
-                ->whereRaw("description NOT LIKE 'Đảo:%'")
-                ->first();
-
-            if ($entry) {
-                try {
-                    $this->accounting->reverse($entry, "Đảo: Hủy hóa đơn {$invoice->code}");
-                } catch (\Exception $e) {
-                    \Log::warning("Reverse invoice entry failed [{$invoice->code}]: " . $e->getMessage());
-                }
+            try {
+                $this->accounting->reverseOrDelete('invoice', $invoice->id, "Hủy hóa đơn {$invoice->code}");
+            } catch (\Exception $e) {
+                \Log::warning("Cancel invoice journal failed [{$invoice->code}]: " . $e->getMessage());
             }
 
             $invoice->update(['status' => InvoiceStatus::Cancelled]);
@@ -99,18 +90,10 @@ class InvoiceService
     public function removePayment(Invoice $invoice, Payment $payment): void
     {
         DB::transaction(function () use ($invoice, $payment) {
-            // Đảo bút toán thanh toán nếu đã hạch toán
-            $entry = JournalEntry::where('reference_type', 'payment')
-                ->where('reference_id', $payment->id)
-                ->where('status', 'posted')
-                ->first();
-
-            if ($entry) {
-                try {
-                    $this->accounting->reverse($entry, "Đảo: Thu tiền {$invoice->code}");
-                } catch (\Exception $e) {
-                    \Log::warning("Reverse payment entry failed [{$invoice->code}]: " . $e->getMessage());
-                }
+            try {
+                $this->accounting->reverseOrDelete('payment', $payment->id, "Thu tiền {$invoice->code}");
+            } catch (\Exception $e) {
+                \Log::warning("Reverse payment entry failed [{$invoice->code}]: " . $e->getMessage());
             }
 
             $payment->delete();
@@ -129,13 +112,13 @@ class InvoiceService
 
     private function postInvoiceEntry(Invoice $invoice): void
     {
-        // Ngăn hạch toán trùng — kiểm tra journal entry đã tồn tại cho hóa đơn này
-        $alreadyPosted = JournalEntry::where('reference_type', 'invoice')
+        // Ngăn hạch toán trùng — kiểm tra journal entry đã tồn tại (kể cả draft chờ duyệt)
+        $alreadyExists = JournalEntry::where('reference_type', 'invoice')
             ->where('reference_id', $invoice->id)
-            ->where('status', 'posted')
+            ->whereIn('status', ['posted', 'draft'])
             ->whereRaw("description NOT LIKE 'Đảo:%'")
             ->exists();
-        if ($alreadyPosted) return;
+        if ($alreadyExists) return;
 
         $subtotal = (float) $invoice->subtotal;
         $tax      = (float) $invoice->tax_amount;
