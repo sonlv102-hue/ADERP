@@ -24,7 +24,7 @@
             class="text-sm px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700">
             Duyệt & Hạch toán
           </button>
-          <button v-if="entry.status === 'posted' && can('accounting.manage')"
+          <button v-if="entry.status === 'posted' && !entry.description.startsWith('Đảo:') && can('accounting.manage')"
             @click="showReverseModal = true"
             class="text-sm px-3 py-1.5 border border-red-300 text-red-600 rounded-lg hover:bg-red-50">
             Đảo bút toán

@@ -109,6 +109,11 @@ class AccountingService
             throw new \RuntimeException('Chỉ có thể đảo bút toán đã hạch toán.');
         }
 
+        // Chặn đảo bút toán đảo — tránh chuỗi "Đảo: Đảo: Đảo:..."
+        if (str_starts_with($entry->description, 'Đảo:')) {
+            throw new \RuntimeException('Không thể đảo một bút toán đảo. Liên hệ kế toán trưởng nếu cần điều chỉnh.');
+        }
+
         $entry->load('lines');
         $reversedLines = $entry->lines->map(fn ($l) => [
             'account'     => $l->account_code,
@@ -118,13 +123,14 @@ class AccountingService
             'project_id'  => $l->project_id,
         ])->all();
 
+        // Bút toán đảo luôn posted ngay (isAuto=false) — đây là bút toán điều chỉnh, không cần duyệt lại
         $reversal = $this->post(
             description: 'Đảo: ' . $entry->description,
             date: now(),
             lines: $reversedLines,
             referenceType: $entry->reference_type,
             referenceId: $entry->reference_id,
-            isAuto: $entry->is_auto,
+            isAuto: false,
             notes: $reason,
         );
 
