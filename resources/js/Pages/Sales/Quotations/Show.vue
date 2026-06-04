@@ -98,7 +98,7 @@
             <template v-if="totalVat > 0">
               <tr>
                 <td colspan="7" class="px-5 py-2 text-right text-sm text-gray-600">Cộng hàng (chưa VAT):</td>
-                <td class="px-5 py-2 text-right font-medium text-gray-700">{{ formatVnd(quotation.total) }}</td>
+                <td class="px-5 py-2 text-right font-medium text-gray-700">{{ formatVnd(netBeforeVat) }}</td>
               </tr>
               <tr>
                 <td colspan="7" class="px-5 py-2 text-right text-sm text-gray-600">Thuế VAT:</td>
@@ -190,7 +190,9 @@ const { formatVnd } = useCurrency();
 const totalVat = computed(() =>
   (props.quotation.items ?? []).reduce((s, i) => s + (i.vat_amount ?? 0), 0)
 );
-const grandTotal = computed(() => (props.quotation.total ?? 0) + totalVat.value);
+// quotation.total từ PHP đã bao gồm VAT (subtotal - globalCK + vatTotal)
+const grandTotal = computed(() => props.quotation.total ?? 0);
+const netBeforeVat = computed(() => grandTotal.value - totalVat.value);
 
 const action = (act) => {
   router.post(route(`sales.quotations.${act}`, props.quotation.id));

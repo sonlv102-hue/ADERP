@@ -61,7 +61,7 @@ class QuotationService
             ]);
 
             $sub = $quotation->subtotal();
-            $docFactor = $sub > 0 ? $quotation->total() / $sub : 1;
+            $docFactor = $sub > 0 ? $quotation->netBeforeVat() / $sub : 1;
 
             foreach ($quotation->items as $qItem) {
                 $order->items()->create([

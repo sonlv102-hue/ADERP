@@ -53,7 +53,9 @@ class Order extends Model
 
     public function total(): float
     {
-        return (float) $this->items->sum(fn ($item) => $item->lineTotal());
+        return (float) $this->items->sum(fn ($item) =>
+            $item->lineTotal() + (int) round($item->lineTotal() * ($item->vat_rate ?? 0) / 100)
+        );
     }
 
     public function customer(): BelongsTo

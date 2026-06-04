@@ -27,7 +27,7 @@ class OrderController extends Controller
             'orders' => Order::with(['customer', 'creator', 'quotation'])
                 ->withCount('items')
                 ->addSelect([
-                    'items_total' => OrderItem::selectRaw('COALESCE(SUM(quantity * unit_price - COALESCE(discount_amount, 0)), 0)')
+                    'items_total' => OrderItem::selectRaw('COALESCE(SUM((quantity * unit_price - COALESCE(discount_amount, 0)) + ROUND((quantity * unit_price - COALESCE(discount_amount, 0)) * COALESCE(vat_rate, 0) / 100)), 0)')
                         ->whereColumn('order_id', 'orders.id'),
                     'has_contract' => \App\Models\Contract::selectRaw('COUNT(*)')
                         ->whereColumn('order_id', 'orders.id')
@@ -429,8 +429,8 @@ class OrderController extends Controller
             ->get()
             ->map(function ($q) {
                 $sub = $q->subtotal();
-                // Tỷ lệ chiết khấu tài liệu (doc-level) phân bổ đều cho từng dòng
-                $docFactor = $sub > 0 ? $q->total() / $sub : 1;
+                // Tỷ lệ chiết khấu tài liệu (doc-level) phân bổ đều cho từng dòng, trước VAT
+                $docFactor = $sub > 0 ? $q->netBeforeVat() / $sub : 1;
 
                 return [
                     'id'          => $q->id,

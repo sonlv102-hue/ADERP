@@ -61,9 +61,22 @@ class Quotation extends Model
         return round(((float) $this->discount_value / $sub) * 100, 2);
     }
 
-    public function total(): float
+    public function vatTotal(): float
+    {
+        return (float) $this->items->sum(fn ($item) =>
+            (int) round($item->lineTotal() * ($item->vat_rate ?? 0) / 100)
+        );
+    }
+
+    /** Tổng sau CK, trước VAT — dùng nội bộ (docFactor khi convert sang Order) */
+    public function netBeforeVat(): float
     {
         return $this->subtotal() - $this->discountAmount();
+    }
+
+    public function total(): float
+    {
+        return $this->netBeforeVat() + $this->vatTotal();
     }
 
     public function customer(): BelongsTo
