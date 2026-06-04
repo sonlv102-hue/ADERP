@@ -100,5 +100,23 @@ export function useTabs() {
     }
   }
 
-  return { tabs, openTab, closeTab };
+  function closeAllTabs(currentUrl) {
+    const wasOnTab = tabs.value.some(t => normalizeUrl(currentUrl) === t.url || normalizeUrl(currentUrl).startsWith(t.url + '/'));
+    tabs.value = [];
+    save(tabs.value);
+    if (wasOnTab) router.visit('/dashboard');
+  }
+
+  function closeOtherTabs(keepUrl, currentUrl) {
+    const keep = tabs.value.find(t => t.url === keepUrl);
+    if (!keep) return;
+    tabs.value = [keep];
+    save(tabs.value);
+    const cur = normalizeUrl(currentUrl);
+    if (cur !== keepUrl && !cur.startsWith(keepUrl + '/')) {
+      router.visit(keepUrl);
+    }
+  }
+
+  return { tabs, openTab, closeTab, closeAllTabs, closeOtherTabs };
 }
