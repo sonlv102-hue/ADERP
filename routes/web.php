@@ -310,6 +310,8 @@ Route::middleware('auth')->group(function () {
 
         // Hệ thống tài khoản kế toán (Chart of Accounts)
         Route::get('account-codes', [AccountCodeController::class, 'index'])->name('account-codes.index');
+        Route::get('account-codes/sample', [AccountCodeController::class, 'downloadSample'])->name('account-codes.sample');
+        Route::post('account-codes/import', [AccountCodeController::class, 'importExcel'])->name('account-codes.import')->middleware('can:accounting.manage');
         Route::post('account-codes', [AccountCodeController::class, 'store'])->name('account-codes.store')->middleware('can:accounting.manage');
         Route::put('account-codes/{accountCode}', [AccountCodeController::class, 'update'])->name('account-codes.update')->middleware('can:accounting.manage');
         Route::delete('account-codes/{accountCode}', [AccountCodeController::class, 'destroy'])->name('account-codes.destroy')->middleware('can:accounting.manage');

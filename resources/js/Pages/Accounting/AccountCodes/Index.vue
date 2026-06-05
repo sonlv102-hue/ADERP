@@ -6,13 +6,31 @@
           <h1 class="text-2xl font-bold text-gray-900">Hệ thống tài khoản kế toán</h1>
           <p class="text-sm text-gray-500 mt-0.5">Thông tư 200/2014/TT-BTC — Chế độ kế toán doanh nghiệp</p>
         </div>
-        <button v-if="can('accounting.manage')" @click="showAddForm = true"
-          class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-          </svg>
-          Thêm tài khoản
-        </button>
+        <div class="flex items-center gap-2">
+          <a v-if="can('accounting.manage')" :href="route('accounting.account-codes.sample')"
+            class="erp-btn-secondary flex items-center gap-1.5 text-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            File mẫu
+          </a>
+          <button v-if="can('accounting.manage')" @click="showImport = true"
+            class="erp-btn-secondary flex items-center gap-1.5 text-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+            </svg>
+            Import Excel
+          </button>
+          <button v-if="can('accounting.manage')" @click="showAddForm = true"
+            class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Thêm tài khoản
+          </button>
+        </div>
       </div>
 
       <!-- Filter -->
@@ -88,6 +106,40 @@
         </table>
       </div>
       <p class="text-xs text-gray-400">{{ filteredAccounts.length }} / {{ accounts.length }} tài khoản</p>
+    </div>
+
+    <!-- Modal: Import Excel -->
+    <div v-if="showImport" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-md">
+        <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <h3 class="font-semibold text-gray-900">Import danh mục tài khoản</h3>
+          <button @click="closeImport" class="text-gray-400 hover:text-gray-600">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+          </button>
+        </div>
+        <div class="p-6 space-y-4">
+          <p class="text-sm text-gray-500">
+            Upload file Excel theo đúng format. Tài khoản đã tồn tại sẽ được <strong>cập nhật</strong>,
+            tài khoản mới sẽ được <strong>tạo thêm</strong>. Không xóa tài khoản cũ.
+          </p>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">File Excel (.xls / .xlsx)</label>
+            <input ref="importFileRef" type="file" accept=".xls,.xlsx"
+              class="w-full text-sm text-gray-600 file:mr-3 file:py-1.5 file:px-3 file:rounded file:border-0 file:text-sm file:bg-gray-100 file:text-gray-700 hover:file:bg-gray-200"
+              @change="onFileChange" />
+          </div>
+          <div v-if="importError" class="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{{ importError }}</div>
+          <div class="flex justify-end gap-3 pt-1">
+            <button @click="closeImport" class="erp-btn-secondary text-sm">Hủy</button>
+            <button @click="submitImport" :disabled="!importFile || importing"
+              class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+              {{ importing ? 'Đang import...' : 'Import' }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Modal: Add/Edit account -->
@@ -168,7 +220,7 @@
 
 <script setup>
 import { ref, computed } from 'vue';
-import { useForm } from '@inertiajs/vue3';
+import { useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { usePermission } from '@/composables/usePermission';
 
@@ -180,6 +232,37 @@ const filterType   = ref('');
 const showDetail   = ref(false);
 const showAddForm  = ref(false);
 const editingAccount = ref(null);
+
+// ─── Import Excel ─────────────────────────────────────────────────────────────
+const showImport    = ref(false);
+const importFile    = ref(null);
+const importError   = ref('');
+const importing     = ref(false);
+const importFileRef = ref(null);
+
+function onFileChange(e) {
+  importFile.value  = e.target.files[0] ?? null;
+  importError.value = '';
+}
+function closeImport() {
+  showImport.value  = false;
+  importFile.value  = null;
+  importError.value = '';
+  if (importFileRef.value) importFileRef.value.value = '';
+}
+function submitImport() {
+  if (!importFile.value) return;
+  importing.value   = true;
+  importError.value = '';
+  const fd = new FormData();
+  fd.append('excel_file', importFile.value);
+  router.post(route('accounting.account-codes.import'), fd, {
+    forceFormData: true,
+    onSuccess: () => closeImport(),
+    onError: (errors) => { importError.value = errors.excel_file ?? 'Import thất bại.'; },
+    onFinish: () => { importing.value = false; },
+  });
+}
 
 const form = useForm({
   code: '', name: '', type: 'asset', normal_balance: 'debit',
