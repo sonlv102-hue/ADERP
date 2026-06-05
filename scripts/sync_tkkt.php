@@ -7,7 +7,13 @@ use App\Models\AccountCode;
 use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Facades\Excel;
 
-$file = 'C:/Mini_erp/Danh mục TKKT.xlsx';
+$file = 'Danh_muc_TKKT.xlsx';
+if (!file_exists($file)) {
+    $file = '/var/www/html/Danh_muc_TKKT.xlsx';
+}
+if (!file_exists($file)) {
+    $file = 'C:/Mini_erp/Danh mục TKKT.xlsx';
+}
 echo "=== Bắt đầu đồng bộ danh mục tài khoản từ Excel ===\n";
 echo "Đọc file: $file\n";
 
