@@ -4,7 +4,7 @@
       <div class="flex items-center justify-between">
         <div>
           <h1 class="text-2xl font-bold text-gray-900">Hệ thống tài khoản kế toán</h1>
-          <p class="text-sm text-gray-500 mt-0.5">Thông tư 200/2014/TT-BTC — Chế độ kế toán doanh nghiệp</p>
+          <p class="text-sm text-gray-500 mt-0.5">Thông tư 133/2016/TT-BTC — Chế độ kế toán doanh nghiệp nhỏ và vừa</p>
         </div>
         <div class="flex items-center gap-2">
           <a v-if="can('accounting.manage')" :href="route('accounting.account-codes.sample')"
