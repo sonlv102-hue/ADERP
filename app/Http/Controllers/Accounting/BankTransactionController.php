@@ -141,8 +141,9 @@ class BankTransactionController extends Controller
 
         try {
             $result = $this->service->importExcel($bankAccount, $request->file('excel_file'));
-        } catch (\RuntimeException $e) {
-            return back()->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            \Log::error('Import Excel failed', ['error' => $e->getMessage(), 'file' => $e->getFile(), 'line' => $e->getLine()]);
+            return back()->with('error', 'Import thất bại: ' . $e->getMessage());
         }
 
         $msg = "Import hoàn tất: đã thêm {$result['imported']} giao dịch";
