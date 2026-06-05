@@ -136,7 +136,7 @@ class BankTransactionController extends Controller
         $this->authorize('accounting.manage');
 
         $request->validate([
-            'excel_file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240'],
+            'excel_file' => ['required', 'file', 'max:10240'],
         ]);
 
         try {
