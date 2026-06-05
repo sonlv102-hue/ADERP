@@ -33,6 +33,10 @@
             Toàn bộ phát sinh được tạo thành bút toán lịch sử — ngày tháng lấy từ file.
             Có thể import lần lượt từng tài khoản; chứng từ trùng số sẽ được cập nhật thay vì tạo mới.
           </p>
+          <div class="mb-3">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Ngày số dư đầu kỳ</label>
+            <input v-model="entryDate" type="date" class="form-input w-44" />
+          </div>
           <div class="mb-4">
             <label class="block text-sm font-medium text-gray-700 mb-1">File Excel (.xls / .xlsx)</label>
             <input ref="importFileInput" type="file" accept=".xls,.xlsx"
@@ -158,7 +162,7 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue';
+import { ref, computed, reactive, watch } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { useCurrency } from '@/composables/useCurrency';
@@ -202,6 +206,7 @@ function submitImport() {
 
   const fd = new FormData();
   fd.append('excel_file', importFile.value);
+  fd.append('entry_date', entryDate.value);
 
   router.post(route('accounting.opening-balance.import-excel'), fd, {
     forceFormData: true,
@@ -220,6 +225,13 @@ const lines = reactive({});
 props.accounts.forEach(acc => {
   lines[acc.code] = { debit: acc.debit || 0, credit: acc.credit || 0 };
 });
+
+// Cập nhật lines khi Inertia reload props (sau import/save)
+watch(() => props.accounts, (accounts) => {
+  accounts.forEach(acc => {
+    lines[acc.code] = { debit: acc.debit || 0, credit: acc.credit || 0 };
+  });
+}, { deep: true });
 
 // Khi focus vào ô Nợ → xóa Có (và ngược lại)
 const clearCredit = (code) => { lines[code].credit = 0; };

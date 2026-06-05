@@ -100,38 +100,83 @@ class OpeningBalanceController extends Controller
     {
         $request->validate([
             'excel_file' => ['required', 'file', 'max:20480'],
+            'entry_date' => ['required', 'date'],
         ]);
 
         try {
-            $result = $this->importMisaTransactions($request->file('excel_file'));
+            $parsed = $this->parseMisaClosingBalance($request->file('excel_file'));
         } catch (\Throwable $e) {
-            \Log::error('MISA import failed', ['error' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            \Log::error('MISA import failed', ['error' => $e->getMessage()]);
             return back()->withErrors(['excel_file' => $e->getMessage()]);
         }
 
+        $account = AccountCode::where('code', $parsed['account_code'])->first();
+        if (!$account) {
+            return back()->withErrors(['excel_file' => "Tài khoản {$parsed['account_code']} không tồn tại trong hệ thống."]);
+        }
+
+        DB::transaction(function () use ($request, $parsed) {
+            $entry = JournalEntry::where('reference_type', 'opening_balance')->first();
+
+            if (!$entry) {
+                $entry = JournalEntry::create([
+                    'code'           => 'SDDK',
+                    'entry_date'     => $request->input('entry_date'),
+                    'description'    => 'Số dư đầu kỳ',
+                    'reference_type' => 'opening_balance',
+                    'status'         => 'posted',
+                    'is_auto'        => false,
+                    'created_by'     => auth()->id(),
+                    'posted_at'      => now(),
+                ]);
+            }
+
+            $maxOrder = $entry->lines()->max('sort_order') ?? 0;
+            $entry->lines()->updateOrCreate(
+                ['account_code' => $parsed['account_code']],
+                [
+                    'debit'       => $parsed['debit'],
+                    'credit'      => $parsed['credit'],
+                    'description' => 'Số dư đầu kỳ',
+                    'sort_order'  => $maxOrder + 1,
+                ]
+            );
+        });
+
+        $balance = $parsed['debit'] > 0
+            ? 'Nợ ' . number_format($parsed['debit'])
+            : 'Có ' . number_format($parsed['credit']);
+
         return back()->with('success',
-            "Đã import TK {$result['account_code']}: {$result['imported']} chứng từ, {$result['lines']} dòng. " .
-            ($result['updated'] > 0 ? "Cập nhật lại {$result['updated']} chứng từ đã tồn tại." : '')
+            "Đã import TK {$parsed['account_code']} ({$account->name}): {$balance} VND " .
+            "(tính từ {$parsed['tx_count']} phát sinh)."
         );
     }
 
     // ─── Private ────────────────────────────────────────────────────────────────
 
-    private function importMisaTransactions(UploadedFile $file): array
+    /**
+     * Tính số dư cuối kỳ bằng cách cộng toàn bộ phát sinh trong file
+     * (chính xác hơn đọc ô "Số dư cuối kỳ" do tránh lỗi làm tròn MISA)
+     */
+    private function parseMisaClosingBalance(UploadedFile $file): array
     {
         $rows = Excel::toArray([], $file)[0] ?? [];
 
         $accountCode = null;
-        $documents   = []; // doc_number => ['date'=>..., 'desc'=>..., 'lines'=>[acc_code=>['debit'=>,'credit'=>]]]
+        $openingDebit  = 0.0;
+        $openingCredit = 0.0;
+        $txDebit  = 0.0;
+        $txCredit = 0.0;
+        $txCount  = 0;
 
         foreach ($rows as $row) {
             $col0 = trim((string)($row[0] ?? ''));
-            $col2 = trim((string)($row[2] ?? '')); // Số chứng từ
-            $col3 = trim((string)($row[3] ?? '')); // Diễn giải
-            $col5 = trim((string)($row[5] ?? '')); // Tài khoản chính
-            $col6 = trim((string)($row[6] ?? '')); // TK đối ứng
-            $col7 = (float)($row[7] ?? 0);          // Phát sinh Nợ
-            $col9 = (float)($row[9] ?? 0);          // Phát sinh Có
+            $col3 = trim((string)($row[3] ?? ''));
+            $col5 = trim((string)($row[5] ?? ''));
+            $col6 = trim((string)($row[6] ?? ''));
+            $col7 = (float)($row[7] ?? 0);  // Phát sinh Nợ
+            $col9 = (float)($row[9] ?? 0);  // Phát sinh Có
 
             // Lấy mã tài khoản từ header
             if (!$accountCode && str_contains($col0, 'Tài khoản:')) {
@@ -140,89 +185,42 @@ class OpeningBalanceController extends Controller
                 }
             }
 
-            // Bỏ qua dòng không phải giao dịch
-            if (!$col2 || !$col6) continue;
-            if (str_contains($col3, 'Số dư') || str_contains($col3, 'Phát sinh')) continue;
-
-            // Parse ngày DD/MM/YYYY
-            $date = null;
-            if ($col0 && preg_match('#^\d{2}/\d{2}/\d{4}$#', $col0)) {
-                $d = \DateTime::createFromFormat('d/m/Y', $col0);
-                if ($d) $date = $d->format('Y-m-d');
-            }
-            if (!$date) continue;
-
-            if (!isset($documents[$col2])) {
-                $documents[$col2] = ['date' => $date, 'desc' => $col3, 'lines' => []];
+            // Dòng "Số dư đầu kỳ" — số dư trước kỳ báo cáo
+            if (str_contains($col3, 'Số dư đầu kỳ') && !$col6) {
+                $openingDebit  = (float)($row[12] ?? 0); // Dư Nợ col 12
+                $openingCredit = (float)($row[13] ?? 0); // Dư Có col 13
+                continue;
             }
 
-            // Gộp theo account_code trong cùng một chứng từ
-            foreach ([$col5, $col6] as $acc) {
-                if (!$acc) continue;
-                if (!isset($documents[$col2]['lines'][$acc])) {
-                    $documents[$col2]['lines'][$acc] = ['debit' => 0, 'credit' => 0];
-                }
-            }
-            // Bên chính: Nợ/Có theo file
-            $documents[$col2]['lines'][$col5]['debit']  += $col7;
-            $documents[$col2]['lines'][$col5]['credit'] += $col9;
-            // Bên đối ứng: ngược lại
-            $documents[$col2]['lines'][$col6]['debit']  += $col9;
-            $documents[$col2]['lines'][$col6]['credit'] += $col7;
+            // Bỏ qua dòng tổng kết
+            if (str_contains($col3, 'Số dư cuối kỳ') || str_contains($col3, 'Phát sinh')) continue;
+
+            // Dòng giao dịch: có số chứng từ và TK đối ứng
+            if (!trim((string)($row[2] ?? '')) || !$col6) continue;
+            if (!preg_match('#^\d{2}/\d{2}/\d{4}$#', $col0)) continue;
+
+            $txDebit  += $col7;
+            $txCredit += $col9;
+            $txCount++;
         }
 
         if (!$accountCode) {
-            throw new \RuntimeException('Không tìm thấy mã tài khoản. Đảm bảo file là sổ chi tiết MISA xuất ra.');
-        }
-        if (empty($documents)) {
-            throw new \RuntimeException("Không tìm thấy giao dịch nào trong file.");
+            throw new \RuntimeException('Không tìm thấy mã tài khoản. Đảm bảo file là sổ chi tiết MISA.');
         }
 
-        $imported = 0;
-        $updated  = 0;
-        $lineCount = 0;
+        // Số dư cuối = Số dư đầu + Phát sinh Nợ - Phát sinh Có (đối với TK có số dư bên Nợ)
+        $grossDebit  = $openingDebit  + $txDebit;
+        $grossCredit = $openingCredit + $txCredit;
+        $net = $grossDebit - $grossCredit;
 
-        DB::transaction(function () use ($documents, &$imported, &$updated, &$lineCount) {
-            foreach ($documents as $docNumber => $doc) {
-                $exists = JournalEntry::where('code', $docNumber)
-                    ->where('reference_type', 'misa_historical')
-                    ->exists();
-
-                $entry = JournalEntry::updateOrCreate(
-                    ['code' => $docNumber, 'reference_type' => 'misa_historical'],
-                    [
-                        'entry_date'  => $doc['date'],
-                        'description' => mb_substr($doc['desc'], 0, 500),
-                        'status'      => 'posted',
-                        'is_auto'     => true,
-                        'created_by'  => auth()->id(),
-                        'posted_at'   => now(),
-                    ]
-                );
-
-                foreach ($doc['lines'] as $accCode => $amounts) {
-                    if ($amounts['debit'] == 0 && $amounts['credit'] == 0) continue;
-                    $entry->lines()->updateOrCreate(
-                        ['account_code' => $accCode],
-                        [
-                            'debit'       => (int) round($amounts['debit']),
-                            'credit'      => (int) round($amounts['credit']),
-                            'description' => mb_substr($doc['desc'], 0, 500),
-                            'sort_order'  => 0,
-                        ]
-                    );
-                    $lineCount++;
-                }
-
-                $exists ? $updated++ : $imported++;
-            }
-        });
+        $debit  = $net > 0 ? (int) round($net) : 0;
+        $credit = $net < 0 ? (int) round(-$net) : 0;
 
         return [
             'account_code' => $accountCode,
-            'imported'     => $imported,
-            'updated'      => $updated,
-            'lines'        => $lineCount,
+            'debit'        => $debit,
+            'credit'       => $credit,
+            'tx_count'     => $txCount,
         ];
     }
 }
