@@ -93,7 +93,9 @@
           <NavItem v-if="can('accounting.manage')" :href="route('accounting.opening-balance.index')" icon="database" sub>Số dư đầu kỳ</NavItem>
           <NavItem :href="route('accounting.journal-entries.index')"     icon="pencil-alt"     sub>Phiếu kế toán</NavItem>
           <NavItem :href="route('accounting.prepaid-expenses.index')"    icon="clock"          sub>Chi phí trả trước</NavItem>
-          <NavItem :href="route('accounting.bank-accounts.index')"       icon="library"        sub>Tài khoản ngân hàng</NavItem>
+          <NavItem :href="route('accounting.bank-accounts.index')"             icon="library"    sub>Tài khoản ngân hàng</NavItem>
+          <NavItem v-if="can('accounting.manage')" :href="route('accounting.internal-bank-accounts.index')" icon="office-building" sub>TK nội bộ</NavItem>
+          <NavItem :href="route('accounting.internal-transfers.index')" icon="arrows-expand" sub>CK nội bộ</NavItem>
           <NavItem v-if="can('accounting.manage')" :href="route('accounting.payment-terms.index')"       icon="tag"       sub>Điều khoản TT</NavItem>
           <NavItem v-if="can('accounting.manage')" :href="route('accounting.account-codes.index')"       icon="view-list" sub>Hệ thống tài khoản</NavItem>
           <NavItem v-if="can('accounting.manage')" :href="route('accounting.accounting-periods.index')"  icon="calendar"  sub>Kỳ kế toán</NavItem>

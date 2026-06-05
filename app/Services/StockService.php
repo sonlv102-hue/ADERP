@@ -146,13 +146,13 @@ class StockService
             }
 
             $entry->update(['status' => StockEntryStatus::Cancelled]);
-        });
 
-        try {
-            $this->accounting->reverseOrDelete('stock_entry', $entry->id, "Hủy phiếu nhập kho {$entry->code}");
-        } catch (\Exception $e) {
-            \Log::warning("Reverse entry journal failed [{$entry->code}]: " . $e->getMessage());
-        }
+            try {
+                $this->accounting->reverseOrDelete('stock_entry', $entry->id, "Hủy phiếu nhập kho {$entry->code}");
+            } catch (\Exception $e) {
+                \Log::warning("Reverse entry journal failed [{$entry->code}]: " . $e->getMessage());
+            }
+        });
 
         Cache::forget('dashboard.stock_overview');
         Cache::forget('dashboard.stats');

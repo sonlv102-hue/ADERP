@@ -131,6 +131,41 @@
           </div>
         </div>
 
+        <!-- Tài khoản NH đăng ký (chỉ khi edit) -->
+        <div v-if="supplier" class="bg-white rounded-xl border border-gray-200 p-6">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Tài khoản NH đăng ký (đối chiếu tự động)</h2>
+              <p class="text-xs text-gray-400 mt-0.5">Dùng để nhận dạng giao dịch thanh toán NCC khi import sao kê ngân hàng.</p>
+            </div>
+            <button type="button" @click="openBankAdd" class="text-sm text-primary-600 hover:text-primary-800 font-medium flex items-center gap-1">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+              Thêm TK
+            </button>
+          </div>
+          <div v-if="bankAccounts.length" class="space-y-2">
+            <div v-for="ba in bankAccounts" :key="ba.id"
+              class="flex items-center gap-3 p-3 rounded-lg border"
+              :class="ba.is_primary ? 'border-primary-200 bg-primary-50' : 'border-gray-100 bg-gray-50'">
+              <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="font-mono font-semibold text-sm text-gray-800">{{ ba.account_number }}</span>
+                  <span v-if="ba.is_primary" class="text-xs bg-primary-100 text-primary-700 px-1.5 py-0.5 rounded font-medium">Mặc định</span>
+                  <span v-if="!ba.is_active" class="text-xs bg-gray-200 text-gray-500 px-1.5 py-0.5 rounded">Ngưng</span>
+                </div>
+                <div class="text-xs text-gray-500 mt-0.5">{{ ba.bank_name }} <span v-if="ba.account_name">· {{ ba.account_name }}</span></div>
+              </div>
+              <div class="flex items-center gap-2 shrink-0">
+                <button v-if="!ba.is_primary" type="button" @click="setPrimaryBank(ba)"
+                  class="text-xs text-gray-400 hover:text-primary-600">Đặt mặc định</button>
+                <button type="button" @click="openBankEdit(ba)" class="text-xs text-blue-600 hover:text-blue-800">Sửa</button>
+                <button type="button" @click="deleteBank(ba)" class="text-xs text-red-500 hover:text-red-700">Xóa</button>
+              </div>
+            </div>
+          </div>
+          <p v-else class="text-sm text-gray-400 text-center py-4">Chưa có tài khoản nào đăng ký</p>
+        </div>
+
         <div class="flex gap-3">
           <button type="submit" :disabled="form.processing"
             class="bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white px-6 py-2 rounded-lg font-medium text-sm">
@@ -141,17 +176,54 @@
         </div>
       </form>
     </div>
+
+    <!-- Bank account modal -->
+    <div v-if="showBankForm" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
+        <h3 class="text-lg font-bold text-gray-900 mb-4">{{ editingBank ? 'Sửa tài khoản NH' : 'Thêm tài khoản NH' }}</h3>
+        <div class="space-y-3">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Ngân hàng <span class="text-red-500">*</span></label>
+            <input v-model="bankForm.bank_name" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-500" placeholder="Techcombank, VCB..." />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Số tài khoản <span class="text-red-500">*</span></label>
+            <input v-model="bankForm.account_number" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none font-mono focus:ring-2 focus:ring-primary-500" placeholder="19036130647011" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Tên chủ tài khoản</label>
+            <input v-model="bankForm.account_name" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-500 uppercase" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Chi nhánh</label>
+            <input v-model="bankForm.branch" class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <div class="flex items-center gap-2">
+            <input type="checkbox" v-model="bankForm.is_primary" id="bank_primary" class="rounded" />
+            <label for="bank_primary" class="text-sm text-gray-700">Đặt làm tài khoản mặc định</label>
+          </div>
+        </div>
+        <div class="flex gap-3 mt-5">
+          <button @click="submitBankForm" class="bg-primary-600 text-white px-5 py-2 rounded-lg text-sm font-medium flex-1">
+            {{ editingBank ? 'Lưu' : 'Thêm' }}
+          </button>
+          <button @click="showBankForm = false" class="border border-gray-300 px-5 py-2 rounded-lg text-sm text-gray-700">Hủy</button>
+        </div>
+      </div>
+    </div>
   </AppLayout>
 </template>
 
 <script setup>
-import { Link, useForm } from '@inertiajs/vue3';
+import { ref } from 'vue';
+import { Link, useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 
 const props = defineProps({
   supplier:      { type: Object, default: null },
   nextCode:      String,
   payment_terms: { type: Array, default: () => [] },
+  bankAccounts:  { type: Array, default: () => [] },
 });
 
 const form = useForm({
@@ -177,4 +249,30 @@ const submit = () => {
     form.post(route('warehouse.suppliers.store'));
   }
 };
+
+// ─── Supplier Bank Accounts ───────────────────────────────────────────────
+const showBankForm = ref(false);
+const editingBank  = ref(null);
+const emptyBankForm = () => ({ bank_name: '', account_number: '', account_name: '', branch: '', is_primary: false });
+const bankForm = ref(emptyBankForm());
+
+function openBankAdd() { editingBank.value = null; bankForm.value = emptyBankForm(); showBankForm.value = true; }
+function openBankEdit(ba) { editingBank.value = ba; bankForm.value = { ...ba }; showBankForm.value = true; }
+
+function submitBankForm() {
+  const url = editingBank.value
+    ? route('warehouse.suppliers.bank-accounts.update', [props.supplier.id, editingBank.value.id])
+    : route('warehouse.suppliers.bank-accounts.store', props.supplier.id);
+  const method = editingBank.value ? 'put' : 'post';
+  router[method](url, bankForm.value, { onSuccess: () => { showBankForm.value = false; } });
+}
+
+function setPrimaryBank(ba) {
+  router.post(route('warehouse.suppliers.bank-accounts.set-primary', [props.supplier.id, ba.id]));
+}
+
+function deleteBank(ba) {
+  if (!confirm(`Xóa TK ${ba.account_number}?`)) return;
+  router.delete(route('warehouse.suppliers.bank-accounts.destroy', [props.supplier.id, ba.id]));
+}
 </script>

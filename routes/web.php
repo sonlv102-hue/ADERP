@@ -58,6 +58,9 @@ use App\Http\Controllers\Purchasing\PurchaseOrderController;
 use App\Http\Controllers\Purchasing\PurchaseInvoiceController;
 use App\Http\Controllers\Purchasing\PurchaseInvoicePaymentController;
 use App\Http\Controllers\Purchasing\PurchaseContractController;
+use App\Http\Controllers\Purchasing\SupplierBankAccountController;
+use App\Http\Controllers\Accounting\InternalBankAccountController;
+use App\Http\Controllers\Accounting\InternalTransferReportController;
 use App\Http\Controllers\Purchasing\PurchaseContractPaymentScheduleController;
 use App\Http\Controllers\Purchasing\PurchaseReturnController;
 use App\Http\Controllers\Documents\DocumentController;
@@ -156,6 +159,11 @@ Route::middleware('auth')->group(function () {
         Route::post('suppliers/import', [SupplierController::class, 'import'])->name('suppliers.import')->middleware('can:warehouse.manage');
         Route::get('suppliers/import-template', [SupplierController::class, 'importTemplate'])->name('suppliers.import-template');
         Route::resource('suppliers', SupplierController::class)->except(['show']);
+        // Supplier bank accounts
+        Route::post('suppliers/{supplier}/bank-accounts', [SupplierBankAccountController::class, 'store'])->name('suppliers.bank-accounts.store');
+        Route::put('suppliers/{supplier}/bank-accounts/{bankAccount}', [SupplierBankAccountController::class, 'update'])->name('suppliers.bank-accounts.update');
+        Route::delete('suppliers/{supplier}/bank-accounts/{bankAccount}', [SupplierBankAccountController::class, 'destroy'])->name('suppliers.bank-accounts.destroy');
+        Route::post('suppliers/{supplier}/bank-accounts/{bankAccount}/set-primary', [SupplierBankAccountController::class, 'setPrimary'])->name('suppliers.bank-accounts.set-primary');
 
         Route::get('stock-entries/export-pdf', [StockEntryController::class, 'exportPdf'])->name('stock-entries.export-pdf');
         Route::resource('stock-entries', StockEntryController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
@@ -321,6 +329,7 @@ Route::middleware('auth')->group(function () {
         Route::resource('journal-entries', JournalEntryController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
         Route::post('journal-entries/{journalEntry}/post', [JournalEntryController::class, 'markPosted'])->name('journal-entries.post')->middleware('can:accounting.manage');
         Route::post('journal-entries/{journalEntry}/reverse', [JournalEntryController::class, 'reverse'])->name('journal-entries.reverse')->middleware('can:accounting.manage');
+        Route::post('journal-entries/bulk-approve', [JournalEntryController::class, 'bulkApprove'])->name('journal-entries.bulk-approve')->middleware('can:accounting.manage');
 
         // Chi phí trả trước (Prepaid Expenses)
         Route::resource('prepaid-expenses', PrepaidExpenseController::class)->only(['index', 'create', 'store', 'show'])->middleware('can:accounting.view');
@@ -335,6 +344,12 @@ Route::middleware('auth')->group(function () {
         Route::resource('bank-accounts.transactions', BankTransactionController::class)->only(['index', 'store']);
         Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/reconcile',   [BankTransactionController::class, 'reconcile'])->name('bank-accounts.transactions.reconcile')->middleware('can:accounting.manage');
         Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/unreconcile', [BankTransactionController::class, 'unreconcile'])->name('bank-accounts.transactions.unreconcile')->middleware('can:accounting.manage');
+        Route::post('bank-accounts/{bankAccount}/transactions/import-excel',                  [BankTransactionController::class, 'importExcel'])->name('bank-accounts.transactions.import-excel')->middleware('can:accounting.manage');
+        // Tài khoản nội bộ
+        Route::resource('internal-bank-accounts', InternalBankAccountController::class)->only(['index', 'store', 'update', 'destroy'])->middleware('can:accounting.manage');
+        // Báo cáo chuyển khoản nội bộ
+        Route::get('internal-transfers', [InternalTransferReportController::class, 'index'])->name('internal-transfers.index');
+        Route::post('internal-transfers/{bankTransaction}/status', [InternalTransferReportController::class, 'updateStatus'])->name('internal-transfers.update-status')->middleware('can:accounting.manage');
     });
 
     // Support - ticket kỹ thuật và bảo hành

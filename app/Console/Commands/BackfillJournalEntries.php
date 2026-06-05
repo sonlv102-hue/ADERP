@@ -3,7 +3,9 @@
 namespace App\Console\Commands;
 
 use App\Models\Invoice;
+use App\Models\Payment;
 use App\Models\StockEntry;
+use App\Models\StockExit;
 use App\Services\AccountingService;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
@@ -24,6 +26,8 @@ class BackfillJournalEntries extends Command
 
         $this->backfillInvoices();
         $this->backfillStockEntries();
+        $this->backfillPayments();
+        $this->backfillStockExits();
 
         $this->info('Done.');
         return self::SUCCESS;
@@ -82,6 +86,111 @@ class BackfillJournalEntries extends Command
                 $this->info("  OK {$inv->code}");
             } catch (\Throwable $e) {
                 $this->warn("  Lỗi {$inv->code}: " . $e->getMessage());
+            }
+        }
+    }
+
+    private function backfillPayments(): void
+    {
+        $payments = Payment::with('invoice')->get();
+        $this->info("Payments: {$payments->count()} cần tạo bút toán");
+
+        foreach ($payments as $payment) {
+            $invoice = $payment->invoice;
+            if (! $invoice) {
+                $this->line("  Skip payment #{$payment->id}: không có invoice");
+                continue;
+            }
+
+            $exists = \App\Models\JournalEntry::where('reference_type', 'payment')
+                ->where('reference_id', $payment->id)
+                ->whereRaw("description NOT LIKE 'Đảo:%'")
+                ->exists();
+
+            if ($exists) {
+                $this->line("  Skip payment #{$payment->id}: đã có bút toán");
+                continue;
+            }
+
+            try {
+                $amount = (float) $payment->amount;
+                if ($amount <= 0) continue;
+
+                $method = $payment->method instanceof \App\Enums\PaymentMethod
+                    ? $payment->method->value
+                    : ($payment->method ?? 'cash');
+                $cashAccount = match($method) {
+                    'bank_transfer', 'bank' => '112',
+                    default => '111',
+                };
+
+                $this->accounting->post(
+                    description: "Thu tiền {$invoice->code}",
+                    date: Carbon::parse($payment->payment_date),
+                    lines: [
+                        ['account' => $cashAccount, 'debit' => (int) $amount, 'credit' => 0,
+                         'description' => "Thu tiền - {$invoice->code}"],
+                        ['account' => '131', 'debit' => 0, 'credit' => (int) $amount,
+                         'description' => "Xóa công nợ KH - {$invoice->code}"],
+                    ],
+                    referenceType: 'payment',
+                    referenceId: $payment->id,
+                    isAuto: true,
+                );
+
+                $this->info("  OK payment #{$payment->id} ({$invoice->code})");
+            } catch (\Throwable $e) {
+                $this->warn("  Lỗi payment #{$payment->id}: " . $e->getMessage());
+            }
+        }
+    }
+
+    private function backfillStockExits(): void
+    {
+        $exits = StockExit::with('items.product')->where('status', 'confirmed')->get();
+        $this->info("StockExits: {$exits->count()} cần tạo bút toán");
+
+        foreach ($exits as $exit) {
+            $exists = \App\Models\JournalEntry::where('reference_type', 'stock_exit')
+                ->where('reference_id', $exit->id)
+                ->whereRaw("description NOT LIKE 'Đảo:%'")
+                ->exists();
+
+            if ($exists) {
+                $this->line("  Skip {$exit->code}: đã có bút toán");
+                continue;
+            }
+
+            try {
+                $isProject = $exit->item_usage_type === 'project';
+                $debitAccount = $isProject ? '154' : '632';
+
+                $totalCogs = $exit->items->sum(function ($item) {
+                    $vatRate     = (float) ($item->product?->vat_percent ?? 10);
+                    $costInclTax = (float) ($item->product?->cost_price ?? 0);
+                    $divisor     = $vatRate > 0 ? (1 + $vatRate / 100) : 1;
+                    return (int) round(($costInclTax / $divisor) * $item->quantity);
+                });
+
+                if ($totalCogs <= 0) continue;
+
+                $this->accounting->post(
+                    description: "Giá vốn hàng bán {$exit->code}",
+                    date: Carbon::parse($exit->exit_date),
+                    lines: [
+                        ['account' => $debitAccount, 'debit' => $totalCogs, 'credit' => 0,
+                         'description' => "GVHB - {$exit->code}"],
+                        ['account' => '156', 'debit' => 0, 'credit' => $totalCogs,
+                         'description' => "Xuất kho - {$exit->code}"],
+                    ],
+                    referenceType: 'stock_exit',
+                    referenceId: $exit->id,
+                    isAuto: true,
+                );
+
+                $this->info("  OK {$exit->code}");
+            } catch (\Throwable $e) {
+                $this->warn("  Lỗi {$exit->code}: " . $e->getMessage());
             }
         }
     }

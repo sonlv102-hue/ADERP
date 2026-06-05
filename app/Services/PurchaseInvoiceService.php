@@ -34,8 +34,11 @@ class PurchaseInvoiceService
 
     public function addPayment(PurchaseInvoice $invoice, array $data): PurchaseInvoicePayment
     {
-        if ($invoice->status === PurchaseInvoiceStatus::Cancelled) {
-            throw new \RuntimeException('Hóa đơn đã hủy, không thể ghi nhận thanh toán.');
+        if (!in_array($invoice->status, [
+            PurchaseInvoiceStatus::Valid,
+            PurchaseInvoiceStatus::PartialPaid,
+        ])) {
+            throw new \RuntimeException('Chỉ có thể ghi nhận thanh toán khi hóa đơn ở trạng thái Hợp lệ hoặc TT một phần.');
         }
 
         $payment = DB::transaction(function () use ($invoice, $data) {
@@ -45,12 +48,10 @@ class PurchaseInvoiceService
             ]);
 
             $this->recalculatePaid($invoice);
+            $this->postPaymentEntry($payment, $invoice);
 
             return $payment;
         });
-
-        // Hạch toán thanh toán NCC: Dr 331 / Cr 111/112 (ngoài transaction)
-        $this->postPaymentEntry($payment, $invoice);
 
         return $payment;
     }

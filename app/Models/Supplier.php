@@ -38,4 +38,15 @@ class Supplier extends Model
     {
         return $this->hasMany(StockEntry::class);
     }
+
+    public function bankAccounts(): HasMany
+    {
+        return $this->hasMany(SupplierBankAccount::class);
+    }
+
+    public function primaryBankAccount()
+    {
+        return $this->bankAccounts()->where('is_primary', true)->first()
+            ?? $this->bankAccounts()->where('is_active', true)->first();
+    }
 }

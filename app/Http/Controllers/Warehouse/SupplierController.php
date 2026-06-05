@@ -81,6 +81,15 @@ class SupplierController extends Controller
                 'payment_term_id'  => $supplier->payment_term_id,
             ],
             'payment_terms' => PaymentTerm::where('is_active', true)->orderBy('days')->get(['id', 'name', 'days']),
+            'bankAccounts'  => $supplier->bankAccounts()->get()->map(fn ($b) => [
+                'id'             => $b->id,
+                'bank_name'      => $b->bank_name,
+                'account_number' => $b->account_number,
+                'account_name'   => $b->account_name,
+                'branch'         => $b->branch,
+                'is_primary'     => $b->is_primary,
+                'is_active'      => $b->is_active,
+            ]),
         ]);
     }
 

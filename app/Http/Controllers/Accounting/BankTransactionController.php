@@ -20,31 +20,52 @@ class BankTransactionController extends Controller
 
     public function index(Request $request, BankAccount $bankAccount): Response
     {
-        $status = $request->input('status');
-        $from   = $request->input('date_from');
-        $to     = $request->input('date_to');
+        $status      = $request->input('status');
+        $txType      = $request->input('tx_type');
+        $from        = $request->input('date_from');
+        $to          = $request->input('date_to');
+        $counterpart = $request->input('counterpart');
 
         $query = $bankAccount->transactions()
             ->with('journalEntry:id,code')
             ->orderByDesc('transaction_date')
             ->orderByDesc('id');
 
-        if ($status) $query->where('status', $status);
-        if ($from)   $query->where('transaction_date', '>=', $from);
-        if ($to)     $query->where('transaction_date', '<=', $to);
+        if ($status)      $query->where('status', $status);
+        if ($txType)      $query->where('tx_type', $txType);
+        if ($from)        $query->where('transaction_date', '>=', $from);
+        if ($to)          $query->where('transaction_date', '<=', $to);
+        if ($counterpart) {
+            $kw = '%' . $counterpart . '%';
+            $query->where(function ($q) use ($kw) {
+                $q->where('counterpart_account', 'ilike', $kw)
+                  ->orWhere('counterpart_name', 'ilike', $kw);
+            });
+        }
+
+        $alertCount = $bankAccount->transactions()
+            ->where('tx_type', 'internal_transfer')
+            ->whereNotNull('alert_note')
+            ->count();
 
         $transactions = $query->paginate(30)->through(fn ($t) => [
-            'id'               => $t->id,
-            'transaction_date' => $t->transaction_date?->toDateString(),
-            'description'      => $t->description,
-            'reference'        => $t->reference,
-            'debit'            => (float)$t->debit,
-            'credit'           => (float)$t->credit,
-            'status'           => $t->status->value,
-            'status_label'     => $t->status->label(),
-            'status_color'     => $t->status->color(),
-            'journal_entry_id' => $t->journal_entry_id,
-            'journal_entry_code' => $t->journalEntry?->code,
+            'id'                  => $t->id,
+            'transaction_date'    => $t->transaction_date?->toDateString(),
+            'description'         => $t->description,
+            'reference'           => $t->reference,
+            'debit'               => (float)$t->debit,
+            'credit'              => (float)$t->credit,
+            'counterpart_bank'    => $t->counterpart_bank,
+            'counterpart_account' => $t->counterpart_account,
+            'counterpart_name'    => $t->counterpart_name,
+            'tx_type'             => $t->tx_type,
+            'tx_type_label'       => $t->txTypeLabel(),
+            'alert_note'          => $t->alert_note,
+            'status'              => $t->status->value,
+            'status_label'        => $t->status->label(),
+            'status_color'        => $t->status->color(),
+            'journal_entry_id'    => $t->journal_entry_id,
+            'journal_entry_code'  => $t->journalEntry?->code,
         ]);
 
         // Suggest unposted JEs on TK 112 for reconciliation
@@ -65,7 +86,8 @@ class BankTransactionController extends Controller
             ],
             'transactions' => $transactions,
             'pendingJEs'   => $pendingJEs,
-            'filters'      => $request->only(['status', 'date_from', 'date_to']),
+            'alertCount'   => $alertCount,
+            'filters'      => $request->only(['counterpart', 'tx_type', 'status', 'date_from', 'date_to']),
             'statuses'     => collect(BankTransactionStatus::cases())->map(fn ($s) => [
                 'value' => $s->value, 'label' => $s->label(),
             ]),
@@ -107,5 +129,31 @@ class BankTransactionController extends Controller
         } catch (\RuntimeException $e) {
             return back()->withErrors(['general' => $e->getMessage()]);
         }
+    }
+
+    public function importExcel(Request $request, BankAccount $bankAccount): RedirectResponse
+    {
+        $this->authorize('accounting.manage');
+
+        $request->validate([
+            'excel_file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240'],
+        ]);
+
+        try {
+            $result = $this->service->importExcel($bankAccount, $request->file('excel_file'));
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $msg = "Import hoàn tất: đã thêm {$result['imported']} giao dịch";
+        if ($result['skipped'] > 0) {
+            $msg .= ", bỏ qua {$result['skipped']} trùng";
+        }
+        if (!empty($result['errors'])) {
+            $msg .= '. Lỗi: ' . implode('; ', array_slice($result['errors'], 0, 3));
+        }
+        $msg .= '.';
+
+        return back()->with('success', $msg);
     }
 }

@@ -78,11 +78,11 @@ class InvoiceService
                 $invoice->update(['status' => InvoiceStatus::Paid]);
             }
 
+            // Hạch toán thanh toán: Dr 111/112 / Cr 131
+            $this->postPaymentEntry($payment, $invoice);
+
             return $payment;
         });
-
-        // Hạch toán thanh toán: Dr 111/112 / Cr 131 (ngoài transaction — lỗi kế toán không roll back payment)
-        $this->postPaymentEntry($payment, $invoice);
 
         return $payment;
     }

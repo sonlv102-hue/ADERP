@@ -40,6 +40,8 @@ class JournalEntryController extends Controller
             $query->where('entry_date', '<=', $request->to);
         }
 
+        $draftCount = JournalEntry::where('status', 'draft')->count();
+
         return Inertia::render('Accounting/JournalEntries/Index', [
             'entries' => $query->paginate(30)->through(fn ($e) => [
                 'id'           => $e->id,
@@ -54,7 +56,8 @@ class JournalEntryController extends Controller
                 'total_credit' => (float) $e->total_credit,
                 'creator'      => $e->creator?->name ?? 'Hệ thống',
             ]),
-            'filters' => $request->only(['search', 'status', 'from', 'to']),
+            'filters'    => $request->only(['search', 'status', 'from', 'to']),
+            'draftCount' => $draftCount,
         ]);
     }
 
@@ -181,5 +184,30 @@ class JournalEntryController extends Controller
 
         return redirect()->route('accounting.journal-entries.show', $reversal)
             ->with('success', 'Đã tạo bút toán đảo.');
+    }
+
+    public function bulkApprove(Request $request): RedirectResponse
+    {
+        $this->authorize('accounting.manage');
+
+        $drafts = JournalEntry::where('status', 'draft')->get();
+        $approved = 0;
+        $errors = [];
+
+        foreach ($drafts as $entry) {
+            try {
+                $this->accounting->markPosted($entry);
+                $approved++;
+            } catch (\RuntimeException $e) {
+                $errors[] = "{$entry->code}: {$e->getMessage()}";
+            }
+        }
+
+        $message = "Đã duyệt {$approved} bút toán.";
+        if ($errors) {
+            $message .= ' Lỗi: ' . implode('; ', array_slice($errors, 0, 3));
+        }
+
+        return back()->with('success', $message);
     }
 }
