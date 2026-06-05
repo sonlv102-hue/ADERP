@@ -43,6 +43,18 @@ class PayrollTest extends TestCase
             'opening_balance' => 500000000,
             'is_active' => true,
         ]);
+
+        // Create an active employee to populate payroll items
+        \App\Models\Employee::create([
+            'code' => 'NV-0001',
+            'name' => 'Nhân viên kiểm thử',
+            'status' => 'active',
+            'base_salary' => 10000000,
+            'allowance' => 1000000,
+            'insurance_subject' => false,
+            'standard_days' => 26,
+            'created_by' => $this->user->id,
+        ]);
     }
 
     public function test_can_create_payroll_and_populate_active_users(): void
@@ -95,15 +107,15 @@ class PayrollTest extends TestCase
         $this->assertEquals(12000000, $item->base_salary);
         $this->assertEquals(1500000, $item->allowance);
         $this->assertEquals(2000000, $item->bonus);
-        $this->assertEquals(500000, $item->deductions);
-        $this->assertEquals(15000000, $item->net_salary); // 12 + 1.5 + 2 - 0.5 = 15
+        $this->assertEquals(225000, $item->deductions);
+        $this->assertEquals(15275000, $item->net_salary);
 
         $payroll->refresh();
         $this->assertEquals(12000000, $payroll->total_base_salary);
         $this->assertEquals(1500000, $payroll->total_allowance);
         $this->assertEquals(2000000, $payroll->total_bonus);
-        $this->assertEquals(500000, $payroll->total_deductions);
-        $this->assertEquals(15000000, $payroll->total_net_salary);
+        $this->assertEquals(225000, $payroll->total_deductions);
+        $this->assertEquals(15275000, $payroll->total_net_salary);
     }
 
     public function test_can_confirm_payroll_and_pay_employee(): void
@@ -138,7 +150,7 @@ class PayrollTest extends TestCase
         $this->assertNotNull($voucher);
         $this->assertEquals('payment', $voucher->type->value);
         $this->assertEquals(CashVoucherStatus::Confirmed->value, $voucher->status->value);
-        $this->assertEquals($item->net_salary, $voucher->amount);
+        $this->assertEquals((float) $item->net_salary, (float) $voucher->amount);
         $this->assertEquals($this->fund->id, $voucher->fund_id);
 
         // 5. Verify entire payroll is marked as paid

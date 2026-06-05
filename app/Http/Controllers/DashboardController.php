@@ -51,10 +51,14 @@ class DashboardController extends Controller
     {
         $startDate = now()->subMonths(11)->startOfMonth();
 
-        // 1 query GROUP BY thay vì 12 queries riêng lẻ
+        $driver = DB::connection()->getDriverName();
+        $dateExpr = $driver === 'sqlite'
+            ? "strftime('%m/%Y', payment_date)"
+            : "TO_CHAR(payment_date, 'MM/YYYY')";
+
         $payments = Payment::where('payment_date', '>=', $startDate)
-            ->selectRaw("TO_CHAR(payment_date, 'MM/YYYY') as month, SUM(amount) as amount")
-            ->groupByRaw("TO_CHAR(payment_date, 'MM/YYYY')")
+            ->selectRaw("{$dateExpr} as month, SUM(amount) as amount")
+            ->groupByRaw($dateExpr)
             ->pluck('amount', 'month');
 
         return collect(range(11, 0))->map(function ($i) use ($payments) {

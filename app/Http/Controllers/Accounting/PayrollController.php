@@ -296,10 +296,10 @@ class PayrollController extends Controller
         $data = $request->validate([
             'fund_id' => 'required|exists:funds,id',
         ]);
-
         try {
             $this->service->payEmployeeSalary($item, $data['fund_id']);
-            return back()->with('success', "Đã thanh toán lương cho nhân viên {$item->user->name}.");
+            $employeeName = $item->employee?->name ?? $item->user?->name ?? 'nhân viên';
+            return back()->with('success', "Đã thanh toán lương cho {$employeeName}.");
         } catch (RuntimeException $e) {
             return back()->with('error', $e->getMessage());
         }
