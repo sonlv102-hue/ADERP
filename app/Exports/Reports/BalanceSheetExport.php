@@ -21,7 +21,7 @@ class BalanceSheetExport implements FromCollection, WithHeadings, WithMapping, W
     {
         $asOf = $this->filters['as_of'] ?? now()->toDateString();
         $bal  = $this->accountBalancesAsOf($asOf);
-        $b    = fn(string $code) => $bal[$code] ?? 0.0;
+        $b    = fn(string $code) => $this->sumPrefix($bal, $code);
 
         $cashOnHand  = $b('111');
         $bankBalance = $b('112');

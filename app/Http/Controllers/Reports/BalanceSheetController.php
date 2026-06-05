@@ -19,7 +19,7 @@ class BalanceSheetController extends Controller
 
         // Lấy toàn bộ số dư tài khoản tính đến $asOf
         $bal = $this->accountBalancesAsOf($asOf);
-        $b   = fn(string $code) => $bal[$code] ?? 0.0;
+        $b   = fn(string $code) => $this->sumPrefix($bal, $code);
 
         // ─── TÀI SẢN ──────────────────────────────────────────────────────────
         $cashOnHand  = $b('111');

@@ -20,10 +20,10 @@ class IncomeStatementController extends Controller
         $dateTo   = $request->input('date_to')   ?: "{$year}-12-31";
 
         $bal = $this->periodBalances($dateFrom, $dateTo);
-        $b   = fn(string $code) => $bal[$code] ?? 0.0;
+        $b   = fn(string $prefix) => $this->sumPrefix($bal, $prefix);
 
-        // Doanh thu — chỉ dùng TK con (5111/5113) để tránh double-count với TK cha 511
-        $revenue      = $b('5111') + $b('5113') + $b('512') + $b('515');
+        // Doanh thu (TK 511 + TK 512, loại trừ TK 515 để tránh double-count)
+        $revenue      = $b('511') + $b('512');
         $salesReturn  = $b('521');  // Giảm trừ doanh thu
         $netRevenue   = $revenue - $salesReturn;
 
@@ -147,8 +147,16 @@ class IncomeStatementController extends Controller
                     ? (float) $r->dr - (float) $r->cr
                     : (float) $r->cr - (float) $r->dr;
             }
-            $mb         = fn(string $code) => $mBal[$code] ?? 0.0;
-            $mRevenue   = $mb('5111') + $mb('5113') + $mb('512') + $mb('515');
+            $mb = function(string $prefix) use ($mBal) {
+                $total = 0.0;
+                foreach ($mBal as $code => $balance) {
+                    if (str_starts_with((string) $code, $prefix)) {
+                        $total += $balance;
+                    }
+                }
+                return $total;
+            };
+            $mRevenue   = $mb('511') + $mb('512');
             $mCogs      = $mb('632');
             $mSelling   = $mb('641');
             $mAdmin     = $mb('642');
@@ -163,6 +171,17 @@ class IncomeStatementController extends Controller
         }
 
         return $monthly;
+    }
+
+    private function sumPrefix(array $balances, string $prefix): float
+    {
+        $total = 0.0;
+        foreach ($balances as $code => $balance) {
+            if (str_starts_with((string) $code, $prefix)) {
+                $total += $balance;
+            }
+        }
+        return $total;
     }
 
     public function export(Request $request): BinaryFileResponse

@@ -24,9 +24,9 @@ class IncomeStatementExport implements FromCollection, WithHeadings, WithMapping
         $to   = $this->filters['date_to']   ?? "{$year}-12-31";
 
         $bal = $this->periodBalances($from, $to);
-        $b   = fn(string $code) => $bal[$code] ?? 0.0;
+        $b   = fn(string $prefix) => $this->sumPrefix($bal, $prefix);
 
-        $revenue         = $b('5111') + $b('5113') + $b('512') + $b('515');
+        $revenue         = $b('511') + $b('512');
         $salesReturn     = $b('521');
         $netRevenue      = $revenue - $salesReturn;
         $cogs            = $b('632');
@@ -83,6 +83,17 @@ class IncomeStatementExport implements FromCollection, WithHeadings, WithMapping
                 : (float) $r->cr - (float) $r->dr;
         }
         return $result;
+    }
+
+    private function sumPrefix(array $balances, string $prefix): float
+    {
+        $total = 0.0;
+        foreach ($balances as $code => $balance) {
+            if (str_starts_with((string) $code, $prefix)) {
+                $total += $balance;
+            }
+        }
+        return $total;
     }
 
     public function headings(): array { return ['Chỉ tiêu', 'Giá trị (VND)']; }
