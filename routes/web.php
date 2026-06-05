@@ -324,6 +324,7 @@ Route::middleware('auth')->group(function () {
         // Số dư đầu kỳ
         Route::get('opening-balance',  [OpeningBalanceController::class, 'index'])->name('opening-balance.index');
         Route::post('opening-balance', [OpeningBalanceController::class, 'store'])->name('opening-balance.store')->middleware('can:accounting.manage');
+        Route::post('opening-balance/import-excel', [OpeningBalanceController::class, 'importExcel'])->name('opening-balance.import-excel')->middleware('can:accounting.manage');
 
         // Phiếu kế toán / Bút toán (Journal Entries)
         Route::resource('journal-entries', JournalEntryController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
