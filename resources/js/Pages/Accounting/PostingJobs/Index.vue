@@ -83,7 +83,7 @@
 import { ref } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
-import StatusBadge from '@/Components/StatusBadge.vue';
+import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import Pagination from '@/Components/Pagination.vue';
 import { usePermission } from '@/composables/usePermission';
 
