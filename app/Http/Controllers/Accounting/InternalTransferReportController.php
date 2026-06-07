@@ -17,10 +17,28 @@ class InternalTransferReportController extends Controller
     {
         $this->authorize('accounting.view');
 
-        $month             = $request->input('month', now()->format('Y-m'));
-        $internalAccountId = $request->input('internal_account_id');
-        [$year, $mon] = explode('-', $month);
+        $month = $request->input('month', now()->format('Y-m'));
 
+        // Multi-select: internal_account_ids[] (new) hoặc internal_account_id (backward compat)
+        $internalAccountIds = $request->input('internal_account_ids', []);
+        if (empty($internalAccountIds) && $request->filled('internal_account_id')) {
+            $internalAccountIds = [$request->input('internal_account_id')];
+        }
+        $internalAccountIds = collect($internalAccountIds)
+            ->map(fn ($v) => (int) $v)
+            ->filter()
+            ->unique()
+            ->values()
+            ->toArray();
+
+        if ($request->has('internal_account_ids') && !empty($internalAccountIds)) {
+            $request->validate([
+                'internal_account_ids'   => ['array'],
+                'internal_account_ids.*' => ['integer', 'exists:internal_bank_accounts,id'],
+            ]);
+        }
+
+        [$year, $mon] = explode('-', $month);
         $from = Carbon::create($year, $mon, 1)->startOfMonth();
         $to   = $from->copy()->endOfMonth();
 
@@ -30,34 +48,31 @@ class InternalTransferReportController extends Controller
             ->orderBy('transaction_date')
             ->orderBy('id');
 
-        if ($internalAccountId) {
-            $query->where('internal_account_id', $internalAccountId);
+        if (!empty($internalAccountIds)) {
+            $query->whereIn('internal_account_id', $internalAccountIds);
         }
 
         $txs = $query->get();
 
-        // Danh sách TK nội bộ xuất hiện trong tháng này (để lọc)
-        $accountsInMonth = BankTransaction::where('tx_type', 'internal_transfer')
-            ->whereBetween('transaction_date', [$from, $to])
-            ->whereNotNull('internal_account_id')
-            ->with('internalAccount:id,name,account_number,bank_name')
-            ->select('internal_account_id')
-            ->distinct()
-            ->get()
-            ->map(fn ($t) => $t->internalAccount)
-            ->filter()
-            ->values();
+        $allInternalAccounts = InternalBankAccount::where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'account_number', 'bank_name'])
+            ->map(fn ($a) => [
+                'id'             => $a->id,
+                'name'           => $a->name,
+                'account_number' => $a->account_number,
+                'bank_name'      => $a->bank_name,
+            ]);
 
         $summary = [
-            'total_debit'       => (int) $txs->sum('debit'),
-            'total_credit'      => (int) $txs->sum('credit'),
-            'net'               => (int) ($txs->sum('credit') - $txs->sum('debit')),
-            'count'             => $txs->count(),
-            'pending_count'     => $txs->whereIn('internal_status', [null, 'pending'])->count(),
-            'needs_return'      => (int) $txs->where('internal_status', 'needs_return')->sum('return_amount'),
+            'total_debit'   => (int) $txs->sum('debit'),
+            'total_credit'  => (int) $txs->sum('credit'),
+            'net'           => (int) ($txs->sum('credit') - $txs->sum('debit')),
+            'count'         => $txs->count(),
+            'pending_count' => $txs->whereIn('internal_status', [null, 'pending'])->count(),
+            'needs_return'  => (int) $txs->where('internal_status', 'needs_return')->sum('return_amount'),
         ];
 
-        // Month list for selector (all months that have internal transfers)
         $availableMonths = BankTransaction::where('tx_type', 'internal_transfer')
             ->selectRaw("to_char(transaction_date, 'YYYY-MM') as month")
             ->groupByRaw("to_char(transaction_date, 'YYYY-MM')")
@@ -65,34 +80,29 @@ class InternalTransferReportController extends Controller
             ->pluck('month');
 
         return Inertia::render('Accounting/InternalTransferReport/Index', [
-            'month'              => $month,
-            'availableMonths'    => $availableMonths,
-            'internalAccountId'  => $internalAccountId ? (int)$internalAccountId : null,
-            'accountsInMonth'    => $accountsInMonth->map(fn ($a) => [
-                'id'             => $a->id,
-                'name'           => $a->name,
-                'account_number' => $a->account_number,
-                'bank_name'      => $a->bank_name,
-            ]),
-            'summary'            => $summary,
-            'transactions'    => $txs->map(fn ($t) => [
-                'id'                  => $t->id,
-                'transaction_date'    => $t->transaction_date->format('d/m/Y'),
-                'description'         => $t->description,
-                'reference'           => $t->reference,
-                'counterpart_account' => $t->counterpart_account,
-                'counterpart_name'    => $t->counterpart_name,
-                'counterpart_bank'    => $t->counterpart_bank,
-                'debit'               => (float) $t->debit,
-                'credit'              => (float) $t->credit,
-                'bank_account_name'   => $t->bankAccount?->name,
-                'internal_account'    => $t->internalAccount?->name,
-                'internal_status'     => $t->internal_status ?? 'pending',
+            'month'               => $month,
+            'availableMonths'     => $availableMonths,
+            'internalAccountIds'  => $internalAccountIds,
+            'allInternalAccounts' => $allInternalAccounts,
+            'summary'             => $summary,
+            'transactions'        => $txs->map(fn ($t) => [
+                'id'                    => $t->id,
+                'transaction_date'      => $t->transaction_date->format('d/m/Y'),
+                'description'           => $t->description,
+                'reference'             => $t->reference,
+                'counterpart_account'   => $t->counterpart_account,
+                'counterpart_name'      => $t->counterpart_name,
+                'counterpart_bank'      => $t->counterpart_bank,
+                'debit'                 => (float) $t->debit,
+                'credit'                => (float) $t->credit,
+                'bank_account_name'     => $t->bankAccount?->name,
+                'internal_account'      => $t->internalAccount?->name,
+                'internal_status'       => $t->internal_status ?? 'pending',
                 'internal_status_label' => $t->internalStatusLabel(),
                 'internal_status_color' => $t->internalStatusColor(),
-                'internal_note'       => $t->internal_note,
-                'return_amount'       => (float) ($t->return_amount ?? 0),
-                'alert_note'          => $t->alert_note,
+                'internal_note'         => $t->internal_note,
+                'return_amount'         => (float) ($t->return_amount ?? 0),
+                'alert_note'            => $t->alert_note,
             ]),
         ]);
     }

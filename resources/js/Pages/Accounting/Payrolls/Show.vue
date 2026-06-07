@@ -431,7 +431,7 @@
             <select v-model="payForm.bank_account_id" required class="form-input">
               <option value="" disabled>-- Chọn tài khoản NH --</option>
               <option v-for="ba in bankAccounts" :key="ba.id" :value="ba.id">
-                {{ ba.bank_name }} — {{ ba.account_number }} ({{ ba.account_name }})
+                {{ ba.bank_name }} — {{ ba.account_number }} ({{ ba.name }})
               </option>
             </select>
           </div>

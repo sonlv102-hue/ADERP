@@ -79,7 +79,7 @@ class PayrollController extends Controller
             ->map(fn (PayrollItem $item) => $this->itemDTO($item));
 
         $bankAccounts = BankAccount::orderBy('bank_name')
-            ->get(['id', 'bank_name', 'account_number', 'account_name', 'account_code']);
+            ->get(['id', 'bank_name', 'account_number', 'account_code', 'name']);
 
         return Inertia::render('Accounting/Payrolls/Show', [
             'payroll' => [

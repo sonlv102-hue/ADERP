@@ -9,14 +9,61 @@
           <p class="text-sm text-slate-500 mt-0.5">Giám sát hồ sơ đối ứng và hoàn ứng theo tháng</p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <!-- Filter TK nội bộ -->
-          <select v-model="selectedAccount" @change="applyFilters"
-            class="erp-input text-sm min-w-[200px]">
-            <option :value="null">Tất cả tài khoản</option>
-            <option v-for="acc in accountsInMonth" :key="acc.id" :value="acc.id">
-              {{ acc.name }} — {{ acc.account_number }}
-            </option>
-          </select>
+          <!-- Multi-select filter: TK nội bộ -->
+          <div class="relative" ref="accountDropdownRef">
+            <button type="button" @click="accountDropdownOpen = !accountDropdownOpen"
+              class="erp-input text-sm min-w-[220px] flex items-center justify-between gap-2 cursor-pointer">
+              <span class="truncate text-left">
+                <template v-if="selectedAccounts.length === 0">Chọn một hoặc nhiều tài khoản</template>
+                <template v-else-if="selectedAccounts.length === 1">{{ selectedAccountLabels[0] }}</template>
+                <template v-else>{{ selectedAccounts.length }} tài khoản đã chọn</template>
+              </span>
+              <span class="flex shrink-0 items-center gap-1">
+                <span v-if="selectedAccounts.length > 0"
+                  class="bg-purple-600 text-white text-xs rounded-full w-4 h-4 flex items-center justify-center font-bold leading-none">
+                  {{ selectedAccounts.length }}
+                </span>
+                <svg class="w-4 h-4 text-slate-400 transition-transform" :class="{ 'rotate-180': accountDropdownOpen }"
+                  fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+                </svg>
+              </span>
+            </button>
+
+            <!-- Dropdown panel -->
+            <div v-show="accountDropdownOpen"
+              class="absolute top-full right-0 mt-1 bg-white border border-slate-200 rounded-lg shadow-lg z-50 min-w-[270px] max-h-72 flex flex-col">
+              <div class="px-3 py-2 border-b border-slate-100 flex items-center justify-between shrink-0">
+                <span class="text-xs text-slate-500 font-medium">Lọc theo tài khoản nội bộ</span>
+                <button v-if="selectedAccounts.length > 0"
+                  @click="clearAndApply"
+                  class="text-xs text-red-500 hover:text-red-700 font-medium">Xóa bộ lọc</button>
+              </div>
+              <div class="overflow-y-auto flex-1">
+                <label v-for="acc in allInternalAccounts" :key="acc.id"
+                  class="flex items-start gap-3 px-3 py-2.5 hover:bg-slate-50 cursor-pointer border-b border-slate-50 last:border-0">
+                  <input type="checkbox" :value="acc.id" v-model="selectedAccounts"
+                    class="mt-0.5 rounded text-primary-600 focus:ring-primary-500 shrink-0" />
+                  <div class="min-w-0">
+                    <div class="text-sm font-medium text-slate-800 truncate">{{ acc.name }}</div>
+                    <div class="text-xs text-slate-400">
+                      {{ acc.account_number }}<span v-if="acc.bank_name"> · {{ acc.bank_name }}</span>
+                    </div>
+                  </div>
+                </label>
+                <div v-if="allInternalAccounts.length === 0" class="px-3 py-5 text-xs text-slate-400 text-center">
+                  Không có tài khoản nội bộ
+                </div>
+              </div>
+              <div class="px-3 py-2 border-t border-slate-100 shrink-0">
+                <button @click="applyFilters(); accountDropdownOpen = false"
+                  class="w-full text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 rounded-lg py-1.5 transition-colors">
+                  Áp dụng
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- Filter tháng -->
           <select v-model="selectedMonth" @change="applyFilters"
             class="erp-input w-40 text-sm">
@@ -28,14 +75,17 @@
         </div>
       </div>
 
-      <!-- Active filter chip -->
-      <div v-if="activeAccountName" class="flex items-center gap-2">
-        <span class="inline-flex items-center gap-1.5 bg-purple-100 text-purple-800 text-xs font-semibold px-3 py-1.5 rounded-full border border-purple-200">
-          <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"/>
+      <!-- Active filter chips -->
+      <div v-if="selectedAccounts.length > 0" class="flex flex-wrap items-center gap-2">
+        <span class="text-xs text-slate-500 font-medium">Đang lọc:</span>
+        <span v-for="acc in selectedAccountObjects" :key="acc.id"
+          class="inline-flex items-center gap-1.5 bg-purple-100 text-purple-800 text-xs font-semibold px-3 py-1.5 rounded-full border border-purple-200">
+          <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z"/>
           </svg>
-          Lọc: {{ activeAccountName }}
-          <button @click="clearAccountFilter" class="ml-1 hover:text-purple-600">✕</button>
+          {{ acc.name }}
+          <button @click="removeAccount(acc.id)" class="ml-0.5 hover:text-purple-600">✕</button>
         </span>
       </div>
 
@@ -163,7 +213,6 @@
     <Modal :show="updateTarget !== null" @close="updateTarget = null">
       <template #title>Cập nhật hồ sơ — {{ updateTarget?.description?.substring(0, 40) }}</template>
       <div class="space-y-4 text-sm">
-        <!-- Transaction info -->
         <div class="bg-slate-50 rounded-lg px-4 py-3 text-xs text-slate-600 space-y-1">
           <div>Ngày: <strong>{{ updateTarget?.transaction_date }}</strong></div>
           <div v-if="updateTarget?.debit > 0">Tiền ra: <strong class="text-red-600">{{ formatVnd(updateTarget?.debit) }}</strong></div>
@@ -203,7 +252,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import Modal from '@/Components/Shared/Modal.vue';
@@ -214,32 +263,46 @@ const { hasPermission: can } = usePermission();
 const { formatVnd } = useCurrency();
 
 const props = defineProps({
-  month:             String,
-  availableMonths:   Array,
-  internalAccountId: { type: Number, default: null },
-  accountsInMonth:   { type: Array, default: () => [] },
-  summary:           Object,
-  transactions:      Array,
+  month:               String,
+  availableMonths:     Array,
+  internalAccountIds:  { type: Array, default: () => [] },
+  allInternalAccounts: { type: Array, default: () => [] },
+  summary:             Object,
+  transactions:        Array,
 });
 
-const selectedMonth   = ref(props.month);
-const selectedAccount = ref(props.internalAccountId);
-const currentMonth    = new Date().toISOString().slice(0, 7);
-const filterStatus    = ref('');
-const updateTarget    = ref(null);
-const updateForm      = ref({ internal_status: 'pending', internal_note: '', return_amount: null });
+const selectedMonth    = ref(props.month);
+const selectedAccounts = ref([...props.internalAccountIds]);
+const currentMonth     = new Date().toISOString().slice(0, 7);
+const filterStatus     = ref('');
+const updateTarget     = ref(null);
+const updateForm       = ref({ internal_status: 'pending', internal_note: '', return_amount: null });
 
-const activeAccountName = computed(() => {
-  if (!selectedAccount.value) return null;
-  const acc = props.accountsInMonth.find(a => a.id === selectedAccount.value);
-  return acc ? `${acc.name} (${acc.account_number})` : null;
-});
+// Multi-select dropdown
+const accountDropdownRef  = ref(null);
+const accountDropdownOpen = ref(false);
+
+function onClickOutside(e) {
+  if (accountDropdownRef.value && !accountDropdownRef.value.contains(e.target)) {
+    accountDropdownOpen.value = false;
+  }
+}
+onMounted(() => document.addEventListener('mousedown', onClickOutside));
+onUnmounted(() => document.removeEventListener('mousedown', onClickOutside));
+
+const selectedAccountObjects = computed(() =>
+  props.allInternalAccounts.filter(a => selectedAccounts.value.includes(a.id))
+);
+
+const selectedAccountLabels = computed(() =>
+  selectedAccountObjects.value.map(a => `${a.name} (${a.account_number})`)
+);
 
 const statusFilters = [
-  { value: 'pending',      label: 'Chưa xử lý',       activeClass: 'bg-amber-100 border-amber-400 text-amber-700' },
-  { value: 'docs_done',    label: 'Đã có hồ sơ',       activeClass: 'bg-blue-100 border-blue-400 text-blue-700' },
-  { value: 'needs_return', label: 'Cần hoàn ứng',      activeClass: 'bg-red-100 border-red-400 text-red-700' },
-  { value: 'returned',     label: 'Đã hoàn ứng',       activeClass: 'bg-green-100 border-green-400 text-green-700' },
+  { value: 'pending',      label: 'Chưa xử lý',  activeClass: 'bg-amber-100 border-amber-400 text-amber-700' },
+  { value: 'docs_done',    label: 'Đã có hồ sơ', activeClass: 'bg-blue-100 border-blue-400 text-blue-700' },
+  { value: 'needs_return', label: 'Cần hoàn ứng', activeClass: 'bg-red-100 border-red-400 text-red-700' },
+  { value: 'returned',     label: 'Đã hoàn ứng', activeClass: 'bg-green-100 border-green-400 text-green-700' },
 ];
 
 const filteredTransactions = computed(() => {
@@ -264,21 +327,29 @@ function formatMonth(m) {
 
 function applyFilters() {
   const params = { month: selectedMonth.value };
-  if (selectedAccount.value) params.internal_account_id = selectedAccount.value;
+  if (selectedAccounts.value.length > 0) {
+    params.internal_account_ids = selectedAccounts.value;
+  }
   router.get(route('accounting.internal-transfers.index'), params, { preserveState: false });
 }
 
-function clearAccountFilter() {
-  selectedAccount.value = null;
+function clearAndApply() {
+  selectedAccounts.value = [];
+  accountDropdownOpen.value = false;
+  applyFilters();
+}
+
+function removeAccount(id) {
+  selectedAccounts.value = selectedAccounts.value.filter(v => v !== id);
   applyFilters();
 }
 
 function statusClass(s) {
   return {
-    'bg-amber-50 border-amber-300 text-amber-700': !s || s === 'pending',
-    'bg-blue-50 border-blue-300 text-blue-700':   s === 'docs_done',
-    'bg-red-50 border-red-300 text-red-700':      s === 'needs_return',
-    'bg-green-50 border-green-300 text-green-700':s === 'returned',
+    'bg-amber-50 border-amber-300 text-amber-700':  !s || s === 'pending',
+    'bg-blue-50 border-blue-300 text-blue-700':     s === 'docs_done',
+    'bg-red-50 border-red-300 text-red-700':        s === 'needs_return',
+    'bg-green-50 border-green-300 text-green-700':  s === 'returned',
   };
 }
 
