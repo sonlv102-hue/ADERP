@@ -79,6 +79,23 @@
           </div>
         </div>
 
+        <!-- Tài khoản doanh thu — chỉ cho standalone invoice không gắn đơn hàng -->
+        <div v-if="!form.order_id" class="col-span-2">
+          <label class="block text-sm font-medium text-gray-700 mb-1">
+            Tài khoản doanh thu
+            <span class="text-orange-500 text-xs ml-1">(cần điền khi không có đơn hàng liên kết)</span>
+          </label>
+          <select v-model="form.revenue_account_code"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <option :value="null">-- Chưa chọn (sẽ log cảnh báo khi hạch toán) --</option>
+            <option v-for="a in revenueAccounts" :key="a.code" :value="a.code">{{ a.label }}</option>
+          </select>
+          <p class="text-xs text-gray-400 mt-1">
+            Nếu để trống, hệ thống fallback về 5111 và ghi cảnh báo vào log. Cần kế toán xác nhận tài khoản phù hợp.
+          </p>
+          <p v-if="form.errors.revenue_account_code" class="text-red-500 text-xs mt-1">{{ form.errors.revenue_account_code }}</p>
+        </div>
+
         <!-- Số tiền -->
         <div class="grid grid-cols-3 gap-4 pt-2 border-t border-gray-100">
           <div>
@@ -128,12 +145,13 @@ import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 
 const props = defineProps({
-  invoice:   Object,
-  nextCode:  String,
-  customers: Array,
-  orders:    Array,
-  contracts: Array,
-  methods:   Array,
+  invoice:         Object,
+  nextCode:        String,
+  customers:       Array,
+  orders:          Array,
+  contracts:       Array,
+  methods:         Array,
+  revenueAccounts: Array,
 });
 
 const today = new Date().toISOString().split('T')[0];
@@ -141,20 +159,23 @@ const autoFilledFrom = ref(null);
 const skipContractWatch = ref(false);
 
 const form = useForm({
-  code:        props.invoice?.code        ?? props.nextCode,
-  customer_id: props.invoice?.customer_id ?? '',
-  order_id:    props.invoice?.order_id    ?? null,
-  contract_id: props.invoice?.contract_id ?? null,
-  issue_date:  props.invoice?.issue_date  ?? today,
-  due_date:    props.invoice?.due_date    ?? '',
-  subtotal:    props.invoice?.subtotal    ?? 0,
-  tax_amount:  props.invoice?.tax_amount  ?? 0,
-  total:       props.invoice?.total       ?? 0,
-  notes:       props.invoice?.notes       ?? '',
+  code:                 props.invoice?.code                 ?? props.nextCode,
+  customer_id:          props.invoice?.customer_id          ?? '',
+  order_id:             props.invoice?.order_id             ?? null,
+  contract_id:          props.invoice?.contract_id          ?? null,
+  issue_date:           props.invoice?.issue_date           ?? today,
+  due_date:             props.invoice?.due_date             ?? '',
+  subtotal:             props.invoice?.subtotal             ?? 0,
+  tax_amount:           props.invoice?.tax_amount           ?? 0,
+  total:                props.invoice?.total                ?? 0,
+  notes:                props.invoice?.notes                ?? '',
+  revenue_account_code: props.invoice?.revenue_account_code ?? null,
 });
 
 watch(() => form.order_id, (id) => {
   if (!id) { autoFilledFrom.value = null; return; }
+  // Khi có order_id, revenue_account_code không cần thiết (lấy từ order_items)
+  form.revenue_account_code = null;
   const contract = props.contracts.find(c => c.order_id === id);
   if (contract) {
     skipContractWatch.value = true;

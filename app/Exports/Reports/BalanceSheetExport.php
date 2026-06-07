@@ -46,12 +46,16 @@ class BalanceSheetExport implements FromCollection, WithHeadings, WithMapping, W
         $salaryPayable = $b('334');
         $totalLiabilities = $ap + $vatPayable + $citPayable + $pitPayable + $bhxhPayable + $salaryPayable;
 
-        $charterCapital = $b('411');
-        $revenue  = $this->sumPrefix($bal, '5');
-        $expenses = $this->sumPrefix($bal, '6') + $this->sumPrefix($bal, '8');
-        $retainedEarnings = $revenue - $expenses;
-        $totalEquity     = $charterCapital + $retainedEarnings;
-        $totalLiabEquity = $totalLiabilities + $totalEquity;
+        $charterCapital   = $b('411');
+        $account421       = $this->sumPrefix($bal, '421');
+        $balance4211      = $this->sumPrefix($bal, '4211');
+        $balance4212      = $this->sumPrefix($bal, '4212');
+        $revenue          = $this->sumPrefix($bal, '5');
+        $expenses         = $this->sumPrefix($bal, '6') + $this->sumPrefix($bal, '8');
+        $currentNetIncome = $revenue - $expenses;
+        $retainedEarnings = $account421 + $currentNetIncome;
+        $totalEquity      = $charterCapital + $retainedEarnings;
+        $totalLiabEquity  = $totalLiabilities + $totalEquity;
 
         return collect([
             (object)['label' => 'BẢNG CÂN ĐỐI KẾ TOÁN tại ' . $asOf, 'amount' => null],
@@ -79,7 +83,10 @@ class BalanceSheetExport implements FromCollection, WithHeadings, WithMapping, W
             (object)['label' => '  VI. BHXH/BHYT/BHTN (TK 338)',               'amount' => $bhxhPayable],
             (object)['label' => 'B. VỐN CHỦ SỞ HỮU',                          'amount' => $totalEquity],
             (object)['label' => '  Vốn đầu tư của CSH (TK 411)',               'amount' => $charterCapital],
-            (object)['label' => '  Lợi nhuận chưa phân phối',                  'amount' => $retainedEarnings],
+            (object)['label' => '  Lợi nhuận chưa phân phối (TK 421)',           'amount' => $retainedEarnings],
+            (object)['label' => '     - LNST năm trước (TK 4211)',              'amount' => $balance4211],
+            (object)['label' => '     - LNST năm nay (TK 4212)',               'amount' => $balance4212],
+            (object)['label' => '     - Lãi/(lỗ) chưa kết chuyển',             'amount' => $currentNetIncome],
             (object)['label' => 'TỔNG CỘNG NGUỒN VỐN (A+B)',                   'amount' => $totalLiabEquity],
         ]);
     }
@@ -90,7 +97,7 @@ class BalanceSheetExport implements FromCollection, WithHeadings, WithMapping, W
             ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
             ->join('account_codes as ac', 'ac.code', '=', 'jel.account_code')
             ->where('je.status', 'posted')
-            ->where('je.entry_date', '<=', $asOf)
+            ->whereDate('je.entry_date', '<=', $asOf)
             ->select('jel.account_code', 'ac.normal_balance',
                 DB::raw('SUM(jel.debit) as dr'),
                 DB::raw('SUM(jel.credit) as cr'))

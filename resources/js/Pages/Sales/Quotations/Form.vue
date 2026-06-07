@@ -144,11 +144,26 @@
               <tr v-for="(item, idx) in form.items" :key="idx">
                 <td class="px-4 py-3">
                   <template v-if="item.item_type === 'product'">
-                    <select v-model="item.product_id" @change="onItemChange(idx)"
-                      class="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-xs">
-                      <option value="">-- Chọn sản phẩm --</option>
-                      <option v-for="p in products" :key="p.id" :value="p.id">{{ p.code }} - {{ p.name }}</option>
-                    </select>
+                    <div class="relative" @vue:mounted="initProductSearch(idx)">
+                      <input
+                        :value="productSearches[idx] ?? ''"
+                        @input="e => onProductSearchInput(idx, e.target.value)"
+                        @focus="openDropdowns[idx] = true"
+                        @blur="setTimeout(() => { openDropdowns[idx] = false }, 200)"
+                        placeholder="Tìm theo tên hoặc mã..."
+                        class="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-xs"
+                      />
+                      <div v-if="openDropdowns[idx] && filteredProducts(idx).length"
+                        class="absolute z-50 top-full left-0 right-0 mt-0.5 bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                        <div
+                          v-for="p in filteredProducts(idx)" :key="p.id"
+                          @mousedown.prevent="selectProduct(idx, p)"
+                          class="px-3 py-1.5 text-xs hover:bg-primary-50 cursor-pointer">
+                          <span class="font-mono text-gray-400 mr-1">{{ p.code }}</span>{{ p.name }}
+                          <span v-if="p.vat_percent" class="ml-1 text-blue-500">VAT {{ p.vat_percent }}%</span>
+                        </div>
+                      </div>
+                    </div>
                   </template>
                   <template v-else>
                     <select v-model="item.service_id" @change="onItemChange(idx)"
@@ -247,7 +262,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { useCurrency } from '@/composables/useCurrency';
@@ -265,6 +280,40 @@ const selectedPriceList = ref('');
 const desiredTotal = ref(null);
 const roundingMode = ref('');
 const discountAmountInput = ref(null);
+
+// Combobox state cho từng dòng sản phẩm
+const productSearches = reactive({});
+const openDropdowns = reactive({});
+
+const filteredProducts = (idx) => {
+  const q = (productSearches[idx] || '').toLowerCase();
+  if (!q) return props.products;
+  return props.products.filter(p =>
+    p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q)
+  );
+};
+
+const selectProduct = (idx, product) => {
+  form.items[idx].product_id = product.id;
+  openDropdowns[idx] = false;
+  onItemChange(idx);
+};
+
+const onProductSearchInput = (idx, val) => {
+  productSearches[idx] = val;
+  openDropdowns[idx] = true;
+  // Xoá product_id nếu người dùng xoá text
+  if (!val) form.items[idx].product_id = null;
+};
+
+// Khởi tạo search text từ sản phẩm đã chọn (khi edit)
+const initProductSearch = (idx) => {
+  const item = form.items[idx];
+  if (!productSearches[idx] && item.product_id) {
+    const p = props.products.find(p => p.id === item.product_id);
+    if (p) productSearches[idx] = `${p.code} - ${p.name}`;
+  }
+};
 
 const applyPriceList = async () => {
   if (!selectedPriceList.value) return;
@@ -324,10 +373,27 @@ const onItemChange = (idx) => {
   const item = form.items[idx];
   if (item.item_type === 'product') {
     const p = props.products.find(p => p.id === item.product_id);
-    if (p) { item.name = p.name; item.unit = p.unit ?? ''; item.unit_price = p.sell_price ?? 0; }
+    if (p) {
+      item.name       = p.name;
+      item.unit       = p.unit ?? '';
+      item.unit_price = p.sell_price ?? 0;
+      // Auto-fill VAT từ danh mục sản phẩm
+      if (p.vat_percent !== null && p.vat_percent !== undefined) {
+        item.vat_rate = Number(p.vat_percent);
+      }
+      productSearches[idx] = `${p.code} - ${p.name}`;
+    }
   } else {
     const s = props.services.find(s => s.id === item.service_id);
-    if (s) { item.name = s.name; item.unit = s.unit ?? ''; item.unit_price = s.price ?? 0; }
+    if (s) {
+      item.name       = s.name;
+      item.unit       = s.unit ?? '';
+      item.unit_price = s.price ?? 0;
+      if (s.vat_percent !== null && s.vat_percent !== undefined) {
+        item.vat_rate = Number(s.vat_percent);
+      }
+      productSearches[idx] = `${s.code} - ${s.name}`;
+    }
   }
   // Reset chiết khấu khi đổi sản phẩm
   item._ck_amount       = 0;

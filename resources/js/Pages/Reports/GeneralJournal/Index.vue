@@ -73,7 +73,10 @@
               <tr v-for="row in entries" :key="row.seq" class="hover:bg-gray-50">
                 <td class="px-4 py-2 text-gray-400 text-xs">{{ row.seq }}</td>
                 <td class="px-4 py-2 text-gray-600 text-xs">{{ row.date }}</td>
-                <td class="px-4 py-2 font-mono text-gray-700 text-xs">{{ row.ref }}</td>
+                <td class="px-4 py-2 font-mono text-xs">
+                  <Link :href="route('accounting.journal-entries.show', row.journal_entry_id)"
+                    class="text-primary-600 hover:underline">{{ row.ref }}</Link>
+                </td>
                 <td class="px-4 py-2 text-gray-700 text-xs">{{ row.description }}</td>
                 <td class="px-4 py-2 text-gray-600 text-xs">{{ row.partner }}</td>
                 <td class="px-4 py-2 text-center font-mono font-semibold text-blue-700 text-xs">{{ row.debit_tk }}</td>
@@ -102,7 +105,7 @@
 
 <script setup>
 import { ref, computed } from 'vue';
-import { router } from '@inertiajs/vue3';
+import { router, Link } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { useCurrency } from '@/composables/useCurrency';
 

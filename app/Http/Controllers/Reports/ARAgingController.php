@@ -18,12 +18,53 @@ class ARAgingController extends Controller
         $search   = $request->input('search');
         $dateFrom = $request->input('date_from');
         $dateTo   = $request->input('date_to');
-        $bucket   = $request->input('bucket'); // overdue bucket filter
+        $bucket   = $request->input('bucket');
 
-        $today = now()->toDateString();
+        // ── Summary from ALL matching invoices (không phân trang) ─────────────
+        $summaryRows = $this->buildBaseQuery($search, $dateFrom, $dateTo)
+            ->select([
+                'invoices.total',
+                'invoices.due_date',
+                DB::raw("COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.invoice_id = invoices.id), 0) as paid"),
+            ])
+            ->get();
 
-        $query = DB::table('invoices')
-            ->join('customers', 'customers.id', '=', 'invoices.customer_id')
+        $summary = [
+            'total_invoiced'  => 0,
+            'total_paid'      => 0,
+            'total_remaining' => 0,
+            'bucket_0'        => 0,
+            'bucket_1_30'     => 0,
+            'bucket_31_60'    => 0,
+            'bucket_61_90'    => 0,
+            'bucket_90_plus'  => 0,
+        ];
+
+        foreach ($summaryRows as $r) {
+            $total     = (float) $r->total;
+            $paid      = (float) $r->paid;
+            $remaining = max(0.0, $total - $paid);
+            $daysOverdue = 0;
+            if ($remaining > 0 && $r->due_date) {
+                $daysOverdue = max(0, (int) now()->diffInDays($r->due_date, false) * -1);
+            }
+            $bl = $this->getBucket($daysOverdue, $remaining);
+
+            $summary['total_invoiced']  += $total;
+            $summary['total_paid']      += $paid;
+            $summary['total_remaining'] += $remaining;
+            match ($bl) {
+                'Chưa đến hạn' => $summary['bucket_0']       += $remaining,
+                '1–30 ngày'    => $summary['bucket_1_30']    += $remaining,
+                '31–60 ngày'   => $summary['bucket_31_60']   += $remaining,
+                '61–90 ngày'   => $summary['bucket_61_90']   += $remaining,
+                '>90 ngày'     => $summary['bucket_90_plus'] += $remaining,
+                default        => null,
+            };
+        }
+
+        // ── Paginated table rows ───────────────────────────────────────────────
+        $tableQuery = $this->buildBaseQuery($search, $dateFrom, $dateTo)
             ->select([
                 'invoices.id',
                 'invoices.code',
@@ -34,32 +75,18 @@ class ARAgingController extends Controller
                 'customers.id as customer_id',
                 'customers.name as customer_name',
                 DB::raw("COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.invoice_id = invoices.id), 0) as paid"),
-            ])
-            ->where('invoices.status', '!=', 'draft')
-            ->when($search, fn ($q) =>
-                $q->where(fn ($q2) =>
-                    $q2->where('invoices.code', 'ilike', "%{$search}%")
-                       ->orWhere('customers.name', 'ilike', "%{$search}%")
-                )
-            )
-            ->when($dateFrom, fn ($q) => $q->where('invoices.issue_date', '>=', $dateFrom))
-            ->when($dateTo,   fn ($q) => $q->where('invoices.issue_date', '<=', $dateTo))
-            ->orderByDesc('invoices.id');
+            ]);
 
-        $rows = $query->paginate(30);
+        $rows = $tableQuery->paginate(30);
 
-        $rows->through(function ($row) use ($today, $bucket) {
+        $rows->through(function ($row) {
             $total     = (float) $row->total;
             $paid      = (float) $row->paid;
             $remaining = max(0, $total - $paid);
-
             $daysOverdue = 0;
             if ($remaining > 0 && $row->due_date) {
                 $daysOverdue = max(0, (int) now()->diffInDays($row->due_date, false) * -1);
             }
-
-            $bucketLabel = $this->getBucket($daysOverdue, $remaining);
-
             return [
                 'id'            => $row->id,
                 'code'          => $row->code,
@@ -72,27 +99,15 @@ class ARAgingController extends Controller
                 'customer_id'   => $row->customer_id,
                 'customer_name' => $row->customer_name,
                 'days_overdue'  => $daysOverdue,
-                'bucket'        => $bucketLabel,
+                'bucket'        => $this->getBucket($daysOverdue, $remaining),
             ];
         });
 
-        // Filter by bucket after transform
+        // Bucket filter affects only the table display (summary always shows all)
         if ($bucket) {
-            $filtered = collect($rows->items())->filter(fn ($r) => $r['bucket'] === $bucket)->values();
-        } else {
-            $filtered = collect($rows->items());
+            $tableItems = collect($rows->items())->filter(fn ($r) => $r['bucket'] === $bucket)->values();
+            $rows->setCollection($tableItems);
         }
-
-        $summary = [
-            'total_invoiced'  => $filtered->sum('total'),
-            'total_paid'      => $filtered->sum('paid'),
-            'total_remaining' => $filtered->sum('remaining'),
-            'bucket_0'        => $filtered->where('bucket', 'Chưa đến hạn')->sum('remaining'),
-            'bucket_1_30'     => $filtered->where('bucket', '1–30 ngày')->sum('remaining'),
-            'bucket_31_60'    => $filtered->where('bucket', '31–60 ngày')->sum('remaining'),
-            'bucket_61_90'    => $filtered->where('bucket', '61–90 ngày')->sum('remaining'),
-            'bucket_90_plus'  => $filtered->where('bucket', '>90 ngày')->sum('remaining'),
-        ];
 
         return Inertia::render('Reports/AR/Index', [
             'rows'    => $rows,
@@ -107,6 +122,22 @@ class ARAgingController extends Controller
             new ARAgingExport($request->all()),
             'ar-aging-' . now()->format('Ymd') . '.xlsx'
         );
+    }
+
+    private function buildBaseQuery(?string $search, ?string $dateFrom, ?string $dateTo)
+    {
+        return DB::table('invoices')
+            ->join('customers', 'customers.id', '=', 'invoices.customer_id')
+            ->whereNotIn('invoices.status', ['draft', 'cancelled'])
+            ->when($search, fn ($q) =>
+                $q->where(fn ($q2) =>
+                    $q2->where('invoices.code', 'ilike', "%{$search}%")
+                       ->orWhere('customers.name', 'ilike', "%{$search}%")
+                )
+            )
+            ->when($dateFrom, fn ($q) => $q->where('invoices.issue_date', '>=', $dateFrom))
+            ->when($dateTo,   fn ($q) => $q->where('invoices.issue_date', '<=', $dateTo))
+            ->orderByDesc('invoices.id');
     }
 
     private function getBucket(int $daysOverdue, float $remaining): string

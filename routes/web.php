@@ -19,6 +19,7 @@ use App\Http\Controllers\Warehouse\StockEntryController;
 use App\Http\Controllers\Warehouse\StockExitController;
 use App\Http\Controllers\Warehouse\StockTransferController;
 use App\Http\Controllers\Warehouse\InventoryCountController;
+use App\Http\Controllers\Warehouse\InventoryOpeningBalanceController;
 use App\Http\Controllers\Sales\QuotationController;
 use App\Http\Controllers\Sales\OrderController;
 use App\Http\Controllers\Reports\ProfitController;
@@ -41,6 +42,7 @@ use App\Http\Controllers\Accounting\CashVoucherController;
 use App\Http\Controllers\Accounting\FundController;
 use App\Http\Controllers\Accounting\InvoiceController;
 use App\Http\Controllers\Accounting\JournalEntryController;
+use App\Http\Controllers\Accounting\ArApOpeningBalanceController;
 use App\Http\Controllers\Accounting\OpeningBalanceController;
 use App\Http\Controllers\Accounting\PaymentController;
 use App\Http\Controllers\Accounting\PrepaidExpenseController;
@@ -61,6 +63,7 @@ use App\Http\Controllers\Purchasing\PurchaseContractController;
 use App\Http\Controllers\Purchasing\SupplierBankAccountController;
 use App\Http\Controllers\Accounting\InternalBankAccountController;
 use App\Http\Controllers\Accounting\InternalTransferReportController;
+use App\Http\Controllers\Accounting\AccountingPostingJobController;
 use App\Http\Controllers\Purchasing\PurchaseContractPaymentScheduleController;
 use App\Http\Controllers\Purchasing\PurchaseReturnController;
 use App\Http\Controllers\Documents\DocumentController;
@@ -182,6 +185,12 @@ Route::middleware('auth')->group(function () {
         Route::post('stock-transfers/{stockTransfer}/cancel', [StockTransferController::class, 'cancel'])->name('stock-transfers.cancel');
 
         Route::resource('inventory-counts', InventoryCountController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
+
+        // Tồn kho đầu kỳ
+        Route::get('opening-balance', [InventoryOpeningBalanceController::class, 'index'])->name('opening-balance.index')->middleware('can:warehouse.manage');
+        Route::get('opening-balance/create', [InventoryOpeningBalanceController::class, 'create'])->name('opening-balance.create')->middleware('can:warehouse.manage');
+        Route::post('opening-balance', [InventoryOpeningBalanceController::class, 'store'])->name('opening-balance.store')->middleware('can:warehouse.manage');
+        Route::delete('opening-balance/{openingBalance}', [InventoryOpeningBalanceController::class, 'destroy'])->name('opening-balance.destroy')->middleware('can:warehouse.manage');
         Route::post('inventory-counts/{inventoryCount}/save-items', [InventoryCountController::class, 'saveItems'])->name('inventory-counts.save-items');
         Route::post('inventory-counts/{inventoryCount}/confirm', [InventoryCountController::class, 'confirm'])->name('inventory-counts.confirm');
         Route::post('inventory-counts/{inventoryCount}/cancel', [InventoryCountController::class, 'cancel'])->name('inventory-counts.cancel');
@@ -328,6 +337,12 @@ Route::middleware('auth')->group(function () {
         Route::post('opening-balance', [OpeningBalanceController::class, 'store'])->name('opening-balance.store')->middleware('can:accounting.manage');
         Route::post('opening-balance/import-excel', [OpeningBalanceController::class, 'importExcel'])->name('opening-balance.import-excel')->middleware('can:accounting.manage');
 
+        // Công nợ đầu kỳ (AR/AP Opening Balance)
+        Route::get('ar-ap-opening-balance',                             [ArApOpeningBalanceController::class, 'index'])->name('ar-ap-opening-balance.index');
+        Route::get('ar-ap-opening-balance/create',                      [ArApOpeningBalanceController::class, 'create'])->name('ar-ap-opening-balance.create')->middleware('can:accounting.manage');
+        Route::post('ar-ap-opening-balance',                            [ArApOpeningBalanceController::class, 'store'])->name('ar-ap-opening-balance.store')->middleware('can:accounting.manage');
+        Route::delete('ar-ap-opening-balance/{arApOpeningBalance}',     [ArApOpeningBalanceController::class, 'destroy'])->name('ar-ap-opening-balance.destroy')->middleware('can:accounting.manage');
+
         // Phiếu kế toán / Bút toán (Journal Entries)
         Route::resource('journal-entries', JournalEntryController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
         Route::post('journal-entries/{journalEntry}/post', [JournalEntryController::class, 'markPosted'])->name('journal-entries.post')->middleware('can:accounting.manage');
@@ -348,11 +363,16 @@ Route::middleware('auth')->group(function () {
         Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/reconcile',   [BankTransactionController::class, 'reconcile'])->name('bank-accounts.transactions.reconcile')->middleware('can:accounting.manage');
         Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/unreconcile', [BankTransactionController::class, 'unreconcile'])->name('bank-accounts.transactions.unreconcile')->middleware('can:accounting.manage');
         Route::post('bank-accounts/{bankAccount}/transactions/import-excel',                  [BankTransactionController::class, 'importExcel'])->name('bank-accounts.transactions.import-excel')->middleware('can:accounting.manage');
+        Route::post('bank-accounts/{bankAccount}/transactions/recategorize',                 [BankTransactionController::class, 'recategorize'])->name('bank-accounts.transactions.recategorize')->middleware('can:accounting.manage');
         // Tài khoản nội bộ
         Route::resource('internal-bank-accounts', InternalBankAccountController::class)->only(['index', 'store', 'update', 'destroy'])->middleware('can:accounting.manage');
         // Báo cáo chuyển khoản nội bộ
         Route::get('internal-transfers', [InternalTransferReportController::class, 'index'])->name('internal-transfers.index');
         Route::post('internal-transfers/{bankTransaction}/status', [InternalTransferReportController::class, 'updateStatus'])->name('internal-transfers.update-status')->middleware('can:accounting.manage');
+
+        // Accounting posting jobs — theo dõi và retry bút toán tự động
+        Route::get('posting-jobs', [AccountingPostingJobController::class, 'index'])->name('posting-jobs.index');
+        Route::post('posting-jobs/{accountingPostingJob}/retry', [AccountingPostingJobController::class, 'retry'])->name('posting-jobs.retry')->middleware('can:accounting.manage');
     });
 
     // Support - ticket kỹ thuật và bảo hành
@@ -413,6 +433,7 @@ Route::middleware('auth')->group(function () {
         Route::get('vat/export',              [VatReportController::class,       'export'])->name('vat.export');
         Route::get('inventory',               [InventoryReportController::class, 'index'])->name('inventory');
         Route::get('inventory/export',        [InventoryReportController::class, 'export'])->name('inventory.export');
+        Route::get('stock-card',              [InventoryReportController::class, 'stockCard'])->name('stock_card');
         Route::get('cash-flow',               [CashFlowController::class,        'index'])->name('cash_flow');
         Route::get('cash-flow/export',        [CashFlowController::class,        'export'])->name('cash_flow.export');
         Route::get('income-statement',        [IncomeStatementController::class, 'index'])->name('income_statement');

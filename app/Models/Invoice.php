@@ -24,7 +24,7 @@ class Invoice extends Model
     protected $fillable = [
         'code', 'customer_id', 'order_id', 'contract_id',
         'issue_date', 'due_date', 'subtotal', 'tax_amount', 'total',
-        'status', 'notes', 'created_by',
+        'status', 'notes', 'revenue_account_code', 'created_by',
         'e_inv_template', 'e_inv_series', 'e_inv_number',
         'e_inv_status', 'e_inv_issued_at', 'e_inv_cancel_reason',
     ];

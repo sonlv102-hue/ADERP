@@ -6,6 +6,7 @@ use App\Enums\CashVoucherStatus;
 use App\Enums\CashVoucherType;
 use App\Models\CashVoucher;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class CashVoucherService
@@ -34,13 +35,10 @@ class CashVoucherService
             throw new RuntimeException('Phiếu đã bị hủy trước đó.');
         }
 
-        $voucher->update(['status' => CashVoucherStatus::Cancelled]);
-
-        try {
+        DB::transaction(function () use ($voucher) {
             $this->accounting->reverseOrDelete('cash_voucher', $voucher->id, "Hủy {$voucher->type->label()} {$voucher->code}");
-        } catch (\Exception $e) {
-            \Log::warning("Cancel voucher journal failed [{$voucher->code}]: " . $e->getMessage());
-        }
+            $voucher->update(['status' => CashVoucherStatus::Cancelled]);
+        });
     }
 
     // ─── Private helpers ─────────────────────────────────────────────────────
@@ -71,14 +69,10 @@ class CashVoucherService
             ];
         }
 
-        try {
-            $this->accounting->post(
-                "{$voucher->type->label()} {$voucher->code}",
-                $date, $lines, 'cash_voucher', $voucher->id, true
-            );
-        } catch (\Exception $e) {
-            \Log::warning("Auto-posting failed [CashVoucher {$voucher->code}]: " . $e->getMessage());
-        }
+        $this->accounting->tryPost(
+            "{$voucher->type->label()} {$voucher->code}",
+            $date, $lines, 'cash_voucher', $voucher->id, 'confirm'
+        );
     }
 
     /** Tài khoản quỹ/ngân hàng của phiếu (111/112 tùy loại Fund) */

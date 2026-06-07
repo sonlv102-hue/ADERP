@@ -123,7 +123,26 @@ class OrderController extends Controller
             'customs_status'              => $isFdi ? CustomsStatus::Pending : CustomsStatus::NotRequired,
         ]);
 
+        $productPrices = Product::with('category:id,revenue_account_code')
+            ->whereIn('id', collect($data['items'])->pluck('product_id')->filter()->unique())
+            ->get(['id', 'cost_price', 'vat_percent', 'item_type', 'revenue_account_code', 'category_id'])
+            ->keyBy('id');
+
         foreach ($data['items'] as $item) {
+            if (!empty($item['product_id']) && isset($productPrices[$item['product_id']])) {
+                $prod = $productPrices[$item['product_id']];
+                $vatDiv = 1 + (float)($prod->vat_percent ?? 0) / 100;
+                $item['unit_cogs']             = round((float)$prod->cost_price / $vatDiv, 2);
+                $item['unit_cogs_source']      = 'snapshot';
+                $item['revenue_account_code']  = $this->resolveRevenueAccount(
+                    $prod->revenue_account_code,
+                    $prod->category?->revenue_account_code,
+                    $prod->item_type,
+                    false
+                );
+            } elseif (!empty($item['service_id'])) {
+                $item['revenue_account_code']  = '5113';
+            }
             $order->items()->create($item);
         }
 
@@ -284,8 +303,27 @@ class OrderController extends Controller
             'notes'             => $data['notes'] ?? null,
         ]);
 
+        $productPrices = Product::with('category:id,revenue_account_code')
+            ->whereIn('id', collect($data['items'])->pluck('product_id')->filter()->unique())
+            ->get(['id', 'cost_price', 'vat_percent', 'item_type', 'revenue_account_code', 'category_id'])
+            ->keyBy('id');
+
         $order->items()->delete();
         foreach ($data['items'] as $item) {
+            if (!empty($item['product_id']) && isset($productPrices[$item['product_id']])) {
+                $prod = $productPrices[$item['product_id']];
+                $vatDiv = 1 + (float)($prod->vat_percent ?? 0) / 100;
+                $item['unit_cogs']             = round((float)$prod->cost_price / $vatDiv, 2);
+                $item['unit_cogs_source']      = 'snapshot';
+                $item['revenue_account_code']  = $this->resolveRevenueAccount(
+                    $prod->revenue_account_code,
+                    $prod->category?->revenue_account_code,
+                    $prod->item_type,
+                    false
+                );
+            } elseif (!empty($item['service_id'])) {
+                $item['revenue_account_code']  = '5113';
+            }
             $order->items()->create($item);
         }
 
@@ -465,6 +503,27 @@ class OrderController extends Controller
         if ($undelivered == 0) return 'done';
         if ($order->status->value === 'partial_delivered') return 'partial';
         return 'none';
+    }
+
+    // Resolution chain khi snapshot revenue_account_code vào order_items:
+    //   1. products.revenue_account_code  (override tường minh)
+    //   2. product_categories.revenue_account_code  (mặc định theo danh mục)
+    //   3. item_type mapping: goods→5111, service→5113
+    //   4. null → InvoiceService log warning, fallback 5111
+    private function resolveRevenueAccount(
+        ?string $productAccount,
+        ?string $categoryAccount,
+        ?string $itemType,
+        bool $isService
+    ): string|null {
+        if ($isService) return '5113';
+        if ($productAccount)  return $productAccount;
+        if ($categoryAccount) return $categoryAccount;
+        return match($itemType ?? 'goods') {
+            'goods'   => '5111',
+            'service' => '5113',
+            default   => null, // software/other — CẦN KẾ TOÁN XÁC NHẬN
+        };
     }
 
     private function approvedQuotations(): array

@@ -3,6 +3,7 @@
 namespace App\Imports;
 
 use App\Models\Supplier;
+use App\Models\SupplierBankAccount;
 use Maatwebsite\Excel\Concerns\ToModel;
 use Maatwebsite\Excel\Concerns\WithHeadingRow;
 use Maatwebsite\Excel\Concerns\WithValidation;
@@ -20,7 +21,7 @@ class SupplierImport implements ToModel, WithHeadingRow, WithValidation, SkipsOn
     {
         $this->imported++;
 
-        return new Supplier([
+        $supplier = new Supplier([
             'code'     => Supplier::generateCode(),
             'name'     => $row['name'],
             'phone'    => $row['phone'] ?? null,
@@ -29,6 +30,25 @@ class SupplierImport implements ToModel, WithHeadingRow, WithValidation, SkipsOn
             'tax_code' => $row['tax_code'] ?? null,
             'notes'    => $row['notes'] ?? null,
         ]);
+
+        $supplier->save();
+
+        // Tạo bank account nếu có
+        $bankName  = trim($row['bank_name'] ?? '');
+        $accountNo = trim($row['account_number'] ?? '');
+        if ($bankName && $accountNo) {
+            SupplierBankAccount::create([
+                'supplier_id'    => $supplier->id,
+                'bank_name'      => $bankName,
+                'account_number' => $accountNo,
+                'account_name'   => trim($row['account_name'] ?? $row['name']),
+                'branch'         => trim($row['branch'] ?? '') ?: null,
+                'is_primary'     => true,
+                'is_active'      => true,
+            ]);
+        }
+
+        return null; // đã save thủ công
     }
 
     public function rules(): array

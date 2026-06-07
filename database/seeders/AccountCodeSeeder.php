@@ -201,6 +201,7 @@ class AccountCodeSeeder extends Seeder
             ['632',  'Giá vốn hàng bán',                                    'expense',   'debit',  '61',  3, true],
             ['635',  'Chi phí tài chính',                                   'expense',   'debit',  '61',  3, true],
             ['642',  'Chi phí quản lý kinh doanh',                          'expense',   'debit',  '6',   2, false],
+            ['627',  'Chi phí sản xuất chung',                               'expense',   'debit',  '61',  3, true],
             ['6421', 'Chi phí bán hàng',                                    'expense',   'debit',  '642', 3, true],
             ['6422', 'Chi phí quản lý doanh nghiệp',                        'expense',   'debit',  '642', 3, true],
 
@@ -261,7 +262,7 @@ class AccountCodeSeeder extends Seeder
             '521', '5211', '5212', '5213',  // giảm trừ doanh thu
             '512',                           // bán hàng nội bộ
             '6111', '6112',                 // chi tiết mua hàng
-            '621', '622', '623', '627',     // chi phí SX
+            '621', '622', '623',            // chi phí SX trực tiếp (dùng 627 cho overhead)
             '641', '6411', '6412', '6413', '6414', '6415', '6417', '6418', // chi phí bán hàng riêng
             '6423', '6424', '6425', '6426', '6427', '6428', // chi tiết 642 cũ
             '8211', '8212',                 // chi tiết TNDN

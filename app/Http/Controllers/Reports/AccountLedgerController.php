@@ -55,7 +55,7 @@ class AccountLedgerController extends Controller
             ->orderBy('je.entry_date')
             ->orderBy('je.id')
             ->orderBy('jel.sort_order')
-            ->select('je.entry_date as date', 'je.code as ref',
+            ->select('je.id as journal_entry_id', 'je.entry_date as date', 'je.code as ref',
                 'je.description as entry_desc', 'jel.description as line_desc',
                 'jel.debit', 'jel.credit')
             ->get();
@@ -69,13 +69,13 @@ class AccountLedgerController extends Controller
                 : ((float) $l->credit - (float) $l->debit);
 
             $rows[] = [
-                'date'        => $l->date,
-                'ref'         => $l->ref,
-                'description' => $l->line_desc ?? $l->entry_desc,
-                'partner'     => '',
-                'debit'       => (float) $l->debit,
-                'credit'      => (float) $l->credit,
-                'balance'     => $balance,
+                'journal_entry_id' => $l->journal_entry_id,
+                'date'             => $l->date,
+                'ref'              => $l->ref,
+                'description'      => $l->line_desc ?? $l->entry_desc,
+                'debit'            => (float) $l->debit,
+                'credit'           => (float) $l->credit,
+                'balance'          => $balance,
             ];
         }
 

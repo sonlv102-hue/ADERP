@@ -47,14 +47,16 @@
           </div>
         </div>
         <div class="bg-white rounded-xl border border-gray-200 p-4">
-          <p class="text-xs text-gray-500 font-medium uppercase tracking-wide">Ngân sách</p>
-          <p class="text-2xl font-bold text-gray-900 mt-2">{{ formatVnd(project.budget) }}</p>
+          <p class="text-xs text-gray-500 font-medium uppercase tracking-wide">Doanh thu (HĐ KH)</p>
+          <p class="text-2xl font-bold text-gray-900 mt-2">{{ contract_value != null ? formatVnd(contract_value) : '—' }}</p>
+          <p v-if="project.budget" class="text-xs text-gray-400 mt-1">NS dự phòng: {{ formatVnd(project.budget) }}</p>
         </div>
         <div class="bg-white rounded-xl border border-gray-200 p-4">
-          <p class="text-xs text-gray-500 font-medium uppercase tracking-wide">Chi phí thực tế</p>
-          <p class="text-2xl font-bold text-gray-900 mt-2">{{ formatVnd(totalCost) }}</p>
-          <p class="text-xs mt-1" :class="totalCost > project.budget ? 'text-red-500' : 'text-green-600'">
-            {{ totalCost > project.budget ? 'Vượt ngân sách' : 'Trong ngân sách' }}
+          <p class="text-xs text-gray-500 font-medium uppercase tracking-wide">Chi phí thực tế (HĐ mua)</p>
+          <p class="text-2xl font-bold text-gray-900 mt-2">{{ formatVnd(actual_cost_from_pi) }}</p>
+          <p v-if="contract_value" class="text-xs mt-1"
+            :class="actual_cost_from_pi > contract_value ? 'text-red-500' : 'text-green-600'">
+            {{ actual_cost_from_pi > contract_value ? 'Vượt doanh thu' : `Còn lại: ${formatVnd(contract_value - actual_cost_from_pi)}` }}
           </p>
         </div>
         <div class="bg-white rounded-xl border border-gray-200 p-4">
@@ -180,10 +182,11 @@
         <!-- Materials tab -->
         <div v-if="activeTab === 'materials'" class="p-5 space-y-4">
           <form v-if="can('projects.manage')" @submit.prevent="addMaterial" class="flex gap-3">
-            <select v-model="materialForm.product_id" class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" required>
-              <option value="">-- Chọn sản phẩm --</option>
-              <option v-for="p in allProducts" :key="p.id" :value="p.id">{{ p.name }}</option>
-            </select>
+            <ProductSearch
+              :options="allProducts"
+              v-model="materialForm.product_id"
+              class="flex-1"
+            />
             <input v-model="materialForm.quantity" type="number" min="0.01" step="0.01" placeholder="Số lượng"
               class="w-28 border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
             <input v-model="materialForm.unit_price" type="number" min="0" step="any" placeholder="Đơn giá"
@@ -445,6 +448,7 @@ import { ref, computed, reactive } from 'vue';
 import { Link, useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
+import ProductSearch from '@/Components/Shared/ProductSearch.vue';
 import { usePermission } from '@/composables/usePermission';
 import { useCurrency } from '@/composables/useCurrency';
 
@@ -458,6 +462,8 @@ const props = defineProps({
   wipTotal: { type: Number, default: 0 },
   purchaseOrders: { type: Array, default: () => [] },
   allEmployees: { type: Array, default: () => [] },
+  contract_value: { type: Number, default: null },
+  actual_cost_from_pi: { type: Number, default: 0 },
 });
 
 const { hasPermission } = usePermission();

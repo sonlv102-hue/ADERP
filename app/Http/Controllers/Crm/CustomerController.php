@@ -180,7 +180,15 @@ class CustomerController extends Controller
 
     public function importTemplate()
     {
-        $headers = ['name', 'phone', 'email', 'address', 'tax_code', 'notes'];
-        return Excel::download(new TemplateExport($headers, 'Customers'), 'customer-template.xlsx');
+        $headers = [
+            'name', 'phone', 'email', 'address', 'tax_code',
+            'bank_name', 'account_number', 'account_name', 'branch',
+            'notes',
+        ];
+        $sample = [
+            ['Công ty ABC', '0901234567', 'abc@example.com', 'Hà Nội', '0123456789',
+             'Vietcombank', '1234567890', 'CÔNG TY TNHH ABC', 'HN - Hoàn Kiếm', 'Khách hàng mẫu'],
+        ];
+        return Excel::download(new TemplateExport($headers, 'Customers', $sample), 'customer-template.xlsx');
     }
 }

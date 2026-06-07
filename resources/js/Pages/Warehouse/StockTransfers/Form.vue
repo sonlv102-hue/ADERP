@@ -1,118 +1,201 @@
 <template>
   <AppLayout>
-    <div class="max-w-5xl">
-      <div class="flex items-center gap-3 mb-6">
-        <Link :href="route('warehouse.stock-transfers.index')" class="text-gray-500 hover:text-gray-700">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <div class="max-w-5xl space-y-5">
+
+      <!-- Page header -->
+      <div class="flex items-center gap-3">
+        <Link
+          :href="route('warehouse.stock-transfers.index')"
+          class="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-gray-400 transition hover:bg-gray-100 hover:text-gray-600"
+        >
+          <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
           </svg>
         </Link>
-        <h1 class="text-2xl font-bold text-gray-900">
-          {{ isEdit ? 'Chỉnh sửa phiếu chuyển kho' : 'Tạo phiếu chuyển kho' }}
-        </h1>
+        <div>
+          <p class="mb-0.5 text-xs font-medium text-gray-400">Kho / Chuyển kho</p>
+          <h1 class="text-xl font-bold text-gray-900">
+            {{ isEdit ? 'Sửa phiếu chuyển kho' : 'Tạo phiếu chuyển kho' }}
+          </h1>
+        </div>
       </div>
 
       <form @submit.prevent="submit" class="space-y-5">
-        <!-- Basic info -->
-        <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <div v-if="!isEdit">
-              <label class="block text-sm font-medium text-gray-700 mb-1">Mã phiếu <span class="text-red-500">*</span></label>
-              <input v-model="form.code" type="text"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                :class="{ 'border-red-500': form.errors.code }" />
-              <p v-if="form.errors.code" class="mt-1 text-xs text-red-600">{{ form.errors.code }}</p>
-            </div>
 
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Ngày chuyển <span class="text-red-500">*</span></label>
-              <input v-model="form.transfer_date" type="date"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                :class="{ 'border-red-500': form.errors.transfer_date }" />
-              <p v-if="form.errors.transfer_date" class="mt-1 text-xs text-red-600">{{ form.errors.transfer_date }}</p>
+        <!-- ─── Section 1: Thông tin phiếu ─── -->
+        <div class="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+          <div class="flex items-center gap-2.5 border-b border-gray-100 bg-gray-50/60 px-6 py-4">
+            <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-primary-100">
+              <svg class="h-3.5 w-3.5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
             </div>
+            <h2 class="text-sm font-semibold text-gray-800">Thông tin phiếu</h2>
           </div>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Kho nguồn <span class="text-red-500">*</span></label>
-              <select v-model="form.from_warehouse_id" @change="onFromWarehouseChange"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                :class="{ 'border-red-500': form.errors.from_warehouse_id }">
-                <option value="">-- Chọn kho nguồn --</option>
-                <option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
-              </select>
-              <p v-if="form.errors.from_warehouse_id" class="mt-1 text-xs text-red-600">{{ form.errors.from_warehouse_id }}</p>
+          <div class="p-6 space-y-5">
+            <div class="grid grid-cols-1 gap-5 sm:grid-cols-2">
+
+              <!-- Mã phiếu -->
+              <FormField v-if="!isEdit" label="Mã phiếu" required :error="form.errors.code">
+                <input
+                  v-model="form.code"
+                  type="text"
+                  placeholder="VD: CK-2024-001"
+                  class="w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow] placeholder:text-gray-300"
+                  :class="form.errors.code
+                    ? 'border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-2 focus:ring-red-100'
+                    : 'border-gray-200 bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100'"
+                />
+              </FormField>
+
+              <!-- Ngày chuyển -->
+              <FormField label="Ngày chuyển" required :error="form.errors.transfer_date">
+                <input
+                  v-model="form.transfer_date"
+                  type="date"
+                  class="w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow]"
+                  :class="form.errors.transfer_date
+                    ? 'border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-2 focus:ring-red-100'
+                    : 'border-gray-200 bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100'"
+                />
+              </FormField>
+
+              <!-- Kho nguồn -->
+              <FormField label="Kho nguồn" required :error="form.errors.from_warehouse_id">
+                <select
+                  v-model="form.from_warehouse_id"
+                  @change="onFromWarehouseChange"
+                  class="w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow]"
+                  :class="form.errors.from_warehouse_id
+                    ? 'border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-2 focus:ring-red-100'
+                    : 'border-gray-200 bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100'"
+                >
+                  <option value="">— Chọn kho nguồn —</option>
+                  <option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
+                </select>
+              </FormField>
+
+              <!-- Kho đích -->
+              <FormField label="Kho đích" required :error="form.errors.to_warehouse_id">
+                <select
+                  v-model="form.to_warehouse_id"
+                  class="w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow]"
+                  :class="form.errors.to_warehouse_id
+                    ? 'border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-2 focus:ring-red-100'
+                    : 'border-gray-200 bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100'"
+                >
+                  <option value="">— Chọn kho đích —</option>
+                  <option v-for="w in toWarehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
+                </select>
+              </FormField>
             </div>
 
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Kho đích <span class="text-red-500">*</span></label>
-              <select v-model="form.to_warehouse_id"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                :class="{ 'border-red-500': form.errors.to_warehouse_id }">
-                <option value="">-- Chọn kho đích --</option>
-                <option v-for="w in toWarehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
-              </select>
-              <p v-if="form.errors.to_warehouse_id" class="mt-1 text-xs text-red-600">{{ form.errors.to_warehouse_id }}</p>
-            </div>
-          </div>
-
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
-            <textarea v-model="form.notes" rows="2"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" />
+            <FormField label="Ghi chú" optional>
+              <textarea
+                v-model="form.notes"
+                rows="2"
+                placeholder="Lý do chuyển kho, ghi chú..."
+                class="w-full resize-none rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow] placeholder:text-gray-300 focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+              />
+            </FormField>
           </div>
         </div>
 
-        <!-- Items -->
-        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
-            <div>
-              <h2 class="text-base font-semibold text-gray-800">Hàng hóa chuyển kho</h2>
-              <p v-if="!form.from_warehouse_id" class="text-xs text-amber-600 mt-0.5">Chọn kho nguồn để xem tồn kho và serial</p>
+        <!-- ─── Section 2: Hàng hóa chuyển kho ─── -->
+        <div class="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
+          <div class="flex items-center justify-between border-b border-gray-100 bg-gray-50/60 px-6 py-4">
+            <div class="flex items-center gap-2.5">
+              <div class="flex h-7 w-7 items-center justify-center rounded-lg bg-primary-100">
+                <svg class="h-3.5 w-3.5 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                </svg>
+              </div>
+              <h2 class="text-sm font-semibold text-gray-800">Hàng hóa chuyển kho</h2>
+              <span v-if="form.items.length"
+                class="rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-600">
+                {{ form.items.length }}
+              </span>
             </div>
-            <button type="button" @click="addRow"
-              class="flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 rounded-lg text-sm font-medium text-gray-700">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-              </svg>
-              Thêm dòng
-            </button>
+            <div class="flex items-center gap-3">
+              <p v-if="!form.from_warehouse_id" class="text-xs text-amber-600">Chọn kho nguồn trước</p>
+              <button
+                type="button"
+                @click="addRow"
+                class="inline-flex items-center gap-1.5 rounded-lg border border-primary-200 bg-primary-50 px-3 py-1.5 text-xs font-semibold text-primary-700 transition hover:bg-primary-100"
+              >
+                <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+                </svg>
+                Thêm dòng
+              </button>
+            </div>
           </div>
 
-          <div class="divide-y divide-gray-100">
-            <div v-for="(item, index) in form.items" :key="index" class="p-5 space-y-3">
+          <!-- Empty state -->
+          <div v-if="!form.items.length" class="flex flex-col items-center gap-2.5 px-6 py-14 text-center">
+            <div class="flex h-14 w-14 items-center justify-center rounded-2xl bg-gray-100">
+              <svg class="h-7 w-7 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                  d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+            </div>
+            <div>
+              <p class="text-sm font-medium text-gray-600">Chưa có hàng hóa nào</p>
+              <p class="mt-0.5 text-xs text-gray-400">Nhấn "+ Thêm dòng" để thêm sản phẩm cần chuyển.</p>
+            </div>
+          </div>
+
+          <!-- Item cards -->
+          <div v-else class="divide-y divide-gray-50">
+            <div v-for="(item, index) in form.items" :key="index" class="p-5 space-y-4">
+
+              <!-- Product + Qty row -->
               <div class="flex items-start gap-3">
                 <div class="flex-1">
-                  <label class="block text-xs font-medium text-gray-600 mb-1">Sản phẩm</label>
-                  <select v-model="item.product_id" @change="onProductChange(index)"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none"
-                    :class="{ 'border-red-500': form.errors[`items.${index}.product_id`] }">
-                    <option value="">-- Chọn sản phẩm --</option>
-                    <option v-for="p in products" :key="p.id" :value="p.id">
-                      [{{ p.code }}] {{ p.name }}
-                    </option>
-                  </select>
-                  <p v-if="form.errors[`items.${index}.product_id`]" class="mt-1 text-xs text-red-600">
+                  <label class="mb-1.5 block text-xs font-medium text-gray-600">Sản phẩm</label>
+                  <ProductSearch
+                    :options="products"
+                    v-model="item.product_id"
+                    @select="() => onProductChange(index)"
+                    :has-error="!!form.errors[`items.${index}.product_id`]"
+                  />
+                  <p v-if="form.errors[`items.${index}.product_id`]"
+                    class="mt-1.5 flex items-center gap-1 text-xs text-red-600">
+                    <svg class="h-3.5 w-3.5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                      <path fill-rule="evenodd"
+                        d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z"
+                        clip-rule="evenodd" />
+                    </svg>
                     {{ form.errors[`items.${index}.product_id`] }}
                   </p>
                 </div>
 
-                <div class="w-32">
-                  <label class="block text-xs font-medium text-gray-600 mb-1">Số lượng</label>
-                  <input v-model.number="item.quantity" type="number" min="1"
+                <div class="w-32 shrink-0">
+                  <label class="mb-1.5 block text-xs font-medium text-gray-600">Số lượng</label>
+                  <input
+                    v-model.number="item.quantity"
+                    type="number"
+                    min="1"
                     @change="onQuantityChange(index)"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm text-right focus:ring-2 focus:ring-primary-500 outline-none"
-                    :class="{ 'border-red-500': form.errors[`items.${index}.quantity`] }" />
+                    class="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm text-right outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+                    :class="form.errors[`items.${index}.quantity`] && 'border-red-400 bg-red-50/40'"
+                  />
                   <p v-if="form.errors[`items.${index}.quantity`]" class="mt-1 text-xs text-red-600">
                     {{ form.errors[`items.${index}.quantity`] }}
                   </p>
                 </div>
 
-                <div class="pt-6">
-                  <button type="button" @click="removeRow(index)"
-                    class="p-2 text-gray-400 hover:text-red-500 transition-colors rounded">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <div class="pt-7">
+                  <button
+                    type="button"
+                    @click="removeRow(index)"
+                    class="rounded-lg p-1.5 text-gray-300 transition hover:bg-red-50 hover:text-red-500 focus:outline-none"
+                    title="Xóa dòng"
+                  >
+                    <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   </button>
@@ -120,33 +203,46 @@
               </div>
 
               <!-- Stock hint -->
-              <div v-if="item.product_id && form.from_warehouse_id" class="text-xs text-gray-500">
+              <div v-if="item.product_id && form.from_warehouse_id" class="text-xs text-gray-400">
                 <span v-if="getProduct(item.product_id)?.has_serial">
-                  Serial trong kho: <strong>{{ getAvailableSerials(item.product_id).length }}</strong>
+                  Serial trong kho nguồn:
+                  <strong class="text-gray-600">{{ getAvailableSerials(item.product_id).length }}</strong> chiếc
                 </span>
               </div>
 
-              <!-- Serial selection for serial-tracked products -->
-              <div v-if="item.product_id && getProduct(item.product_id)?.has_serial && form.from_warehouse_id"
-                class="bg-blue-50 rounded-lg p-4 space-y-3">
+              <!-- Serial selection -->
+              <div
+                v-if="item.product_id && getProduct(item.product_id)?.has_serial && form.from_warehouse_id"
+                class="rounded-xl border border-blue-100 bg-blue-50/60 p-4 space-y-3"
+              >
                 <div class="flex items-center justify-between">
                   <div class="flex items-center gap-2">
-                    <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                         d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 3.5V16M4 16v.5M4 9v.5M4 6h.01" />
                     </svg>
                     <span class="text-sm font-semibold text-blue-800">Chọn Serial</span>
-                    <span class="px-2 py-0.5 rounded-full text-xs font-bold"
-                      :class="item.serial_ids.length === item.quantity ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'">
+                    <span
+                      class="rounded-full px-2 py-0.5 text-xs font-bold"
+                      :class="item.serial_ids.length === item.quantity
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-amber-100 text-amber-700'"
+                    >
                       {{ item.serial_ids.length }}/{{ item.quantity }}
                     </span>
                   </div>
-                  <button v-if="item.serial_ids.length > 0" type="button" @click="item.serial_ids = []"
-                    class="text-xs text-gray-400 hover:text-red-500 transition-colors">Bỏ chọn tất cả</button>
+                  <button
+                    v-if="item.serial_ids.length > 0"
+                    type="button"
+                    @click="item.serial_ids = []"
+                    class="text-xs text-gray-400 hover:text-red-500 transition"
+                  >
+                    Bỏ chọn tất cả
+                  </button>
                 </div>
 
                 <div v-if="getAvailableSerials(item.product_id).length === 0"
-                  class="text-xs text-amber-700 bg-amber-50 rounded px-3 py-2">
+                  class="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
                   Không có serial nào trong kho nguồn cho sản phẩm này.
                 </div>
 
@@ -157,12 +253,13 @@
                     type="button"
                     @click="toggleSerial(index, s.id)"
                     :disabled="!item.serial_ids.includes(s.id) && item.serial_ids.length >= item.quantity"
-                    class="px-2.5 py-1 rounded-lg font-mono text-xs border transition-colors"
+                    class="rounded-lg border px-2.5 py-1 font-mono text-xs transition"
                     :class="item.serial_ids.includes(s.id)
                       ? 'bg-blue-600 text-white border-blue-600'
                       : item.serial_ids.length >= item.quantity
                         ? 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed'
-                        : 'bg-white text-gray-700 border-blue-200 hover:border-blue-500'">
+                        : 'bg-white text-gray-700 border-blue-200 hover:border-blue-500'"
+                  >
                     {{ s.serial_number }}
                   </button>
                 </div>
@@ -172,24 +269,33 @@
                 </p>
               </div>
             </div>
-
-            <div v-if="!form.items.length" class="px-5 py-8 text-center text-gray-400 text-sm">
-              Chưa có hàng hóa. Nhấn "Thêm dòng" để bắt đầu.
-            </div>
           </div>
 
-          <p v-if="form.errors.items" class="px-5 py-2 text-xs text-red-600 border-t border-gray-100">
+          <p v-if="form.errors.items"
+            class="border-t border-red-100 bg-red-50 px-5 py-2.5 text-xs text-red-600">
             {{ form.errors.items }}
           </p>
         </div>
 
-        <div class="flex gap-3">
-          <button type="submit" :disabled="form.processing"
-            class="bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white px-6 py-2 rounded-lg font-medium text-sm">
-            {{ form.processing ? 'Đang lưu...' : (isEdit ? 'Cập nhật' : 'Tạo phiếu') }}
+        <!-- Action bar -->
+        <div class="flex items-center gap-3 pb-2">
+          <button
+            type="submit"
+            :disabled="form.processing"
+            class="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <svg v-if="form.processing" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            {{ form.processing ? 'Đang lưu...' : (isEdit ? 'Cập nhật phiếu' : 'Tạo phiếu chuyển kho') }}
           </button>
-          <Link :href="route('warehouse.stock-transfers.index')"
-            class="px-6 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Hủy</Link>
+          <Link
+            :href="route('warehouse.stock-transfers.index')"
+            class="rounded-xl border border-gray-200 px-5 py-2.5 text-sm font-medium text-gray-600 transition hover:bg-gray-50"
+          >
+            Hủy
+          </Link>
         </div>
       </form>
     </div>
@@ -200,6 +306,8 @@
 import { computed } from 'vue';
 import { Link, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
+import FormField from '@/Components/Shared/FormField.vue';
+import ProductSearch from '@/Components/Shared/ProductSearch.vue';
 
 const props = defineProps({
   nextCode: String,
@@ -236,11 +344,9 @@ const getAvailableSerials = (productId) => {
 };
 
 const onFromWarehouseChange = () => {
-  // Reset to_warehouse if same, reload serials via Inertia visit
   if (form.to_warehouse_id === form.from_warehouse_id) {
     form.to_warehouse_id = '';
   }
-  // Reload page with new warehouse to get fresh serial data
   if (form.from_warehouse_id) {
     router.visit(
       isEdit.value
@@ -255,7 +361,6 @@ const onFromWarehouseChange = () => {
       }
     );
   }
-  // Clear serial selections on warehouse change
   form.items.forEach(item => { item.serial_ids = []; });
 };
 
@@ -266,7 +371,6 @@ const onProductChange = (index) => {
 const onQuantityChange = (index) => {
   const item = form.items[index];
   if (item.quantity < 1) item.quantity = 1;
-  // Trim serial selection if more than quantity
   if (item.serial_ids.length > item.quantity) {
     item.serial_ids = item.serial_ids.slice(0, item.quantity);
   }

@@ -145,13 +145,8 @@ class StockService
                 }
             }
 
+            $this->accounting->reverseOrDelete('stock_entry', $entry->id, "Hủy phiếu nhập kho {$entry->code}");
             $entry->update(['status' => StockEntryStatus::Cancelled]);
-
-            try {
-                $this->accounting->reverseOrDelete('stock_entry', $entry->id, "Hủy phiếu nhập kho {$entry->code}");
-            } catch (\Exception $e) {
-                \Log::warning("Reverse entry journal failed [{$entry->code}]: " . $e->getMessage());
-            }
         });
 
         Cache::forget('dashboard.stock_overview');
@@ -177,6 +172,8 @@ class StockService
         }
 
         DB::transaction(function () use ($entry) {
+            $this->accounting->reverseOrDelete('stock_entry', $entry->id, "Thu hồi phiếu nhập kho {$entry->code} để chỉnh sửa");
+
             // Tạo movement âm để đảo ngược tồn kho tạm thời (sẽ được tạo lại khi confirm)
             foreach ($entry->items as $item) {
                 StockMovement::create([
@@ -194,12 +191,6 @@ class StockService
             // Serial giữ nguyên InStock (hàng vẫn đang trong kho vật lý)
             $entry->update(['status' => StockEntryStatus::Draft]);
         });
-
-        try {
-            $this->accounting->reverseOrDelete('stock_entry', $entry->id, "Thu hồi phiếu nhập kho {$entry->code} để chỉnh sửa");
-        } catch (\Exception $e) {
-            \Log::warning("Reverse entry journal failed on recall [{$entry->code}]: " . $e->getMessage());
-        }
 
         Cache::forget('dashboard.stock_overview');
         Cache::forget('dashboard.stats');
@@ -301,6 +292,8 @@ class StockService
         }
 
         DB::transaction(function () use ($exit) {
+            $this->accounting->reverseOrDelete('stock_exit', $exit->id, "Hủy phiếu xuất kho {$exit->code}");
+
             // Tạo movement dương để đảo ngược tồn kho (giữ audit trail)
             foreach ($exit->items as $item) {
                 StockMovement::create([
@@ -324,12 +317,6 @@ class StockService
 
             $exit->update(['status' => StockExitStatus::Cancelled]);
         });
-
-        try {
-            $this->accounting->reverseOrDelete('stock_exit', $exit->id, "Hủy phiếu xuất kho {$exit->code}");
-        } catch (\Exception $e) {
-            \Log::warning("Reverse exit journal failed [{$exit->code}]: " . $e->getMessage());
-        }
 
         Cache::forget('dashboard.stock_overview');
         Cache::forget('dashboard.stats');
@@ -380,15 +367,11 @@ class StockService
         $lines[] = ['account' => '331', 'debit' => 0, 'credit' => $totalCredit,
                     'description' => "Phải trả NCC - phiếu {$entry->code}"];
 
-        try {
-            $this->accounting->post(
-                "Nhập kho hàng hóa {$entry->code}",
-                Carbon::parse($entry->entry_date),
-                $lines, 'stock_entry', $entry->id, true
-            );
-        } catch (\Exception $e) {
-            \Log::warning("Auto-posting failed [StockEntry {$entry->code}]: " . $e->getMessage());
-        }
+        $this->accounting->tryPost(
+            "Nhập kho hàng hóa {$entry->code}",
+            Carbon::parse($entry->entry_date),
+            $lines, 'stock_entry', $entry->id, 'inbound'
+        );
     }
 
     private function postExitJournal(StockExit $exit): void
@@ -436,19 +419,15 @@ class StockService
             ? "Xuất vật tư dự án {$exit->code}"
             : "Giá vốn hàng bán {$exit->code}";
 
-        try {
-            $journalEntry = $this->accounting->post(
-                $description,
-                Carbon::parse($exit->exit_date),
-                $lines, 'stock_exit', $exit->id, true
-            );
+        $journalEntry = $this->accounting->tryPost(
+            $description,
+            Carbon::parse($exit->exit_date),
+            $lines, 'stock_exit', $exit->id, 'outbound'
+        );
 
-            // Tạo WIP entry để theo dõi chi phí dở dang theo dự án
-            if ($isProject) {
-                $this->wip->createFromStockExit($exit, $journalEntry->id);
-            }
-        } catch (\Exception $e) {
-            \Log::warning("Auto-posting failed [StockExit {$exit->code}]: " . $e->getMessage());
+        // Tạo WIP entry để theo dõi chi phí dở dang theo dự án
+        if ($isProject && $journalEntry) {
+            $this->wip->createFromStockExit($exit, $journalEntry->id);
         }
     }
 }

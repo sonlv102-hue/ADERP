@@ -73,7 +73,6 @@
                 <th class="text-left px-4 py-2 font-semibold text-gray-600 text-xs">Ngày</th>
                 <th class="text-left px-4 py-2 font-semibold text-gray-600 text-xs">Chứng từ</th>
                 <th class="text-left px-4 py-2 font-semibold text-gray-600 text-xs">Diễn giải</th>
-                <th class="text-left px-4 py-2 font-semibold text-gray-600 text-xs">Đối tác</th>
                 <th class="text-right px-4 py-2 font-semibold text-blue-600 text-xs">Nợ</th>
                 <th class="text-right px-4 py-2 font-semibold text-green-600 text-xs">Có</th>
                 <th class="text-right px-4 py-2 font-semibold text-gray-600 text-xs">Số dư</th>
@@ -81,28 +80,30 @@
             </thead>
             <tbody class="divide-y divide-gray-100">
               <tr class="bg-yellow-50 font-semibold">
-                <td colspan="4" class="px-4 py-2 text-gray-700 text-xs">Số dư đầu kỳ</td>
+                <td colspan="3" class="px-4 py-2 text-gray-700 text-xs">Số dư đầu kỳ</td>
                 <td class="px-4 py-2 text-right text-xs"></td>
                 <td class="px-4 py-2 text-right text-xs"></td>
                 <td class="px-4 py-2 text-right font-semibold text-gray-800 text-xs">{{ fmt(openingBalance) }}</td>
               </tr>
               <tr v-for="(row, i) in rows" :key="i" class="hover:bg-gray-50">
                 <td class="px-4 py-2 text-gray-600 text-xs">{{ row.date }}</td>
-                <td class="px-4 py-2 font-mono text-gray-700 text-xs">{{ row.ref }}</td>
+                <td class="px-4 py-2 font-mono text-xs">
+                  <Link :href="route('accounting.journal-entries.show', row.journal_entry_id)"
+                    class="text-primary-600 hover:underline">{{ row.ref }}</Link>
+                </td>
                 <td class="px-4 py-2 text-gray-700 text-xs">{{ row.description }}</td>
-                <td class="px-4 py-2 text-gray-500 text-xs">{{ row.partner }}</td>
                 <td class="px-4 py-2 text-right text-blue-700 text-xs">{{ row.debit > 0 ? fmt(row.debit) : '—' }}</td>
                 <td class="px-4 py-2 text-right text-green-700 text-xs">{{ row.credit > 0 ? fmt(row.credit) : '—' }}</td>
                 <td class="px-4 py-2 text-right font-semibold text-xs"
                   :class="row.balance >= 0 ? 'text-gray-800' : 'text-red-700'">{{ fmt(row.balance) }}</td>
               </tr>
               <tr v-if="rows.length === 0">
-                <td colspan="7" class="px-4 py-8 text-center text-gray-400 text-sm">Không có phát sinh trong kỳ</td>
+                <td colspan="6" class="px-4 py-8 text-center text-gray-400 text-sm">Không có phát sinh trong kỳ</td>
               </tr>
             </tbody>
             <tfoot class="bg-gray-50 border-t-2 border-gray-300">
               <tr>
-                <td colspan="4" class="px-4 py-2 font-bold text-gray-800 text-xs">Số dư cuối kỳ</td>
+                <td colspan="3" class="px-4 py-2 font-bold text-gray-800 text-xs">Số dư cuối kỳ</td>
                 <td class="px-4 py-2 text-right font-bold text-blue-800 text-xs">{{ fmt(totalDebit) }}</td>
                 <td class="px-4 py-2 text-right font-bold text-green-800 text-xs">{{ fmt(totalCredit) }}</td>
                 <td class="px-4 py-2 text-right font-bold text-xs"
@@ -118,7 +119,7 @@
 
 <script setup>
 import { ref, computed } from 'vue';
-import { router } from '@inertiajs/vue3';
+import { router, Link } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { useCurrency } from '@/composables/useCurrency';
 

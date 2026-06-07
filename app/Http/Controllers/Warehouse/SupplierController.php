@@ -141,7 +141,15 @@ class SupplierController extends Controller
 
     public function importTemplate()
     {
-        $headers = ['name', 'phone', 'email', 'address', 'tax_code', 'notes'];
-        return Excel::download(new TemplateExport($headers, 'Suppliers'), 'supplier-template.xlsx');
+        $headers = [
+            'name', 'phone', 'email', 'address', 'tax_code',
+            'bank_name', 'account_number', 'account_name', 'branch',
+            'notes',
+        ];
+        $sample = [
+            ['Công ty XYZ', '0901234568', 'xyz@example.com', 'TP.HCM', '9876543210',
+             'Techcombank', '0987654321', 'CÔNG TY CP XYZ', 'HCM - Quận 1', 'Nhà cung cấp mẫu'],
+        ];
+        return Excel::download(new TemplateExport($headers, 'Suppliers', $sample), 'supplier-template.xlsx');
     }
 }

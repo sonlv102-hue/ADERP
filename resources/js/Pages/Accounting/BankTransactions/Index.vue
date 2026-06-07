@@ -17,8 +17,15 @@
         </div>
       </div>
 
-      <!-- Import Excel button -->
-      <div v-if="can('accounting.manage')" class="flex justify-end mb-3">
+      <!-- Import Excel + Recategorize buttons -->
+      <div v-if="can('accounting.manage')" class="flex justify-end gap-2 mb-3">
+        <button @click="showRecategorize = true" class="erp-btn-secondary flex items-center gap-2">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+          </svg>
+          Phân loại lại
+        </button>
         <button @click="showImport = true" class="erp-btn-secondary flex items-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -226,6 +233,21 @@
         </div>
       </div>
 
+      <!-- Recategorize confirm modal -->
+      <div v-if="showRecategorize" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+        <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
+          <h3 class="text-lg font-bold text-gray-900 mb-2">Phân loại lại giao dịch</h3>
+          <p class="text-sm text-gray-600 mb-4">
+            Tìm tất cả giao dịch <strong>chưa phân loại</strong> của tài khoản này và so khớp lại với danh sách TK nội bộ / NCC hiện tại.
+            Giao dịch đã có phân loại sẽ không bị thay đổi.
+          </p>
+          <div class="flex gap-3">
+            <button @click="submitRecategorize" class="erp-btn-primary flex-1">Chạy phân loại</button>
+            <button @click="showRecategorize = false" class="erp-btn-secondary">Hủy</button>
+          </div>
+        </div>
+      </div>
+
       <!-- Reconcile modal -->
       <div v-if="reconcileTarget" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
         <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
@@ -292,8 +314,17 @@ const addForm = useForm({
   credit:           0,
 });
 
-const reconcileTarget = ref(null);
-const reconcileForm   = useForm({ journal_entry_id: null });
+const reconcileTarget   = ref(null);
+const reconcileForm     = useForm({ journal_entry_id: null });
+const showRecategorize  = ref(false);
+
+function submitRecategorize() {
+  router.post(
+    route('accounting.bank-accounts.transactions.recategorize', props.bankAccount.id),
+    {},
+    { onSuccess: () => { showRecategorize.value = false; } }
+  );
+}
 
 // Import Excel
 const showImport  = ref(false);

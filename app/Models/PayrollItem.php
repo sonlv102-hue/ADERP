@@ -18,8 +18,10 @@ class PayrollItem extends Model
         'bhxh_employer', 'bhyt_employer', 'bhtn_employer',
         'pit', 'dependents_count',
         'deductions', 'net_salary',
-        'working_days', 'standard_days', 'advance', 'insurance_subject',
-        'status', 'paid_at', 'cash_voucher_id',
+        'working_days', 'standard_days', 'advance', 'insurance_subject', 'trade_union_fee',
+        'attendance_sheet_id', 'actual_working_days', 'paid_leave_days',
+        'unpaid_leave_days', 'overtime_days', 'attendance_note',
+        'status', 'paid_at', 'cash_voucher_id', 'salary_journal_entry_id',
     ];
 
     protected function casts(): array
@@ -50,6 +52,12 @@ class PayrollItem extends Model
             'standard_days'            => 'integer',
             'advance'                  => 'decimal:0',
             'insurance_subject'        => 'boolean',
+            'trade_union_fee'          => 'decimal:0',
+            'attendance_sheet_id'      => 'integer',
+            'actual_working_days'      => 'integer',
+            'paid_leave_days'          => 'integer',
+            'unpaid_leave_days'        => 'integer',
+            'overtime_days'            => 'integer',
             'paid_at'                  => 'datetime',
             'cash_voucher_id'          => 'integer',
         ];
@@ -73,5 +81,10 @@ class PayrollItem extends Model
     public function cashVoucher(): BelongsTo
     {
         return $this->belongsTo(CashVoucher::class);
+    }
+
+    public function salaryJournalEntry(): BelongsTo
+    {
+        return $this->belongsTo(JournalEntry::class, 'salary_journal_entry_id');
     }
 }

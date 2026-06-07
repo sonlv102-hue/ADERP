@@ -350,4 +350,55 @@ class BankReconciliationService
             'reconciled_by'    => null,
         ]);
     }
+
+    /**
+     * Phân loại lại các giao dịch tx_type = 'unknown' dựa trên danh sách TK nội bộ / NCC hiện tại.
+     * Trả về: ['updated' => int, 'total' => int]
+     */
+    public function recategorizeUnknown(BankAccount $account): array
+    {
+        $transactions = BankTransaction::where('bank_account_id', $account->id)
+            ->where(function ($q) {
+                $q->where('tx_type', 'unknown')->orWhereNull('tx_type');
+            })
+            ->whereNotNull('counterpart_account')
+            ->get();
+
+        if ($transactions->isEmpty()) {
+            return ['updated' => 0, 'total' => 0];
+        }
+
+        $internalAccounts = InternalBankAccount::where('is_active', true)->get();
+        $supplierBanks    = SupplierBankAccount::where('is_active', true)->get();
+
+        $updated = 0;
+        foreach ($transactions as $tx) {
+            $normalized = preg_replace('/[\s\-]/', '', $tx->counterpart_account);
+
+            $internal = $internalAccounts->first(
+                fn ($a) => preg_replace('/[\s\-]/', '', $a->account_number) === $normalized
+            );
+
+            if ($internal) {
+                $data = ['tx_type' => 'internal_transfer', 'internal_account_id' => $internal->id];
+                if ($tx->debit > 0) {
+                    $data['alert_note'] = "Chuyển khoản nội bộ đến {$internal->name} ({$internal->account_number}). Cần hồ sơ đối ứng. Nếu là tạm ứng, cần hoàn ứng sau khi sử dụng.";
+                }
+                $tx->update($data);
+                $updated++;
+                continue;
+            }
+
+            $supplier = $supplierBanks->first(
+                fn ($a) => preg_replace('/[\s\-]/', '', $a->account_number) === $normalized
+            );
+
+            if ($supplier) {
+                $tx->update(['tx_type' => 'supplier_payment', 'supplier_bank_account_id' => $supplier->id]);
+                $updated++;
+            }
+        }
+
+        return ['updated' => $updated, 'total' => $transactions->count()];
+    }
 }

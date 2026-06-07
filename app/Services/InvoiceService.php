@@ -26,12 +26,7 @@ class InvoiceService
         }
 
         DB::transaction(function () use ($invoice) {
-            try {
-                $this->accounting->reverseOrDelete('invoice', $invoice->id, "Hủy hóa đơn {$invoice->code}");
-            } catch (\Exception $e) {
-                \Log::warning("Cancel invoice journal failed [{$invoice->code}]: " . $e->getMessage());
-            }
-
+            $this->accounting->reverseOrDelete('invoice', $invoice->id, "Hủy hóa đơn {$invoice->code}");
             $invoice->update(['status' => InvoiceStatus::Cancelled]);
         });
     }
@@ -90,12 +85,7 @@ class InvoiceService
     public function removePayment(Invoice $invoice, Payment $payment): void
     {
         DB::transaction(function () use ($invoice, $payment) {
-            try {
-                $this->accounting->reverseOrDelete('payment', $payment->id, "Thu tiền {$invoice->code}");
-            } catch (\Exception $e) {
-                \Log::warning("Reverse payment entry failed [{$invoice->code}]: " . $e->getMessage());
-            }
-
+            $this->accounting->reverseOrDelete('payment', $payment->id, "Thu tiền {$invoice->code}");
             $payment->delete();
 
             // Nếu hóa đơn đang là Paid, hoàn về Sent/Overdue
@@ -135,18 +125,19 @@ class InvoiceService
              'description' => "Phải thu KH - {$invoice->code}"],
         ];
 
-        // Doanh thu: hàng hóa → 5111, dịch vụ → 5113 (phân tách đơn giản dựa subtotal)
+        // Doanh thu: phân tách theo revenue_account_code từ order_items
         if ($creditSubtotal > 0) {
-            $lines[] = ['account' => '5111', 'debit' => 0, 'credit' => $creditSubtotal,
-                        'description' => "Doanh thu - {$invoice->code}"];
+            foreach ($this->buildRevenueLines($invoice, $creditSubtotal) as $revLine) {
+                $lines[] = $revLine;
+            }
         }
         if ($creditTax > 0) {
             $lines[] = ['account' => '33311', 'debit' => 0, 'credit' => $creditTax,
                         'description' => "Thuế GTGT đầu ra - {$invoice->code}"];
         }
 
-        $this->tryPost("Ghi nhận doanh thu {$invoice->code}", Carbon::parse($invoice->issue_date),
-            $lines, 'invoice', $invoice->id);
+        $this->accounting->tryPost("Ghi nhận doanh thu {$invoice->code}", Carbon::parse($invoice->issue_date),
+            $lines, 'invoice', $invoice->id, 'revenue');
     }
 
     private function postPaymentEntry(Payment $payment, Invoice $invoice): void
@@ -159,7 +150,7 @@ class InvoiceService
             : ($payment->method ?? 'cash');
         $cashAccount = $this->resolvePaymentAccount($method);
 
-        $this->tryPost(
+        $this->accounting->tryPost(
             "Thu tiền {$invoice->code}",
             Carbon::parse($payment->payment_date),
             [
@@ -168,8 +159,75 @@ class InvoiceService
                 ['account' => '131', 'debit' => 0, 'credit' => $amount,
                  'description' => "Xóa công nợ KH - {$invoice->code}"],
             ],
-            'payment', $payment->id
+            'payment', $payment->id, 'collection'
         );
+    }
+
+    // Phân tách creditSubtotal theo tỷ lệ revenue_account_code từ order_items.
+    // Nếu invoice không có order_id → dùng invoice.revenue_account_code (nếu có) hoặc log warning + fallback 5111.
+    // Nếu order_item có revenue_account_code = null → log warning + gộp vào 5111.
+    private function buildRevenueLines(Invoice $invoice, int $creditSubtotal): array
+    {
+        if (!$invoice->order_id) {
+            $account = $invoice->revenue_account_code;
+            if (!$account) {
+                \Log::warning("Invoice {$invoice->code} (standalone): thiếu revenue_account_code. "
+                    . 'Fallback 5111. Vào form hóa đơn để chọn tài khoản doanh thu phù hợp.');
+                $account = '5111';
+            }
+            return [['account' => $account, 'debit' => 0, 'credit' => $creditSubtotal,
+                     'description' => "Doanh thu ({$account}) - {$invoice->code}"]];
+        }
+
+        $groups = DB::table('order_items')
+            ->where('order_id', $invoice->order_id)
+            ->selectRaw('COALESCE(revenue_account_code, \'5111\') as account_code,
+                         SUM(quantity * unit_price) as group_total')
+            ->groupBy('account_code')
+            ->orderByDesc('group_total')
+            ->get();
+
+        if ($groups->isEmpty()) {
+            return [['account' => '5111', 'debit' => 0, 'credit' => $creditSubtotal,
+                     'description' => "Doanh thu - {$invoice->code}"]];
+        }
+
+        // Log cảnh báo nếu có dòng revenue_account_code = null (item_type chưa được cấu hình)
+        $hasNull = DB::table('order_items')
+            ->where('order_id', $invoice->order_id)
+            ->whereNull('revenue_account_code')
+            ->exists();
+        if ($hasNull) {
+            \Log::warning("Invoice {$invoice->code}: có order_item thiếu revenue_account_code. "
+                . 'Đã fallback về 5111. Cần kế toán cấu hình products.item_type cho các sản phẩm này.');
+        }
+
+        $orderTotal = $groups->sum('group_total');
+        if ($orderTotal <= 0) {
+            return [['account' => '5111', 'debit' => 0, 'credit' => $creditSubtotal,
+                     'description' => "Doanh thu - {$invoice->code}"]];
+        }
+
+        $lines     = [];
+        $allocated = 0;
+        $lastKey   = $groups->keys()->last();
+
+        foreach ($groups as $key => $group) {
+            if ($key === $lastKey) {
+                $amount = $creditSubtotal - $allocated; // phần dư để tránh sai số làm lệch bút toán
+            } else {
+                $amount = (int) round($creditSubtotal * ($group->group_total / $orderTotal));
+            }
+
+            if ($amount <= 0) continue;
+
+            $lines[]    = ['account' => $group->account_code, 'debit' => 0, 'credit' => $amount,
+                           'description' => "Doanh thu ({$group->account_code}) - {$invoice->code}"];
+            $allocated += $amount;
+        }
+
+        return $lines ?: [['account' => '5111', 'debit' => 0, 'credit' => $creditSubtotal,
+                            'description' => "Doanh thu - {$invoice->code}"]];
     }
 
     private function resolvePaymentAccount(string $method): string
@@ -180,13 +238,4 @@ class InvoiceService
         };
     }
 
-    private function tryPost(string $description, Carbon $date, array $lines, string $refType, int $refId): void
-    {
-        try {
-            $this->accounting->post($description, $date, $lines, $refType, $refId, true);
-        } catch (\Exception $e) {
-            // Không để lỗi kế toán block nghiệp vụ — log để xem lại
-            \Log::warning("Auto-posting failed [{$description}]: " . $e->getMessage());
-        }
-    }
 }

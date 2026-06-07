@@ -220,10 +220,10 @@
                         Chi lương
                       </button>
                     </div>
-                    <Link v-if="item.cash_voucher"
-                      :href="route('accounting.cash-vouchers.show', item.cash_voucher.id)"
+                    <Link v-if="item.salary_journal_entry"
+                      :href="route('accounting.journal-entries.show', item.salary_journal_entry.id)"
                       class="text-green-600 hover:underline text-[10px] font-mono font-bold block mt-0.5">
-                      {{ item.cash_voucher.code }}
+                      {{ item.salary_journal_entry.code }}
                     </Link>
                   </td>
                   <td v-if="payroll.status === 'draft'" class="border border-gray-200 px-2 py-1.5 text-center">
@@ -427,11 +427,11 @@
             </p>
           </div>
           <div>
-            <label class="form-label">Quỹ / Tài khoản</label>
-            <select v-model="payForm.fund_id" required class="form-input">
-              <option value="" disabled>-- Chọn quỹ --</option>
-              <option v-for="fund in funds" :key="fund.id" :value="fund.id">
-                {{ fund.name }} ({{ fund.type === 'cash' ? 'Tiền mặt' : 'Ngân hàng' }})
+            <label class="form-label">Tài khoản ngân hàng chi lương</label>
+            <select v-model="payForm.bank_account_id" required class="form-input">
+              <option value="" disabled>-- Chọn tài khoản NH --</option>
+              <option v-for="ba in bankAccounts" :key="ba.id" :value="ba.id">
+                {{ ba.bank_name }} — {{ ba.account_number }} ({{ ba.account_name }})
               </option>
             </select>
           </div>
@@ -452,7 +452,7 @@ import { Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { usePermission } from '@/composables/usePermission';
 
-const props = defineProps({ payroll: Object, items: Array, funds: Array });
+const props = defineProps({ payroll: Object, items: Array, bankAccounts: Array });
 
 const { hasPermission: can } = usePermission();
 const page = usePage();
@@ -607,11 +607,11 @@ function submitEdit() {
 
 // Pay modal
 const showPayModal = ref(false);
-const payForm = useForm({ fund_id: '' });
+const payForm = useForm({ bank_account_id: '' });
 
 function openPayModal(item) {
   activeItem.value = item;
-  payForm.fund_id  = '';
+  payForm.bank_account_id = '';
   showPayModal.value = true;
 }
 

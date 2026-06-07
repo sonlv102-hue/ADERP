@@ -16,21 +16,31 @@ class BalanceSheetController extends Controller
     public function index(Request $request): Response
     {
         $asOf = $request->input('as_of', now()->toDateString());
+        ['balanceSheet' => $balanceSheet, 'summary' => $summary] = $this->computeData($asOf);
 
-        // Lấy toàn bộ số dư tài khoản tính đến $asOf
+        return Inertia::render('Reports/BalanceSheet/Index', [
+            'balanceSheet' => $balanceSheet,
+            'summary'      => $summary,
+            'filters'      => ['as_of' => $asOf],
+        ]);
+    }
+
+    /** Tính toán toàn bộ Balance Sheet — tách riêng để unit-testable */
+    public function computeData(string $asOf): array
+    {
         $bal = $this->accountBalancesAsOf($asOf);
         $b   = fn(string $code) => $this->sumPrefix($bal, $code);
 
         // ─── TÀI SẢN ──────────────────────────────────────────────────────────
         $cashOnHand  = $b('111');
         $bankBalance = $b('112');
-        $ar          = $b('131');          // Phải thu KH
-        $prepaidST   = $b('142');          // Chi phí trả trước ngắn hạn
+        $ar          = $b('131');
+        $prepaidST   = $b('142');
         $inventory   = $b('156') + $b('155') + $b('152') + $b('153');
         $faGross     = $b('211') + $b('213');
-        $faAccDep    = $b('214');          // credit-normal → dương = hao mòn tích lũy
+        $faAccDep    = $b('214');
         $faNet       = max(0.0, $faGross - $faAccDep);
-        $prepaidLT   = $b('242');          // Chi phí trả trước dài hạn
+        $prepaidLT   = $b('242');
 
         $cash                  = $cashOnHand + $bankBalance;
         $totalCurrentAssets    = $cash + $ar + $prepaidST + $inventory;
@@ -38,21 +48,30 @@ class BalanceSheetController extends Controller
         $totalAssets           = $totalCurrentAssets + $totalNonCurrentAssets;
 
         // ─── NỢ PHẢI TRẢ ──────────────────────────────────────────────────────
-        $ap         = $b('331');
-        $vatPayable = $b('3331') + $b('3332') + $b('3333');
-        $citPayable = $b('3334');
-        $pitPayable = $b('3335');
-        $bhxhPayable= $b('3383') + $b('3384') + $b('3389');
+        $ap            = $b('331');
+        $vatPayable    = $b('3331') + $b('3332') + $b('3333');
+        $citPayable    = $b('3334');
+        $pitPayable    = $b('3335');
+        $bhxhPayable   = $b('3383') + $b('3384') + $b('3385') + $b('3389');
         $salaryPayable = $b('334');
         $totalLiabilities = $ap + $vatPayable + $citPayable + $pitPayable + $bhxhPayable + $salaryPayable;
 
         // ─── VỐN CHỦ SỞ HỮU ──────────────────────────────────────────────────
-        $charterCapital  = $b('411');
+        $charterCapital = $b('411');
 
-        // Lợi nhuận chưa phân phối = tổng doanh thu – tổng chi phí (tất cả các kỳ)
-        $revenue  = $this->sumPrefix($bal, '5');
-        $expenses = $this->sumPrefix($bal, '6') + $this->sumPrefix($bal, '8');
-        $retainedEarnings = $revenue - $expenses;
+        // TK 421*: số dư từ closing entries, phân phối lợi nhuận, điều chỉnh hồi tố
+        $account421       = $this->sumPrefix($bal, '421');  // tổng 421 + 4211 + 4212 + TK con
+        $balance4211      = $this->sumPrefix($bal, '4211'); // LNST năm trước
+        $balance4212      = $this->sumPrefix($bal, '4212'); // LNST năm nay (sau closing)
+
+        // P&L chưa kết chuyển: ≈ 0 nếu closing entries đã chạy và zero hóa 5xx/6xx/8xx
+        $revenue          = $this->sumPrefix($bal, '5');
+        $expenses         = $this->sumPrefix($bal, '6') + $this->sumPrefix($bal, '8');
+        $currentNetIncome = $revenue - $expenses;
+
+        // Case B: TK 421* (posted) + P&L chưa kết chuyển
+        // Closing entries standard zero 5xx/6xx/8xx → không double-count
+        $retainedEarnings = $account421 + $currentNetIncome;
 
         $totalEquity     = $charterCapital + $retainedEarnings;
         $totalLiabEquity = $totalLiabilities + $totalEquity;
@@ -83,22 +102,22 @@ class BalanceSheetController extends Controller
             ['label' => 'B. VỐN CHỦ SỞ HỮU',                                      'amount' => $totalEquity,           'bold' => true,  'indent' => 0, 'side' => 'equity'],
             ['label' => 'Vốn đầu tư của CSH (TK 411)',                             'amount' => $charterCapital,        'bold' => false, 'indent' => 1, 'side' => 'equity'],
             ['label' => 'Lợi nhuận chưa phân phối (TK 421)',                      'amount' => $retainedEarnings,      'bold' => false, 'indent' => 1, 'side' => 'equity'],
+            ['label' => '   - LNST năm trước (TK 4211)',                          'amount' => $balance4211,           'bold' => false, 'indent' => 2, 'side' => 'equity'],
+            ['label' => '   - LNST năm nay (TK 4212)',                            'amount' => $balance4212,           'bold' => false, 'indent' => 2, 'side' => 'equity'],
+            ['label' => '   - Lãi/(lỗ) chưa kết chuyển',                         'amount' => $currentNetIncome,      'bold' => false, 'indent' => 2, 'side' => 'equity'],
             ['label' => 'TỔNG CỘNG NGUỒN VỐN (A+B)',                              'amount' => $totalLiabEquity,       'bold' => true,  'indent' => 0, 'side' => 'total_equity'],
         ];
 
-        $summary = [
-            'total_assets'             => $totalAssets,
-            'total_liabilities'        => $totalLiabilities,
-            'total_equity'             => $totalEquity,
-            'total_liabilities_equity' => $totalLiabEquity,
-            'balanced'                 => abs($totalAssets - $totalLiabEquity) < 1,
-        ];
-
-        return Inertia::render('Reports/BalanceSheet/Index', [
+        return [
             'balanceSheet' => $balanceSheet,
-            'summary'      => $summary,
-            'filters'      => ['as_of' => $asOf],
-        ]);
+            'summary'      => [
+                'total_assets'             => $totalAssets,
+                'total_liabilities'        => $totalLiabilities,
+                'total_equity'             => $totalEquity,
+                'total_liabilities_equity' => $totalLiabEquity,
+                'balanced'                 => abs($totalAssets - $totalLiabEquity) < 1,
+            ],
+        ];
     }
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
@@ -110,7 +129,7 @@ class BalanceSheetController extends Controller
             ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
             ->join('account_codes as ac', 'ac.code', '=', 'jel.account_code')
             ->where('je.status', 'posted')
-            ->where('je.entry_date', '<=', $asOf)
+            ->whereDate('je.entry_date', '<=', $asOf)
             ->select('jel.account_code', 'ac.normal_balance',
                 DB::raw('SUM(jel.debit) as dr'),
                 DB::raw('SUM(jel.credit) as cr'))

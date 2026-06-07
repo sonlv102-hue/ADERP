@@ -68,6 +68,11 @@ class InternalBankAccountController extends Controller
     {
         $this->authorize('accounting.manage');
 
+        $count = $internalBankAccount->bankTransactions()->count();
+        if ($count > 0) {
+            return back()->withErrors(['error' => "Không thể xóa: tài khoản đang được tham chiếu bởi {$count} giao dịch ngân hàng."]);
+        }
+
         $internalBankAccount->delete();
 
         return back()->with('success', 'Đã xóa tài khoản nội bộ.');

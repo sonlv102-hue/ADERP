@@ -48,7 +48,7 @@ class QuotationController extends Controller
         return Inertia::render('Sales/Quotations/Form', [
             'nextCode'    => Quotation::generateCode(),
             'customers'   => Customer::orderBy('name')->get(['id', 'code', 'name']),
-            'products'    => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'sell_price']),
+            'products'    => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'sell_price', 'vat_percent']),
             'services'    => Service::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'price']),
             'priceLists'  => PriceList::select('id', 'code', 'name')->orderBy('name')->get(),
         ]);
@@ -179,7 +179,7 @@ class QuotationController extends Controller
                 ]),
             ],
             'customers'  => Customer::orderBy('name')->get(['id', 'code', 'name']),
-            'products'   => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'sell_price']),
+            'products'   => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'sell_price', 'vat_percent']),
             'services'   => Service::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'price']),
             'priceLists' => PriceList::select('id', 'code', 'name')->orderBy('name')->get(),
         ]);

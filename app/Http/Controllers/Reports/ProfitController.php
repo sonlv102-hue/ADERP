@@ -26,10 +26,9 @@ class ProfitController extends Controller
                 'customers.name as customer',
                 // Doanh thu = tổng subtotal hóa đơn gắn với đơn hàng
                 DB::raw('COALESCE((SELECT SUM(i.subtotal) FROM invoices i WHERE i.order_id = orders.id), 0) as revenue'),
-                // Giá vốn = tổng SL × giá vốn sản phẩm (chỉ product items)
-                DB::raw('COALESCE((SELECT SUM(oi.quantity * COALESCE(p.cost_price, 0))
+                // Giá vốn = snapshot unit_cogs tại thời điểm tạo đơn (ex-VAT, nhất quán với revenue)
+                DB::raw('COALESCE((SELECT SUM(oi.quantity * COALESCE(oi.unit_cogs, 0))
                           FROM order_items oi
-                          LEFT JOIN products p ON p.id = oi.product_id
                           WHERE oi.order_id = orders.id), 0) as cogs'),
                 // Hoa hồng đã duyệt gắn với đơn hàng
                 DB::raw("COALESCE((SELECT SUM(c.amount) FROM commissions c
@@ -109,7 +108,10 @@ class ProfitController extends Controller
                 DB::raw('COALESCE((SELECT SUM(i.subtotal) FROM invoices i
                           WHERE i.contract_id = projects.contract_id
                           AND projects.contract_id IS NOT NULL), 0) as revenue'),
-                // Chi phí vật tư dự án
+                // CẦN KẾ TOÁN/BA XÁC NHẬN: project_materials.unit_price là giá bán hay giá vốn?
+                // Nếu là giá bán → material_cost đang bị sai (dùng giá bán làm chi phí).
+                // Nếu là giá vốn → cần xác nhận có VAT không và có phải snapshot không.
+                // Chưa sửa công thức này cho đến khi có xác nhận rõ ràng.
                 DB::raw('COALESCE((SELECT SUM(pm.quantity * pm.unit_price)
                           FROM project_materials pm
                           WHERE pm.project_id = projects.id), 0) as material_cost'),

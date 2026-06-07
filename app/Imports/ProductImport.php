@@ -22,6 +22,9 @@ class ProductImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnE
         $category = ProductCategory::where('name', $row['category'] ?? '')->first();
         $this->imported++;
 
+        $vatRaw = $row['vat_percent'] ?? null;
+        $vat    = is_numeric($vatRaw) ? (float) $vatRaw : null;
+
         return new Product([
             'code'        => Product::generateCode(),
             'name'        => $row['name'],
@@ -29,6 +32,7 @@ class ProductImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnE
             'unit'        => $row['unit'] ?? 'cái',
             'cost_price'  => (float) ($row['cost_price'] ?? 0),
             'sell_price'  => (float) ($row['unit_price'] ?? 0),
+            'vat_percent' => $vat,
             'has_serial'  => strtolower($row['has_serial'] ?? 'no') === 'yes',
             'description' => $row['description'] ?? null,
         ]);

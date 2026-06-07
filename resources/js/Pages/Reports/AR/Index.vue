@@ -39,13 +39,19 @@
           <option value=">90 ngày">&gt;90 ngày</option>
           <option value="Đã thanh toán">Đã thanh toán</option>
         </select>
-        <button @click="applyFilters"
-          class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium">Lọc</button>
+        <button @click="applyFilters" :disabled="isLoading"
+          class="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-70 disabled:cursor-not-allowed">
+          <svg v-if="isLoading" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          Lọc
+        </button>
         <button v-if="hasFilters" @click="clearFilters" class="text-gray-500 hover:text-gray-700 text-sm px-2">Xóa lọc</button>
       </div>
 
       <!-- Aging buckets summary -->
-      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 transition-opacity" :class="{ 'opacity-60': isLoading }">
         <div class="bg-white rounded-xl border border-gray-200 p-4 text-center">
           <p class="text-xs text-gray-500 mb-1">Tổng còn lại</p>
           <p class="text-base font-bold text-gray-900">{{ fmt(summary.total_remaining) }}</p>
@@ -73,7 +79,7 @@
       </div>
 
       <!-- Table -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto transition-opacity" :class="{ 'opacity-60': isLoading }">
         <table class="w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
@@ -135,6 +141,7 @@ import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
 import { useCurrency } from '@/composables/useCurrency';
+import { useInertiaLoading } from '@/composables/useInertiaLoading';
 
 const props = defineProps({
   rows:    Object,
@@ -143,6 +150,7 @@ const props = defineProps({
 });
 
 const { formatVnd: fmt } = useCurrency();
+const { isLoading } = useInertiaLoading();
 
 const search   = ref(props.filters?.search    ?? '');
 const dateFrom = ref(props.filters?.date_from ?? '');

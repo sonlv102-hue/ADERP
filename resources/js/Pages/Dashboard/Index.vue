@@ -1,7 +1,20 @@
 <template>
   <AppLayout>
     <div class="space-y-6">
-      <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
+      <div class="flex items-center justify-between flex-wrap gap-3">
+        <h1 class="text-2xl font-bold text-gray-900">Dashboard</h1>
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-gray-400">Cập nhật lúc {{ loadedAtDisplay }}</span>
+          <button @click="refresh" :disabled="isLoading"
+            class="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 transition hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed">
+            <svg class="h-3.5 w-3.5" :class="{ 'animate-spin': isLoading }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Làm mới
+          </button>
+        </div>
+      </div>
 
       <!-- KPI Cards -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
@@ -262,7 +275,8 @@
 </template>
 
 <script setup>
-import { computed, h } from 'vue';
+import { computed, h, ref, onUnmounted } from 'vue';
+import { router } from '@inertiajs/vue3';
 import { Bar, Doughnut } from 'vue-chartjs';
 import {
   Chart as ChartJS,
@@ -287,6 +301,24 @@ const props = defineProps({
 });
 
 const isLowStock = (p) => p.min_stock > 0 && p.stock <= p.min_stock;
+
+const isLoading = ref(false);
+const loadedAt  = ref(new Date());
+
+const removeStart  = router.on('start',  () => { isLoading.value = true; });
+const removeFinish = router.on('finish', () => {
+  isLoading.value = false;
+  loadedAt.value  = new Date();
+});
+onUnmounted(() => { removeStart(); removeFinish(); });
+
+const loadedAtDisplay = computed(() =>
+  loadedAt.value.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+);
+
+function refresh() {
+  router.reload({ preserveScroll: true });
+}
 
 const fmtVnd = (v) => new Intl.NumberFormat('vi-VN').format(v || 0) + ' ₫';
 

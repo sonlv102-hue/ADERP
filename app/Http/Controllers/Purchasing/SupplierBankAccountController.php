@@ -58,6 +58,11 @@ class SupplierBankAccountController extends Controller
         $this->authorize('purchasing.create');
         abort_if($bankAccount->supplier_id !== $supplier->id, 403);
 
+        $count = $bankAccount->bankTransactions()->count();
+        if ($count > 0) {
+            return back()->withErrors(['error' => "Không thể xóa: tài khoản đang được tham chiếu bởi {$count} giao dịch ngân hàng."]);
+        }
+
         $bankAccount->delete();
 
         return back()->with('success', 'Đã xóa tài khoản ngân hàng.');

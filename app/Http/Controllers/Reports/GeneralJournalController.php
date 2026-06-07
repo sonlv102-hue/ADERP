@@ -77,14 +77,15 @@ class GeneralJournalController extends Controller
             $totalDebit  = (float) $entryLines->sum('debit');
 
             $result[] = [
-                'seq'         => $seq++,
-                'date'        => $e->entry_date,
-                'ref'         => $e->code,
-                'description' => $e->description,
-                'partner'     => '',
-                'debit_tk'    => $debitCodes ?: '—',
-                'credit_tk'   => $creditCodes ?: '—',
-                'amount'      => $totalDebit,
+                'seq'               => $seq++,
+                'journal_entry_id'  => $e->id,
+                'date'              => $e->entry_date,
+                'ref'               => $e->code,
+                'description'       => $e->description,
+                'partner'           => '',
+                'debit_tk'          => $debitCodes ?: '—',
+                'credit_tk'         => $creditCodes ?: '—',
+                'amount'            => $totalDebit,
             ];
         }
 

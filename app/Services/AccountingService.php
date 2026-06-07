@@ -2,13 +2,16 @@
 
 namespace App\Services;
 
+use App\Enums\AccountingPostingStatus;
 use App\Models\AccountCode;
 use App\Models\AccountingPeriod;
+use App\Models\AccountingPostingJob;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class AccountingService
 {
@@ -202,7 +205,109 @@ class AccountingService
         return $result;
     }
 
+    /**
+     * Auto-posting với tracking. Không throw exception — ghi status vào accounting_posting_jobs.
+     * Idempotent: nếu job đã posted thì return JE cũ, không tạo trùng.
+     */
+    public function tryPost(
+        string $description,
+        CarbonInterface $date,
+        array $lines,
+        string $sourceType,
+        int $sourceId,
+        string $postingType,
+        bool $isAuto = true,
+    ): ?JournalEntry {
+        $job = AccountingPostingJob::firstOrNew([
+            'source_type'  => $sourceType,
+            'source_id'    => $sourceId,
+            'posting_type' => $postingType,
+        ]);
+
+        if ($job->exists && $job->status === AccountingPostingStatus::Posted) {
+            return $job->journalEntry;
+        }
+
+        $job->fill([
+            'description' => $description,
+            'posting_date' => $date->toDateString(),
+            'lines'        => $lines,
+            'status'       => AccountingPostingStatus::Pending,
+            'created_by'   => auth()->id() ?? 1,
+        ]);
+        $job->attempts = ($job->attempts ?? 0) + 1;
+        $job->last_attempted_at = now();
+
+        try {
+            $entry = $this->post($description, $date, $lines, $sourceType, $sourceId, $isAuto);
+            $job->status           = AccountingPostingStatus::Posted;
+            $job->journal_entry_id = $entry->id;
+            $job->error_code       = null;
+            $job->error_message    = null;
+            $job->posted_at        = now();
+            $job->save();
+            return $entry;
+        } catch (\Throwable $e) {
+            $job->status        = AccountingPostingStatus::Failed;
+            $job->error_code    = $this->classifyError($e);
+            $job->error_message = $e->getMessage();
+            $job->save();
+            Log::warning("AccountingService::tryPost [{$sourceType}#{$sourceId}/{$postingType}]: {$e->getMessage()}");
+            return null;
+        }
+    }
+
+    /**
+     * Retry một posting job đã failed/pending. Dùng lại description/date/lines đã lưu.
+     * Nếu kỳ vẫn đóng → throw exception để controller báo lỗi cho user.
+     */
+    public function retryJob(AccountingPostingJob $job): JournalEntry
+    {
+        if ($job->status === AccountingPostingStatus::Posted && $job->journalEntry) {
+            return $job->journalEntry;
+        }
+
+        $job->attempts++;
+        $job->last_attempted_at = now();
+
+        try {
+            $entry = $this->post(
+                $job->description,
+                Carbon::parse($job->posting_date),
+                $job->lines,
+                $job->source_type,
+                $job->source_id,
+                true,
+            );
+            $job->status           = AccountingPostingStatus::Posted;
+            $job->journal_entry_id = $entry->id;
+            $job->error_code       = null;
+            $job->error_message    = null;
+            $job->posted_at        = now();
+            $job->save();
+            return $entry;
+        } catch (\Throwable $e) {
+            $job->status        = AccountingPostingStatus::Failed;
+            $job->error_code    = $this->classifyError($e);
+            $job->error_message = $e->getMessage();
+            $job->save();
+            throw $e;
+        }
+    }
+
     // ─── Helpers ───────────────────────────────────────────────────────────────
+
+    private function classifyError(\Throwable $e): string
+    {
+        $msg = $e->getMessage();
+        if (str_contains($msg, 'đã đóng') || str_contains($msg, 'đã khóa')) {
+            return 'PERIOD_CLOSED';
+        }
+        if ($e instanceof \InvalidArgumentException) {
+            return 'INVALID_DATA';
+        }
+        return 'UNKNOWN';
+    }
 
     private function validateLines(array $lines): void
     {

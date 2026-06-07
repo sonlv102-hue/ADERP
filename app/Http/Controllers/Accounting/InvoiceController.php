@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Accounting;
 use App\Enums\InvoiceStatus;
 use App\Enums\PaymentMethod;
 use App\Http\Controllers\Controller;
+use App\Models\AccountCode;
 use App\Models\Contract;
 use App\Models\Customer;
 use App\Models\Invoice;
@@ -57,27 +58,29 @@ class InvoiceController extends Controller
     public function create(): Response
     {
         return Inertia::render('Accounting/Invoices/Form', [
-            'nextCode'  => Invoice::generateCode(),
-            'customers' => Customer::orderBy('name')->get(['id', 'name']),
-            'orders'    => $this->ordersWithTotal(),
-            'contracts' => Contract::orderByDesc('id')->get(['id', 'code', 'title', 'value', 'order_id']),
-            'methods'   => collect(PaymentMethod::cases())->map(fn ($m) => ['value' => $m->value, 'label' => $m->label()]),
+            'nextCode'        => Invoice::generateCode(),
+            'customers'       => Customer::orderBy('name')->get(['id', 'name']),
+            'orders'          => $this->ordersWithTotal(),
+            'contracts'       => Contract::orderByDesc('id')->get(['id', 'code', 'title', 'value', 'order_id']),
+            'methods'         => collect(PaymentMethod::cases())->map(fn ($m) => ['value' => $m->value, 'label' => $m->label()]),
+            'revenueAccounts' => $this->revenueAccountOptions(),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'code'        => ['required', 'string', 'max:20', 'unique:invoices,code'],
-            'customer_id' => ['required', 'exists:customers,id'],
-            'order_id'    => ['nullable', 'exists:orders,id'],
-            'contract_id' => ['nullable', 'exists:contracts,id'],
-            'issue_date'  => ['required', 'date'],
-            'due_date'    => ['nullable', 'date', 'after_or_equal:issue_date'],
-            'subtotal'    => ['required', 'numeric', 'min:0'],
-            'tax_amount'  => ['required', 'numeric', 'min:0'],
-            'total'       => ['required', 'numeric', 'min:0'],
-            'notes'       => ['nullable', 'string'],
+            'code'                 => ['required', 'string', 'max:20', 'unique:invoices,code'],
+            'customer_id'          => ['required', 'exists:customers,id'],
+            'order_id'             => ['nullable', 'exists:orders,id'],
+            'contract_id'          => ['nullable', 'exists:contracts,id'],
+            'issue_date'           => ['required', 'date'],
+            'due_date'             => ['nullable', 'date', 'after_or_equal:issue_date'],
+            'subtotal'             => ['required', 'numeric', 'min:0'],
+            'tax_amount'           => ['required', 'numeric', 'min:0'],
+            'total'                => ['required', 'numeric', 'min:0'],
+            'notes'                => ['nullable', 'string'],
+            'revenue_account_code' => ['nullable', 'string', 'max:10', 'exists:account_codes,code'],
         ]);
 
         // Kiểm tra tổng hóa đơn không vượt giá trị đơn hàng
@@ -164,13 +167,24 @@ class InvoiceController extends Controller
     public function edit(Invoice $invoice): Response
     {
         return Inertia::render('Accounting/Invoices/Form', [
-            'invoice'   => $invoice,
-            'nextCode'  => $invoice->code,
-            'customers' => Customer::orderBy('name')->get(['id', 'name']),
-            'orders'    => $this->ordersWithTotal(),
-            'contracts' => Contract::orderByDesc('id')->get(['id', 'code', 'title', 'value', 'order_id']),
-            'methods'   => collect(PaymentMethod::cases())->map(fn ($m) => ['value' => $m->value, 'label' => $m->label()]),
+            'invoice'         => $invoice,
+            'nextCode'        => $invoice->code,
+            'customers'       => Customer::orderBy('name')->get(['id', 'name']),
+            'orders'          => $this->ordersWithTotal(),
+            'contracts'       => Contract::orderByDesc('id')->get(['id', 'code', 'title', 'value', 'order_id']),
+            'methods'         => collect(PaymentMethod::cases())->map(fn ($m) => ['value' => $m->value, 'label' => $m->label()]),
+            'revenueAccounts' => $this->revenueAccountOptions(),
         ]);
+    }
+
+    private function revenueAccountOptions(): array
+    {
+        return AccountCode::where('type', 'revenue')
+            ->where('is_active', true)
+            ->orderBy('code')
+            ->get(['code', 'name'])
+            ->map(fn ($a) => ['code' => $a->code, 'label' => "{$a->code} — {$a->name}"])
+            ->all();
     }
 
     private function ordersWithTotal(): \Illuminate\Support\Collection
@@ -192,15 +206,16 @@ class InvoiceController extends Controller
         }
 
         $data = $request->validate([
-            'customer_id' => ['required', 'exists:customers,id'],
-            'order_id'    => ['nullable', 'exists:orders,id'],
-            'contract_id' => ['nullable', 'exists:contracts,id'],
-            'issue_date'  => ['required', 'date'],
-            'due_date'    => ['nullable', 'date', 'after_or_equal:issue_date'],
-            'subtotal'    => ['required', 'numeric', 'min:0'],
-            'tax_amount'  => ['required', 'numeric', 'min:0'],
-            'total'       => ['required', 'numeric', 'min:0'],
-            'notes'       => ['nullable', 'string'],
+            'customer_id'          => ['required', 'exists:customers,id'],
+            'order_id'             => ['nullable', 'exists:orders,id'],
+            'contract_id'          => ['nullable', 'exists:contracts,id'],
+            'issue_date'           => ['required', 'date'],
+            'due_date'             => ['nullable', 'date', 'after_or_equal:issue_date'],
+            'subtotal'             => ['required', 'numeric', 'min:0'],
+            'tax_amount'           => ['required', 'numeric', 'min:0'],
+            'total'                => ['required', 'numeric', 'min:0'],
+            'notes'                => ['nullable', 'string'],
+            'revenue_account_code' => ['nullable', 'string', 'max:10', 'exists:account_codes,code'],
         ]);
 
         $invoice->update($data);

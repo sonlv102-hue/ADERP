@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Accounting;
 
 use App\Http\Controllers\Controller;
+use App\Models\BankAccount;
 use App\Models\Payroll;
 use App\Models\PayrollItem;
-use App\Models\Fund;
 use App\Services\PayrollService;
 use App\Services\PitCalculatorService;
 use Illuminate\Http\RedirectResponse;
@@ -73,12 +73,13 @@ class PayrollController extends Controller
     {
         $payroll->load('creator', 'locker');
 
-        $items = $payroll->items()->with('employee', 'user', 'cashVoucher')
+        $items = $payroll->items()->with('employee', 'user', 'salaryJournalEntry')
             ->orderBy('id')
             ->get()
             ->map(fn (PayrollItem $item) => $this->itemDTO($item));
 
-        $funds = Fund::where('is_active', true)->orderBy('name')->get(['id', 'name', 'type']);
+        $bankAccounts = BankAccount::orderBy('bank_name')
+            ->get(['id', 'bank_name', 'account_number', 'account_name', 'account_code']);
 
         return Inertia::render('Accounting/Payrolls/Show', [
             'payroll' => [
@@ -104,8 +105,8 @@ class PayrollController extends Controller
                 'locked_by_name'            => $payroll->locker?->name,
                 'locked_at'                 => $payroll->locked_at?->format('d/m/Y H:i'),
             ],
-            'items' => $items,
-            'funds' => $funds,
+            'items'        => $items,
+            'bankAccounts' => $bankAccounts,
         ]);
     }
 
@@ -193,6 +194,7 @@ class PayrollController extends Controller
 
     private function itemDTO(PayrollItem $item): array
     {
+        $item->loadMissing('salaryJournalEntry');
         $gross       = (float) $item->gross_salary;
         $insEmp      = (float) $item->bhxh_employee + (float) $item->bhyt_employee + (float) $item->bhtn_employee;
         $personalDed = \App\Services\PitCalculatorService::PERSONAL_DEDUCTION
@@ -236,9 +238,9 @@ class PayrollController extends Controller
             'status_label'             => $item->status->label(),
             'status_color'             => $item->status->color(),
             'paid_at'                  => $item->paid_at?->format('d/m/Y H:i'),
-            'cash_voucher'             => $item->cashVoucher ? [
-                'id'   => $item->cashVoucher->id,
-                'code' => $item->cashVoucher->code,
+            'salary_journal_entry'     => $item->salaryJournalEntry ? [
+                'id'   => $item->salaryJournalEntry->id,
+                'code' => $item->salaryJournalEntry->code,
             ] : null,
         ];
     }
@@ -294,10 +296,10 @@ class PayrollController extends Controller
     public function payEmployee(Request $request, Payroll $payroll, PayrollItem $item): RedirectResponse
     {
         $data = $request->validate([
-            'fund_id' => 'required|exists:funds,id',
+            'bank_account_id' => 'required|exists:bank_accounts,id',
         ]);
         try {
-            $this->service->payEmployeeSalary($item, $data['fund_id']);
+            $this->service->payEmployeeSalary($item, $data['bank_account_id']);
             $employeeName = $item->employee?->name ?? $item->user?->name ?? 'nhân viên';
             return back()->with('success', "Đã thanh toán lương cho {$employeeName}.");
         } catch (RuntimeException $e) {

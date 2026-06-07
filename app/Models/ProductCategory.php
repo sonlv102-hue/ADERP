@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 
 class ProductCategory extends Model
 {
-    protected $fillable = ['parent_id', 'name', 'slug', 'description'];
+    protected $fillable = ['parent_id', 'name', 'slug', 'description', 'revenue_account_code'];
 
     protected static function booted(): void
     {

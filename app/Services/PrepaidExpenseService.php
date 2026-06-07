@@ -39,21 +39,17 @@ class PrepaidExpenseService
 
             // Bút toán ghi nhận: Dr 142/242 / Cr nguồn tiền
             $creditAccount = $data['credit_account'] ?? '331';
-            try {
-                $this->accounting->post(
-                    description: 'Ghi nhận chi phí trả trước: ' . $expense->description,
-                    date: Carbon::parse($data['start_date']),
-                    lines: [
-                        ['account' => $expense->account_code, 'debit' => (int) $data['total_amount'], 'credit' => 0],
-                        ['account' => $creditAccount, 'debit' => 0, 'credit' => (int) $data['total_amount']],
-                    ],
-                    referenceType: PrepaidExpense::class,
-                    referenceId: $expense->id,
-                    isAuto: true,
-                );
-            } catch (\Exception $e) {
-                \Log::warning("PrepaidExpense auto-posting failed: " . $e->getMessage());
-            }
+            $this->accounting->tryPost(
+                description: 'Ghi nhận chi phí trả trước: ' . $expense->description,
+                date: Carbon::parse($data['start_date']),
+                lines: [
+                    ['account' => $expense->account_code, 'debit' => (int) $data['total_amount'], 'credit' => 0],
+                    ['account' => $creditAccount, 'debit' => 0, 'credit' => (int) $data['total_amount']],
+                ],
+                sourceType: 'prepaid_expense',
+                sourceId: $expense->id,
+                postingType: 'recognition',
+            );
 
             return $expense;
         });
@@ -81,30 +77,29 @@ class PrepaidExpenseService
             : (int) $expense->monthly_amount;
 
         return DB::transaction(function () use ($expense, $period, $amount) {
-            $journalEntry = null;
-            try {
-                $date = Carbon::createFromFormat('Y-m', $period)->startOfMonth();
-                $journalEntry = $this->accounting->post(
-                    description: "Phân bổ chi phí trả trước {$period}: " . $expense->description,
-                    date: $date,
-                    lines: [
-                        ['account' => $expense->expense_account, 'debit' => $amount, 'credit' => 0],
-                        ['account' => $expense->account_code,    'debit' => 0, 'credit' => $amount],
-                    ],
-                    referenceType: PrepaidExpense::class,
-                    referenceId: $expense->id,
-                    isAuto: true,
-                );
-            } catch (\Exception $e) {
-                \Log::warning("PrepaidExpense amortization posting failed: " . $e->getMessage());
-            }
-
             $allocation = PrepaidExpenseAllocation::create([
                 'prepaid_expense_id' => $expense->id,
                 'period'             => $period,
                 'amount'             => $amount,
-                'journal_entry_id'   => $journalEntry?->id,
+                'journal_entry_id'   => null,
             ]);
+
+            $date = Carbon::createFromFormat('Y-m', $period)->startOfMonth();
+            $je = $this->accounting->tryPost(
+                description: "Phân bổ chi phí trả trước {$period}: " . $expense->description,
+                date: $date,
+                lines: [
+                    ['account' => $expense->expense_account, 'debit' => $amount, 'credit' => 0],
+                    ['account' => $expense->account_code,    'debit' => 0, 'credit' => $amount],
+                ],
+                sourceType: 'prepaid_expense_allocation',
+                sourceId: $allocation->id,
+                postingType: 'amortization',
+            );
+
+            if ($je) {
+                $allocation->update(['journal_entry_id' => $je->id]);
+            }
 
             $newAmortized = (float) $expense->amortized_amount + $amount;
             $newStatus    = $newAmortized >= (float) $expense->total_amount

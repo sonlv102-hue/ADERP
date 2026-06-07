@@ -22,7 +22,12 @@
           <input v-model="asOf" type="date"
             class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
         </div>
-        <button @click="applyFilters" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+        <button @click="applyFilters" :disabled="isLoading"
+          class="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-70 disabled:cursor-not-allowed">
+          <svg v-if="isLoading" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
           Xem báo cáo
         </button>
       </div>
@@ -61,7 +66,7 @@
       </div>
 
       <!-- KPI -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 transition-opacity" :class="{ 'opacity-60': isLoading }">
         <div class="bg-white rounded-xl border border-gray-200 p-4">
           <p class="text-xs text-gray-500 mb-1">Tổng tài sản</p>
           <p class="text-lg font-bold text-gray-900">{{ fmt(summary.total_assets) }}</p>
@@ -81,7 +86,7 @@
       </div>
 
       <!-- Two-column layout -->
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 transition-opacity" :class="{ 'opacity-60': isLoading }">
         <!-- Assets -->
         <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <div class="bg-blue-50 border-b border-gray-200 px-5 py-3">
@@ -140,6 +145,7 @@ import { ref, computed } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { useCurrency } from '@/composables/useCurrency';
+import { useInertiaLoading } from '@/composables/useInertiaLoading';
 
 const props = defineProps({
   balanceSheet: Array,
@@ -148,6 +154,7 @@ const props = defineProps({
 });
 
 const { formatVnd: fmt } = useCurrency();
+const { isLoading } = useInertiaLoading();
 
 const asOf = ref(props.filters?.as_of ?? new Date().toISOString().slice(0, 10));
 

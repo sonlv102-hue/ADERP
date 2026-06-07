@@ -12,6 +12,7 @@
         "axios": "^1.11.0",
         "concurrently": "^9.0.1",
         "laravel-vite-plugin": "^2.0.0",
+        "playwright-core": "^1.60.0",
         "postcss": "^8.5.15",
         "tailwindcss": "^3.4.19",
         "vite": "^7.0.7"

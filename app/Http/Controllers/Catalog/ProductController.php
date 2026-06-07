@@ -183,8 +183,23 @@ class ProductController extends Controller
 
     public function importTemplate()
     {
-        $headers = ['name', 'sku', 'category', 'unit', 'unit_price', 'cost_price', 'has_serial', 'description'];
-        return Excel::download(new TemplateExport($headers, 'Products'), 'product-template.xlsx');
+        $headers = [
+            'name', 'sku', 'category', 'unit',
+            'unit_price', 'cost_price', 'vat_percent',
+            'has_serial', 'description',
+        ];
+
+        // Gợi ý quy ước đặt mã — dòng mẫu
+        $sampleRows = [
+            ['[Hướng dẫn đặt mã] Mã SP do hệ thống tự tạo. Bạn có thể đặt SKU theo quy ước sau:', '', '', '', '', '', '', '', ''],
+            ['LT-xxx = Laptop | PC-xxx = Máy tính | MN-xxx = Màn hình | SW-xxx = Switch/Mạng | DV-xxx = Dịch vụ', '', '', '', '', '', '', '', ''],
+            ['--- Dữ liệu mẫu (xóa 3 dòng hướng dẫn này trước khi import) ---', '', '', '', '', '', '', '', ''],
+            ['Laptop Dell Inspiron 15', 'LT-001', 'Máy tính', 'cái', 25000000, 22000000, 10, 'no', 'Laptop Dell 15 inch'],
+            ['Switch Cisco 24 port', 'SW-001', 'Thiết bị mạng', 'cái', 8000000, 7000000, 10, 'no', ''],
+            ['Dịch vụ cài đặt hệ thống', 'DV-001', 'Dịch vụ', 'lần', 2000000, 1500000, 10, 'no', ''],
+        ];
+
+        return Excel::download(new TemplateExport($headers, 'Products', $sampleRows), 'product-template.xlsx');
     }
 
     private function calcTotalCost(array $data): float

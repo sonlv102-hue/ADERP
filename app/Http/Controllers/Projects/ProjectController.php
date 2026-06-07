@@ -183,6 +183,13 @@ class ProjectController extends Controller
                     'status_label'=> $po->status->label(),
                     'total'       => (float) $po->items()->sum(\DB::raw('quantity * unit_price')),
                 ]),
+            // Budget (hợp đồng khách hàng) vs Actual (hóa đơn mua hàng qua PO dự án)
+            'contract_value'  => $project->contract ? (float) $project->contract->value : null,
+            'actual_cost_from_pi' => (float) \DB::table('purchase_invoices as pi')
+                ->join('purchase_orders as po', 'po.id', '=', 'pi.purchase_order_id')
+                ->where('po.project_id', $project->id)
+                ->whereIn('pi.status', ['valid', 'partial_paid', 'paid'])
+                ->sum('pi.total'),
         ]);
     }
 

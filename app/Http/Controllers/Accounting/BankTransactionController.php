@@ -131,6 +131,19 @@ class BankTransactionController extends Controller
         }
     }
 
+    public function recategorize(BankAccount $bankAccount): RedirectResponse
+    {
+        $this->authorize('accounting.manage');
+
+        $result = $this->service->recategorizeUnknown($bankAccount);
+
+        $msg = $result['total'] === 0
+            ? 'Không có giao dịch chưa phân loại nào.'
+            : "Đã phân loại lại {$result['updated']}/{$result['total']} giao dịch.";
+
+        return back()->with('success', $msg);
+    }
+
     public function importExcel(Request $request, BankAccount $bankAccount): RedirectResponse
     {
         $this->authorize('accounting.manage');

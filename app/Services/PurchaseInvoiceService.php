@@ -59,12 +59,7 @@ class PurchaseInvoiceService
     public function removePayment(PurchaseInvoice $invoice, PurchaseInvoicePayment $payment): void
     {
         DB::transaction(function () use ($invoice, $payment) {
-            try {
-                $this->accounting->reverseOrDelete('purchase_invoice_payment', $payment->id, "Trả NCC {$invoice->code}");
-            } catch (\Exception $e) {
-                \Log::warning("Reverse purchase payment entry failed [{$invoice->code}]: " . $e->getMessage());
-            }
-
+            $this->accounting->reverseOrDelete('purchase_invoice_payment', $payment->id, "Trả NCC {$invoice->code}");
             $payment->delete();
             $this->recalculatePaid($invoice);
         });
@@ -82,21 +77,17 @@ class PurchaseInvoiceService
             default                 => '111',
         };
 
-        try {
-            $this->accounting->post(
-                "Trả tiền NCC {$invoice->code}",
-                Carbon::parse($payment->payment_date),
-                [
-                    ['account' => '331',        'debit' => (int) $amount, 'credit' => 0,
-                     'description' => "Xóa công nợ NCC - {$invoice->code}"],
-                    ['account' => $cashAccount, 'debit' => 0, 'credit' => (int) $amount,
-                     'description' => "Trả tiền NCC - {$invoice->code}"],
-                ],
-                'purchase_invoice_payment', $payment->id, true
-            );
-        } catch (\Exception $e) {
-            \Log::warning("Auto-posting failed [PurchasePayment {$invoice->code}]: " . $e->getMessage());
-        }
+        $this->accounting->tryPost(
+            "Trả tiền NCC {$invoice->code}",
+            Carbon::parse($payment->payment_date),
+            [
+                ['account' => '331',        'debit' => (int) $amount, 'credit' => 0,
+                 'description' => "Xóa công nợ NCC - {$invoice->code}"],
+                ['account' => $cashAccount, 'debit' => 0, 'credit' => (int) $amount,
+                 'description' => "Trả tiền NCC - {$invoice->code}"],
+            ],
+            'purchase_invoice_payment', $payment->id, 'payment'
+        );
     }
 
     private function recalculatePaid(PurchaseInvoice $invoice): void
