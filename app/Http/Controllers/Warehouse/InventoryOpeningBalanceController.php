@@ -72,6 +72,8 @@ class InventoryOpeningBalanceController extends Controller
 
         DB::transaction(function () use ($data) {
             $date = Carbon::createFromFormat('Y-m', $data['period'])->startOfMonth();
+            // Đặt movement vào cuối tháng trước để luôn nằm trong stock_begin khi date_from = đầu tháng mở đầu kỳ
+            $movDate = $date->copy()->subSecond();
             $lines = [];
             $totalCost = 0;
 
@@ -81,7 +83,7 @@ class InventoryOpeningBalanceController extends Controller
                 $total = round($qty * $cost, 2);
                 $totalCost += $total;
 
-                InventoryOpeningBalance::updateOrCreate(
+                $balance = InventoryOpeningBalance::updateOrCreate(
                     [
                         'period'       => $data['period'],
                         'warehouse_id' => $data['warehouse_id'],
@@ -95,6 +97,27 @@ class InventoryOpeningBalanceController extends Controller
                         'created_by' => auth()->id(),
                     ]
                 );
+
+                // Đồng bộ stock_movement — xóa cũ rồi tạo mới (idempotent khi re-submit)
+                DB::table('stock_movements')
+                    ->where('source_type', InventoryOpeningBalance::class)
+                    ->where('source_id', $balance->id)
+                    ->delete();
+
+                if ($qty > 0) {
+                    DB::table('stock_movements')->insert([
+                        'warehouse_id' => $data['warehouse_id'],
+                        'product_id'   => $item['product_id'],
+                        'quantity'     => $qty,
+                        'type'         => 'opening',
+                        'source_type'  => InventoryOpeningBalance::class,
+                        'source_id'    => $balance->id,
+                        'created_by'   => auth()->id(),
+                        'notes'        => "Tồn kho đầu kỳ {$data['period']}",
+                        'created_at'   => $movDate,
+                        'updated_at'   => now(),
+                    ]);
+                }
 
                 $product = Product::find($item['product_id']);
                 $lines[] = [
@@ -135,7 +158,13 @@ class InventoryOpeningBalanceController extends Controller
         if ($openingBalance->journal_entry_id) {
             return back()->with('error', 'Không thể xóa dòng đã có bút toán kế toán.');
         }
-        $openingBalance->delete();
+        DB::transaction(function () use ($openingBalance) {
+            DB::table('stock_movements')
+                ->where('source_type', InventoryOpeningBalance::class)
+                ->where('source_id', $openingBalance->id)
+                ->delete();
+            $openingBalance->delete();
+        });
         return back()->with('success', 'Đã xóa.');
     }
 }
