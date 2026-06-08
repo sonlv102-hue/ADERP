@@ -34,7 +34,6 @@ class BalanceSheetController extends Controller
         // ─── TÀI SẢN ──────────────────────────────────────────────────────────
         $cashOnHand  = $b('111');
         $bankBalance = $b('112');
-        $ar          = $b('131');
         $prepaidST   = $b('142');
         $inventory   = $b('156') + $b('155') + $b('152') + $b('153');
         $faGross     = $b('211') + $b('213');
@@ -42,19 +41,30 @@ class BalanceSheetController extends Controller
         $faNet       = max(0.0, $faGross - $faAccDep);
         $prepaidLT   = $b('242');
 
+        // TK 131 lưỡng tính: debit-normal nên $b('131') = dr − cr
+        // Dư Nợ (>0) → Tài sản phải thu; Dư Có (<0) → Nợ phải trả (KH trả trước)
+        $ar131Net    = $b('131');
+        $arAsset     = max(0.0, $ar131Net);
+        $arLiability = max(0.0, -$ar131Net);
+
         $cash                  = $cashOnHand + $bankBalance;
-        $totalCurrentAssets    = $cash + $ar + $prepaidST + $inventory;
-        $totalNonCurrentAssets = $faNet + $prepaidLT;
-        $totalAssets           = $totalCurrentAssets + $totalNonCurrentAssets;
 
         // ─── NỢ PHẢI TRẢ ──────────────────────────────────────────────────────
-        $ap            = $b('331');
+        // TK 331 lưỡng tính: credit-normal nên $b('331') = cr − dr
+        // Dư Có (>0) → Nợ phải trả; Dư Nợ (<0) → Tài sản (trả trước NCC)
+        $ap331Net      = $b('331');
+        $apLiability   = max(0.0, $ap331Net);
+        $apAsset       = max(0.0, -$ap331Net);
         $vatPayable    = $b('3331') + $b('3332') + $b('3333');
         $citPayable    = $b('3334');
         $pitPayable    = $b('3335');
         $bhxhPayable   = $b('3383') + $b('3384') + $b('3385') + $b('3389');
         $salaryPayable = $b('334');
-        $totalLiabilities = $ap + $vatPayable + $citPayable + $pitPayable + $bhxhPayable + $salaryPayable;
+        $totalLiabilities = $apLiability + $arLiability + $vatPayable + $citPayable + $pitPayable + $bhxhPayable + $salaryPayable;
+
+        $totalCurrentAssets    = $cash + $arAsset + $apAsset + $prepaidST + $inventory;
+        $totalNonCurrentAssets = $faNet + $prepaidLT;
+        $totalAssets           = $totalCurrentAssets + $totalNonCurrentAssets;
 
         // ─── VỐN CHỦ SỞ HỮU ──────────────────────────────────────────────────
         $charterCapital = $b('411');
@@ -81,7 +91,8 @@ class BalanceSheetController extends Controller
             ['label' => 'I. Tiền và tương đương tiền',                              'amount' => $cash,                  'bold' => false, 'indent' => 1, 'side' => 'asset'],
             ['label' => '   - Tiền mặt (TK 111)',                                   'amount' => $cashOnHand,            'bold' => false, 'indent' => 2, 'side' => 'asset'],
             ['label' => '   - Tiền gửi ngân hàng (TK 112)',                         'amount' => $bankBalance,           'bold' => false, 'indent' => 2, 'side' => 'asset'],
-            ['label' => 'II. Phải thu ngắn hạn – KH (TK 131)',                    'amount' => $ar,                    'bold' => false, 'indent' => 1, 'side' => 'asset'],
+            ['label' => 'II. Phải thu ngắn hạn – KH (TK 131)',                    'amount' => $arAsset,               'bold' => false, 'indent' => 1, 'side' => 'asset'],
+            ['label' => '   + Trả trước cho người bán (TK 331)',                  'amount' => $apAsset,               'bold' => false, 'indent' => 2, 'side' => 'asset'],
             ['label' => 'III. Hàng tồn kho (TK 152/153/155/156)',                 'amount' => $inventory,             'bold' => false, 'indent' => 1, 'side' => 'asset'],
             ['label' => 'IV. Chi phí trả trước ngắn hạn (TK 142)',               'amount' => $prepaidST,             'bold' => false, 'indent' => 1, 'side' => 'asset'],
             ['label' => 'B. TÀI SẢN DÀI HẠN',                                    'amount' => $totalNonCurrentAssets, 'bold' => true,  'indent' => 0, 'side' => 'asset'],
@@ -92,7 +103,8 @@ class BalanceSheetController extends Controller
             ['label' => 'TỔNG CỘNG TÀI SẢN (A+B)',                               'amount' => $totalAssets,           'bold' => true,  'indent' => 0, 'side' => 'total_asset'],
 
             ['label' => 'A. NỢ PHẢI TRẢ',                                         'amount' => $totalLiabilities,      'bold' => true,  'indent' => 0, 'side' => 'liability'],
-            ['label' => 'I. Phải trả người bán (TK 331)',                          'amount' => $ap,                    'bold' => false, 'indent' => 1, 'side' => 'liability'],
+            ['label' => 'I. Phải trả người bán (TK 331)',                          'amount' => $apLiability,           'bold' => false, 'indent' => 1, 'side' => 'liability'],
+            ['label' => '   + Người mua trả tiền trước (TK 131)',                 'amount' => $arLiability,           'bold' => false, 'indent' => 2, 'side' => 'liability'],
             ['label' => 'II. Thuế và các khoản phải nộp',                         'amount' => $vatPayable + $citPayable + $pitPayable, 'bold' => false, 'indent' => 1, 'side' => 'liability'],
             ['label' => '   - Thuế GTGT phải nộp (TK 3331)',                      'amount' => $vatPayable,            'bold' => false, 'indent' => 2, 'side' => 'liability'],
             ['label' => '   - Thuế TNDN (TK 3334)',                               'amount' => $citPayable,            'bold' => false, 'indent' => 2, 'side' => 'liability'],

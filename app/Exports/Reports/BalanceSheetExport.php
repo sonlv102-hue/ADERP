@@ -25,7 +25,9 @@ class BalanceSheetExport implements FromCollection, WithHeadings, WithMapping, W
 
         $cashOnHand  = $b('111');
         $bankBalance = $b('112');
-        $ar          = $b('131');
+        $ar131Net    = $b('131');
+        $arAsset     = max(0.0, $ar131Net);
+        $arLiability = max(0.0, -$ar131Net);
         $prepaidST   = $b('142');
         $inventory   = $b('156') + $b('155') + $b('152') + $b('153');
         $faGross     = $b('211') + $b('213');
@@ -34,17 +36,18 @@ class BalanceSheetExport implements FromCollection, WithHeadings, WithMapping, W
         $prepaidLT   = $b('242');
 
         $cash                  = $cashOnHand + $bankBalance;
-        $totalCurrentAssets    = $cash + $ar + $prepaidST + $inventory;
-        $totalNonCurrentAssets = $faNet + $prepaidLT;
-        $totalAssets           = $totalCurrentAssets + $totalNonCurrentAssets;
-
-        $ap            = $b('331');
+        $ap331Net      = $b('331');
+        $apLiability   = max(0.0, $ap331Net);
+        $apAsset       = max(0.0, -$ap331Net);
         $vatPayable    = $b('3331') + $b('3332') + $b('3333');
         $citPayable    = $b('3334');
         $pitPayable    = $b('3335');
         $bhxhPayable   = $b('3383') + $b('3384') + $b('3389');
         $salaryPayable = $b('334');
-        $totalLiabilities = $ap + $vatPayable + $citPayable + $pitPayable + $bhxhPayable + $salaryPayable;
+        $totalLiabilities     = $apLiability + $arLiability + $vatPayable + $citPayable + $pitPayable + $bhxhPayable + $salaryPayable;
+        $totalCurrentAssets    = $cash + $arAsset + $apAsset + $prepaidST + $inventory;
+        $totalNonCurrentAssets = $faNet + $prepaidLT;
+        $totalAssets           = $totalCurrentAssets + $totalNonCurrentAssets;
 
         $charterCapital   = $b('411');
         $account421       = $this->sumPrefix($bal, '421');
@@ -64,7 +67,8 @@ class BalanceSheetExport implements FromCollection, WithHeadings, WithMapping, W
             (object)['label' => '  I. Tiền và tương đương tiền',               'amount' => $cash],
             (object)['label' => '     - Tiền mặt (TK 111)',                    'amount' => $cashOnHand],
             (object)['label' => '     - Tiền gửi ngân hàng (TK 112)',          'amount' => $bankBalance],
-            (object)['label' => '  II. Phải thu ngắn hạn – KH (TK 131)',      'amount' => $ar],
+            (object)['label' => '  II. Phải thu ngắn hạn – KH (TK 131)',      'amount' => $arAsset],
+            (object)['label' => '     + Trả trước cho NCC (TK 331)',          'amount' => $apAsset],
             (object)['label' => '  III. Hàng tồn kho (TK 152/153/155/156)',   'amount' => $inventory],
             (object)['label' => '  IV. Chi phí trả trước ngắn hạn (TK 142)', 'amount' => $prepaidST],
             (object)['label' => 'B. TÀI SẢN DÀI HẠN',                        'amount' => $totalNonCurrentAssets],
@@ -75,7 +79,8 @@ class BalanceSheetExport implements FromCollection, WithHeadings, WithMapping, W
             (object)['label' => 'TỔNG CỘNG TÀI SẢN (A+B)',                    'amount' => $totalAssets],
             (object)['label' => '', 'amount' => null],
             (object)['label' => 'A. NỢ PHẢI TRẢ',                             'amount' => $totalLiabilities],
-            (object)['label' => '  I. Phải trả người bán (TK 331)',            'amount' => $ap],
+            (object)['label' => '  I. Phải trả người bán (TK 331)',            'amount' => $apLiability],
+            (object)['label' => '     + Người mua trả trước (TK 131)',         'amount' => $arLiability],
             (object)['label' => '  II. Thuế GTGT phải nộp (TK 3331)',         'amount' => $vatPayable],
             (object)['label' => '  III. Thuế TNDN (TK 3334)',                  'amount' => $citPayable],
             (object)['label' => '  IV. Thuế TNCN (TK 3335)',                   'amount' => $pitPayable],

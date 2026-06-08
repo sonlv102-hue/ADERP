@@ -73,7 +73,8 @@ class ArApOpeningBalanceController extends Controller
 
         DB::transaction(function () use ($data) {
             $isAr  = $data['type'] === 'ar';
-            $date  = Carbon::createFromFormat('Y-m', $data['period'])->startOfMonth();
+            // Ngày JE = ngày cuối tháng trước kỳ, để báo cáo tháng kỳ tính đúng opening (query < dateFrom)
+            $date  = Carbon::createFromFormat('Y-m', $data['period'])->startOfMonth()->subDay();
             $lines = [];
             // Track running Dr/Cr totals on 131/331 to compute 411 contra
             $totalDr = 0.0;
@@ -120,11 +121,14 @@ class ArApOpeningBalanceController extends Controller
                         : (Supplier::find($item['supplier_id'])?->name ?? '?');
 
                     $lines[] = [
-                        'account'     => $isAr ? '131' : '331',
-                        'debit'       => $lineDr,
-                        'credit'      => $lineCr,
-                        'description' => ($isAr ? 'Phải thu ĐK' : 'Phải trả ĐK') . " {$partyName}" .
+                        'account'      => $isAr ? '131' : '331',
+                        'debit'        => $lineDr,
+                        'credit'       => $lineCr,
+                        'description'  => ($isAr ? 'Phải thu ĐK' : 'Phải trả ĐK') . " {$partyName}" .
                             ($item['invoice_ref'] ? " HĐ {$item['invoice_ref']}" : ''),
+                        // partner_type/partner_id cần thiết cho ArDetail/ApDetail query theo đối tác
+                        'partner_type' => $isAr ? 'customer' : 'supplier',
+                        'partner_id'   => $isAr ? ($item['customer_id'] ?: null) : ($item['supplier_id'] ?: null),
                     ];
                 }
             }
