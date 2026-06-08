@@ -334,6 +334,9 @@ class StockService
     private function postEntryJournal(StockEntry $entry): void
     {
         $entry->load('items.product');
+        $supplierId = $entry->purchase_order_id
+            ? DB::table('purchase_orders')->where('id', $entry->purchase_order_id)->value('supplier_id')
+            : null;
         $lines = [];
 
         foreach ($entry->items as $item) {
@@ -365,7 +368,8 @@ class StockService
         if ($totalCredit <= 0) return;
 
         $lines[] = ['account' => '331', 'debit' => 0, 'credit' => $totalCredit,
-                    'description' => "Phải trả NCC - phiếu {$entry->code}"];
+                    'description'  => "Phải trả NCC - phiếu {$entry->code}",
+                    'partner_type' => 'supplier', 'partner_id' => $supplierId];
 
         $this->accounting->tryPost(
             "Nhập kho hàng hóa {$entry->code}",

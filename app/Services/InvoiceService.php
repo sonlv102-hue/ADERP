@@ -122,7 +122,8 @@ class InvoiceService
         // Dr 131 = tổng Có đã round — đảm bảo bút toán cân bằng
         $lines = [
             ['account' => '131', 'debit' => $totalCredit, 'credit' => 0,
-             'description' => "Phải thu KH - {$invoice->code}"],
+             'description'  => "Phải thu KH - {$invoice->code}",
+             'partner_type' => 'customer', 'partner_id' => $invoice->customer_id],
         ];
 
         // Doanh thu: phân tách theo revenue_account_code từ order_items
@@ -157,7 +158,8 @@ class InvoiceService
                 ['account' => $cashAccount, 'debit' => $amount, 'credit' => 0,
                  'description' => "Thu tiền - {$invoice->code}"],
                 ['account' => '131', 'debit' => 0, 'credit' => $amount,
-                 'description' => "Xóa công nợ KH - {$invoice->code}"],
+                 'description'  => "Xóa công nợ KH - {$invoice->code}",
+                 'partner_type' => 'customer', 'partner_id' => $invoice->customer_id],
             ],
             'payment', $payment->id, 'collection'
         );

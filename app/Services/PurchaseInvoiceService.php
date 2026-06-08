@@ -82,7 +82,8 @@ class PurchaseInvoiceService
             Carbon::parse($payment->payment_date),
             [
                 ['account' => '331',        'debit' => (int) $amount, 'credit' => 0,
-                 'description' => "Xóa công nợ NCC - {$invoice->code}"],
+                 'description'  => "Xóa công nợ NCC - {$invoice->code}",
+                 'partner_type' => 'supplier', 'partner_id' => $invoice->supplier_id],
                 ['account' => $cashAccount, 'debit' => 0, 'credit' => (int) $amount,
                  'description' => "Trả tiền NCC - {$invoice->code}"],
             ],

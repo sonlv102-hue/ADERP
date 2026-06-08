@@ -62,6 +62,8 @@ class AccountingService
                     'credit'           => (int) ($line['credit'] ?? 0),
                     'sort_order'       => $i,
                     'project_id'       => $line['project_id'] ?? null,
+                    'partner_type'     => $line['partner_type'] ?? null,
+                    'partner_id'       => $line['partner_id'] ?? null,
                 ]);
             }
 
