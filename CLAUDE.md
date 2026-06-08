@@ -70,6 +70,7 @@ Agents:
 - Invoice chỉ tự động Paid khi payment >= total qua service xử lý payment; không thêm action mark-paid thủ công nếu không có yêu cầu rõ.
 - Accounting auto-posting phải tránh double-posting bằng cách kiểm tra journal entry liên quan trước khi post.
 - Dòng kế toán có thể cần `project_id`; không bỏ mất chiều dự án khi sửa nghiệp vụ dự án/TK 154.
+- **AR/AP**: Mọi màn công nợ phải thu/trả phải dùng `ArApLedgerService` — không tự query invoice/purchase_invoice riêng. Opening balance không phải doanh thu/chi phí. Xem `docs/AR_AP_LOGIC.md`.
 
 ---
 

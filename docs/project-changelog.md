@@ -2,6 +2,24 @@
 
 All significant changes, features, and fixes are documented below.
 
+## [2026-06-09] — AR/AP Unified Ledger Service
+
+### New
+- **`ArApLedgerService`** (`app/Services/ArApLedgerService.php`) — service lõi dùng chung cho toàn bộ màn công nợ AR/AP. Merge invoices + opening_balance thành unified DTO, tính aging buckets, in-memory pagination tương thích Inertia.
+- **AP Opening Balance pay()** — `ArApOpeningBalanceController::pay()` mở rộng hỗ trợ cả AP (Dr 331 / Cr 111/112) và AR (Dr 111/112 / Cr 131). Route: `accounting.ar-ap-opening-balance.pay`.
+
+### Updated
+- `ArCollectionController`, `ApPaymentController`, `ARAgingController`, `APAgingController` — dùng `ArApLedgerService` thay vì self-query.
+- `ARAgingExport`, `APAgingExport` — thêm cột "Nguồn" (Hóa đơn / Đầu kỳ).
+- Vue pages: `ArCollections/Index.vue`, `ApPayments/Index.vue`, `Reports/AR/Index.vue`, `Reports/AP/Index.vue` — prop `items`/`rows`, badge "Đầu kỳ", conditional link by source_type, composite key `source_type-id`.
+- `CLAUDE.md` — thêm rule AR/AP phải dùng ArApLedgerService.
+
+### Docs
+- `docs/AR_AP_LOGIC.md` — mô tả đầy đủ logic AR/AP, DTO, aging, bút toán, quy tắc không vi phạm.
+- `docs/TEST_LOG.md` — log commands + results.
+
+---
+
 ## [2026-05-23] — Phase 9: CRM Pipeline, Returns & Logistics
 
 ### New Features
