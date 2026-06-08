@@ -5,7 +5,7 @@
       <div class="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 class="text-2xl font-bold text-gray-900">Công nợ phải trả (AP)</h1>
-          <p class="text-sm text-gray-500 mt-0.5">Hóa đơn mua — tổng tiền, đã trả, còn lại theo hạn thanh toán</p>
+          <p class="text-sm text-gray-500 mt-0.5">Hóa đơn mua + công nợ đầu kỳ — tổng tiền, đã trả, còn lại theo hạn thanh toán</p>
         </div>
         <a :href="exportUrl" class="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -83,9 +83,9 @@
         <table class="w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th class="text-left px-4 py-3 font-semibold text-gray-600">Số HĐ</th>
+              <th class="text-left px-4 py-3 font-semibold text-gray-600">Số HĐ/CT</th>
               <th class="text-left px-4 py-3 font-semibold text-gray-600">Nhà cung cấp</th>
-              <th class="text-left px-4 py-3 font-semibold text-gray-600">Ngày HĐ</th>
+              <th class="text-left px-4 py-3 font-semibold text-gray-600">Ngày CT</th>
               <th class="text-left px-4 py-3 font-semibold text-gray-600">Hạn TT</th>
               <th class="text-right px-4 py-3 font-semibold text-gray-600">Tổng tiền</th>
               <th class="text-right px-4 py-3 font-semibold text-gray-600">Đã trả</th>
@@ -94,13 +94,21 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <tr v-for="row in rows.data" :key="row.id" class="hover:bg-gray-50">
+            <tr v-for="row in rows.data" :key="row.source_type + '-' + row.id" class="hover:bg-gray-50">
               <td class="px-4 py-3">
-                <Link :href="route('purchasing.purchase-invoices.show', row.id)"
-                  class="font-mono font-medium text-primary-700 hover:underline">{{ row.code }}</Link>
+                <template v-if="row.source_type === 'purchase_invoice'">
+                  <Link :href="route('purchasing.purchase-invoices.show', row.id)"
+                    class="font-mono font-medium text-primary-700 hover:underline">{{ row.code }}</Link>
+                </template>
+                <template v-else>
+                  <span class="font-mono font-medium text-gray-700">{{ row.code }}</span>
+                  <span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                    Đầu kỳ
+                  </span>
+                </template>
               </td>
-              <td class="px-4 py-3 text-gray-800">{{ row.supplier_name }}</td>
-              <td class="px-4 py-3 text-gray-500 text-xs">{{ fmtDate(row.invoice_date) }}</td>
+              <td class="px-4 py-3 text-gray-800">{{ row.partner_name }}</td>
+              <td class="px-4 py-3 text-gray-500 text-xs">{{ fmtDate(row.doc_date) }}</td>
               <td class="px-4 py-3 text-xs" :class="row.remaining > 0 && row.days_overdue > 0 ? 'text-red-600 font-medium' : 'text-gray-500'">
                 {{ row.due_date ? fmtDate(row.due_date) : '—' }}
               </td>
@@ -121,7 +129,7 @@
           </tbody>
           <tfoot v-if="rows.data?.length" class="bg-gray-50 border-t-2 border-gray-300">
             <tr>
-              <td colspan="4" class="px-4 py-3 font-semibold text-gray-700">Tổng (trang này)</td>
+              <td colspan="4" class="px-4 py-3 font-semibold text-gray-700">Tổng cộng</td>
               <td class="px-4 py-3 text-right font-semibold text-gray-800">{{ fmt(summary.total_invoiced) }}</td>
               <td class="px-4 py-3 text-right font-semibold text-green-700">{{ fmt(summary.total_paid) }}</td>
               <td class="px-4 py-3 text-right font-semibold text-red-700">{{ fmt(summary.total_remaining) }}</td>

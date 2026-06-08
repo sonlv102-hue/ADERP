@@ -166,13 +166,11 @@ class ArApOpeningBalanceController extends Controller
     {
         $this->authorize('accounting.manage');
 
-        if ($arApOpeningBalance->type !== 'ar') {
-            return back()->with('error', 'Chỉ áp dụng cho công nợ phải thu (AR).');
-        }
-
+        $isAr      = $arApOpeningBalance->type === 'ar';
         $remaining = (float) $arApOpeningBalance->remaining_amount;
+
         if ($remaining <= 0) {
-            return back()->with('error', 'Công nợ đầu kỳ này đã được thu đầy đủ.');
+            return back()->with('error', 'Công nợ đầu kỳ này đã được thanh toán đầy đủ.');
         }
 
         $data = $request->validate([
@@ -183,8 +181,8 @@ class ArApOpeningBalanceController extends Controller
             'notes'        => ['nullable', 'string'],
         ]);
 
-        DB::transaction(function () use ($arApOpeningBalance, $data) {
-            $amount      = round((float) $data['amount'], 2);
+        DB::transaction(function () use ($arApOpeningBalance, $data, $isAr) {
+            $amount       = round((float) $data['amount'], 2);
             $newRemaining = round((float) $arApOpeningBalance->remaining_amount - $amount, 2);
             $arApOpeningBalance->update(['remaining_amount' => $newRemaining]);
 
@@ -196,22 +194,40 @@ class ArApOpeningBalanceController extends Controller
                 ? "CN ĐK {$arApOpeningBalance->invoice_ref}"
                 : "CN ĐK #{$arApOpeningBalance->id}";
 
-            $this->accounting->tryPost(
-                "Thu công nợ đầu kỳ {$docRef}",
-                Carbon::parse($data['payment_date']),
-                [
+            if ($isAr) {
+                // AR: Thu tiền → Dr 111/112 / Cr 131
+                $lines = [
                     ['account' => $cashAccount, 'debit' => $amount, 'credit' => 0,
                      'description' => "Thu tiền - {$docRef}"],
                     ['account' => '131', 'debit' => 0, 'credit' => $amount,
-                     'description'  => "Xóa công nợ ĐK KH - {$docRef}",
+                     'description'  => "Xóa CN ĐK KH - {$docRef}",
                      'partner_type' => 'customer',
                      'partner_id'   => $arApOpeningBalance->customer_id],
-                ],
+                ];
+                $desc = "Thu công nợ đầu kỳ {$docRef}";
+            } else {
+                // AP: Trả tiền NCC → Dr 331 / Cr 111/112
+                $lines = [
+                    ['account' => '331', 'debit' => $amount, 'credit' => 0,
+                     'description'  => "Xóa CN ĐK NCC - {$docRef}",
+                     'partner_type' => 'supplier',
+                     'partner_id'   => $arApOpeningBalance->supplier_id],
+                    ['account' => $cashAccount, 'debit' => 0, 'credit' => $amount,
+                     'description' => "Trả tiền - {$docRef}"],
+                ];
+                $desc = "Thanh toán công nợ đầu kỳ {$docRef}";
+            }
+
+            $this->accounting->tryPost(
+                $desc,
+                Carbon::parse($data['payment_date']),
+                $lines,
                 'ar_ap_opening_balance', $arApOpeningBalance->id, 'collection'
             );
         });
 
-        return back()->with('success', 'Đã ghi nhận thu tiền công nợ đầu kỳ.');
+        $msg = $isAr ? 'Đã ghi nhận thu tiền công nợ đầu kỳ.' : 'Đã ghi nhận thanh toán công nợ đầu kỳ.';
+        return back()->with('success', $msg);
     }
 
     public function destroy(ArApOpeningBalance $arApOpeningBalance): RedirectResponse

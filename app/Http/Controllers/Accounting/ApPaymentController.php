@@ -2,56 +2,47 @@
 
 namespace App\Http\Controllers\Accounting;
 
-use App\Enums\PurchaseInvoiceStatus;
 use App\Http\Controllers\Controller;
-use App\Models\PurchaseInvoice;
 use App\Models\Supplier;
+use App\Services\ArApLedgerService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class ApPaymentController extends Controller
 {
+    public function __construct(private ArApLedgerService $ledger) {}
+
     public function index(Request $request): Response
     {
-        $query = PurchaseInvoice::with([
-            'supplier' => fn ($q) => $q->withTrashed(),
-        ])
-        ->whereIn('status', [PurchaseInvoiceStatus::Valid, PurchaseInvoiceStatus::PartialPaid])
-        ->orderBy('due_date')
-        ->orderByDesc('id');
+        $filters = $request->only(['supplier_id', 'status']);
 
-        if ($request->filled('supplier_id')) {
-            $query->where('supplier_id', $request->supplier_id);
-        }
-
-        if ($request->filled('status')) {
-            $query->where('status', $request->status);
-        }
-
-        $invoices = $query->get()->map(fn ($pi) => [
-            'id'           => $pi->id,
-            'code'         => $pi->code,
-            'supplier_id'  => $pi->supplier_id,
-            'supplier'     => $pi->supplier?->name ?? '—',
-            'invoice_date' => $pi->invoice_date?->format('d/m/Y'),
-            'due_date'     => $pi->due_date?->format('d/m/Y'),
-            'total'        => (float) $pi->total,
-            'amount_paid'  => $pi->amountPaid(),
-            'amount_due'   => $pi->amountDue(),
-            'status'       => $pi->status->value,
-            'status_label' => $pi->status->label(),
-            'status_color' => $pi->status->color(),
-        ])->values();
+        $items = $this->ledger->payables($filters, onlyOutstanding: true)
+            ->map(fn ($item) => [
+                'id'           => $item['id'],
+                'source_type'  => $item['source_type'],
+                'code'         => $item['code'],
+                'supplier_id'  => $item['partner_id'],
+                'supplier'     => $item['partner_name'],
+                'invoice_date' => $item['doc_date'] ? date('d/m/Y', strtotime($item['doc_date'])) : '—',
+                'due_date'     => $item['due_date'] ? date('d/m/Y', strtotime($item['due_date'])) : null,
+                'total'        => $item['total'],
+                'amount_paid'  => $item['paid'],
+                'amount_due'   => $item['remaining'],
+                'status'       => $item['status'],
+                'status_label' => $item['status_label'],
+                'status_color' => $item['status_color'],
+            ])
+            ->values();
 
         return Inertia::render('Accounting/ApPayments/Index', [
-            'invoices'  => $invoices,
+            'items'     => $items,
             'suppliers' => Supplier::orderBy('name')->get(['id', 'name', 'code']),
             'statuses'  => [
-                ['value' => 'valid',        'label' => PurchaseInvoiceStatus::Valid->label()],
-                ['value' => 'partial_paid', 'label' => PurchaseInvoiceStatus::PartialPaid->label()],
+                ['value' => 'valid',        'label' => 'Hợp lệ / Chưa TT'],
+                ['value' => 'partial_paid', 'label' => 'TT một phần'],
             ],
-            'filters'   => $request->only(['supplier_id', 'status']),
+            'filters'   => $filters,
         ]);
     }
 }
