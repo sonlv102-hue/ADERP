@@ -341,6 +341,7 @@ Route::middleware('auth')->group(function () {
         Route::get('ar-ap-opening-balance',                             [ArApOpeningBalanceController::class, 'index'])->name('ar-ap-opening-balance.index');
         Route::get('ar-ap-opening-balance/create',                      [ArApOpeningBalanceController::class, 'create'])->name('ar-ap-opening-balance.create')->middleware('can:accounting.manage');
         Route::post('ar-ap-opening-balance',                            [ArApOpeningBalanceController::class, 'store'])->name('ar-ap-opening-balance.store')->middleware('can:accounting.manage');
+        Route::post('ar-ap-opening-balance/{arApOpeningBalance}/pay',   [ArApOpeningBalanceController::class, 'pay'])->name('ar-ap-opening-balance.pay')->middleware('can:accounting.manage');
         Route::delete('ar-ap-opening-balance/{arApOpeningBalance}',     [ArApOpeningBalanceController::class, 'destroy'])->name('ar-ap-opening-balance.destroy')->middleware('can:accounting.manage');
 
         // Phiếu kế toán / Bút toán (Journal Entries)

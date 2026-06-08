@@ -4,7 +4,7 @@
       <div class="flex items-center justify-between">
         <div>
           <h1 class="text-2xl font-bold text-gray-900">Thu nợ khách hàng (TK 131)</h1>
-          <p class="text-sm text-gray-500 mt-0.5">Danh sách hóa đơn chưa thu — ghi nhận tiền nhận được</p>
+          <p class="text-sm text-gray-500 mt-0.5">Hóa đơn chưa thu + công nợ đầu kỳ — ghi nhận tiền nhận được</p>
         </div>
       </div>
 
@@ -30,7 +30,7 @@
         <table class="w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">Hóa đơn</th>
+              <th class="text-left px-5 py-3 font-semibold text-gray-600">Hóa đơn / Chứng từ</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Khách hàng</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Ngày HĐ</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Hạn thu</th>
@@ -42,33 +42,43 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <tr v-for="inv in invoices" :key="inv.id" class="hover:bg-gray-50">
+            <tr v-for="item in items" :key="item.source_type + '-' + item.id" class="hover:bg-gray-50">
               <td class="px-5 py-3 font-mono text-xs text-gray-700">
-                <Link :href="route('accounting.invoices.show', inv.id)" class="text-primary-600 hover:underline">
-                  {{ inv.code }}
-                </Link>
+                <!-- Hóa đơn bán hàng: có link -->
+                <template v-if="item.source_type === 'invoice'">
+                  <Link :href="route('accounting.invoices.show', item.id)" class="text-primary-600 hover:underline">
+                    {{ item.code }}
+                  </Link>
+                </template>
+                <!-- Công nợ đầu kỳ: không có link -->
+                <template v-else>
+                  <span class="text-gray-700">{{ item.code }}</span>
+                  <span class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-amber-100 text-amber-800">
+                    Đầu kỳ
+                  </span>
+                </template>
               </td>
-              <td class="px-5 py-3 text-gray-800 font-medium">{{ inv.customer }}</td>
-              <td class="px-5 py-3 text-gray-600 whitespace-nowrap">{{ inv.issue_date }}</td>
-              <td class="px-5 py-3 whitespace-nowrap" :class="isOverdue(inv) ? 'text-red-600 font-medium' : 'text-gray-600'">
-                {{ inv.due_date ?? '—' }}
-                <span v-if="isOverdue(inv)" class="ml-1 text-xs">(Quá hạn)</span>
+              <td class="px-5 py-3 text-gray-800 font-medium">{{ item.customer }}</td>
+              <td class="px-5 py-3 text-gray-600 whitespace-nowrap">{{ item.issue_date }}</td>
+              <td class="px-5 py-3 whitespace-nowrap" :class="isOverdue(item) ? 'text-red-600 font-medium' : 'text-gray-600'">
+                {{ item.due_date ?? '—' }}
+                <span v-if="isOverdue(item)" class="ml-1 text-xs">(Quá hạn)</span>
               </td>
-              <td class="px-5 py-3 text-right text-gray-800">{{ formatVnd(inv.total) }}</td>
-              <td class="px-5 py-3 text-right text-green-700">{{ formatVnd(inv.amount_paid) }}</td>
-              <td class="px-5 py-3 text-right font-semibold text-red-600">{{ formatVnd(inv.amount_due) }}</td>
+              <td class="px-5 py-3 text-right text-gray-800">{{ formatVnd(item.total) }}</td>
+              <td class="px-5 py-3 text-right text-green-700">{{ formatVnd(item.amount_paid) }}</td>
+              <td class="px-5 py-3 text-right font-semibold text-red-600">{{ formatVnd(item.amount_due) }}</td>
               <td class="px-5 py-3">
-                <StatusBadge :color="inv.status_color">{{ inv.status_label }}</StatusBadge>
+                <StatusBadge :color="item.status_color">{{ item.status_label }}</StatusBadge>
               </td>
               <td class="px-5 py-3 text-right">
-                <button @click="openPayment(inv)"
+                <button @click="openPayment(item)"
                   class="px-3 py-1.5 text-xs font-medium bg-primary-600 text-white rounded-lg hover:bg-primary-700">
                   Ghi thu tiền
                 </button>
               </td>
             </tr>
-            <tr v-if="!invoices.length">
-              <td colspan="9" class="px-5 py-10 text-center text-gray-400">Không có hóa đơn chưa thu</td>
+            <tr v-if="!items.length">
+              <td colspan="9" class="px-5 py-10 text-center text-gray-400">Không có khoản cần thu</td>
             </tr>
           </tbody>
         </table>
@@ -81,6 +91,9 @@
       <div class="space-y-4" v-if="payModal">
         <div class="p-3 bg-blue-50 rounded-lg text-sm">
           <div class="text-gray-600">Khách hàng: <span class="font-medium text-gray-900">{{ payModal.customer }}</span></div>
+          <div v-if="payModal.source_type === 'opening_balance'" class="text-amber-700 mt-1 text-xs font-medium">
+            Công nợ đầu kỳ
+          </div>
           <div class="text-gray-600 mt-1">Còn phải thu: <span class="font-semibold text-red-600">{{ formatVnd(payModal.amount_due) }}</span></div>
         </div>
         <div class="grid grid-cols-2 gap-4">
@@ -137,10 +150,10 @@ import Modal from '@/Components/Shared/Modal.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({
-  invoices: Array,
+  items:     Array,
   customers: Array,
-  statuses: Array,
-  filters: Object,
+  statuses:  Array,
+  filters:   Object,
 });
 
 const { formatVnd } = useCurrency();
@@ -150,15 +163,15 @@ const filters = ref({
   status:      props.filters.status ?? '',
 });
 
-const payModal      = ref(null);
-const submitting    = ref(false);
+const payModal       = ref(null);
+const submitting     = ref(false);
 const payAmountError = ref('');
 const payForm = ref({ amount: 0, payment_date: new Date().toISOString().slice(0, 10), method: 'bank_transfer', reference: '', notes: '' });
 
-const totalDue = computed(() => props.invoices.reduce((s, i) => s + i.amount_due, 0));
+const totalDue = computed(() => (props.items ?? []).reduce((s, i) => s + i.amount_due, 0));
 
-function isOverdue(inv) {
-  return inv.status === 'overdue';
+function isOverdue(item) {
+  return item.status === 'overdue';
 }
 
 function applyFilters() {
@@ -168,15 +181,16 @@ function applyFilters() {
   }, { preserveState: true });
 }
 
-function openPayment(inv) {
-  payModal.value = inv;
+function openPayment(item) {
+  payModal.value = item;
   payForm.value = {
-    amount:       inv.amount_due,
+    amount:       item.amount_due,
     payment_date: new Date().toISOString().slice(0, 10),
     method:       'bank_transfer',
     reference:    '',
     notes:        '',
   };
+  payAmountError.value = '';
 }
 
 function submitPayment() {
@@ -194,7 +208,13 @@ function submitPayment() {
     return;
   }
   submitting.value = true;
-  router.post(route('accounting.invoices.payments.store', payModal.value.id), {
+
+  const item = payModal.value;
+  const url = item.source_type === 'opening_balance'
+    ? route('accounting.ar-ap-opening-balance.pay', item.id)
+    : route('accounting.invoices.payments.store', item.id);
+
+  router.post(url, {
     amount:       payForm.value.amount,
     payment_date: payForm.value.payment_date,
     method:       payForm.value.method,
