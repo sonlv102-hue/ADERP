@@ -13,7 +13,7 @@ class AccountCode extends Model
     public $incrementing = false;
 
     protected $fillable = [
-        'code', 'name', 'type', 'normal_balance',
+        'code', 'name', 'type', 'normal_balance', 'balance_type',
         'parent_code', 'level', 'is_detail', 'is_active', 'notes',
     ];
 

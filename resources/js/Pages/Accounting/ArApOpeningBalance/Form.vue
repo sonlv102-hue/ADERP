@@ -85,11 +85,11 @@
                     <input v-model="item.due_date" type="date" class="w-full form-input text-xs py-1" />
                   </td>
                   <td class="px-3 py-2">
-                    <input v-model.number="item.amount" type="number" min="0" step="any"
+                    <input v-model.number="item.amount" type="number" step="0.01"
                       class="w-full form-input text-xs py-1 text-right" />
                   </td>
                   <td class="px-3 py-2">
-                    <input v-model.number="item.remaining_amount" type="number" min="0" step="any"
+                    <input v-model.number="item.remaining_amount" type="number" step="0.01"
                       class="w-full form-input text-xs py-1 text-right" />
                   </td>
                   <td class="px-3 py-2">
@@ -118,7 +118,10 @@
           </div>
 
           <p class="text-xs text-gray-400 mt-3">
-            Bút toán sẽ được tạo tự động: {{ form.type === 'ar' ? 'Dr 131 / Cr 411' : 'Dr 411 / Cr 331' }}
+            TK 131 và 331 là tài khoản lưỡng tính. Số dương = Dư Nợ (AR) / Dư Có (AP). Số âm = Dư ngược chiều.
+            <br/>Bút toán tự động:
+            <span v-if="form.type === 'ar'">dương → Nợ 131 / Có 411 · âm → Có 131 / Nợ 411</span>
+            <span v-else>dương → Nợ 411 / Có 331 · âm → Có 411 / Nợ 331</span>
           </p>
         </div>
 
@@ -139,7 +142,7 @@ import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({ customers: Array, suppliers: Array, defaultType: String });
-const { formatVnd: fv } = useCurrency();
+const { formatDecimalVnd: fv } = useCurrency();
 
 const today = new Date().toISOString().slice(0, 7);
 

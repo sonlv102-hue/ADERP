@@ -66,8 +66,8 @@ class ArApOpeningBalanceController extends Controller
             'items.*.invoice_ref'      => 'nullable|string|max:100',
             'items.*.invoice_date'     => 'nullable|date',
             'items.*.due_date'         => 'nullable|date',
-            'items.*.amount'           => 'required|numeric|min:0',
-            'items.*.remaining_amount' => 'required|numeric|min:0',
+            'items.*.amount'           => 'required|numeric',
+            'items.*.remaining_amount' => 'required|numeric',
             'items.*.note'             => 'nullable|string|max:255',
         ]);
 
@@ -75,13 +75,32 @@ class ArApOpeningBalanceController extends Controller
             $isAr  = $data['type'] === 'ar';
             $date  = Carbon::createFromFormat('Y-m', $data['period'])->startOfMonth();
             $lines = [];
-            $total = 0;
+            // Track running Dr/Cr totals on 131/331 to compute 411 contra
+            $totalDr = 0.0;
+            $totalCr = 0.0;
 
             foreach ($data['items'] as $item) {
                 $remaining = (float) $item['remaining_amount'];
-                $total += $remaining;
+                $abs       = round(abs($remaining), 2);
 
-                $record = ArApOpeningBalance::create([
+                // AR lưỡng tính:
+                //   remaining >= 0 → Dư Nợ TK 131 → Dr 131
+                //   remaining <  0 → Dư Có TK 131 → Cr 131
+                // AP lưỡng tính:
+                //   remaining >= 0 → Dư Có TK 331 → Cr 331
+                //   remaining <  0 → Dư Nợ TK 331 → Dr 331
+                if ($isAr) {
+                    $lineDr = $remaining >= 0 ? $abs : 0;
+                    $lineCr = $remaining <  0 ? $abs : 0;
+                } else {
+                    $lineDr = $remaining <  0 ? $abs : 0;
+                    $lineCr = $remaining >= 0 ? $abs : 0;
+                }
+
+                $totalDr += $lineDr;
+                $totalCr += $lineCr;
+
+                ArApOpeningBalance::create([
                     'type'             => $data['type'],
                     'period'           => $data['period'],
                     'customer_id'      => $item['customer_id'] ?? null,
@@ -95,25 +114,32 @@ class ArApOpeningBalanceController extends Controller
                     'created_by'       => auth()->id(),
                 ]);
 
-                $partyName = $isAr
-                    ? (Customer::find($item['customer_id'])?->name ?? '?')
-                    : (Supplier::find($item['supplier_id'])?->name ?? '?');
+                if ($abs > 0) {
+                    $partyName = $isAr
+                        ? (Customer::find($item['customer_id'])?->name ?? '?')
+                        : (Supplier::find($item['supplier_id'])?->name ?? '?');
 
-                $lines[] = [
-                    'account'     => $isAr ? '131' : '331',
-                    'debit'       => $isAr ? $remaining : 0,
-                    'credit'      => $isAr ? 0 : $remaining,
-                    'description' => ($isAr ? 'Phải thu ĐK' : 'Phải trả ĐK') . " {$partyName}" .
-                        ($item['invoice_ref'] ? " HĐ {$item['invoice_ref']}" : ''),
-                ];
+                    $lines[] = [
+                        'account'     => $isAr ? '131' : '331',
+                        'debit'       => $lineDr,
+                        'credit'      => $lineCr,
+                        'description' => ($isAr ? 'Phải thu ĐK' : 'Phải trả ĐK') . " {$partyName}" .
+                            ($item['invoice_ref'] ? " HĐ {$item['invoice_ref']}" : ''),
+                    ];
+                }
             }
 
-            if ($total > 0) {
-                // Đối ứng: Cr 411 (AR) hoặc Dr 411 (AP)
+            if ($lines) {
+                // TK 411 đối ứng — giữ cân bằng bút toán
+                // Tổng Dr 131/331 > Tổng Cr 131/331 → Cr 411 phần chênh
+                // Tổng Cr 131/331 > Tổng Dr 131/331 → Dr 411 phần chênh
+                $dr411 = $totalCr > $totalDr ? round($totalCr - $totalDr, 2) : 0;
+                $cr411 = $totalDr > $totalCr ? round($totalDr - $totalCr, 2) : 0;
+
                 $lines[] = [
                     'account'     => '411',
-                    'debit'       => $isAr ? 0 : round($total),
-                    'credit'      => $isAr ? round($total) : 0,
+                    'debit'       => $dr411,
+                    'credit'      => $cr411,
                     'description' => ($isAr ? 'Công nợ phải thu' : 'Công nợ phải trả') . " đầu kỳ {$data['period']}",
                 ];
 

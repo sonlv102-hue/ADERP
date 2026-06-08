@@ -62,11 +62,13 @@
               <td class="px-4 py-2.5 text-center text-xs text-gray-600">{{ b.due_date ?? '—' }}</td>
               <td class="px-4 py-2.5 text-right font-mono">{{ fv(b.amount) }}</td>
               <td class="px-4 py-2.5 text-right font-mono font-semibold"
-                :class="b.remaining_amount > 0 ? 'text-orange-700' : 'text-gray-400'">
+                :class="b.remaining_amount > 0 ? 'text-orange-700' : b.remaining_amount < 0 ? 'text-red-600' : 'text-gray-400'">
                 {{ fv(b.remaining_amount) }}
               </td>
               <td class="px-4 py-2.5 text-center">
-                <span v-if="b.has_je" class="text-green-600 text-xs font-semibold">✓ Đã HT</span>
+                <span v-if="b.has_je" class="text-green-600 text-xs font-semibold">
+                  ✓ {{ jeLabel(b) }}
+                </span>
                 <span v-else class="text-gray-400 text-xs">—</span>
               </td>
               <td class="px-4 py-2.5 text-center">
@@ -96,10 +98,17 @@ import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({ balances: Array, filters: Object });
-const { formatVnd: fv } = useCurrency();
+const { formatDecimalVnd: fv } = useCurrency();
 
 const activeType = ref(props.filters.type ?? 'ar');
 const period     = ref(props.filters.period ?? '');
+
+function jeLabel(b) {
+  if (b.type === 'ar') {
+    return b.remaining_amount >= 0 ? 'Nợ 131 / Có 411' : 'Có 131 / Nợ 411';
+  }
+  return b.remaining_amount >= 0 ? 'Có 331 / Nợ 411' : 'Nợ 331 / Có 411';
+}
 
 const totalAmount    = computed(() => props.balances.reduce((s, b) => s + b.amount, 0));
 const totalRemaining = computed(() => props.balances.reduce((s, b) => s + b.remaining_amount, 0));
