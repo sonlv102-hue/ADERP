@@ -25,7 +25,7 @@ class RolePermissionSeeder extends Seeder
             'quotations.view', 'quotations.create', 'quotations.edit', 'quotations.approve',
             'orders.view', 'orders.create', 'orders.manage',
             // Projects
-            'projects.view', 'projects.create', 'projects.manage',
+            'projects.view', 'projects.create', 'projects.manage', 'projects.delete',
             // Tickets
             'tickets.view', 'tickets.create', 'tickets.assign', 'tickets.close',
             // Purchasing
@@ -66,7 +66,7 @@ class RolePermissionSeeder extends Seeder
                 'quotations.view', 'quotations.approve',
                 'orders.view', 'orders.manage',
                 'sales-returns.view', 'sales-returns.create', 'sales-returns.edit', 'sales-returns.delete',
-                'projects.view', 'projects.manage',
+                'projects.view', 'projects.manage', 'projects.delete',
                 'tickets.view',
                 'purchasing.view', 'purchasing.approve',
                 'purchase-returns.view', 'purchase-returns.create', 'purchase-returns.edit', 'purchase-returns.delete',

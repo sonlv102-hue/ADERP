@@ -228,10 +228,26 @@ class ProjectController extends Controller
     public function destroy(Project $project): RedirectResponse
     {
         $this->authorize('projects.delete');
-        $project->delete();
+
+        if ($project->status !== ProjectStatus::Cancelled) {
+            return back()->with('error', 'Chỉ có thể xóa dự án đã hủy.');
+        }
+
+        DB::transaction(function () use ($project) {
+            // Null out project_id on linked POs/stock exits to preserve financial records
+            DB::table('purchase_orders')->where('project_id', $project->id)->update(['project_id' => null]);
+            DB::table('stock_exits')->where('project_id', $project->id)->update(['project_id' => null]);
+
+            DB::table('project_wip_entries')->where('project_id', $project->id)->delete();
+            $project->tasks()->delete();
+            $project->members()->delete();
+            $project->materials()->delete();
+            $project->expenses()->delete();
+            $project->delete();
+        });
 
         return redirect()->route('projects.projects.index')
-            ->with('success', 'Đã xóa dự án.');
+            ->with('success', 'Đã xóa dự án ' . $project->code . '.');
     }
 
     public function transition(Request $request, Project $project): RedirectResponse

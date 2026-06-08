@@ -29,6 +29,12 @@
               {{ t.label }}
             </button>
           </template>
+          <!-- Delete button — only for cancelled projects -->
+          <button v-if="project.status === 'cancelled' && can('projects.delete')"
+            @click="confirmDelete"
+            class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            Xóa dự án
+          </button>
         </div>
       </div>
 
@@ -552,6 +558,12 @@ const doTransition = (status) => {
 const recognizeCost = () => {
   if (!confirm(`Kết chuyển toàn bộ chi phí dở dang TK 154 của dự án ${props.project.code} vào giá vốn TK 632?\n\nHành động này tạo bút toán: Nợ 632 / Có 154.`)) return;
   router.post(route('projects.projects.recognize-cost', props.project.id), {}, { preserveScroll: true });
+};
+
+// Delete project
+const confirmDelete = () => {
+  if (!confirm(`Xóa vĩnh viễn dự án ${props.project.code} — ${props.project.name}?\n\nTất cả tasks, thành viên, vật tư, chi phí sẽ bị xóa.\nHành động này không thể hoàn tác.`)) return;
+  router.delete(route('projects.projects.destroy', props.project.id));
 };
 
 // Style helpers
