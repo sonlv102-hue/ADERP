@@ -265,17 +265,17 @@ class ArApLedgerService
             ->when($onlyOutstanding, fn ($q) => $q->where('remaining_amount', '>', 0))
             ->when($partnerId,       fn ($q) => $q->where($isAr ? 'customer_id' : 'supplier_id', $partnerId))
             ->when($search, fn ($q) =>
-                $q->where(fn ($q2) use ($isAr, $search) {
+                $q->where(function ($q2) use ($isAr, $search) {
                     $q2->where('invoice_ref', 'ilike', "%{$search}%")
                        ->orWhereHas($isAr ? 'customer' : 'supplier', fn ($q3) =>
                            $q3->where('name', 'ilike', "%{$search}%")
                        );
                 })
             )
-            ->when($dateFrom, fn ($q) => $q->where(fn ($q2) use ($dateFrom) {
+            ->when($dateFrom, fn ($q) => $q->where(function ($q2) use ($dateFrom) {
                 $q2->whereNull('invoice_date')->orWhere('invoice_date', '>=', $dateFrom);
             }))
-            ->when($dateTo, fn ($q) => $q->where(fn ($q2) use ($dateTo) {
+            ->when($dateTo, fn ($q) => $q->where(function ($q2) use ($dateTo) {
                 $q2->whereNull('invoice_date')->orWhere('invoice_date', '<=', $dateTo);
             }))
             ->orderBy('due_date')
