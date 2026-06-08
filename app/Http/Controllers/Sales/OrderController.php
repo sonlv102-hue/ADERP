@@ -105,7 +105,7 @@ class OrderController extends Controller
             'items.*.unit_price'          => ['required', 'numeric', 'min:0'],
             'items.*.vat_rate'            => ['nullable', 'numeric', 'min:0', 'max:100'],
             'items.*.discount_percent'    => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'items.*.discount_amount'     => ['nullable', 'integer', 'min:0'],
+            'items.*.discount_amount'     => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $isFdi = Customer::where('id', $data['customer_id'])->value('is_fdi');
@@ -293,7 +293,7 @@ class OrderController extends Controller
             'items.*.unit_price'       => ['required', 'numeric', 'min:0'],
             'items.*.vat_rate'         => ['nullable', 'numeric', 'min:0', 'max:100'],
             'items.*.discount_percent' => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'items.*.discount_amount'  => ['nullable', 'integer', 'min:0'],
+            'items.*.discount_amount'  => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $order->update([

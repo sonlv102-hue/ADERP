@@ -274,6 +274,7 @@
                         v-model.number="item.unit_price"
                         type="number"
                         min="0"
+                        step="any"
                         class="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-right outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
                         :class="form.errors[`items.${index}.unit_price`] && 'border-red-400 bg-red-50/40'"
                       />

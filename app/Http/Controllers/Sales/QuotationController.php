@@ -73,7 +73,7 @@ class QuotationController extends Controller
             'items.*.quantity'        => ['required', 'integer', 'min:1'],
             'items.*.unit_price'      => ['required', 'numeric', 'min:0'],
             'items.*.discount_percent'=> ['nullable', 'numeric', 'min:0', 'max:100'],
-            'items.*.discount_amount' => ['nullable', 'integer', 'min:0'],
+            'items.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
             'items.*.vat_rate'        => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
@@ -205,7 +205,7 @@ class QuotationController extends Controller
             'items.*.quantity'        => ['required', 'integer', 'min:1'],
             'items.*.unit_price'      => ['required', 'numeric', 'min:0'],
             'items.*.discount_percent'=> ['nullable', 'numeric', 'min:0', 'max:100'],
-            'items.*.discount_amount' => ['nullable', 'integer', 'min:0'],
+            'items.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
             'items.*.vat_rate'        => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 

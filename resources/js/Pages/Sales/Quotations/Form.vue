@@ -42,7 +42,7 @@
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Tổng tiền bán (tính CK tự động)</label>
               <div class="flex gap-2">
-                <input v-model.number="desiredTotal" @input="calculateDiscountFromTotal" type="number" min="0"
+                <input v-model.number="desiredTotal" @input="calculateDiscountFromTotal" type="number" min="0" step="any"
                   class="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
                   placeholder="Nhập tổng tiền muốn bán, hệ thống sẽ tính % CK" />
                 <select v-model="roundingMode" class="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm">
@@ -183,7 +183,7 @@
                     class="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-xs" />
                 </td>
                 <td class="px-4 py-3">
-                  <input v-model.number="item.unit_price" type="number" min="0"
+                  <input v-model.number="item.unit_price" type="number" min="0" step="any"
                     @input="recalcCkPercent(idx)"
                     class="w-full px-2 py-1.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-xs" />
                 </td>

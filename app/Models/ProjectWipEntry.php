@@ -18,7 +18,7 @@ class ProjectWipEntry extends Model
 
     protected $casts = [
         'entry_date' => 'date',
-        'amount'     => 'integer',
+        'amount'     => 'decimal:2',
     ];
 
     public static array $costTypeLabels = [

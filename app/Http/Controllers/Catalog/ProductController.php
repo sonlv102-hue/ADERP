@@ -175,10 +175,13 @@ class ProductController extends Controller
         Excel::import($import, $request->file('file'));
 
         if ($import->errors) {
-            return back()->with('warning', 'Nhập ' . $import->imported . ' sản phẩm. Lỗi: ' . implode('; ', array_slice($import->errors, 0, 5)));
+            $errorText = implode(' | ', array_slice($import->errors, 0, 10));
+            $more = count($import->errors) > 10 ? ' (và ' . (count($import->errors) - 10) . ' lỗi khác)' : '';
+            return back()->with('error', 'Import thất bại. Chưa có sản phẩm nào được lưu. Lỗi: ' . $errorText . $more);
         }
 
-        return back()->with('success', "Đã nhập {$import->imported} sản phẩm thành công.");
+        $summary = "Tạo mới: {$import->created} | Cập nhật: {$import->updated} sản phẩm.";
+        return back()->with('success', "Import thành công. {$summary}");
     }
 
     public function importTemplate()
@@ -189,10 +192,9 @@ class ProductController extends Controller
             'has_serial', 'description',
         ];
 
-        // Gợi ý quy ước đặt mã — dòng mẫu
         $sampleRows = [
-            ['[Hướng dẫn đặt mã] Mã SP do hệ thống tự tạo. Bạn có thể đặt SKU theo quy ước sau:', '', '', '', '', '', '', '', ''],
-            ['LT-xxx = Laptop | PC-xxx = Máy tính | MN-xxx = Màn hình | SW-xxx = Switch/Mạng | DV-xxx = Dịch vụ', '', '', '', '', '', '', '', ''],
+            ['[Hướng dẫn] Cột "sku" là MÃ SẢN PHẨM — BẮT BUỘC, dùng để nhận diện và update khi import lại.', '', '', '', '', '', '', '', ''],
+            ['Cột "category" là TÊN DANH MỤC — phải khớp chính xác với danh mục đã có trong hệ thống. Bỏ trống nếu không có danh mục.', '', '', '', '', '', '', '', ''],
             ['--- Dữ liệu mẫu (xóa 3 dòng hướng dẫn này trước khi import) ---', '', '', '', '', '', '', '', ''],
             ['Laptop Dell Inspiron 15', 'LT-001', 'Máy tính', 'cái', 25000000, 22000000, 10, 'no', 'Laptop Dell 15 inch'],
             ['Switch Cisco 24 port', 'SW-001', 'Thiết bị mạng', 'cái', 8000000, 7000000, 10, 'no', ''],

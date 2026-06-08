@@ -166,7 +166,7 @@
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Lương cơ bản / tháng</label>
                 <div class="relative">
-                  <input v-model.number="form.base_salary" type="number" min="0" step="100000"
+                  <input v-model.number="form.base_salary" type="number" min="0" step="any"
                     class="w-full border border-gray-300 rounded-lg pl-3 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-right font-mono"
                     placeholder="0" />
                   <span class="absolute inset-y-0 right-3 flex items-center text-xs text-gray-400 pointer-events-none">₫</span>
@@ -253,7 +253,7 @@
                   <span class="ml-1 text-xs font-normal text-green-600 bg-green-100 px-1.5 rounded">tính BHXH</span>
                 </label>
                 <div class="relative">
-                  <input v-model.number="form.allowance_responsibility" type="number" min="0" step="100000"
+                  <input v-model.number="form.allowance_responsibility" type="number" min="0" step="any"
                     class="w-full border border-green-300 rounded-lg pl-3 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-right font-mono bg-green-50/30"
                     placeholder="0" />
                   <span class="absolute inset-y-0 right-3 flex items-center text-xs text-gray-400 pointer-events-none">₫</span>
@@ -265,7 +265,7 @@
                   <span class="ml-1 text-xs font-normal text-green-600 bg-green-100 px-1.5 rounded">tính BHXH</span>
                 </label>
                 <div class="relative">
-                  <input v-model.number="form.allowance" type="number" min="0" step="100000"
+                  <input v-model.number="form.allowance" type="number" min="0" step="any"
                     class="w-full border border-green-300 rounded-lg pl-3 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-500 text-right font-mono bg-green-50/30"
                     placeholder="0" />
                   <span class="absolute inset-y-0 right-3 flex items-center text-xs text-gray-400 pointer-events-none">₫</span>
@@ -312,7 +312,7 @@
                   <span class="ml-1 text-xs font-normal text-blue-600 bg-blue-100 px-1.5 rounded">không BHXH</span>
                 </label>
                 <div class="relative">
-                  <input v-model.number="form.allowance_lunch" type="number" min="0" step="100000"
+                  <input v-model.number="form.allowance_lunch" type="number" min="0" step="any"
                     class="w-full border border-blue-300 rounded-lg pl-3 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-right font-mono bg-blue-50/30"
                     placeholder="0" />
                   <span class="absolute inset-y-0 right-3 flex items-center text-xs text-gray-400 pointer-events-none">₫</span>
@@ -324,7 +324,7 @@
                   <span class="ml-1 text-xs font-normal text-blue-600 bg-blue-100 px-1.5 rounded">không BHXH</span>
                 </label>
                 <div class="relative">
-                  <input v-model.number="form.allowance_transport" type="number" min="0" step="100000"
+                  <input v-model.number="form.allowance_transport" type="number" min="0" step="any"
                     class="w-full border border-blue-300 rounded-lg pl-3 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-right font-mono bg-blue-50/30"
                     placeholder="0" />
                   <span class="absolute inset-y-0 right-3 flex items-center text-xs text-gray-400 pointer-events-none">₫</span>
@@ -336,7 +336,7 @@
                   <span class="ml-1 text-xs font-normal text-blue-600 bg-blue-100 px-1.5 rounded">không BHXH</span>
                 </label>
                 <div class="relative">
-                  <input v-model.number="form.allowance_phone" type="number" min="0" step="100000"
+                  <input v-model.number="form.allowance_phone" type="number" min="0" step="any"
                     class="w-full border border-blue-300 rounded-lg pl-3 pr-10 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 text-right font-mono bg-blue-50/30"
                     placeholder="0" />
                   <span class="absolute inset-y-0 right-3 flex items-center text-xs text-gray-400 pointer-events-none">₫</span>
