@@ -38,7 +38,7 @@ class FixedAssetService
             }
 
             // Skip if acquisition date is after the period end
-            $periodEnd = $period . '-' . cal_days_in_month(CAL_GREGORIAN, (int) substr($period, 5, 2), (int) substr($period, 0, 4));
+            $periodEnd = \Carbon\Carbon::parse($period . '-01')->endOfMonth()->format('Y-m-d');
             if ($asset->acquisition_date && $asset->acquisition_date->format('Y-m-d') > $periodEnd) {
                 $skipped++;
                 continue;
