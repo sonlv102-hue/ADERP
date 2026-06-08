@@ -120,6 +120,20 @@ class InventoryOpeningBalanceController extends Controller
                 }
 
                 $product = Product::find($item['product_id']);
+
+                // Sync cost_price: chỉ update khi cost_price hiện tại = 0/null và unit_cost > 0
+                if ($cost > 0 && (is_null($product->cost_price) || (float) $product->cost_price == 0.0)) {
+                    $product->cost_price = $cost;
+                    $product->save();
+                    \Illuminate\Support\Facades\Log::info('InventoryOpeningBalance: auto-set cost_price', [
+                        'product_id'   => $product->id,
+                        'product_code' => $product->code,
+                        'cost_price'   => $cost,
+                        'period'       => $data['period'],
+                        'by'           => auth()->id(),
+                    ]);
+                }
+
                 $lines[] = [
                     'account'     => '156',
                     'debit'       => $total,
