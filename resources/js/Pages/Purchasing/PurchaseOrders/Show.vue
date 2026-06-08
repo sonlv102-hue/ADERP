@@ -140,6 +140,10 @@
                 <th class="text-left px-5 py-3 font-semibold text-gray-600">Đơn vị</th>
                 <th class="text-right px-5 py-3 font-semibold text-gray-600">SL</th>
                 <th class="text-right px-5 py-3 font-semibold text-gray-600">Đơn giá</th>
+                <template v-if="hasVat">
+                  <th class="text-right px-5 py-3 font-semibold text-gray-600">VAT (%)</th>
+                  <th class="text-right px-5 py-3 font-semibold text-gray-600">Tiền VAT</th>
+                </template>
                 <th class="text-right px-5 py-3 font-semibold text-gray-600">Thành tiền</th>
               </tr>
             </thead>
@@ -150,16 +154,34 @@
                 <td class="px-5 py-3 text-gray-600">{{ item.unit }}</td>
                 <td class="px-5 py-3 text-right text-gray-700">{{ item.quantity.toLocaleString('vi-VN') }}</td>
                 <td class="px-5 py-3 text-right text-gray-700">{{ formatVnd(item.unit_price) }}</td>
+                <template v-if="hasVat">
+                  <td class="px-5 py-3 text-right text-gray-600">{{ (item.vat_rate ?? 0) }}%</td>
+                  <td class="px-5 py-3 text-right text-gray-700">{{ formatVnd(item.vat_amount ?? 0) }}</td>
+                </template>
                 <td class="px-5 py-3 text-right font-medium text-gray-900">{{ formatVnd(item.total) }}</td>
               </tr>
             </tbody>
             <tfoot class="bg-gray-50 border-t border-gray-200">
-              <tr>
-                <td colspan="5" class="px-5 py-3 text-right font-semibold text-gray-700">Tổng cộng:</td>
-                <td class="px-5 py-3 text-right font-bold text-gray-900 text-base">
-                  {{ formatVnd(grandTotal) }}
-                </td>
-              </tr>
+              <template v-if="hasVat">
+                <tr>
+                  <td :colspan="hasVat ? 7 : 5" class="px-5 py-2 text-right text-gray-600">Tổng tiền hàng:</td>
+                  <td class="px-5 py-2 text-right font-medium text-gray-800">{{ formatVnd(totalSubtotal) }}</td>
+                </tr>
+                <tr>
+                  <td :colspan="hasVat ? 7 : 5" class="px-5 py-2 text-right text-gray-600">Tổng VAT:</td>
+                  <td class="px-5 py-2 text-right font-medium text-blue-700">{{ formatVnd(totalVat) }}</td>
+                </tr>
+                <tr class="border-t border-gray-200">
+                  <td :colspan="hasVat ? 7 : 5" class="px-5 py-3 text-right font-semibold text-gray-700">Tổng thanh toán:</td>
+                  <td class="px-5 py-3 text-right font-bold text-gray-900 text-base">{{ formatVnd(totalPayment) }}</td>
+                </tr>
+              </template>
+              <template v-else>
+                <tr>
+                  <td colspan="5" class="px-5 py-3 text-right font-semibold text-gray-700">Tổng cộng:</td>
+                  <td class="px-5 py-3 text-right font-bold text-gray-900 text-base">{{ formatVnd(totalSubtotal) }}</td>
+                </tr>
+              </template>
             </tfoot>
           </table>
         </div>
@@ -273,9 +295,19 @@ const tabs = computed(() => [
   { key: 'invoices', label: 'Hóa đơn đầu vào',   count: props.order.purchase_invoices?.length },
 ]);
 
-const grandTotal = computed(() =>
+const hasVat = computed(() => props.order.invoice_type === 'vat');
+
+const totalSubtotal = computed(() =>
   props.order.items.reduce((sum, item) => sum + Number(item.total), 0)
 );
+
+const totalVat = computed(() =>
+  hasVat.value
+    ? props.order.items.reduce((sum, item) => sum + Number(item.vat_amount ?? 0), 0)
+    : 0
+);
+
+const totalPayment = computed(() => totalSubtotal.value + totalVat.value);
 
 const actionRoutes = {
   send:    () => route('purchasing.purchase-orders.send',    props.order.id),
