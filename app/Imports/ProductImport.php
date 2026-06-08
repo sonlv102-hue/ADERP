@@ -41,7 +41,7 @@ class ProductImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnE
     public function rules(): array
     {
         return [
-            'name'       => 'required|string|max:200',
+            'name'       => 'required|string|max:255',
             'unit_price' => 'nullable|numeric|min:0',
         ];
     }
@@ -58,8 +58,39 @@ class ProductImport implements ToModel, WithHeadingRow, WithValidation, SkipsOnE
 
     public function onFailure(Failure ...$failures): void
     {
+        $labels = [
+            'name'       => 'Tên sản phẩm',
+            'unit_price' => 'Đơn giá bán',
+            'cost_price' => 'Giá vốn',
+            'unit'       => 'Đơn vị tính',
+        ];
+
+        $maxLengths = [
+            'name' => 255,
+        ];
+
         foreach ($failures as $f) {
-            $this->errors[] = "Row {$f->row()}: " . implode(', ', $f->errors());
+            $attr = $f->attribute();
+            $val  = (string) ($f->values()[$attr] ?? '');
+            $len  = mb_strlen($val);
+            $label = $labels[$attr] ?? $attr;
+
+            $messages = [];
+            foreach ($f->errors() as $error) {
+                if (str_contains($error, 'validation.max')) {
+                    $max = $maxLengths[$attr] ?? '?';
+                    $preview = $len > 60 ? mb_substr($val, 0, 60) . '...' : $val;
+                    $messages[] = "{$label} dài {$len} ký tự, vượt quá giới hạn {$max}: \"{$preview}\"";
+                } elseif (str_contains($error, 'validation.required')) {
+                    $messages[] = "{$label} là bắt buộc.";
+                } elseif (str_contains($error, 'validation.numeric')) {
+                    $messages[] = "{$label} phải là số.";
+                } else {
+                    $messages[] = $error;
+                }
+            }
+
+            $this->errors[] = "Row {$f->row()}: " . implode('; ', $messages);
         }
     }
 }
