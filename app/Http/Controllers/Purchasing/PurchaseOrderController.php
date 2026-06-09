@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Purchasing;
 
 use App\Enums\PurchaseOrderInvoiceType;
 use App\Enums\PurchaseOrderStatus;
+use App\Exports\TemplateExport;
 use App\Http\Controllers\Controller;
+use App\Imports\PurchaseOrderImport;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Project;
@@ -19,6 +21,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
 
 class PurchaseOrderController extends Controller
 {
@@ -26,40 +29,149 @@ class PurchaseOrderController extends Controller
 
     public function index(): Response
     {
-        return Inertia::render('Purchasing/PurchaseOrders/Index', [
-            'orders' => PurchaseOrder::with(['supplier', 'warehouse', 'creator'])
-                ->withCount('items')
-                ->addSelect([
-                    'items_total' => PurchaseOrderItem::selectRaw('COALESCE(SUM(quantity * unit_price * (1 + COALESCE(vat_rate, 0) / 100.0)), 0)')
-                        ->whereColumn('purchase_order_id', 'purchase_orders.id'),
-                    'invoice_status' => \App\Models\PurchaseInvoice::select('status')
-                        ->whereColumn('purchase_order_id', 'purchase_orders.id')
-                        ->where('status', '!=', 'cancelled')
-                        ->orderByDesc('id')
-                        ->limit(1),
-                ])
-                ->orderByDesc('id')
-                ->paginate(20)
-                ->through(fn ($po) => [
-                    'id'             => $po->id,
-                    'code'           => $po->code,
-                    'order_date'     => $po->order_date->format('d/m/Y'),
-                    'expected_date'  => $po->expected_date?->format('d/m/Y'),
-                    'status'         => $po->status->value,
-                    'status_label'   => $po->status->label(),
-                    'status_color'   => $po->status->color(),
-                    'supplier'       => $po->supplier->name,
-                    'warehouse'      => $po->warehouse->name,
-                    'creator'        => $po->creator->name,
-                    'items_count'    => $po->items_count,
-                    'total'          => (float) $po->items_total,
-                    'receipt_status'      => $this->resolveReceiptStatus($po->status->value),
-                    'invoice_status'      => $po->invoice_status,
-                    'invoice_type'        => $po->invoice_type->value,
-                    'invoice_type_label'  => $po->invoice_type->label(),
-                    'invoice_type_color'  => $po->invoice_type->color(),
-                ]),
+        return Inertia::render('Purchasing/PurchaseOrders/Index', $this->ordersListProps());
+    }
+
+    public function importTemplate()
+    {
+        $headers = [
+            'order_code', 'order_date', 'expected_date', 'supplier_code',
+            'warehouse', 'product_code', 'quantity', 'unit_price', 'vat_rate',
+            'subtotal', 'tax_amount', 'total', 'notes',
+        ];
+
+        $sampleRows = [
+            ['[Hướng dẫn] Bắt buộc: order_code, order_date, supplier_code, warehouse, product_code, quantity, unit_price. Xóa 3 dòng này trước khi import.'],
+            ['Cùng order_code trên nhiều dòng = nhiều sản phẩm trong 1 đơn. supplier_code = Mã NCC, warehouse = Tên kho.'],
+            ['subtotal/tax_amount/total chỉ tham khảo — hệ thống tự tính lại từ quantity × unit_price × vat_rate.'],
+            ['MH-2026-001', '2026-06-01', '2026-06-15', 'NCC-0001', 'Kho chính', 'SP-0001', 2, 5000000, 10, 10000000, 1000000, 11000000, 'Đơn mua tháng 6'],
+            ['MH-2026-001', '',           '',            '',          '',           'SP-0002', 1, 3000000,  8,  3000000,  240000,  3240000, ''],
+            ['MH-2026-002', '2026-06-05', '',            'NCC-0002', 'Kho HCM',    'SP-0003', 5, 1000000,  0,  5000000,       0,  5000000, ''],
+        ];
+
+        return Excel::download(new TemplateExport($headers, 'Đơn mua hàng', $sampleRows), 'purchase-order-template.xlsx');
+    }
+
+    public function importPreview(Request $request): Response
+    {
+        $request->validate([
+            'file' => ['required', 'file', 'extensions:xlsx,xls,csv', 'max:10240'],
         ]);
+
+        $suppliers    = Supplier::where('is_active', true)->get(['id', 'code', 'name']);
+        $warehouses   = Warehouse::where('is_active', true)->get(['id', 'name']);
+        $products     = Product::where('is_active', true)->get(['id', 'code', 'name', 'unit']);
+        $existingCodes= PurchaseOrder::pluck('code')->toArray();
+
+        $import = new PurchaseOrderImport($suppliers, $warehouses, $products, $existingCodes);
+        Excel::import($import, $request->file('file'));
+
+        $validOrders = collect($import->parsedOrders)
+            ->filter(fn ($o) => !isset($o['_invalid']) && !empty($o['items']))
+            ->values()
+            ->toArray();
+
+        session(['po_import' => $validOrders]);
+
+        return Inertia::render('Purchasing/PurchaseOrders/Index', array_merge(
+            $this->ordersListProps(),
+            [
+                'preview' => [
+                    'total_rows'     => $import->totalRows,
+                    'valid_orders'   => count($validOrders),
+                    'error_count'    => count($import->errors),
+                    'warning_count'  => count($import->warnings),
+                    'orders'         => $validOrders,
+                    'errors'         => $import->errors,
+                    'warnings'       => $import->warnings,
+                    'has_duplicates' => collect($validOrders)->contains('exists_in_db', true),
+                ],
+            ]
+        ));
+    }
+
+    public function importConfirm(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'duplicate_action' => ['required', Rule::in(['skip', 'update', 'abort'])],
+        ]);
+
+        $validOrders = session('po_import', []);
+        if (empty($validOrders)) {
+            return back()->with('error', 'Phiên import đã hết hạn. Vui lòng upload lại file.');
+        }
+
+        $dupAction    = $data['duplicate_action'];
+        $existingMap  = PurchaseOrder::whereIn('code', array_column($validOrders, 'code'))
+            ->pluck('id', 'code')
+            ->toArray();
+
+        if ($dupAction === 'abort' && !empty($existingMap)) {
+            session()->forget('po_import');
+            return back()->with('error', 'Import bị hủy: ' . count($existingMap) . ' mã đơn đã tồn tại: ' . implode(', ', array_keys($existingMap)));
+        }
+
+        $created = 0;
+        $updated = 0;
+        $skipped = 0;
+
+        DB::transaction(function () use ($validOrders, $existingMap, $dupAction, &$created, &$updated, &$skipped) {
+            foreach ($validOrders as $orderData) {
+                $code       = $orderData['code'];
+                $existingId = $existingMap[$code] ?? null;
+
+                if ($existingId) {
+                    if ($dupAction === 'skip') { $skipped++; continue; }
+
+                    $po = PurchaseOrder::find($existingId);
+                    if ($po->status !== PurchaseOrderStatus::Draft) { $skipped++; continue; }
+
+                    $po->update([
+                        'supplier_id'   => $orderData['supplier_id'],
+                        'warehouse_id'  => $orderData['warehouse_id'],
+                        'order_date'    => $orderData['order_date'],
+                        'expected_date' => $orderData['expected_date'],
+                        'notes'         => $orderData['notes'],
+                    ]);
+                    $po->items()->delete();
+                    $updated++;
+                } else {
+                    $po = PurchaseOrder::create([
+                        'code'          => $code,
+                        'supplier_id'   => $orderData['supplier_id'],
+                        'warehouse_id'  => $orderData['warehouse_id'],
+                        'order_date'    => $orderData['order_date'],
+                        'expected_date' => $orderData['expected_date'],
+                        'notes'         => $orderData['notes'],
+                        'created_by'    => auth()->id(),
+                    ]);
+                    $created++;
+                }
+
+                foreach ($orderData['items'] as $item) {
+                    $po->items()->create([
+                        'product_id' => $item['product_id'],
+                        'quantity'   => $item['quantity'],
+                        'unit_price' => $item['unit_price'],
+                        'vat_rate'   => $item['vat_rate'],
+                    ]);
+                }
+            }
+        });
+
+        session()->forget('po_import');
+
+        activity()
+            ->causedBy(auth()->user())
+            ->withProperties(['created' => $created, 'updated' => $updated, 'skipped' => $skipped])
+            ->log("Import đơn mua hàng: tạo {$created}, cập nhật {$updated}, bỏ qua {$skipped}.");
+
+        $msg = "Import thành công: tạo {$created} đơn mua";
+        if ($updated) $msg .= ", cập nhật {$updated}";
+        if ($skipped) $msg .= ", bỏ qua {$skipped}";
+        $msg .= '.';
+
+        return redirect()->route('purchasing.purchase-orders.index')->with('success', $msg);
     }
 
     public function create(Request $request): Response
@@ -330,6 +442,44 @@ class PurchaseOrderController extends Controller
 
         return redirect()->route('purchasing.purchase-orders.index')
             ->with('success', "Đã xóa đơn mua hàng {$code}.");
+    }
+
+    private function ordersListProps(): array
+    {
+        return [
+            'orders' => PurchaseOrder::with(['supplier', 'warehouse', 'creator'])
+                ->withCount('items')
+                ->addSelect([
+                    'items_total' => PurchaseOrderItem::selectRaw('COALESCE(SUM(quantity * unit_price * (1 + COALESCE(vat_rate, 0) / 100.0)), 0)')
+                        ->whereColumn('purchase_order_id', 'purchase_orders.id'),
+                    'invoice_status' => \App\Models\PurchaseInvoice::select('status')
+                        ->whereColumn('purchase_order_id', 'purchase_orders.id')
+                        ->where('status', '!=', 'cancelled')
+                        ->orderByDesc('id')
+                        ->limit(1),
+                ])
+                ->orderByDesc('id')
+                ->paginate(20)
+                ->through(fn ($po) => [
+                    'id'                 => $po->id,
+                    'code'               => $po->code,
+                    'order_date'         => $po->order_date->format('d/m/Y'),
+                    'expected_date'      => $po->expected_date?->format('d/m/Y'),
+                    'status'             => $po->status->value,
+                    'status_label'       => $po->status->label(),
+                    'status_color'       => $po->status->color(),
+                    'supplier'           => $po->supplier->name,
+                    'warehouse'          => $po->warehouse->name,
+                    'creator'            => $po->creator->name,
+                    'items_count'        => $po->items_count,
+                    'total'              => (float) $po->items_total,
+                    'receipt_status'     => $this->resolveReceiptStatus($po->status->value),
+                    'invoice_status'     => $po->invoice_status,
+                    'invoice_type'       => $po->invoice_type->value,
+                    'invoice_type_label' => $po->invoice_type->label(),
+                    'invoice_type_color' => $po->invoice_type->color(),
+                ]),
+        ];
     }
 
     private function resolveReceiptStatus(string $status): string

@@ -389,6 +389,9 @@ Route::middleware('auth')->group(function () {
 
     // Purchasing - mua hàng
     Route::prefix('purchasing')->name('purchasing.')->middleware('can:purchasing.view')->group(function () {
+        Route::get('purchase-orders/import/template', [PurchaseOrderController::class, 'importTemplate'])->name('purchase-orders.import.template');
+        Route::post('purchase-orders/import/preview',  [PurchaseOrderController::class, 'importPreview'])->name('purchase-orders.import.preview');
+        Route::post('purchase-orders/import/confirm',  [PurchaseOrderController::class, 'importConfirm'])->name('purchase-orders.import.confirm');
         Route::resource('purchase-orders', PurchaseOrderController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
         Route::post('purchase-orders/{purchaseOrder}/send',    [PurchaseOrderController::class, 'send'])->name('purchase-orders.send');
         Route::post('purchase-orders/{purchaseOrder}/receive', [PurchaseOrderController::class, 'receive'])->name('purchase-orders.receive');
