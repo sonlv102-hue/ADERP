@@ -206,7 +206,7 @@
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Tên sản phẩm</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">ĐVT</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">SL</th>
-              <th class="text-right px-5 py-3 font-semibold text-gray-600">Đơn giá (gồm VAT)</th>
+              <th class="text-right px-5 py-3 font-semibold text-gray-600">Đơn giá</th>
               <th class="text-center px-3 py-3 font-semibold text-gray-600">% VAT</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">Chưa thuế</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">Thuế GTGT</th>

@@ -424,9 +424,9 @@ class StockEntryController extends Controller
                     'quantity'   => $item->quantity,
                     'unit_price' => (float) $item->unit_price,
                     'tax_rate'   => (float) $item->tax_rate,
-                    'subtotal_excl' => round($item->quantity * $item->unit_price / (1 + $item->tax_rate / 100)),
-                    'tax_amount'    => round($item->quantity * $item->unit_price - $item->quantity * $item->unit_price / (1 + $item->tax_rate / 100)),
-                    'total'      => $item->quantity * $item->unit_price,
+                    'subtotal_excl' => (int) round($item->quantity * $item->unit_price),
+                    'tax_amount'    => (int) round($item->quantity * $item->unit_price * $item->tax_rate / 100),
+                    'total'         => (int) round($item->quantity * $item->unit_price * (1 + $item->tax_rate / 100)),
                     'serials' => $item->serials->map(fn ($s) => [
                         'serial_number' => $s->serial_number,
                         'status' => $s->status->value,

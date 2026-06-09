@@ -340,13 +340,12 @@ class StockService
         $lines = [];
 
         foreach ($entry->items as $item) {
-            $unitInclTax = (float) ($item->unit_price ?? $item->product?->cost_price ?? 0);
+            $unitExclTax = (float) ($item->unit_price ?? $item->product?->cost_price ?? 0);
             $taxRate     = (float) ($item->tax_rate ?? 10);
-            $divisor     = 1 + $taxRate / 100;
 
-            $lineInclTax = $unitInclTax * $item->quantity;
-            $lineExclTax = $lineInclTax / $divisor;
-            $lineTax     = $lineInclTax - $lineExclTax;
+            $lineExclTax = $unitExclTax * $item->quantity;
+            $lineTax     = $lineExclTax * $taxRate / 100;
+            $lineInclTax = $lineExclTax + $lineTax;
 
             $exclRounded = (int) round($lineExclTax);
             $taxRounded  = (int) round($lineTax);

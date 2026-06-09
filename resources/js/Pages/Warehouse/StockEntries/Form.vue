@@ -92,7 +92,7 @@
                 <th class="text-right px-5 py-3 font-semibold text-gray-600">Đã nhận</th>
                 <th class="text-right px-5 py-3 font-semibold text-gray-600">Còn lại</th>
                 <th class="text-right px-5 py-3 font-semibold text-gray-600">Nhận lần này</th>
-                <th class="text-right px-5 py-3 font-semibold text-gray-600">Đơn giá (gồm VAT)</th>
+                <th class="text-right px-5 py-3 font-semibold text-gray-600">Đơn giá</th>
                 <th class="text-center px-3 py-3 font-semibold text-gray-600">% VAT</th>
                 <th class="text-right px-5 py-3 font-semibold text-gray-600">Thành tiền</th>
               </tr>
@@ -138,13 +138,13 @@
                     </select>
                   </td>
                   <td class="px-5 py-3 text-right font-medium text-gray-900">
-                    {{ formatVnd(item.quantity * item.unit_price) }}
+                    {{ formatVnd(Math.round(item.quantity * item.unit_price * (1 + item.tax_rate / 100))) }}
                   </td>
                 </tr>
 
                 <!-- Serial scan panel -->
                 <tr v-if="item.quantity > 0" class="bg-blue-50">
-                  <td colspan="7" class="px-5 py-3">
+                  <td colspan="8" class="px-5 py-3">
                     <div class="space-y-2.5">
                       <div class="flex items-center justify-between">
                         <div class="flex items-center gap-2">
@@ -209,7 +209,7 @@
             </tbody>
             <tfoot class="bg-gray-50 border-t border-gray-200">
               <tr>
-                <td colspan="6" class="px-5 py-3 text-right font-semibold text-gray-700">Tổng cộng:</td>
+                <td colspan="7" class="px-5 py-3 text-right font-semibold text-gray-700">Tổng cộng:</td>
                 <td class="px-5 py-3 text-right font-bold text-gray-900">{{ formatVnd(grandTotal) }}</td>
               </tr>
             </tfoot>
@@ -339,7 +339,7 @@ const handlePaste = (index, event) => {
 };
 
 const grandTotal = computed(() =>
-  form.items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0)
+  form.items.reduce((sum, item) => sum + Math.round(item.quantity * item.unit_price * (1 + item.tax_rate / 100)), 0)
 );
 
 const receivingCount = computed(() => form.items.filter(item => item.quantity > 0).length);
