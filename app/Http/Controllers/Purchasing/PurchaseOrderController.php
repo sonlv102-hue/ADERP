@@ -30,7 +30,7 @@ class PurchaseOrderController extends Controller
             'orders' => PurchaseOrder::with(['supplier', 'warehouse', 'creator'])
                 ->withCount('items')
                 ->addSelect([
-                    'items_total' => PurchaseOrderItem::selectRaw('COALESCE(SUM(quantity * unit_price), 0)')
+                    'items_total' => PurchaseOrderItem::selectRaw('COALESCE(SUM(quantity * unit_price * (1 + COALESCE(vat_rate, 0) / 100.0)), 0)')
                         ->whereColumn('purchase_order_id', 'purchase_orders.id'),
                     'invoice_status' => \App\Models\PurchaseInvoice::select('status')
                         ->whereColumn('purchase_order_id', 'purchase_orders.id')
