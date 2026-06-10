@@ -432,10 +432,12 @@ class PayrollService
         if ($bhtn > 0) {
             $lines[] = ['account' => '3385', 'debit' => 0, 'credit' => $bhtn, 'description' => "BHTN phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
         }
-        // Cr: KPCĐ phải nộp (TK 3382) — do NSDLĐ chịu, base = tổng insurance_base NLĐ đóng BHXH bắt buộc
-        $unionFee = round((float)$payroll->total_trade_union_fee);
-        if ($unionFee > 0) {
-            $lines[] = ['account' => '3382', 'debit' => 0, 'credit' => $unionFee, 'description' => "KPCĐ phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
+        // Cr: KPCĐ phải nộp (TK 3382) — chỉ hạch toán khi kế toán xác nhận ghi nhận (union_fee_include = true)
+        if ($payroll->union_fee_include === true) {
+            $unionFee = round((float)$payroll->total_trade_union_fee);
+            if ($unionFee > 0) {
+                $lines[] = ['account' => '3382', 'debit' => 0, 'credit' => $unionFee, 'description' => "KPCĐ phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
+            }
         }
 
         if (empty($lines)) {

@@ -71,7 +71,7 @@ class PayrollController extends Controller
 
     public function show(Payroll $payroll): Response
     {
-        $payroll->load('creator', 'locker');
+        $payroll->load('creator', 'locker', 'unionFeeConfirmedBy');
 
         $items = $payroll->items()->with('employee', 'user', 'salaryJournalEntry')
             ->orderBy('id')
@@ -104,6 +104,10 @@ class PayrollController extends Controller
                 'is_locked'                 => (bool) $payroll->is_locked,
                 'locked_by_name'            => $payroll->locker?->name,
                 'locked_at'                 => $payroll->locked_at?->format('d/m/Y H:i'),
+                'total_trade_union_fee'     => (float) $payroll->total_trade_union_fee,
+                'union_fee_include'         => $payroll->union_fee_include,
+                'union_fee_confirmed_by'    => $payroll->unionFeeConfirmedBy?->name,
+                'union_fee_confirmed_at'    => $payroll->union_fee_confirmed_at?->format('d/m/Y H:i'),
             ],
             'items'        => $items,
             'bankAccounts' => $bankAccounts,
@@ -316,6 +320,31 @@ class PayrollController extends Controller
         } catch (RuntimeException $e) {
             return back()->with('error', $e->getMessage());
         }
+    }
+
+    public function setUnionFee(Request $request, Payroll $payroll): RedirectResponse
+    {
+        if ($payroll->status->value !== 'draft') {
+            return back()->with('error', 'Chỉ có thể thay đổi cấu hình phí công đoàn khi bảng lương ở trạng thái nháp.');
+        }
+
+        if ($payroll->is_locked) {
+            return back()->with('error', 'Bảng lương đã bị khóa.');
+        }
+
+        $data = $request->validate([
+            'union_fee_include' => ['required', 'boolean'],
+        ]);
+
+        $include = (bool) $data['union_fee_include'];
+        $payroll->update([
+            'union_fee_include'      => $include,
+            'union_fee_confirmed_by' => auth()->id(),
+            'union_fee_confirmed_at' => now(),
+        ]);
+
+        $label = $include ? 'ghi nhận' : 'không ghi nhận';
+        return back()->with('success', "Đã xác nhận {$label} phí công đoàn vào chi phí.");
     }
 
     public function payEmployee(Request $request, Payroll $payroll, PayrollItem $item): RedirectResponse

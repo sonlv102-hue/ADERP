@@ -17,6 +17,7 @@ class Payroll extends Model
         'total_pit', 'total_deductions', 'total_net_salary',
         'created_by', 'notes',
         'is_locked', 'locked_by', 'locked_at',
+        'union_fee_include', 'union_fee_confirmed_by', 'union_fee_confirmed_at',
     ];
 
     protected function casts(): array
@@ -35,6 +36,8 @@ class Payroll extends Model
             'total_pit'                => 'decimal:0',
             'total_deductions'         => 'decimal:0',
             'total_net_salary'         => 'decimal:0',
+            'union_fee_include'        => 'boolean',
+            'union_fee_confirmed_at'   => 'datetime',
         ];
     }
 
@@ -51,6 +54,11 @@ class Payroll extends Model
     public function locker(): BelongsTo
     {
         return $this->belongsTo(User::class, 'locked_by');
+    }
+
+    public function unionFeeConfirmedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'union_fee_confirmed_by');
     }
 
     public static function generateCode(string $period): string

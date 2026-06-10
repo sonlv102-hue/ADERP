@@ -105,6 +105,35 @@
         </div>
       </div>
 
+      <!-- Union fee confirmation panel -->
+      <div v-if="payroll.total_trade_union_fee > 0" class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <p class="text-xs font-semibold text-amber-800 mb-0.5">Kinh phí công đoàn (KPCĐ) doanh nghiệp phải nộp</p>
+          <p class="text-xs text-amber-700">
+            Hệ thống tính được: <span class="font-mono font-bold">{{ fv(payroll.total_trade_union_fee) }} đ</span>
+            <span v-if="payroll.union_fee_include === null"> · <em class="not-italic text-gray-500">Chưa xác nhận — sẽ không hạch toán vào bút toán lương</em></span>
+            <span v-else-if="payroll.union_fee_include" class="text-green-700"> · Đã chọn ghi nhận vào chi phí · {{ payroll.union_fee_confirmed_by }} · {{ payroll.union_fee_confirmed_at }}</span>
+            <span v-else class="text-gray-600"> · Đã chọn không ghi nhận · {{ payroll.union_fee_confirmed_by }} · {{ payroll.union_fee_confirmed_at }}</span>
+          </p>
+        </div>
+        <div v-if="payroll.status === 'draft' && !payroll.is_locked" class="flex items-center gap-2 shrink-0">
+          <button @click="setUnionFee(true)"
+            :class="payroll.union_fee_include === true ? 'bg-green-600 text-white border-green-600' : 'bg-white border-green-500 text-green-700 hover:bg-green-50'"
+            class="border px-3 py-1.5 rounded-lg text-xs font-medium">
+            Ghi nhận vào chi phí
+          </button>
+          <button @click="setUnionFee(false)"
+            :class="payroll.union_fee_include === false ? 'bg-gray-500 text-white border-gray-500' : 'bg-white border-gray-400 text-gray-600 hover:bg-gray-50'"
+            class="border px-3 py-1.5 rounded-lg text-xs font-medium">
+            Không ghi nhận
+          </button>
+        </div>
+        <span v-else-if="payroll.union_fee_include !== null" class="text-xs px-2 py-1 rounded-full font-medium shrink-0"
+          :class="payroll.union_fee_include ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'">
+          {{ payroll.union_fee_include ? 'Đã ghi nhận' : 'Không ghi nhận' }}
+        </span>
+      </div>
+
       <!-- Full Payroll Table -->
       <div class="bg-white rounded-xl shadow-sm overflow-hidden" id="payroll-table-container">
         <div class="overflow-x-auto">
@@ -556,6 +585,15 @@ function unconfirmPayroll() {
 function syncFromEmployees() {
   if (confirm('Đồng bộ dữ liệu lương từ hồ sơ nhân viên?\nLương cơ bản và phụ cấp sẽ được cập nhật theo hồ sơ hiện tại.\nBonus, tạm ứng và phụ cấp hiệu quả nhập tay sẽ được giữ nguyên.')) {
     router.post(route('accounting.payrolls.sync-employees', props.payroll.id));
+  }
+}
+
+function setUnionFee(include) {
+  const msg = include
+    ? `Ghi nhận phí công đoàn ${fv(props.payroll.total_trade_union_fee)} đ vào chi phí?\nSẽ hạch toán Nợ chi phí lương / Có TK 3382 khi xác nhận bảng lương.`
+    : 'Không ghi nhận phí công đoàn vào chi phí?\nKPCĐ sẽ không đưa vào bút toán kế toán kỳ này.';
+  if (confirm(msg)) {
+    router.post(route('accounting.payrolls.set-union-fee', props.payroll.id), { union_fee_include: include });
   }
 }
 
