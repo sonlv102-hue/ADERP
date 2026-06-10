@@ -15,18 +15,30 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class SupplierController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $query = Supplier::orderBy('code');
+
+        if ($request->filled('search')) {
+            $query->where(fn ($q) =>
+                $q->where('name', 'ilike', "%{$request->search}%")
+                  ->orWhere('code', 'ilike', "%{$request->search}%")
+                  ->orWhere('phone', 'ilike', "%{$request->search}%")
+                  ->orWhere('email', 'ilike', "%{$request->search}%")
+                  ->orWhere('tax_code', 'ilike', "%{$request->search}%")
+            );
+        }
+
         return Inertia::render('Warehouse/Suppliers/Index', [
-            'suppliers' => Supplier::orderBy('code')->paginate(20)
-                ->through(fn ($s) => [
-                    'id' => $s->id,
-                    'code' => $s->code,
-                    'name' => $s->name,
-                    'phone' => $s->phone,
-                    'email' => $s->email,
-                    'is_active' => $s->is_active,
-                ]),
+            'suppliers' => $query->paginate(20)->through(fn ($s) => [
+                'id'        => $s->id,
+                'code'      => $s->code,
+                'name'      => $s->name,
+                'phone'     => $s->phone,
+                'email'     => $s->email,
+                'is_active' => $s->is_active,
+            ]),
+            'filters' => $request->only(['search']),
         ]);
     }
 

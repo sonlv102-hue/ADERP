@@ -1,9 +1,18 @@
 <template>
   <AppLayout>
     <div class="space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <h1 class="text-2xl font-bold text-gray-900">Nhà cung cấp</h1>
-        <div class="flex gap-2">
+        <div class="flex gap-2 flex-wrap items-center">
+          <!-- Search -->
+          <div class="relative">
+            <svg class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input v-model="search" @input="applyFilters" type="text" placeholder="Tìm mã, tên, SĐT, email..."
+              class="pl-9 pr-8 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-400 w-64" />
+            <button v-if="search" @click="clearFilters" class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none">&times;</button>
+          </div>
           <button @click="showImport = true"
             class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -102,7 +111,25 @@ import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
 import Modal from '@/Components/Shared/Modal.vue';
 
-defineProps({ suppliers: Object });
+const props = defineProps({ suppliers: Object, filters: Object });
+
+const search = ref(props.filters?.search ?? '');
+
+let searchTimer = null;
+function applyFilters() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    router.get(route('warehouse.suppliers.index'),
+      { search: search.value },
+      { preserveState: true, replace: true }
+    );
+  }, 300);
+}
+
+function clearFilters() {
+  search.value = '';
+  router.get(route('warehouse.suppliers.index'), {}, { preserveState: true, replace: true });
+}
 
 const deleteTarget = ref(null);
 const showImport = ref(false);
