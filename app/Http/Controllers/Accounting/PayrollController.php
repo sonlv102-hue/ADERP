@@ -302,7 +302,8 @@ class PayrollController extends Controller
         try {
             $this->service->unconfirmPayroll($payroll);
             return back()->with('success', "Đã hủy xác nhận bảng lương {$payroll->code}. Bảng lương trở về trạng thái nháp.");
-        } catch (\RuntimeException $e) {
+        } catch (\Throwable $e) {
+            \Log::error('unconfirm payroll failed', ['payroll' => $payroll->id, 'msg' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
             return back()->with('error', $e->getMessage());
         }
     }
