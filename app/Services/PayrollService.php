@@ -285,6 +285,87 @@ class PayrollService
         ]);
     }
 
+    public function syncFromEmployees(Payroll $payroll): void
+    {
+        if ($payroll->status !== PayrollStatus::Draft) {
+            throw new RuntimeException('Chỉ đồng bộ bảng lương ở trạng thái nháp.');
+        }
+
+        DB::transaction(function () use ($payroll) {
+            $items = $payroll->items()
+                ->with('employee')
+                ->where('status', PayrollItemStatus::Pending)
+                ->get();
+
+            foreach ($items as $item) {
+                if (!$item->employee) {
+                    continue;
+                }
+
+                $employee = $item->employee;
+
+                $base           = (float) ($employee->base_salary              ?? 0);
+                $allocResp      = (float) ($employee->allowance_responsibility ?? 0);
+                $allocLunch     = (float) ($employee->allowance_lunch          ?? 0);
+                $allocPhone     = (float) ($employee->allowance_phone          ?? 0);
+                $allocTransport = (float) ($employee->allowance_transport      ?? 0);
+                $allocOther     = (float) ($employee->allowance                ?? 0);
+                $dependents     = (int)   ($employee->dependents_count  ?? 0);
+                $insSubject     = (bool)  ($employee->insurance_subject ?? true);
+                $standardDays   = (int)   ($employee->standard_days    ?? 26);
+
+                // Giữ lại các giá trị nhập tay theo kỳ lương
+                $allocPerf   = (float) ($item->allowance_performance ?? 0);
+                $bonus       = (float) ($item->bonus                 ?? 0);
+                $workingDays = (int)   ($item->working_days          ?? $standardDays);
+
+                $bhxhAllowances    = $allocResp + $allocOther;
+                $nonBhxhAllowances = $allocLunch + $allocPhone + $allocTransport + $allocPerf + $bonus;
+
+                $bd = $this->pit->breakdown(
+                    $base,
+                    $bhxhAllowances,
+                    $nonBhxhAllowances,
+                    $dependents,
+                    $insSubject,
+                    $workingDays,
+                    $standardDays,
+                );
+
+                $tradeUnionFee = 0;
+                if ($this->isUnionFeeEnabled() && $insSubject && $bd['insurance_base'] > 0) {
+                    $tradeUnionFee = (int) round($bd['insurance_base'] * $this->getUnionFeeRate() / 100);
+                }
+
+                $item->update([
+                    'base_salary'              => $base,
+                    'allowance'                => $allocOther,
+                    'allowance_responsibility' => $allocResp,
+                    'allowance_lunch'          => $allocLunch,
+                    'allowance_phone'          => $allocPhone,
+                    'allowance_transport'      => $allocTransport,
+                    'standard_days'            => $standardDays,
+                    'dependents_count'         => $dependents,
+                    'insurance_subject'        => $insSubject,
+                    'gross_salary'             => $bd['gross_salary'],
+                    'insurance_base'           => $bd['insurance_base'],
+                    'bhxh_employee'            => $bd['bhxh_employee'],
+                    'bhyt_employee'            => $bd['bhyt_employee'],
+                    'bhtn_employee'            => $bd['bhtn_employee'],
+                    'bhxh_employer'            => $bd['bhxh_employer'],
+                    'bhyt_employer'            => $bd['bhyt_employer'],
+                    'bhtn_employer'            => $bd['bhtn_employer'],
+                    'pit'                      => $bd['pit'],
+                    'deductions'               => $bd['ins_employee'] + $bd['pit'],
+                    'net_salary'               => $bd['net_salary'],
+                    'trade_union_fee'          => $tradeUnionFee,
+                ]);
+            }
+
+            $this->recalculateTotals($payroll);
+        });
+    }
+
     /** Post journal entry when payroll is confirmed (TT133) */
     private function postPayrollJournalEntry(Payroll $payroll): void
     {

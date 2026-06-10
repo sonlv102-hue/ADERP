@@ -308,6 +308,16 @@ class PayrollController extends Controller
         }
     }
 
+    public function syncFromEmployees(Payroll $payroll): RedirectResponse
+    {
+        try {
+            $this->service->syncFromEmployees($payroll);
+            return back()->with('success', 'Đã đồng bộ dữ liệu lương từ hồ sơ nhân viên.');
+        } catch (RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
     public function payEmployee(Request $request, Payroll $payroll, PayrollItem $item): RedirectResponse
     {
         $data = $request->validate([

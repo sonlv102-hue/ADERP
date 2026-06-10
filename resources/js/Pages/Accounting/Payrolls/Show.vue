@@ -31,6 +31,12 @@
             In bảng lương
           </button>
 
+          <!-- Sync from employees (draft + not locked) -->
+          <button v-if="payroll.status === 'draft' && !payroll.is_locked" @click="syncFromEmployees"
+            class="flex items-center gap-1.5 px-3 py-1.5 border border-gray-400 text-gray-700 rounded-lg text-sm hover:bg-gray-50">
+            Đồng bộ từ hồ sơ NV
+          </button>
+
           <!-- Confirm (draft + not locked) -->
           <button v-if="payroll.status === 'draft' && !payroll.is_locked" @click="confirmPayroll"
             class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold shadow-sm">
@@ -544,6 +550,12 @@ function confirmPayroll() {
 function unconfirmPayroll() {
   if (confirm(`Hủy xác nhận bảng lương ${props.payroll.code}?\nBảng lương sẽ trở về trạng thái nháp và bút toán kế toán sẽ bị đảo.\nChỉ thực hiện khi cần sửa lương.`)) {
     router.post(route('accounting.payrolls.unconfirm', props.payroll.id));
+  }
+}
+
+function syncFromEmployees() {
+  if (confirm('Đồng bộ dữ liệu lương từ hồ sơ nhân viên?\nLương cơ bản và phụ cấp sẽ được cập nhật theo hồ sơ hiện tại.\nBonus, tạm ứng và phụ cấp hiệu quả nhập tay sẽ được giữ nguyên.')) {
+    router.post(route('accounting.payrolls.sync-employees', props.payroll.id));
   }
 }
 

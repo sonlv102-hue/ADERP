@@ -310,6 +310,7 @@ Route::middleware('auth')->group(function () {
         Route::put('payrolls/{payroll}/items/{item}', [PayrollController::class, 'updateItem'])->name('payrolls.items.update');
         Route::post('payrolls/{payroll}/confirm', [PayrollController::class, 'confirm'])->name('payrolls.confirm');
         Route::post('payrolls/{payroll}/unconfirm', [PayrollController::class, 'unconfirm'])->name('payrolls.unconfirm');
+        Route::post('payrolls/{payroll}/sync-employees', [PayrollController::class, 'syncFromEmployees'])->name('payrolls.sync-employees');
         Route::post('payrolls/{payroll}/items/{item}/pay', [PayrollController::class, 'payEmployee'])->name('payrolls.items.pay');
         Route::post('payrolls/{payroll}/lock', [PayrollController::class, 'lock'])->name('payrolls.lock')->middleware('can:accounting.manage');
         Route::post('payrolls/{payroll}/unlock', [PayrollController::class, 'unlock'])->name('payrolls.unlock')->middleware('can:accounting.manage');
