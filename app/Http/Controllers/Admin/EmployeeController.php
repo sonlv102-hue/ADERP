@@ -89,6 +89,7 @@ class EmployeeController extends Controller
             'notes'                    => ['nullable', 'string'],
         ]);
 
+        $data = $this->coerceSalaryFields($data);
         $employee = Employee::create([...$data, 'created_by' => auth()->id()]);
 
         return redirect()->route('admin.employees.show', $employee)
@@ -180,7 +181,7 @@ class EmployeeController extends Controller
             'notes'                    => ['nullable', 'string'],
         ]);
 
-        $employee->update($data);
+        $employee->update($this->coerceSalaryFields($data));
 
         return redirect()->route('admin.employees.show', $employee)
             ->with('success', 'Đã cập nhật.');
@@ -192,5 +193,13 @@ class EmployeeController extends Controller
 
         return redirect()->route('admin.employees.index')
             ->with('success', 'Đã xóa cán bộ.');
+    }
+
+    private function coerceSalaryFields(array $data): array
+    {
+        foreach (['base_salary', 'allowance', 'allowance_responsibility', 'allowance_lunch', 'allowance_phone', 'allowance_transport'] as $field) {
+            $data[$field] = (float) ($data[$field] ?? 0);
+        }
+        return $data;
     }
 }
