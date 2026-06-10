@@ -293,6 +293,20 @@ class PayrollController extends Controller
         }
     }
 
+    public function unconfirm(Payroll $payroll): RedirectResponse
+    {
+        if (!auth()->user()->hasRole('admin')) {
+            return back()->with('error', 'Chỉ Admin mới có thể hủy xác nhận bảng lương.');
+        }
+
+        try {
+            $this->service->unconfirmPayroll($payroll);
+            return back()->with('success', "Đã hủy xác nhận bảng lương {$payroll->code}. Bảng lương trở về trạng thái nháp.");
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
     public function payEmployee(Request $request, Payroll $payroll, PayrollItem $item): RedirectResponse
     {
         $data = $request->validate([

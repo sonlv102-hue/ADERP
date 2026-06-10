@@ -11,6 +11,7 @@ use App\Models\BankAccount;
 use App\Models\Employee;
 use App\Models\Payroll;
 use App\Models\PayrollItem;
+use App\Models\AccountingPostingJob;
 use App\Models\Setting;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -76,6 +77,30 @@ class PayrollService
         DB::transaction(function () use ($payroll) {
             $payroll->update(['status' => PayrollStatus::Confirmed]);
             $this->postPayrollJournalEntry($payroll);
+        });
+    }
+
+    public function unconfirmPayroll(Payroll $payroll): void
+    {
+        if ($payroll->status !== PayrollStatus::Confirmed) {
+            throw new \RuntimeException('Chỉ hủy xác nhận bảng lương ở trạng thái đã xác nhận.');
+        }
+        if ($payroll->is_locked) {
+            throw new \RuntimeException('Bảng lương đã bị khóa, không thể hủy xác nhận.');
+        }
+        if ($payroll->items()->where('status', PayrollItemStatus::Paid)->exists()) {
+            throw new \RuntimeException('Bảng lương đã có nhân viên được thanh toán, không thể hủy xác nhận.');
+        }
+
+        DB::transaction(function () use ($payroll) {
+            $this->accounting->reverseOrDelete('payroll', $payroll->id, "Hủy xác nhận bảng lương {$payroll->code}");
+
+            AccountingPostingJob::where('source_type', 'payroll')
+                ->where('source_id', $payroll->id)
+                ->where('posting_type', 'salary')
+                ->delete();
+
+            $payroll->update(['status' => PayrollStatus::Draft]);
         });
     }
 

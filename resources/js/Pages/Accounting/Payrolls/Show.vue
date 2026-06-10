@@ -37,6 +37,12 @@
             Xác nhận bảng lương
           </button>
 
+          <!-- Unconfirm (admin only, confirmed + not locked) -->
+          <button v-if="payroll.status === 'confirmed' && !payroll.is_locked && isAdmin" @click="unconfirmPayroll"
+            class="flex items-center gap-1.5 px-3 py-1.5 border border-red-400 text-red-600 rounded-lg text-sm hover:bg-red-50">
+            Hủy xác nhận
+          </button>
+
           <!-- Status badge when not draft -->
           <span v-if="payroll.status !== 'draft'" :class="{
             'bg-blue-100 text-blue-800': payroll.status === 'confirmed',
@@ -523,6 +529,12 @@ function calcPit(gross, insEmp, deps) {
 function confirmPayroll() {
   if (confirm('Xác nhận bảng lương? Sau khi xác nhận, lương sẽ không thể chỉnh sửa.')) {
     router.post(route('accounting.payrolls.confirm', props.payroll.id));
+  }
+}
+
+function unconfirmPayroll() {
+  if (confirm(`Hủy xác nhận bảng lương ${props.payroll.code}?\nBảng lương sẽ trở về trạng thái nháp và bút toán kế toán sẽ bị đảo.\nChỉ thực hiện khi cần sửa lương.`)) {
+    router.post(route('accounting.payrolls.unconfirm', props.payroll.id));
   }
 }
 
