@@ -159,13 +159,21 @@ class QuotationController extends Controller
                     'mime_type' => $a->mime_type,
                     'created_by'=> $a->creator->name,
                 ]),
+                'can_edit' => $quotation->status === QuotationStatus::Draft
+                    || (auth()->user()->can('admin.users') && $quotation->status !== QuotationStatus::Cancelled),
             ],
         ]);
     }
 
     public function edit(Quotation $quotation): Response
     {
-        abort_if($quotation->status !== QuotationStatus::Draft, 403, 'Chỉ có thể sửa báo giá ở trạng thái nháp.');
+        $isAdmin = auth()->user()->can('admin.users');
+        abort_if(
+            $quotation->status !== QuotationStatus::Draft
+                && !($isAdmin && $quotation->status !== QuotationStatus::Cancelled),
+            403,
+            'Chỉ có thể sửa báo giá ở trạng thái nháp.'
+        );
 
         $quotation->load('items');
 
@@ -201,7 +209,12 @@ class QuotationController extends Controller
 
     public function update(Request $request, Quotation $quotation): RedirectResponse
     {
-        abort_if($quotation->status !== QuotationStatus::Draft, 403);
+        $isAdmin = auth()->user()->can('admin.users');
+        abort_if(
+            $quotation->status !== QuotationStatus::Draft
+                && !($isAdmin && $quotation->status !== QuotationStatus::Cancelled),
+            403
+        );
 
         $data = $request->validate([
             'customer_id'    => ['required', 'exists:customers,id'],

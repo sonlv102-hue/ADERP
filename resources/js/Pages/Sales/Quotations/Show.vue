@@ -20,7 +20,7 @@
             </svg>
             Xuất PDF
           </a>
-          <Link v-if="quotation.status === 'draft'" :href="route('sales.quotations.edit', quotation.id)"
+          <Link v-if="quotation.can_edit" :href="route('sales.quotations.edit', quotation.id)"
             class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
             Sửa
           </Link>
