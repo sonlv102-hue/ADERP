@@ -370,6 +370,44 @@
             </div>
           </div>
 
+          <!-- BHXH override fields -->
+          <div v-if="editForm.insurance_subject" class="bg-orange-50 border border-orange-200 rounded-lg p-3 space-y-2">
+            <p class="text-xs font-semibold text-orange-800">Số tiền BHXH tháng này (có thể sửa)</p>
+            <div class="grid grid-cols-3 gap-2">
+              <div>
+                <label class="text-[10px] text-gray-500 font-medium">BHXH CP DN (17.5%)</label>
+                <input type="number" v-model.number="editForm.bhxh_employer" min="0" step="any"
+                  class="form-input text-right font-mono text-xs" />
+              </div>
+              <div>
+                <label class="text-[10px] text-gray-500 font-medium">BHYT CP DN (3%)</label>
+                <input type="number" v-model.number="editForm.bhyt_employer" min="0" step="any"
+                  class="form-input text-right font-mono text-xs" />
+              </div>
+              <div>
+                <label class="text-[10px] text-gray-500 font-medium">BHTN CP DN (1%)</label>
+                <input type="number" v-model.number="editForm.bhtn_employer" min="0" step="any"
+                  class="form-input text-right font-mono text-xs" />
+              </div>
+              <div>
+                <label class="text-[10px] text-orange-600 font-medium">BHXH NV (8%)</label>
+                <input type="number" v-model.number="editForm.bhxh_employee" min="0" step="any"
+                  class="form-input text-right font-mono text-xs border-orange-300" />
+              </div>
+              <div>
+                <label class="text-[10px] text-orange-600 font-medium">BHYT NV (1.5%)</label>
+                <input type="number" v-model.number="editForm.bhyt_employee" min="0" step="any"
+                  class="form-input text-right font-mono text-xs border-orange-300" />
+              </div>
+              <div>
+                <label class="text-[10px] text-orange-600 font-medium">BHTN NV (1%)</label>
+                <input type="number" v-model.number="editForm.bhtn_employee" min="0" step="any"
+                  class="form-input text-right font-mono text-xs border-orange-300" />
+              </div>
+            </div>
+            <p class="text-[10px] text-gray-400">Mặc định: theo công thức. Đặt về 0 nếu tháng này NV không đóng.</p>
+          </div>
+
           <div class="border-b pb-1 flex gap-3">
             <p class="text-xs font-semibold text-green-700">Phụ cấp lương (tính BHXH): cố định, trách nhiệm</p>
             <p class="text-xs font-semibold text-blue-700 ml-auto">| Hỗ trợ phúc lợi (không BHXH): ăn trưa, xăng xe, ĐT, hiệu quả</p>
@@ -436,7 +474,7 @@
               <span class="font-mono">{{ fv(previewInsBase) }}</span>
             </div>
             <div v-if="editForm.insurance_subject" class="flex justify-between text-orange-600">
-              <span>BHXH/BHYT/BHTN NV (10.5% × căn cứ BH):</span>
+              <span>BHXH/BHYT/BHTN NV (trích lương):</span>
               <span class="font-mono">-{{ fv(previewInsEmp) }}</span>
             </div>
             <div class="flex justify-between text-red-600">
@@ -497,7 +535,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { usePermission } from '@/composables/usePermission';
@@ -631,6 +669,13 @@ const editForm = useForm({
   working_days:             26,
   advance:                  0,
   insurance_subject:        true,
+  // BHXH override — kế toán có thể sửa thủ công
+  bhxh_employer:            0,
+  bhyt_employer:            0,
+  bhtn_employer:            0,
+  bhxh_employee:            0,
+  bhyt_employee:            0,
+  bhtn_employee:            0,
 });
 
 // BHXH-subject allowances (Nghị định 158/2025): trách nhiệm + cố định khác
@@ -647,10 +692,23 @@ const previewNonBhxh  = computed(() =>
 );
 
 const previewGross   = computed(() => (editForm.base_salary || 0) + previewBhxhAllw.value + previewNonBhxh.value);
-const previewInsEmp  = computed(() => calcInsEmpOnBase(editForm.base_salary || 0, previewBhxhAllw.value, editForm.insurance_subject));
+const previewInsEmp  = computed(() =>
+  (editForm.bhxh_employee || 0) + (editForm.bhyt_employee || 0) + (editForm.bhtn_employee || 0)
+);
 const previewPit     = computed(() => calcPit(previewGross.value, previewInsEmp.value, editForm.dependents_count || 0));
 const previewNet     = computed(() => previewGross.value - previewInsEmp.value - previewPit.value);
 const previewInsBase = computed(() => calcInsBase(editForm.base_salary || 0, previewBhxhAllw.value, editForm.insurance_subject));
+
+function calcBhxhFromBase(insBase) {
+  return {
+    bhxh_employer: Math.round(insBase * 0.175),
+    bhyt_employer: Math.round(insBase * 0.03),
+    bhtn_employer: Math.round(insBase * 0.01),
+    bhxh_employee: Math.round(insBase * 0.08),
+    bhyt_employee: Math.round(insBase * 0.015),
+    bhtn_employee: Math.round(insBase * 0.01),
+  };
+}
 
 function openEditModal(item) {
   activeItem.value = item;
@@ -666,8 +724,24 @@ function openEditModal(item) {
   editForm.working_days             = item.working_days;
   editForm.advance                  = item.advance;
   editForm.insurance_subject        = item.insurance_subject;
+  editForm.bhxh_employer            = item.bhxh_employer ?? 0;
+  editForm.bhyt_employer            = item.bhyt_employer ?? 0;
+  editForm.bhtn_employer            = item.bhtn_employer ?? 0;
+  editForm.bhxh_employee            = item.bhxh_employee ?? 0;
+  editForm.bhyt_employee            = item.bhyt_employee ?? 0;
+  editForm.bhtn_employee            = item.bhtn_employee ?? 0;
   showEditModal.value = true;
 }
+
+watch(() => editForm.insurance_subject, (newVal) => {
+  if (!newVal) {
+    editForm.bhxh_employer = 0; editForm.bhyt_employer = 0; editForm.bhtn_employer = 0;
+    editForm.bhxh_employee = 0; editForm.bhyt_employee = 0; editForm.bhtn_employee = 0;
+  } else {
+    const insBase = calcInsBase(editForm.base_salary || 0, previewBhxhAllw.value, true);
+    Object.assign(editForm, calcBhxhFromBase(insBase));
+  }
+});
 
 function submitEdit() {
   editForm.put(

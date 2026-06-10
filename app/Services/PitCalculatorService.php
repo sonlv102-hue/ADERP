@@ -129,6 +129,16 @@ class PitCalculatorService
         ];
     }
 
+    /** Tính lại PIT và net khi biết gross và ins_employee (dùng khi override BHXH). */
+    public function calcPitFromGross(float $gross, float $insEmployee, int $dependents): array
+    {
+        $personalDed = self::PERSONAL_DEDUCTION + ($dependents * self::DEPENDENT_DEDUCTION);
+        $taxable     = max(0, $gross - $insEmployee - $personalDed);
+        $pit         = round($this->progressiveTax($taxable));
+        $net         = round($gross - $insEmployee - $pit);
+        return ['pit' => $pit, 'net_salary' => $net];
+    }
+
     // ── Legacy helpers ────────────────────────────────────────────────────────
 
     public function insuranceBase(float $baseSalary): float

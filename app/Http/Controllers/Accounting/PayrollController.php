@@ -141,6 +141,13 @@ class PayrollController extends Controller
             'advance'                  => 'nullable|numeric|min:0',
             'insurance_subject'        => 'nullable|boolean',
             'dependents_count'         => 'nullable|integer|min:0|max:10',
+            // BHXH override — kế toán có thể sửa thủ công từng dòng
+            'bhxh_employer'            => 'nullable|numeric|min:0',
+            'bhyt_employer'            => 'nullable|numeric|min:0',
+            'bhtn_employer'            => 'nullable|numeric|min:0',
+            'bhxh_employee'            => 'nullable|numeric|min:0',
+            'bhyt_employee'            => 'nullable|numeric|min:0',
+            'bhtn_employee'            => 'nullable|numeric|min:0',
         ]);
 
         $base           = (float) $data['base_salary'];
@@ -165,6 +172,18 @@ class PayrollController extends Controller
 
         $bd = $this->pit->breakdown($base, $bhxhAllowances, $nonBhxhAllowances, $dependents, $insSubject, $workingDays, $standardDays);
 
+        // Dùng override nếu kế toán sửa thủ công, ngược lại dùng giá trị công thức
+        $bhxhEmpl   = isset($data['bhxh_employer']) ? (float) $data['bhxh_employer'] : $bd['bhxh_employer'];
+        $bhytEmpl   = isset($data['bhyt_employer']) ? (float) $data['bhyt_employer'] : $bd['bhyt_employer'];
+        $bhtnEmpl   = isset($data['bhtn_employer']) ? (float) $data['bhtn_employer'] : $bd['bhtn_employer'];
+        $bhxhEmp    = isset($data['bhxh_employee']) ? (float) $data['bhxh_employee'] : $bd['bhxh_employee'];
+        $bhytEmp    = isset($data['bhyt_employee']) ? (float) $data['bhyt_employee'] : $bd['bhyt_employee'];
+        $bhtnEmp    = isset($data['bhtn_employee']) ? (float) $data['bhtn_employee'] : $bd['bhtn_employee'];
+        $insEmpTotal = $bhxhEmp + $bhytEmp + $bhtnEmp;
+
+        // Tính lại PIT nếu ins_employee thay đổi so với công thức
+        $pitCalc = $this->pit->calcPitFromGross($bd['gross_salary'], $insEmpTotal, $dependents);
+
         $item->update([
             'base_salary'              => $base,
             'allowance'                => $allocOther,
@@ -176,16 +195,16 @@ class PayrollController extends Controller
             'bonus'                    => $bonus,
             'gross_salary'             => $bd['gross_salary'],
             'insurance_base'           => $bd['insurance_base'],
-            'bhxh_employee'            => $bd['bhxh_employee'],
-            'bhyt_employee'            => $bd['bhyt_employee'],
-            'bhtn_employee'            => $bd['bhtn_employee'],
-            'bhxh_employer'            => $bd['bhxh_employer'],
-            'bhyt_employer'            => $bd['bhyt_employer'],
-            'bhtn_employer'            => $bd['bhtn_employer'],
-            'pit'                      => $bd['pit'],
+            'bhxh_employee'            => $bhxhEmp,
+            'bhyt_employee'            => $bhytEmp,
+            'bhtn_employee'            => $bhtnEmp,
+            'bhxh_employer'            => $bhxhEmpl,
+            'bhyt_employer'            => $bhytEmpl,
+            'bhtn_employer'            => $bhtnEmpl,
+            'pit'                      => $pitCalc['pit'],
             'dependents_count'         => $dependents,
-            'deductions'               => $bd['ins_employee'] + $bd['pit'],
-            'net_salary'               => $bd['net_salary'],
+            'deductions'               => $insEmpTotal + $pitCalc['pit'],
+            'net_salary'               => $pitCalc['net_salary'],
             'working_days'             => $workingDays,
             'advance'                  => (float) ($data['advance'] ?? $item->advance ?? 0),
             'insurance_subject'        => $insSubject,
