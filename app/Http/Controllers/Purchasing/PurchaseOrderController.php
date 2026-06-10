@@ -27,9 +27,9 @@ class PurchaseOrderController extends Controller
 {
     public function __construct(private PurchaseOrderService $service) {}
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
-        return Inertia::render('Purchasing/PurchaseOrders/Index', $this->ordersListProps());
+        return Inertia::render('Purchasing/PurchaseOrders/Index', $this->ordersListProps($request));
     }
 
     public function importTemplate()
@@ -444,8 +444,11 @@ class PurchaseOrderController extends Controller
             ->with('success', "Đã xóa đơn mua hàng {$code}.");
     }
 
-    private function ordersListProps(): array
+    private function ordersListProps(?Request $request = null): array
     {
+        $q      = $request?->input('q');
+        $status = $request?->input('status');
+
         return [
             'orders' => PurchaseOrder::with(['supplier', 'warehouse', 'creator'])
                 ->withCount('items')
@@ -458,8 +461,17 @@ class PurchaseOrderController extends Controller
                         ->orderByDesc('id')
                         ->limit(1),
                 ])
+                ->when($q, fn ($query) => $query->where(function ($sq) use ($q) {
+                    $sq->where('code', 'ilike', "%{$q}%")
+                       ->orWhere('notes', 'ilike', "%{$q}%")
+                       ->orWhereHas('supplier', fn ($s) => $s->where('name', 'ilike', "%{$q}%")
+                                                              ->orWhere('code', 'ilike', "%{$q}%"))
+                       ->orWhereHas('creator', fn ($u) => $u->where('name', 'ilike', "%{$q}%"));
+                }))
+                ->when($status, fn ($query) => $query->where('status', $status))
                 ->orderByDesc('id')
                 ->paginate(20)
+                ->withQueryString()
                 ->through(fn ($po) => [
                     'id'                 => $po->id,
                     'code'               => $po->code,
@@ -479,6 +491,8 @@ class PurchaseOrderController extends Controller
                     'invoice_type_label' => $po->invoice_type->label(),
                     'invoice_type_color' => $po->invoice_type->color(),
                 ]),
+            'filters'  => ['q' => $q, 'status' => $status],
+            'statuses' => collect(PurchaseOrderStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
         ];
     }
 

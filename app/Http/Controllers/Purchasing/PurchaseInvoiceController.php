@@ -34,6 +34,7 @@ class PurchaseInvoiceController extends Controller
                 ->when($status, fn ($q) => $q->where('status', $status))
                 ->orderByDesc('id')
                 ->paginate(20)
+                ->withQueryString()
                 ->through(fn ($inv) => [
                     'id'             => $inv->id,
                     'code'           => $inv->code,

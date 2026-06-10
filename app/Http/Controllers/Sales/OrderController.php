@@ -21,8 +21,11 @@ use Inertia\Response;
 
 class OrderController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $q      = $request->input('q');
+        $status = $request->input('status');
+
         return Inertia::render('Sales/Orders/Index', [
             'orders' => Order::with(['customer', 'creator', 'quotation'])
                 ->withCount('items')
@@ -36,8 +39,18 @@ class OrderController extends Controller
                         ->whereColumn('order_id', 'orders.id')
                         ->whereNotNull('product_id'),
                 ])
+                ->when($q, fn ($query) => $query->where(function ($sq) use ($q) {
+                    $sq->where('code', 'ilike', "%{$q}%")
+                       ->orWhere('notes', 'ilike', "%{$q}%")
+                       ->orWhereHas('customer', fn ($c) => $c->where('name', 'ilike', "%{$q}%")
+                                                              ->orWhere('code', 'ilike', "%{$q}%"))
+                       ->orWhereHas('creator', fn ($u) => $u->where('name', 'ilike', "%{$q}%"))
+                       ->orWhereHas('quotation', fn ($qt) => $qt->where('code', 'ilike', "%{$q}%"));
+                }))
+                ->when($status, fn ($query) => $query->where('status', $status))
                 ->orderByDesc('id')
                 ->paginate(20)
+                ->withQueryString()
                 ->through(fn ($o) => [
                     'id'               => $o->id,
                     'code'             => $o->code,
@@ -57,6 +70,8 @@ class OrderController extends Controller
                     'customs_status_label' => $o->customs_status->label(),
                     'customs_status_color' => $o->customs_status->color(),
                 ]),
+            'filters'  => ['q' => $q, 'status' => $status],
+            'statuses' => collect(OrderStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
         ]);
     }
 

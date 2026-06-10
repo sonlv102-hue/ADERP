@@ -21,6 +21,20 @@
         </div>
       </div>
 
+      <!-- Search -->
+      <div class="flex gap-3 flex-wrap">
+        <input v-model="search" @input="doSearch" type="text"
+          placeholder="Tìm đơn mua, nhà cung cấp, mã chứng từ..."
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-72 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+        <select v-model="statusFilter" @change="doSearch"
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+          <option value="">Tất cả trạng thái</option>
+          <option v-for="s in statuses" :key="s.value" :value="s.value">{{ s.label }}</option>
+        </select>
+        <button v-if="search || statusFilter" @click="clearSearch"
+          class="text-gray-500 hover:text-gray-700 px-3 py-2 text-sm">Xóa lọc</button>
+      </div>
+
       <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table class="w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
@@ -324,11 +338,30 @@ import Modal from '@/Components/Shared/Modal.vue';
 import { usePermission } from '@/composables/usePermission';
 import { useCurrency } from '@/composables/useCurrency';
 
-const props = defineProps({ orders: Object, preview: Object });
+const props = defineProps({ orders: Object, preview: Object, filters: Object, statuses: Array });
 
 const { hasPermission } = usePermission();
 const can = hasPermission;
 const { formatVnd } = useCurrency();
+
+const search       = ref(props.filters?.q ?? '');
+const statusFilter = ref(props.filters?.status ?? '');
+let searchTimer    = null;
+
+function doSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    router.get(route('purchasing.purchase-orders.index'), {
+      q:      search.value || undefined,
+      status: statusFilter.value || undefined,
+    }, { preserveState: true, replace: true });
+  }, 300);
+}
+function clearSearch() {
+  search.value       = '';
+  statusFilter.value = '';
+  doSearch();
+}
 
 // ── Import state ────────────────────────────────────────────────────────────
 const showImport      = ref(false);

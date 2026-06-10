@@ -36,13 +36,26 @@ class StockExitController extends Controller
         private AccountingService $accounting,
     ) {}
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $q      = $request->input('q');
+        $status = $request->input('status');
+
         return Inertia::render('Warehouse/StockExits/Index', [
             'exits' => StockExit::with(['warehouse', 'customer', 'creator'])
                 ->withCount('items')
+                ->when($q, fn ($query) => $query->where(function ($sq) use ($q) {
+                    $sq->where('code', 'ilike', "%{$q}%")
+                       ->orWhere('reason', 'ilike', "%{$q}%")
+                       ->orWhereHas('customer', fn ($c) => $c->where('name', 'ilike', "%{$q}%")
+                                                              ->orWhere('code', 'ilike', "%{$q}%"))
+                       ->orWhereHas('warehouse', fn ($w) => $w->where('name', 'ilike', "%{$q}%"))
+                       ->orWhereHas('creator', fn ($u) => $u->where('name', 'ilike', "%{$q}%"));
+                }))
+                ->when($status, fn ($query) => $query->where('status', $status))
                 ->orderByDesc('id')
                 ->paginate(20)
+                ->withQueryString()
                 ->through(fn ($e) => [
                     'id' => $e->id,
                     'code' => $e->code,
@@ -56,6 +69,8 @@ class StockExitController extends Controller
                     'creator' => $e->creator->name,
                     'items_count' => $e->items_count,
                 ]),
+            'filters'  => ['q' => $q, 'status' => $status],
+            'statuses' => collect(StockExitStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
         ]);
     }
 

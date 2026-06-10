@@ -21,25 +21,39 @@ class QuotationController extends Controller
 {
     public function __construct(private QuotationService $quotationService) {}
 
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $q      = $request->input('q');
+        $status = $request->input('status');
+
         return Inertia::render('Sales/Quotations/Index', [
             'quotations' => Quotation::with(['customer', 'creator'])
+                ->when($q, fn ($query) => $query->where(function ($sq) use ($q) {
+                    $sq->where('code', 'ilike', "%{$q}%")
+                       ->orWhere('notes', 'ilike', "%{$q}%")
+                       ->orWhereHas('customer', fn ($c) => $c->where('name', 'ilike', "%{$q}%")
+                                                              ->orWhere('code', 'ilike', "%{$q}%"))
+                       ->orWhereHas('creator', fn ($u) => $u->where('name', 'ilike', "%{$q}%"));
+                }))
+                ->when($status, fn ($query) => $query->where('status', $status))
                 ->orderByDesc('id')
                 ->paginate(20)
-                ->through(fn ($q) => [
-                    'id'            => $q->id,
-                    'code'          => $q->code,
-                    'customer'      => $q->customer->name,
-                    'valid_until'   => $q->valid_until?->format('d/m/Y'),
-                    'status'        => $q->status->value,
-                    'status_label'  => $q->status->label(),
-                    'status_color'  => $q->status->color(),
-                    'creator'       => $q->creator->name,
-                    'items_count'   => $q->items()->count(),
-                    'total'         => $q->total(),
-                    'created_at'    => $q->created_at->format('d/m/Y'),
+                ->withQueryString()
+                ->through(fn ($qt) => [
+                    'id'            => $qt->id,
+                    'code'          => $qt->code,
+                    'customer'      => $qt->customer->name,
+                    'valid_until'   => $qt->valid_until?->format('d/m/Y'),
+                    'status'        => $qt->status->value,
+                    'status_label'  => $qt->status->label(),
+                    'status_color'  => $qt->status->color(),
+                    'creator'       => $qt->creator->name,
+                    'items_count'   => $qt->items()->count(),
+                    'total'         => $qt->total(),
+                    'created_at'    => $qt->created_at->format('d/m/Y'),
                 ]),
+            'filters'  => ['q' => $q, 'status' => $status],
+            'statuses' => collect(QuotationStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
         ]);
     }
 

@@ -15,12 +15,25 @@ use Inertia\Response;
 
 class PurchaseContractController extends Controller
 {
-    public function index(): Response
+    public function index(Request $request): Response
     {
+        $q      = $request->input('q');
+        $status = $request->input('status');
+
         return Inertia::render('Purchasing/PurchaseContracts/Index', [
             'contracts' => PurchaseContract::with(['supplier', 'purchaseOrder', 'creator'])
+                ->when($q, fn ($query) => $query->where(function ($sq) use ($q) {
+                    $sq->where('code', 'ilike', "%{$q}%")
+                       ->orWhere('title', 'ilike', "%{$q}%")
+                       ->orWhere('notes', 'ilike', "%{$q}%")
+                       ->orWhereHas('supplier', fn ($s) => $s->where('name', 'ilike', "%{$q}%")
+                                                              ->orWhere('code', 'ilike', "%{$q}%"))
+                       ->orWhereHas('creator', fn ($u) => $u->where('name', 'ilike', "%{$q}%"));
+                }))
+                ->when($status, fn ($query) => $query->where('status', $status))
                 ->orderByDesc('id')
                 ->paginate(20)
+                ->withQueryString()
                 ->through(fn ($c) => [
                     'id'            => $c->id,
                     'code'          => $c->code,
@@ -35,6 +48,8 @@ class PurchaseContractController extends Controller
                     'status_color'  => $c->status->color(),
                     'creator'       => $c->creator->name,
                 ]),
+            'filters'  => ['q' => $q, 'status' => $status],
+            'statuses' => collect(PurchaseContractStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
         ]);
     }
 

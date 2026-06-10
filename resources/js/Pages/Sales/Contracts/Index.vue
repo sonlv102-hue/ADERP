@@ -12,6 +12,20 @@
         </Link>
       </div>
 
+      <!-- Search -->
+      <div class="flex gap-3 flex-wrap">
+        <input v-model="search" @input="doSearch" type="text"
+          placeholder="Tìm hợp đồng, khách hàng, mã chứng từ..."
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-72 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+        <select v-model="statusFilter" @change="doSearch"
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+          <option value="">Tất cả trạng thái</option>
+          <option v-for="s in statuses" :key="s.value" :value="s.value">{{ s.label }}</option>
+        </select>
+        <button v-if="search || statusFilter" @click="clearSearch"
+          class="text-gray-500 hover:text-gray-700 px-3 py-2 text-sm">Xóa lọc</button>
+      </div>
+
       <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
         <table class="w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
@@ -59,15 +73,35 @@
 </template>
 
 <script setup>
+import { ref } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
-defineProps({ contracts: Object });
+const props = defineProps({ contracts: Object, filters: Object, statuses: Array });
 
 const { formatVnd } = useCurrency();
+
+const search       = ref(props.filters?.q ?? '');
+const statusFilter = ref(props.filters?.status ?? '');
+let searchTimer    = null;
+
+function doSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => {
+    router.get(route('sales.contracts.index'), {
+      q:      search.value || undefined,
+      status: statusFilter.value || undefined,
+    }, { preserveState: true, replace: true });
+  }, 300);
+}
+function clearSearch() {
+  search.value       = '';
+  statusFilter.value = '';
+  doSearch();
+}
 
 const deleteContract = (c) => {
   if (confirm(`Xóa hợp đồng ${c.code}? Thao tác không thể hoàn tác.`)) {
