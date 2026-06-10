@@ -110,7 +110,7 @@
                 <th rowspan="2" class="border border-primary-600 px-3 py-2 text-left min-w-[140px]">Họ và tên</th>
                 <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[90px]">Chức vụ</th>
                 <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[90px]">Lương<br/>Chính</th>
-                <th colspan="5" class="border border-primary-600 px-2 py-1">Phụ cấp (không tính BHXH)</th>
+                <th colspan="6" class="border border-primary-600 px-2 py-1">Phụ cấp</th>
                 <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[90px]">Tổng<br/>Thu Nhập</th>
                 <th rowspan="2" class="border border-primary-600 px-2 py-2 w-14">Ngày<br/>công</th>
                 <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[90px]">Tổng Lương<br/>Thực Tế</th>
@@ -128,6 +128,7 @@
                 <th rowspan="2" v-if="payroll.status === 'draft'" class="border border-primary-600 px-2 py-2 w-10"></th>
               </tr>
               <tr class="bg-primary-600 text-white text-center">
+                <th class="border border-primary-500 px-1 py-1">Cố<br/>định</th>
                 <th class="border border-primary-500 px-1 py-1">Trách<br/>nhiệm</th>
                 <th class="border border-primary-500 px-1 py-1">Ăn<br/>trưa</th>
                 <th class="border border-primary-500 px-1 py-1">Điện<br/>thoại</th>
@@ -151,6 +152,7 @@
                     {{ deptName || 'Chưa phân phòng ban' }}
                   </td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-bold font-mono">{{ fv(sum(group, 'base_salary')) }}</td>
+                  <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'allowance')) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'allowance_responsibility')) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'allowance_lunch')) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'allowance_phone')) }}</td>
@@ -190,6 +192,7 @@
                   </td>
                   <td class="border border-gray-200 px-2 py-1.5 text-center text-gray-600">{{ item.position }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono font-semibold">{{ fv(item.base_salary) }}</td>
+                  <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ item.allowance             ? fv(item.allowance)             : '' }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ item.allowance_responsibility ? fv(item.allowance_responsibility) : '' }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ item.allowance_lunch        ? fv(item.allowance_lunch)        : '' }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ item.allowance_phone        ? fv(item.allowance_phone)        : '' }}</td>
@@ -244,6 +247,7 @@
               <tr class="bg-primary-50 font-bold border-t-2 border-primary-300">
                 <td colspan="3" class="border border-gray-300 px-3 py-2 text-sm font-bold text-gray-800">Tổng cộng</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono text-sm">{{ fv(payroll.total_base_salary) }}</td>
+                <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('allowance')) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('allowance_responsibility')) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('allowance_lunch')) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('allowance_phone')) }}</td>
@@ -332,10 +336,15 @@
           </div>
 
           <div class="border-b pb-1 flex gap-3">
-            <p class="text-xs font-semibold text-green-700">Phụ cấp lương (tính BHXH): trách nhiệm, cố định khác</p>
+            <p class="text-xs font-semibold text-green-700">Phụ cấp lương (tính BHXH): cố định, trách nhiệm</p>
             <p class="text-xs font-semibold text-blue-700 ml-auto">| Hỗ trợ phúc lợi (không BHXH): ăn trưa, xăng xe, ĐT, hiệu quả</p>
           </div>
           <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="form-label text-xs">PC Cố định (từ hồ sơ NV)</label>
+              <input type="number" v-model.number="editForm.allowance" min="0" step="any"
+                class="form-input text-right font-mono text-sm" />
+            </div>
             <div>
               <label class="form-label text-xs">PC Trách nhiệm</label>
               <input type="number" v-model.number="editForm.allowance_responsibility" min="0" step="any"
