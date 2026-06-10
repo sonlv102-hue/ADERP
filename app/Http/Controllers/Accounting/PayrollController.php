@@ -148,6 +148,9 @@ class PayrollController extends Controller
             'bhxh_employee'            => 'nullable|numeric|min:0',
             'bhyt_employee'            => 'nullable|numeric|min:0',
             'bhtn_employee'            => 'nullable|numeric|min:0',
+            // PIT override — chỉ admin
+            'pit_override_enabled'     => 'nullable|boolean',
+            'pit_override'             => 'nullable|numeric|min:0',
         ]);
 
         $base           = (float) $data['base_salary'];
@@ -184,6 +187,13 @@ class PayrollController extends Controller
         // Tính lại PIT nếu ins_employee thay đổi so với công thức
         $pitCalc = $this->pit->calcPitFromGross($bd['gross_salary'], $insEmpTotal, $dependents);
 
+        // PIT override — chỉ admin có thể ghi đè
+        $pitOverrideEnabled = !empty($data['pit_override_enabled']) && auth()->user()->hasRole('admin');
+        $pitFinal = $pitOverrideEnabled && isset($data['pit_override'])
+            ? (float) $data['pit_override']
+            : $pitCalc['pit'];
+        $netFinal = (int) round($bd['gross_salary'] - $insEmpTotal - $pitFinal);
+
         $item->update([
             'base_salary'              => $base,
             'allowance'                => $allocOther,
@@ -201,10 +211,10 @@ class PayrollController extends Controller
             'bhxh_employer'            => $bhxhEmpl,
             'bhyt_employer'            => $bhytEmpl,
             'bhtn_employer'            => $bhtnEmpl,
-            'pit'                      => $pitCalc['pit'],
+            'pit'                      => $pitFinal,
             'dependents_count'         => $dependents,
-            'deductions'               => $insEmpTotal + $pitCalc['pit'],
-            'net_salary'               => $pitCalc['net_salary'],
+            'deductions'               => $insEmpTotal + $pitFinal,
+            'net_salary'               => $netFinal,
             'working_days'             => $workingDays,
             'advance'                  => (float) ($data['advance'] ?? $item->advance ?? 0),
             'insurance_subject'        => $insSubject,

@@ -408,6 +408,24 @@
             <p class="text-[10px] text-gray-400">Mặc định: theo công thức. Đặt về 0 nếu tháng này NV không đóng.</p>
           </div>
 
+          <!-- PIT override — admin only -->
+          <div v-if="isAdmin" class="bg-red-50 border border-red-200 rounded-lg p-3 space-y-2">
+            <div class="flex items-center gap-3">
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" v-model="editForm.pit_override_enabled" class="sr-only peer" />
+                <div class="w-9 h-5 bg-gray-300 rounded-full peer peer-checked:bg-red-500 transition-colors"></div>
+                <div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4"></div>
+              </label>
+              <span class="text-xs font-semibold text-red-800">Ghi đè Thuế TNCN thủ công (Admin)</span>
+            </div>
+            <div v-if="editForm.pit_override_enabled" class="space-y-1">
+              <label class="text-[10px] text-red-600 font-medium">Thuế TNCN thực tế (đ)</label>
+              <input type="number" v-model.number="editForm.pit_override" min="0" step="any"
+                class="form-input text-right font-mono text-sm border-red-300" />
+              <p class="text-[10px] text-gray-400">Công thức tính: {{ fv(previewPitAuto) }} đ</p>
+            </div>
+          </div>
+
           <div class="border-b pb-1 flex gap-3">
             <p class="text-xs font-semibold text-green-700">Phụ cấp lương (tính BHXH): cố định, trách nhiệm</p>
             <p class="text-xs font-semibold text-blue-700 ml-auto">| Hỗ trợ phúc lợi (không BHXH): ăn trưa, xăng xe, ĐT, hiệu quả</p>
@@ -676,6 +694,9 @@ const editForm = useForm({
   bhxh_employee:            0,
   bhyt_employee:            0,
   bhtn_employee:            0,
+  // PIT override — chỉ admin
+  pit_override_enabled:     false,
+  pit_override:             0,
 });
 
 // BHXH-subject allowances (Nghị định 158/2025): trách nhiệm + cố định khác
@@ -695,7 +716,12 @@ const previewGross   = computed(() => (editForm.base_salary || 0) + previewBhxhA
 const previewInsEmp  = computed(() =>
   (editForm.bhxh_employee || 0) + (editForm.bhyt_employee || 0) + (editForm.bhtn_employee || 0)
 );
-const previewPit     = computed(() => calcPit(previewGross.value, previewInsEmp.value, editForm.dependents_count || 0));
+const previewPitAuto = computed(() => calcPit(previewGross.value, previewInsEmp.value, editForm.dependents_count || 0));
+const previewPit     = computed(() =>
+  isAdmin.value && editForm.pit_override_enabled
+    ? (editForm.pit_override || 0)
+    : previewPitAuto.value
+);
 const previewNet     = computed(() => previewGross.value - previewInsEmp.value - previewPit.value);
 const previewInsBase = computed(() => calcInsBase(editForm.base_salary || 0, previewBhxhAllw.value, editForm.insurance_subject));
 
@@ -730,6 +756,8 @@ function openEditModal(item) {
   editForm.bhxh_employee            = item.bhxh_employee ?? 0;
   editForm.bhyt_employee            = item.bhyt_employee ?? 0;
   editForm.bhtn_employee            = item.bhtn_employee ?? 0;
+  editForm.pit_override_enabled     = false;
+  editForm.pit_override             = item.pit ?? 0;
   showEditModal.value = true;
 }
 
