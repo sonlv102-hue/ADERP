@@ -27,6 +27,8 @@ class AuditPayableAccounts extends Command
                      ->whereRaw("jel.partner_type = 'supplier'");
             })
             ->where('jel.account_code', '331')
+            ->where(fn ($q) => $q->whereNull('je.source_type')
+                                  ->orWhere('je.source_type', '!=', 'payable_reclassification'))
             ->select(
                 'je.code as je_code',
                 'je.status',
