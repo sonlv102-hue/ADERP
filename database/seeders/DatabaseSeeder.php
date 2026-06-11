@@ -14,6 +14,7 @@ class DatabaseSeeder extends Seeder
         $this->call(SettingsSeeder::class);
         $this->call(DocumentTypeSeeder::class);
         $this->call(AccountCodeSeeder::class);
+        $this->call(PitConfigSeeder::class);
 
         // Admin
         $admin = User::firstOrCreate(

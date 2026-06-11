@@ -23,12 +23,14 @@ class JournalEntry extends Model
     protected $fillable = [
         'code', 'entry_date', 'description', 'reference_type', 'reference_id',
         'status', 'is_auto', 'reversed_by_id', 'created_by', 'posted_at', 'notes',
+        'source_type', 'fiscal_period', 'exclude_from_period_movement',
     ];
 
     protected $casts = [
-        'entry_date' => 'date',
-        'posted_at'  => 'datetime',
-        'is_auto'    => 'boolean',
+        'entry_date'                   => 'date',
+        'posted_at'                    => 'datetime',
+        'is_auto'                      => 'boolean',
+        'exclude_from_period_movement' => 'boolean',
     ];
 
     public function lines(): HasMany

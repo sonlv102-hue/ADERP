@@ -255,8 +255,8 @@ class BackfillJournalEntries extends Command
                 ? $payment->method->value
                 : ($payment->method ?? 'cash');
             $cashAccount = match($method) {
-                'bank_transfer', 'bank' => '112',
-                default                 => '111',
+                'bank_transfer', 'bank' => '1121',
+                default                 => '1111',
             };
 
             $lines = [

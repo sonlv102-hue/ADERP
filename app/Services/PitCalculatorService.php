@@ -2,6 +2,9 @@
 
 namespace App\Services;
 
+use App\Models\PitConfig;
+use Carbon\Carbon;
+
 /**
  * Vietnam Personal Income Tax (PIT) + BHXH/BHYT/BHTN calculation.
  *
@@ -40,13 +43,15 @@ namespace App\Services;
  * ==========================================================================
  * PIT DEDUCTIONS
  * ==========================================================================
- *   Bản thân: 11,000,000 VND/tháng
- *   Người phụ thuộc: 4,400,000 VND/người/tháng
+ *   Bản thân: 15,500,000 VND/tháng  (TT 111/2013 sửa đổi TT 79/2022)
+ *   Người phụ thuộc: 6,200,000 VND/người/tháng
  */
 class PitCalculatorService
 {
-    public const PERSONAL_DEDUCTION  = 11_000_000;
-    public const DEPENDENT_DEDUCTION = 4_400_000;
+    // Hằng số giữ lại cho backward-compatibility (PayrollController.php dòng 233-234)
+    // Không xóa — một số màn hình cũ vẫn dùng để hiển thị giá trị mặc định trước khi có DB
+    public const PERSONAL_DEDUCTION  = 15_500_000; // TT 111/2013 sửa đổi bởi TT 79/2022
+    public const DEPENDENT_DEDUCTION = 6_200_000;  // TT 111/2013 sửa đổi bởi TT 79/2022
     public const INSURANCE_CAP       = 46_800_000;
 
     private const BRACKETS = [
@@ -58,6 +63,31 @@ class PitCalculatorService
         [80_000_000, 30],
         [null,        35],
     ];
+
+    /**
+     * Tải cấu hình PIT tại tháng lương từ database.
+     * Fallback về hằng số mặc định nếu chưa có bản ghi (hoặc DB chưa có bảng).
+     */
+    private function loadConfig(Carbon $payrollMonth): array
+    {
+        try {
+            $cfg = PitConfig::forDate($payrollMonth);
+            return [
+                'personal_deduction'  => $cfg->personal_deduction,
+                'dependent_deduction' => $cfg->dependent_deduction,
+                'insurance_cap'       => $cfg->insurance_cap,
+                'brackets'            => $cfg->getBrackets(),
+            ];
+        } catch (\Throwable) {
+            // Fallback về hằng số nếu chưa có cấu hình trong DB
+            return [
+                'personal_deduction'  => self::PERSONAL_DEDUCTION,
+                'dependent_deduction' => self::DEPENDENT_DEDUCTION,
+                'insurance_cap'       => self::INSURANCE_CAP,
+                'brackets'            => self::BRACKETS,
+            ];
+        }
+    }
 
     /**
      * Full payroll breakdown theo Nghị định 158/2025/NĐ-CP.
@@ -73,14 +103,17 @@ class PitCalculatorService
      * @param int   $standardDays     Ngày công chuẩn theo hợp đồng (thường 26)
      */
     public function breakdown(
-        float $baseSalary,
-        float $bhxhAllowances    = 0,
-        float $nonBhxhAllowances = 0,
-        int   $dependents        = 0,
-        bool  $insuranceSubject  = true,
-        int   $workingDays       = 26,
-        int   $standardDays      = 26,
+        float   $baseSalary,
+        float   $bhxhAllowances    = 0,
+        float   $nonBhxhAllowances = 0,
+        int     $dependents        = 0,
+        bool    $insuranceSubject  = true,
+        int     $workingDays       = 26,
+        int     $standardDays      = 26,
+        ?Carbon $payrollMonth      = null,  // tháng lương → dùng để lấy cấu hình PIT từ DB
     ): array {
+        $cfg  = $this->loadConfig($payrollMonth ?? now());
+
         $rate               = ($standardDays > 0) ? min($workingDays / $standardDays, 1.0) : 1.0;
         $effectiveBase      = round($baseSalary       * $rate);
         $effectiveBhxhAllw  = round($bhxhAllowances   * $rate);
@@ -89,7 +122,7 @@ class PitCalculatorService
 
         // Căn cứ BHXH = lương cơ bản + phụ cấp lương ổn định (tính BHXH), capped
         $insBase   = $insuranceSubject
-            ? min($effectiveBase + $effectiveBhxhAllw, self::INSURANCE_CAP)
+            ? min($effectiveBase + $effectiveBhxhAllw, $cfg['insurance_cap'])
             : 0;
 
         $bhxhEmp   = round($insBase * 0.08);
@@ -102,9 +135,9 @@ class PitCalculatorService
         $insEmpl   = $bhxhEmpl + $bhytEmpl + $bhtnEmpl;
 
         // Thu nhập tính thuế TNCN = Gross - BHXH/BHYT/BHTN NV - Giảm trừ gia cảnh
-        $personalDed   = self::PERSONAL_DEDUCTION + ($dependents * self::DEPENDENT_DEDUCTION);
+        $personalDed   = $cfg['personal_deduction'] + ($dependents * $cfg['dependent_deduction']);
         $taxableForPit = max(0, $gross - $insEmp - $personalDed);
-        $pit           = round($this->progressiveTax($taxableForPit));
+        $pit           = round($this->progressiveTax($taxableForPit, $cfg['brackets']));
         $net           = round($gross - $insEmp - $pit);
 
         return [
@@ -130,11 +163,16 @@ class PitCalculatorService
     }
 
     /** Tính lại PIT và net khi biết gross và ins_employee (dùng khi override BHXH). */
-    public function calcPitFromGross(float $gross, float $insEmployee, int $dependents): array
-    {
-        $personalDed = self::PERSONAL_DEDUCTION + ($dependents * self::DEPENDENT_DEDUCTION);
+    public function calcPitFromGross(
+        float   $gross,
+        float   $insEmployee,
+        int     $dependents,
+        ?Carbon $payrollMonth = null,
+    ): array {
+        $cfg         = $this->loadConfig($payrollMonth ?? now());
+        $personalDed = $cfg['personal_deduction'] + ($dependents * $cfg['dependent_deduction']);
         $taxable     = max(0, $gross - $insEmployee - $personalDed);
-        $pit         = round($this->progressiveTax($taxable));
+        $pit         = round($this->progressiveTax($taxable, $cfg['brackets']));
         $net         = round($gross - $insEmployee - $pit);
         return ['pit' => $pit, 'net_salary' => $net];
     }
@@ -146,12 +184,13 @@ class PitCalculatorService
         return min($baseSalary, self::INSURANCE_CAP);
     }
 
-    private function progressiveTax(float $taxable): float
+    private function progressiveTax(float $taxable, ?array $brackets = null): float
     {
-        $tax  = 0.0;
-        $prev = 0.0;
+        $tax      = 0.0;
+        $prev     = 0.0;
+        $brackets = $brackets ?? self::BRACKETS;
 
-        foreach (self::BRACKETS as [$cap, $rate]) {
+        foreach ($brackets as [$cap, $rate]) {
             if ($taxable <= $prev) break;
             $upper = $cap ?? PHP_FLOAT_MAX;
             $slice = min($taxable, $upper) - $prev;

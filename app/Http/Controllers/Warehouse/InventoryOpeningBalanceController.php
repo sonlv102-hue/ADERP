@@ -135,7 +135,7 @@ class InventoryOpeningBalanceController extends Controller
                 }
 
                 $lines[] = [
-                    'account'     => '156',
+                    'account'     => '156',   // TK 156 is_detail=true trong hệ thống này
                     'debit'       => $total,
                     'credit'      => 0,
                     'description' => "Tồn ĐK {$product->name} tháng {$data['period']}",
@@ -143,9 +143,9 @@ class InventoryOpeningBalanceController extends Controller
             }
 
             if ($totalCost > 0) {
-                // Cr 411 — vốn chủ sở hữu (ghi nhận tồn kho đầu kỳ)
+                // Cr 4111 — vốn đầu tư của chủ sở hữu (leaf account, TK 411 là tổng hợp)
                 $lines[] = [
-                    'account'     => '411',
+                    'account'     => '4111',
                     'debit'       => 0,
                     'credit'      => round($totalCost),
                     'description' => "Tồn kho đầu kỳ {$data['period']}",
@@ -159,6 +159,10 @@ class InventoryOpeningBalanceController extends Controller
                     referenceType: InventoryOpeningBalance::class,
                     referenceId: 0,
                     isAuto: false,
+                    notes: null,
+                    journalSourceType: 'inventory_opening',
+                    excludeFromPeriodMovement: true,
+                    fiscalPeriod: $data['period'],
                 );
             }
         });

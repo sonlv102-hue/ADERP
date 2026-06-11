@@ -227,11 +227,20 @@ class PayrollController extends Controller
 
     private function itemDTO(PayrollItem $item): array
     {
-        $item->loadMissing('salaryJournalEntry');
+        $item->loadMissing(['salaryJournalEntry', 'payroll']);
         $gross       = (float) $item->gross_salary;
         $insEmp      = (float) $item->bhxh_employee + (float) $item->bhyt_employee + (float) $item->bhtn_employee;
-        $personalDed = \App\Services\PitCalculatorService::PERSONAL_DEDUCTION
-            + ((int) $item->dependents_count * \App\Services\PitCalculatorService::DEPENDENT_DEDUCTION);
+
+        // Lấy cấu hình PIT theo tháng lương — không dùng hằng số cứng
+        try {
+            $payrollDate = \Carbon\Carbon::parse($item->payroll?->month ?? now()->format('Y-m').'-01');
+            $pitCfg      = \App\Models\PitConfig::forDate($payrollDate);
+            $personalDed = $pitCfg->personal_deduction
+                + ((int) $item->dependents_count * $pitCfg->dependent_deduction);
+        } catch (\Throwable) {
+            $personalDed = \App\Services\PitCalculatorService::PERSONAL_DEDUCTION
+                + ((int) $item->dependents_count * \App\Services\PitCalculatorService::DEPENDENT_DEDUCTION);
+        }
 
         return [
             'id'                       => $item->id,
@@ -321,7 +330,14 @@ class PayrollController extends Controller
         try {
             $this->service->confirmPayroll($payroll);
             return back()->with('success', 'Bảng lương tháng đã được xác nhận.');
-        } catch (RuntimeException $e) {
+        } catch (\Throwable $e) {
+            \Log::error('confirm payroll failed', [
+                'payroll_id' => $payroll->id,
+                'code'       => $payroll->code,
+                'period'     => $payroll->period,
+                'user_id'    => auth()->id(),
+                'error'      => $e->getMessage(),
+            ]);
             return back()->with('error', $e->getMessage());
         }
     }

@@ -127,7 +127,21 @@ class FinancialPositionReportService
             );
         }
 
+        // 7. Tài khoản có số dư nhưng chưa được map vào B01a-DNN
+        $unmapped = $this->detectUnmappedAccounts($cfg, $balances);
+        if (!empty($unmapped)) {
+            $warnings[] = sprintf(
+                'Có %d tài khoản có số dư nhưng chưa được map vào B01a-DNN: %s. '
+                . 'Tổng giá trị: %s đ. Kiểm tra config/accounting_reports_tt133.php.',
+                count($unmapped),
+                implode(', ', array_column($unmapped, 'code')),
+                number_format(array_sum(array_map(fn($u) => abs($u['balance']), $unmapped)), 0, ',', '.')
+            );
+        }
+
         return [
+            'unmapped_accounts' => $unmapped,  // [] nếu không có TK lệch
+
             'rows'          => array_merge($assetRows, $sourceRows),
             'summary'       => $summary,
             'warnings'      => $warnings,
@@ -221,7 +235,6 @@ class FinancialPositionReportService
      */
     private function detectUnclosedIncomeExpense(array $balances): array
     {
-        // Các prefix TK doanh thu/chi phí
         $prefixes = ['5', '6', '8', '9'];
         $unclosed = [];
 
@@ -238,5 +251,73 @@ class FinancialPositionReportService
         }
 
         return $unclosed;
+    }
+
+    /**
+     * Phát hiện tài khoản có số dư nhưng chưa được map vào B01a-DNN.
+     *
+     * Trả về: [['code' => '...', 'balance' => float, 'name' => '...'], ...]
+     * Loại trừ: TK doanh thu/chi phí (5/6/8) vì chúng thuộc báo cáo KQHĐKD, không phải B01a-DNN.
+     */
+    private function detectUnmappedAccounts(array $cfg, array $balances): array
+    {
+        // Tập hợp tất cả account codes được dùng trong config
+        $mappedCodes = [];
+        $allItems = array_merge($cfg['assets'] ?? [], $cfg['equity_liabilities'] ?? []);
+        foreach ($allItems as $item) {
+            foreach ($item['accounts'] ?? [] as $code) {
+                $mappedCodes[$code] = true;
+            }
+        }
+
+        // Loại trừ TK doanh thu/chi phí (thuộc KQHĐKD, không thuộc B01a-DNN)
+        // Lưu ý: không loại '9' toàn bộ vì hệ thống có thể có TK 9xx là bảng tổng hợp
+        $excludePrefixes = ['5', '6', '8'];
+        // Thêm các TK kết chuyển cụ thể (chắc chắn không phải BS)
+        $extraExcludeSpecific = ['911', '921'];
+        // Các TK trong config["unmapped_exclude"] nếu có
+        $extraExclude    = $cfg['unmapped_exclude'] ?? [];
+
+        $unmapped = [];
+        foreach ($balances as $code => $balance) {
+            if (abs($balance) < 1) {
+                continue;
+            }
+            // Đã được map → bỏ qua
+            if (isset($mappedCodes[$code])) {
+                continue;
+            }
+            // TK doanh thu/chi phí → bỏ qua (chúng thuộc KQHĐKD)
+            $excluded = false;
+            foreach ($excludePrefixes as $prefix) {
+                if (str_starts_with((string) $code, $prefix)) {
+                    $excluded = true;
+                    break;
+                }
+            }
+            if ($excluded || in_array($code, $extraExclude) || in_array($code, $extraExcludeSpecific)) {
+                continue;
+            }
+
+            $unmapped[] = [
+                'code'    => (string) $code,
+                'balance' => $balance,
+            ];
+        }
+
+        // Bổ sung tên tài khoản từ DB (1 query)
+        if (!empty($unmapped)) {
+            $codeList  = array_column($unmapped, 'code');
+            $nameMap   = DB::table('account_codes')
+                ->whereIn('code', $codeList)
+                ->pluck('name', 'code')
+                ->all();
+            foreach ($unmapped as &$row) {
+                $row['name'] = $nameMap[$row['code']] ?? '—';
+            }
+            unset($row);
+        }
+
+        return $unmapped;
     }
 }

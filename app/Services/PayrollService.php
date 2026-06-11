@@ -11,7 +11,9 @@ use App\Models\BankAccount;
 use App\Models\Employee;
 use App\Models\Payroll;
 use App\Models\PayrollItem;
+use App\Models\AccountCode;
 use App\Models\AccountingPostingJob;
+use App\Models\JournalEntry;
 use App\Models\Setting;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -116,13 +118,17 @@ class PayrollService
         }
 
         $bankAccount = BankAccount::findOrFail($bankAccountId);
-        $bankTk = $bankAccount->account_code ?: '112';
+
+        // Validate: bank account phải có account_code hợp lệ là tài khoản chi tiết (is_detail=true)
+        $this->validateBankAccountCode($bankAccount);
+
+        $bankTk = $bankAccount->account_code;
 
         DB::transaction(function () use ($item, $payroll, $bankAccount, $bankTk) {
             $employeeName = $item->employee?->name ?? 'Nhân viên';
             $net = round((float)$item->net_salary);
 
-            // Bút toán chi lương: Nợ 334 / Có 112 (chuyển khoản ngân hàng)
+            // Bút toán chi lương: Nợ 334 / Có TK ngân hàng (chuyển khoản)
             $je = $this->accounting->post(
                 description: "Chi lương {$employeeName} tháng {$payroll->period} — CK {$bankAccount->account_number}",
                 date: now(),
@@ -369,6 +375,14 @@ class PayrollService
     /** Post journal entry when payroll is confirmed (TT133) */
     private function postPayrollJournalEntry(Payroll $payroll): void
     {
+        // Idempotency: nếu JE đã tồn tại (confirm bị retry), không tạo lại
+        if (JournalEntry::where('reference_type', 'payroll')
+            ->where('reference_id', $payroll->id)
+            ->whereIn('status', ['posted', 'draft'])
+            ->exists()) {
+            return;
+        }
+
         $net = round((float)$payroll->total_net_salary);
         $pit = round((float)$payroll->total_pit);
 
@@ -383,7 +397,13 @@ class PayrollService
         $bhyt = round((float)$sums->bhyt);
         $bhtn = round((float)$sums->bhtn);
 
-        // Tổng chi phí Dr phân theo phòng ban (gross + employer insurance + KPCĐ)
+        // KPCĐ: ghi nhận khi (1) kế toán xác nhận rõ (union_fee_include=true)
+        // hoặc (2) chưa đặt (null) và cài đặt toàn hệ thống bật union_fee_enabled.
+        // Nếu union_fee_include=false, KHÔNG ghi nhận dù cài đặt bật.
+        $includeUnionFee = $payroll->union_fee_include === true
+            || ($payroll->union_fee_include === null && $this->isUnionFeeEnabled());
+
+        // Tổng chi phí Dr phân theo phòng ban
         $deptTotals = $payroll->items()
             ->join('employees', 'payroll_items.employee_id', '=', 'employees.id')
             ->selectRaw(
@@ -391,8 +411,9 @@ class PayrollService
                  SUM(payroll_items.gross_salary
                      + payroll_items.bhxh_employer
                      + payroll_items.bhyt_employer
-                     + payroll_items.bhtn_employer
-                     + payroll_items.trade_union_fee) as total_cost'
+                     + payroll_items.bhtn_employer'
+                . ($includeUnionFee ? ' + payroll_items.trade_union_fee' : '')
+                . ') as total_cost'
             )
             ->groupBy('employees.department')
             ->get();
@@ -432,8 +453,8 @@ class PayrollService
         if ($bhtn > 0) {
             $lines[] = ['account' => '3385', 'debit' => 0, 'credit' => $bhtn, 'description' => "BHTN phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
         }
-        // Cr: KPCĐ phải nộp (TK 3382) — chỉ hạch toán khi kế toán xác nhận ghi nhận (union_fee_include = true)
-        if ($payroll->union_fee_include === true) {
+        // Cr: KPCĐ phải nộp (TK 3382) — ghi nhận khi $includeUnionFee (phải nhất quán với Dr total_cost)
+        if ($includeUnionFee) {
             $unionFee = round((float)$payroll->total_trade_union_fee);
             if ($unionFee > 0) {
                 $lines[] = ['account' => '3382', 'debit' => 0, 'credit' => $unionFee, 'description' => "KPCĐ phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
@@ -441,17 +462,22 @@ class PayrollService
         }
 
         if (empty($lines)) {
-            Log::warning("PayrollService: no debit lines for payroll #{$payroll->id}");
-            return;
+            throw new RuntimeException(
+                "Không thể tạo bút toán lương {$payroll->code}: không có dòng chi phí hợp lệ. "
+                . "Kiểm tra lại dữ liệu nhân viên và phòng ban."
+            );
         }
 
-        $this->accounting->tryPost(
+        // Post trực tiếp — nếu lỗi sẽ throw, transaction trong confirmPayroll sẽ rollback
+        $this->accounting->post(
             description: "Bảng lương tháng {$payroll->period} ({$payroll->code})",
             date: \Carbon\Carbon::createFromFormat('Y-m', $payroll->period)->startOfMonth(),
             lines: $lines,
-            sourceType: 'payroll',
-            sourceId: $payroll->id,
-            postingType: 'salary',
+            referenceType: 'payroll',
+            referenceId: $payroll->id,
+            isAuto: false,
+            journalSourceType: 'payroll_confirm',
+            fiscalPeriod: $payroll->period,
         );
     }
 
@@ -473,6 +499,41 @@ class PayrollService
     private function getUnionFeeRate(): float
     {
         return (float) Setting::get('payroll.union_fee_rate', '2');
+    }
+
+    /**
+     * Kiểm tra bank account có account_code hợp lệ (non-empty + is_detail=true).
+     * Throw RuntimeException rõ ràng thay vì fallback về TK tổng hợp.
+     */
+    private function validateBankAccountCode(BankAccount $bankAccount): void
+    {
+        if (empty($bankAccount->account_code)) {
+            throw new RuntimeException(
+                "Tài khoản ngân hàng '{$bankAccount->name}' ({$bankAccount->account_number}) "
+                . "chưa cấu hình tài khoản kế toán. "
+                . "Vui lòng cập nhật tài khoản kế toán chi tiết (ví dụ: 1121 — Tiền gửi VND) "
+                . "trước khi thanh toán lương."
+            );
+        }
+
+        $ac = AccountCode::where('code', $bankAccount->account_code)->first();
+
+        if (!$ac) {
+            throw new RuntimeException(
+                "Tài khoản kế toán '{$bankAccount->account_code}' trên tài khoản ngân hàng "
+                . "'{$bankAccount->name}' không tồn tại trong hệ thống. "
+                . "Kiểm tra lại danh mục tài khoản."
+            );
+        }
+
+        if (!$ac->is_detail) {
+            throw new RuntimeException(
+                "Tài khoản kế toán '{$ac->code}' ({$ac->name}) là tài khoản tổng hợp "
+                . "(is_detail=false), không thể hạch toán trực tiếp. "
+                . "Vui lòng cấu hình tài khoản chi tiết, ví dụ: 1121 (Tiền gửi VND) "
+                . "thay vì 112 (Tiền gửi ngân hàng)."
+            );
+        }
     }
 
     /**

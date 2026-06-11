@@ -73,8 +73,8 @@ class PurchaseInvoiceService
         if ($amount <= 0) return;
 
         $cashAccount = match($payment->method) {
-            'bank_transfer', 'bank' => '112',
-            default                 => '111',
+            'bank_transfer', 'bank' => '1121',
+            default                 => '1111',
         };
 
         $this->accounting->tryPost(

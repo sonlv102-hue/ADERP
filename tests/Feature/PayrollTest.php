@@ -39,12 +39,19 @@ class PayrollTest extends TestCase
         
         $this->actingAs($this->user);
 
+        // Seed TK 1121 (Tiền gửi VND — leaf account) để payEmployeeSalary có thể hạch toán
+        // '112' là TK tổng hợp (is_detail=false), phải dùng TK chi tiết '1121'
+        \App\Models\AccountCode::firstOrCreate(['code' => '1121'], [
+            'name' => 'Tiền gửi VND', 'type' => 'asset', 'normal_balance' => 'debit',
+            'parent_code' => '112', 'level' => 4, 'is_detail' => true, 'is_active' => true,
+        ]);
+
         // Create a bank account for salary payment
         $this->bankAccount = BankAccount::create([
             'name' => 'Tài khoản kiểm thử',
             'bank_name' => 'Test Bank',
             'account_number' => '123456789',
-            'account_code' => '112',
+            'account_code' => '1121',
             'is_active' => true,
         ]);
 

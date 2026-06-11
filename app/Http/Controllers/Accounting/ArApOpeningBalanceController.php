@@ -140,8 +140,9 @@ class ArApOpeningBalanceController extends Controller
                 $dr411 = $totalCr > $totalDr ? round($totalCr - $totalDr, 2) : 0;
                 $cr411 = $totalDr > $totalCr ? round($totalDr - $totalCr, 2) : 0;
 
+                // TK 4111 — leaf account (TK 411 là tổng hợp, không ghi trực tiếp)
                 $lines[] = [
-                    'account'     => '411',
+                    'account'     => '4111',
                     'debit'       => $dr411,
                     'credit'      => $cr411,
                     'description' => ($isAr ? 'Công nợ phải thu' : 'Công nợ phải trả') . " đầu kỳ {$data['period']}",
@@ -154,6 +155,10 @@ class ArApOpeningBalanceController extends Controller
                     referenceType: ArApOpeningBalance::class,
                     referenceId: 0,
                     isAuto: false,
+                    notes: null,
+                    journalSourceType: $isAr ? 'receivable_opening' : 'payable_opening',
+                    excludeFromPeriodMovement: true,
+                    fiscalPeriod: $data['period'],
                 );
             }
         });
@@ -187,8 +192,8 @@ class ArApOpeningBalanceController extends Controller
             $arApOpeningBalance->update(['remaining_amount' => $newRemaining]);
 
             $cashAccount = match($data['method']) {
-                'bank_transfer', 'bank' => '112',
-                default => '111',
+                'bank_transfer', 'bank' => '1121',
+                default => '1111',
             };
             $docRef = $arApOpeningBalance->invoice_ref
                 ? "CN ĐK {$arApOpeningBalance->invoice_ref}"

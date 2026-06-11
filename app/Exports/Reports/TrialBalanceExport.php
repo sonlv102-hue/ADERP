@@ -29,10 +29,16 @@ class TrialBalanceExport implements FromCollection, WithHeadings, WithMapping, W
 
     private function buildAccounts(string $from, string $to): array
     {
+        // Cùng logic với TrialBalanceController: tách số dư đầu kỳ khỏi phát sinh kỳ
         $opening = DB::table('journal_entry_lines as jel')
             ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
             ->where('je.status', 'posted')
-            ->where('je.entry_date', '<', $from)
+            ->where(function ($q) use ($from) {
+                $q->where(function ($q2) use ($from) {
+                    $q2->where('je.entry_date', '<', $from)
+                       ->where('je.exclude_from_period_movement', false);
+                })->orWhere('je.exclude_from_period_movement', true);
+            })
             ->select('jel.account_code',
                 DB::raw('SUM(jel.debit) as total_debit'),
                 DB::raw('SUM(jel.credit) as total_credit'))
@@ -43,6 +49,7 @@ class TrialBalanceExport implements FromCollection, WithHeadings, WithMapping, W
             ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
             ->where('je.status', 'posted')
             ->whereBetween('je.entry_date', [$from, $to])
+            ->where('je.exclude_from_period_movement', false)
             ->select('jel.account_code',
                 DB::raw('SUM(jel.debit) as total_debit'),
                 DB::raw('SUM(jel.credit) as total_credit'))
@@ -64,25 +71,13 @@ class TrialBalanceExport implements FromCollection, WithHeadings, WithMapping, W
             $dr     = (float) ($period->get($code)?->total_debit ?? 0);
             $cr     = (float) ($period->get($code)?->total_credit ?? 0);
 
-            $normalBalance = $acc?->normal_balance ?? 'debit';
             $openingNet    = $openDr - $openCr;
+            $openingDebit  = max(0.0, $openingNet);
+            $openingCredit = max(0.0, -$openingNet);
 
-            if ($normalBalance === 'debit') {
-                $openingDebit  = max(0.0, $openingNet);
-                $openingCredit = max(0.0, -$openingNet);
-            } else {
-                $openingDebit  = max(0.0, -$openingNet);
-                $openingCredit = max(0.0, $openingNet);
-            }
-
-            $closingNet = $openingNet + $dr - $cr;
-            if ($normalBalance === 'debit') {
-                $closingDebit  = max(0.0, $closingNet);
-                $closingCredit = max(0.0, -$closingNet);
-            } else {
-                $closingDebit  = max(0.0, -$closingNet);
-                $closingCredit = max(0.0, $closingNet);
-            }
+            $closingNet    = $openingNet + $dr - $cr;
+            $closingDebit  = max(0.0, $closingNet);
+            $closingCredit = max(0.0, -$closingNet);
 
             $result[] = (object) [
                 'code'           => $code,

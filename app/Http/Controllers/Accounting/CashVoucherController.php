@@ -6,6 +6,7 @@ use App\Enums\CashVoucherType;
 use App\Http\Controllers\Controller;
 use App\Models\CashVoucher;
 use App\Models\Fund;
+use App\Models\Supplier;
 use App\Services\CashVoucherService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -68,10 +69,11 @@ class CashVoucherController extends Controller
         $type = CashVoucherType::from($request->input('type', 'receipt'));
 
         return Inertia::render('Accounting/CashVouchers/Form', [
-            'voucher'  => null,
-            'nextCode' => CashVoucher::generateCode($type),
-            'funds'    => Fund::where('is_active', true)->orderBy('name')->get(['id', 'name', 'type']),
+            'voucher'     => null,
+            'nextCode'    => CashVoucher::generateCode($type),
+            'funds'       => Fund::where('is_active', true)->orderBy('name')->get(['id', 'name', 'type']),
             'defaultType' => $type->value,
+            'suppliers'   => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
         ]);
     }
 
@@ -83,6 +85,7 @@ class CashVoucherController extends Controller
             'amount'       => 'required|numeric|min:0.01',
             'voucher_date' => 'required|date',
             'counterparty' => 'nullable|string|max:255',
+            'supplier_id'  => 'nullable|exists:suppliers,id',
             'description'  => 'required|string|max:500',
         ]);
 
@@ -137,10 +140,12 @@ class CashVoucherController extends Controller
                 'amount'       => (float) $cashVoucher->amount,
                 'voucher_date' => $cashVoucher->voucher_date?->format('Y-m-d'),
                 'counterparty' => $cashVoucher->counterparty,
+                'supplier_id'  => $cashVoucher->supplier_id,
                 'description'  => $cashVoucher->description,
             ],
             'funds'       => Fund::where('is_active', true)->orderBy('name')->get(['id', 'name', 'type']),
             'defaultType' => $cashVoucher->type->value,
+            'suppliers'   => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
         ]);
     }
 
@@ -155,6 +160,7 @@ class CashVoucherController extends Controller
             'amount'       => 'required|numeric|min:0.01',
             'voucher_date' => 'required|date',
             'counterparty' => 'nullable|string|max:255',
+            'supplier_id'  => 'nullable|exists:suppliers,id',
             'description'  => 'required|string|max:500',
         ]);
 

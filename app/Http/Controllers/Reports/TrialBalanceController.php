@@ -40,22 +40,30 @@ class TrialBalanceController extends Controller
 
     private function buildAccounts(string $from, string $to): array
     {
-        // Opening: tất cả bút toán TRƯỚC kỳ
+        // Opening: bút toán TRƯỚC kỳ (exclude_from_period_movement=false)
+        //        + bút toán đầu kỳ (exclude_from_period_movement=true) dù ngày nào cũng vào đây
         $opening = DB::table('journal_entry_lines as jel')
             ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
             ->where('je.status', 'posted')
-            ->where('je.entry_date', '<', $from)
+            ->where(function ($q) use ($from) {
+                $q->where(function ($q2) use ($from) {
+                    // Bút toán thông thường trước kỳ
+                    $q2->where('je.entry_date', '<', $from)
+                       ->where('je.exclude_from_period_movement', false);
+                })->orWhere('je.exclude_from_period_movement', true); // Mọi bút toán đầu kỳ
+            })
             ->select('jel.account_code',
                 DB::raw('SUM(jel.debit) as total_debit'),
                 DB::raw('SUM(jel.credit) as total_credit'))
             ->groupBy('jel.account_code')
             ->get()->keyBy('account_code');
 
-        // Period: bút toán TRONG kỳ
+        // Period: bút toán thực tế TRONG kỳ — KHÔNG bao gồm bút toán đầu kỳ
         $period = DB::table('journal_entry_lines as jel')
             ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
             ->where('je.status', 'posted')
             ->whereBetween('je.entry_date', [$from, $to])
+            ->where('je.exclude_from_period_movement', false)
             ->select('jel.account_code',
                 DB::raw('SUM(jel.debit) as total_debit'),
                 DB::raw('SUM(jel.credit) as total_credit'))
@@ -77,25 +85,16 @@ class TrialBalanceController extends Controller
             $dr     = (float) ($period->get($code)?->total_debit ?? 0);
             $cr     = (float) ($period->get($code)?->total_credit ?? 0);
 
-            $normalBalance = $acc?->normal_balance ?? 'debit';
-            $openingNet    = $openDr - $openCr;
+            $openingNet = $openDr - $openCr;
 
-            if ($normalBalance === 'debit') {
-                $openingDebit  = max(0.0, $openingNet);
-                $openingCredit = max(0.0, -$openingNet);
-            } else {
-                $openingDebit  = max(0.0, -$openingNet);
-                $openingCredit = max(0.0, $openingNet);
-            }
+            // Quy tắc: net > 0 → Dư Nợ; net < 0 → Dư Có (không phụ thuộc normal_balance)
+            // normal_balance không ảnh hưởng tới cột trình bày — chỉ để xác định "bình thường là dư bên nào"
+            $openingDebit  = max(0.0, $openingNet);
+            $openingCredit = max(0.0, -$openingNet);
 
-            $closingNet = $openingNet + $dr - $cr;
-            if ($normalBalance === 'debit') {
-                $closingDebit  = max(0.0, $closingNet);
-                $closingCredit = max(0.0, -$closingNet);
-            } else {
-                $closingDebit  = max(0.0, -$closingNet);
-                $closingCredit = max(0.0, $closingNet);
-            }
+            $closingNet    = $openingNet + $dr - $cr;
+            $closingDebit  = max(0.0, $closingNet);
+            $closingCredit = max(0.0, -$closingNet);
 
             $result[] = [
                 'code'          => $code,

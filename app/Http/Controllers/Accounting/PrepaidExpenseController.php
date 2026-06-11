@@ -54,15 +54,15 @@ class PrepaidExpenseController extends Controller
                 ['code' => '242', 'label' => '242 — Chi phí trả trước dài hạn'],
             ],
             'expenseOptions' => [
-                ['code' => '641', 'label' => '641 — Chi phí bán hàng'],
-                ['code' => '642', 'label' => '642 — Chi phí QLDN'],
-                ['code' => '627', 'label' => '627 — Chi phí sản xuất chung'],
-                ['code' => '635', 'label' => '635 — Chi phí tài chính'],
+                ['code' => '6421', 'label' => '6421 — Chi phí bán hàng'],
+                ['code' => '6422', 'label' => '6422 — Chi phí QLDN'],
+                ['code' => '627',  'label' => '627 — Chi phí sản xuất chung'],
+                ['code' => '635',  'label' => '635 — Chi phí tài chính'],
             ],
             'creditOptions' => [
-                ['code' => '331', 'label' => '331 — Phải trả người bán'],
-                ['code' => '111', 'label' => '111 — Tiền mặt'],
-                ['code' => '112', 'label' => '112 — Tiền gửi ngân hàng'],
+                ['code' => '331',  'label' => '331 — Phải trả người bán'],
+                ['code' => '1111', 'label' => '1111 — Tiền mặt VND'],
+                ['code' => '1121', 'label' => '1121 — Tiền gửi VND'],
             ],
         ]);
     }

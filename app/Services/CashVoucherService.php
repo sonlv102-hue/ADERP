@@ -75,28 +75,28 @@ class CashVoucherService
         );
     }
 
-    /** Tài khoản quỹ/ngân hàng của phiếu (111/112 tùy loại Fund) */
+    /** Tài khoản quỹ/ngân hàng của phiếu (1111/1121 tùy loại Fund) */
     private function resolveFundAccount(CashVoucher $voucher): string
     {
         $voucher->loadMissing('fund');
         if ($voucher->fund && $voucher->fund->type === 'bank') {
-            return '112';
+            return '1121'; // Tiền gửi VND — chi tiết của 112
         }
-        return '111';
+        return '1111'; // Tiền mặt VND — chi tiết của 111
     }
 
     /** Tài khoản đối ứng mặc định */
     private function resolveCounterAccount(CashVoucher $voucher, string $direction): string
     {
-        // Nếu reference là Invoice → 131 (thu từ KH)
+        // Thu từ KH (gắn HD bán hàng) → 131
         if ($direction === 'receipt' && $voucher->reference_type === 'invoice') {
             return '131';
         }
-        // Nếu reference là PurchaseInvoice → 331 (trả NCC)
-        if ($direction === 'payment' && $voucher->reference_type === 'purchase_invoice') {
+        // Liên quan NCC: có supplier_id hoặc gắn HD mua hàng → 331
+        if ($voucher->supplier_id || $voucher->reference_type === 'purchase_invoice') {
             return '331';
         }
-        // Mặc định: thu → 131, chi → 642 (Chi phí QLDN)
-        return $direction === 'receipt' ? '131' : '642';
+        // Mặc định: thu → 131, chi → 6422 (Chi phí QLDN)
+        return $direction === 'receipt' ? '131' : '6422';
     }
 }

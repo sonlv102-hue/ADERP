@@ -11,7 +11,7 @@ class CashVoucher extends Model
 {
     protected $fillable = [
         'code', 'type', 'status', 'fund_id', 'amount', 'voucher_date',
-        'counterparty', 'description', 'reference_type', 'reference_id', 'created_by',
+        'counterparty', 'supplier_id', 'description', 'reference_type', 'reference_id', 'created_by',
     ];
 
     protected function casts(): array
@@ -32,6 +32,11 @@ class CashVoucher extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function supplier(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\Supplier::class);
     }
 
     public function reference(): \Illuminate\Database\Eloquent\Relations\MorphTo

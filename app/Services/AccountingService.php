@@ -31,26 +31,38 @@ class AccountingService
         ?string $referenceType = null,
         ?int $referenceId = null,
         bool $isAuto = false,
-        ?string $notes = null
+        ?string $notes = null,
+        ?string $journalSourceType = null,
+        bool $excludeFromPeriodMovement = false,
+        ?string $fiscalPeriod = null,
     ): JournalEntry {
         $this->validateLines($lines);
         $this->checkPeriodOpen($date);
 
-        return DB::transaction(function () use ($description, $date, $lines, $referenceType, $referenceId, $isAuto, $notes) {
+        // fiscal_period tự suy ra từ entry_date nếu không truyền
+        $resolvedFiscalPeriod = $fiscalPeriod ?? $date->format('Y-m');
+
+        return DB::transaction(function () use (
+            $description, $date, $lines, $referenceType, $referenceId, $isAuto, $notes,
+            $journalSourceType, $excludeFromPeriodMovement, $resolvedFiscalPeriod
+        ) {
             // Bút toán tự động (is_auto=true) tạo ở trạng thái draft để kế toán duyệt trước khi hạch toán
             $status = $isAuto ? 'draft' : 'posted';
 
             $entry = JournalEntry::create([
-                'code'           => JournalEntry::generateCode(),
-                'entry_date'     => $date,
-                'description'    => $description,
-                'reference_type' => $referenceType,
-                'reference_id'   => $referenceId,
-                'status'         => $status,
-                'is_auto'        => $isAuto,
-                'created_by'     => auth()->id() ?? 1,
-                'posted_at'      => $isAuto ? null : now(),
-                'notes'          => $notes,
+                'code'                          => JournalEntry::generateCode(),
+                'entry_date'                    => $date,
+                'description'                   => $description,
+                'reference_type'                => $referenceType,
+                'reference_id'                  => $referenceId,
+                'source_type'                   => $journalSourceType,
+                'fiscal_period'                 => $resolvedFiscalPeriod,
+                'exclude_from_period_movement'  => $excludeFromPeriodMovement,
+                'status'                        => $status,
+                'is_auto'                       => $isAuto,
+                'created_by'                    => auth()->id() ?? 1,
+                'posted_at'                     => $isAuto ? null : now(),
+                'notes'                         => $notes,
             ]);
 
             foreach ($lines as $i => $line) {
@@ -323,6 +335,21 @@ class AccountingService
         if (abs($totalDebit - $totalCredit) >= 1) {
             throw new \InvalidArgumentException(
                 "Bút toán không cân: Nợ={$totalDebit}, Có={$totalCredit}."
+            );
+        }
+
+        // Không được ghi bút toán vào tài khoản tổng hợp (is_detail = false)
+        $codes = array_unique(array_column($lines, 'account'));
+        $parentCodes = AccountCode::whereIn('code', $codes)
+            ->where('is_detail', false)
+            ->pluck('code')
+            ->toArray();
+
+        if (! empty($parentCodes)) {
+            $list = implode(', ', $parentCodes);
+            throw new \InvalidArgumentException(
+                "Tài khoản tổng hợp không được ghi bút toán trực tiếp: {$list}. " .
+                "Vui lòng chọn tài khoản chi tiết (cấp cuối cùng)."
             );
         }
     }

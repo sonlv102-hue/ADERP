@@ -235,8 +235,8 @@ class InvoiceService
     private function resolvePaymentAccount(string $method): string
     {
         return match($method) {
-            'bank_transfer', 'bank' => '112',
-            default => '111',
+            'bank_transfer', 'bank' => '1121',
+            default => '1111',
         };
     }
 

@@ -65,10 +65,38 @@
             <p v-if="form.errors.amount" class="mt-1 text-xs text-red-600">{{ form.errors.amount }}</p>
           </div>
 
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Đối tác (tên người/đơn vị)</label>
-            <input v-model="form.counterparty" type="text"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none" />
+          <!-- Đối tác: combobox NCC + free text -->
+          <div class="relative">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Đối tác</label>
+            <div class="relative">
+              <input
+                v-model="counterpartyInput"
+                type="text"
+                placeholder="Nhập tên hoặc tìm nhà cung cấp..."
+                autocomplete="off"
+                class="w-full px-3 py-2 pr-8 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                @focus="showDropdown = true"
+                @blur="closeDropdown"
+              />
+              <button v-if="form.supplier_id" type="button"
+                class="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none"
+                @mousedown.prevent="clearSupplier"
+                title="Bỏ liên kết NCC">×</button>
+            </div>
+            <!-- Dropdown danh sách NCC -->
+            <ul v-if="showDropdown && filteredSuppliers.length"
+              class="absolute z-20 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-52 overflow-y-auto mt-1">
+              <li v-for="s in filteredSuppliers" :key="s.id"
+                @mousedown.prevent="selectSupplier(s)"
+                class="px-3 py-2 cursor-pointer hover:bg-primary-50 flex items-center gap-2 text-sm">
+                <span class="text-gray-400 font-mono text-xs w-20 shrink-0">{{ s.code }}</span>
+                <span class="truncate">{{ s.name }}</span>
+              </li>
+            </ul>
+            <!-- Indicator khi đã chọn NCC -->
+            <p v-if="form.supplier_id" class="mt-1 text-xs text-primary-600">
+              Đã liên kết NCC — bút toán sẽ dùng TK 331
+            </p>
           </div>
 
           <div class="sm:col-span-2">
@@ -96,6 +124,7 @@
 </template>
 
 <script setup>
+import { ref, computed, watch } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 
@@ -104,6 +133,7 @@ const props = defineProps({
   funds:       Array,
   nextCode:    String,
   defaultType: String,
+  suppliers:   Array,
 });
 
 const form = useForm({
@@ -113,8 +143,58 @@ const form = useForm({
   amount:       props.voucher?.amount       ?? '',
   voucher_date: props.voucher?.voucher_date ?? new Date().toISOString().slice(0, 10),
   counterparty: props.voucher?.counterparty ?? '',
+  supplier_id:  props.voucher?.supplier_id  ?? null,
   description:  props.voucher?.description  ?? '',
 });
+
+// ── Combobox NCC ──────────────────────────────────────────────────────────────
+
+const counterpartyInput = ref(props.voucher?.counterparty ?? '');
+const showDropdown = ref(false);
+// Track selected supplier to detect manual text changes
+const selectedSupplier = ref(
+  props.suppliers?.find(s => s.id === props.voucher?.supplier_id) ?? null
+);
+
+watch(counterpartyInput, (val) => {
+  form.counterparty = val;
+  // Nếu user tự sửa text khác với tên NCC đã chọn → bỏ liên kết
+  if (selectedSupplier.value && val !== selectedSupplier.value.name) {
+    form.supplier_id = null;
+    selectedSupplier.value = null;
+  }
+});
+
+const filteredSuppliers = computed(() => {
+  if (!props.suppliers?.length) return [];
+  const q = counterpartyInput.value.toLowerCase().trim();
+  if (!q) return props.suppliers.slice(0, 8);
+  return props.suppliers.filter(s =>
+    s.name.toLowerCase().includes(q) ||
+    s.code.toLowerCase().includes(q)
+  ).slice(0, 10);
+});
+
+function selectSupplier(s) {
+  selectedSupplier.value = s;   // set trước để watch không clear
+  form.supplier_id = s.id;
+  form.counterparty = s.name;
+  counterpartyInput.value = s.name;
+  showDropdown.value = false;
+}
+
+function clearSupplier() {
+  selectedSupplier.value = null;
+  form.supplier_id = null;
+  form.counterparty = '';
+  counterpartyInput.value = '';
+}
+
+function closeDropdown() {
+  setTimeout(() => { showDropdown.value = false; }, 150);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function submit() {
   if (props.voucher) {

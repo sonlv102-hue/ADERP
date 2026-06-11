@@ -29,10 +29,12 @@ class AccountingPostingJobTest extends TestCase
         $this->svc = app(AccountingService::class);
 
         // Tạo account codes cần thiết (dùng firstOrCreate để idempotent)
+        // Chú ý: migration 2026_06_06_900045 đã seed '131' (is_detail=true) và '5111' (is_detail=true)
+        // Phải dùng TK chi tiết (is_detail=true) vì validateLines từ chối TK tổng hợp
         foreach ([
-            ['code' => '131',  'name' => 'Phải thu KH', 'type' => 'asset',   'normal_balance' => 'debit'],
-            ['code' => '511',  'name' => 'Doanh thu',    'type' => 'revenue', 'normal_balance' => 'credit'],
-            ['code' => '1111', 'name' => 'Tiền mặt VND', 'type' => 'asset',  'normal_balance' => 'debit'],
+            ['code' => '131',  'name' => 'Phải thu KH',         'type' => 'asset',   'normal_balance' => 'debit',  'is_detail' => true],
+            ['code' => '5111', 'name' => 'Doanh thu bán hàng',  'type' => 'revenue', 'normal_balance' => 'credit', 'is_detail' => true],
+            ['code' => '1111', 'name' => 'Tiền mặt VND',        'type' => 'asset',   'normal_balance' => 'debit',  'is_detail' => true],
         ] as $ac) {
             AccountCode::firstOrCreate(['code' => $ac['code']], $ac);
         }
@@ -44,8 +46,8 @@ class AccountingPostingJobTest extends TestCase
     private function sampleLines(): array
     {
         return [
-            ['account' => '131', 'debit' => 1000000, 'credit' => 0,       'description' => 'Dr 131'],
-            ['account' => '511', 'debit' => 0,       'credit' => 1000000, 'description' => 'Cr 511'],
+            ['account' => '131',  'debit' => 1000000, 'credit' => 0,       'description' => 'Dr 131'],
+            ['account' => '5111', 'debit' => 0,       'credit' => 1000000, 'description' => 'Cr 5111'],
         ];
     }
 

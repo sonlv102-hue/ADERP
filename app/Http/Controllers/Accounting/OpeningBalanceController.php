@@ -71,15 +71,21 @@ class OpeningBalanceController extends Controller
 
             if (empty($lines)) return;
 
+            $entryDate    = $request->input('entry_date');
+            $fiscalPeriod = substr($entryDate, 0, 7); // 'YYYY-MM'
+
             $entry = JournalEntry::create([
-                'code'           => 'SDDK',
-                'entry_date'     => $request->input('entry_date'),
-                'description'    => 'Số dư đầu kỳ',
-                'reference_type' => 'opening_balance',
-                'status'         => 'posted',
-                'is_auto'        => false,
-                'created_by'     => auth()->id(),
-                'posted_at'      => now(),
+                'code'                         => 'SDDK',
+                'entry_date'                   => $entryDate,
+                'description'                  => 'Số dư đầu kỳ',
+                'reference_type'               => 'opening_balance',
+                'source_type'                  => 'opening_balance',
+                'fiscal_period'                => $fiscalPeriod,
+                'exclude_from_period_movement' => true,
+                'status'                       => 'posted',
+                'is_auto'                      => false,
+                'created_by'                   => auth()->id(),
+                'posted_at'                    => now(),
             ]);
 
             foreach ($lines as $idx => $line) {
@@ -119,15 +125,19 @@ class OpeningBalanceController extends Controller
             $entry = JournalEntry::where('reference_type', 'opening_balance')->first();
 
             if (!$entry) {
+                $importDate   = $request->input('entry_date');
                 $entry = JournalEntry::create([
-                    'code'           => 'SDDK',
-                    'entry_date'     => $request->input('entry_date'),
-                    'description'    => 'Số dư đầu kỳ',
-                    'reference_type' => 'opening_balance',
-                    'status'         => 'posted',
-                    'is_auto'        => false,
-                    'created_by'     => auth()->id(),
-                    'posted_at'      => now(),
+                    'code'                         => 'SDDK',
+                    'entry_date'                   => $importDate,
+                    'description'                  => 'Số dư đầu kỳ',
+                    'reference_type'               => 'opening_balance',
+                    'source_type'                  => 'opening_balance',
+                    'fiscal_period'                => substr($importDate, 0, 7),
+                    'exclude_from_period_movement' => true,
+                    'status'                       => 'posted',
+                    'is_auto'                      => false,
+                    'created_by'                   => auth()->id(),
+                    'posted_at'                    => now(),
                 ]);
             }
 
