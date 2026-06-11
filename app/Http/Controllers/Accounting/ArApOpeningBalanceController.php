@@ -117,8 +117,11 @@ class ArApOpeningBalanceController extends Controller
 
                 if ($abs > 0) {
                     if ($isAr) {
-                        $partyName      = Customer::find($item['customer_id'])?->name ?? '?';
-                        $partyAccount   = '131';
+                        $partyCustomer  = Customer::find($item['customer_id']);
+                        $partyName      = $partyCustomer?->name ?? '?';
+                        $partyAccount   = $partyCustomer
+                            ? $partyCustomer->getReceivableAccount()
+                            : throw new \RuntimeException("Khách hàng không tồn tại (id={$item['customer_id']}).");
                     } else {
                         $partySupplier  = Supplier::find($item['supplier_id']);
                         $partyName      = $partySupplier?->name ?? '?';
@@ -207,11 +210,13 @@ class ArApOpeningBalanceController extends Controller
                 : "CN ĐK #{$arApOpeningBalance->id}";
 
             if ($isAr) {
-                // AR: Thu tiền → Dr 111/112 / Cr 131
+                // AR: Thu tiền → Dr 1111/1121 / Cr 1311/1312/...
+                $arApOpeningBalance->loadMissing('customer');
+                $receivableAccount = $arApOpeningBalance->customer->getReceivableAccount();
                 $lines = [
                     ['account' => $cashAccount, 'debit' => $amount, 'credit' => 0,
                      'description' => "Thu tiền - {$docRef}"],
-                    ['account' => '131', 'debit' => 0, 'credit' => $amount,
+                    ['account' => $receivableAccount, 'debit' => 0, 'credit' => $amount,
                      'description'  => "Xóa CN ĐK KH - {$docRef}",
                      'partner_type' => 'customer',
                      'partner_id'   => $arApOpeningBalance->customer_id],

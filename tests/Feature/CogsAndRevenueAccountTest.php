@@ -35,21 +35,23 @@ class CogsAndRevenueAccountTest extends TestCase
         $this->actingAs($this->user);
         $this->invoiceService = app(InvoiceService::class);
 
-        $this->customer = Customer::create([
-            'code' => 'KH-0001',
-            'name' => 'Test Customer',
-        ]);
-
         foreach ([
-            ['code' => '131',   'name' => 'Phải thu KH',      'type' => 'asset',     'normal_balance' => 'debit'],
-            ['code' => '5111',  'name' => 'DT hàng hóa',      'type' => 'revenue',   'normal_balance' => 'credit'],
-            ['code' => '5113',  'name' => 'DT dịch vụ',       'type' => 'revenue',   'normal_balance' => 'credit'],
-            ['code' => '33311', 'name' => 'Thuế GTGT đầu ra', 'type' => 'liability', 'normal_balance' => 'credit'],
+            ['code' => '131',   'name' => 'Phải thu KH',      'type' => 'asset',     'normal_balance' => 'debit',  'is_detail' => false],
+            ['code' => '1311',  'name' => 'Phải thu KH - DN', 'type' => 'asset',     'normal_balance' => 'debit',  'is_detail' => true],
+            ['code' => '5111',  'name' => 'DT hàng hóa',      'type' => 'revenue',   'normal_balance' => 'credit', 'is_detail' => true],
+            ['code' => '5113',  'name' => 'DT dịch vụ',       'type' => 'revenue',   'normal_balance' => 'credit', 'is_detail' => true],
+            ['code' => '33311', 'name' => 'Thuế GTGT đầu ra', 'type' => 'liability', 'normal_balance' => 'credit', 'is_detail' => true],
         ] as $ac) {
             AccountCode::firstOrCreate(['code' => $ac['code']], array_merge($ac, [
-                'level' => 3, 'parent_code' => null, 'is_detail' => true,
+                'level' => 3, 'parent_code' => null,
             ]));
         }
+
+        $this->customer = Customer::create([
+            'code'                    => 'KH-0001',
+            'name'                    => 'Test Customer',
+            'receivable_account_code' => '1311',
+        ]);
 
         // Kỳ kế toán mở tháng 6/2026 — cần để AccountingService::checkPeriodOpen() không throw
         AccountingPeriod::create(['year' => 2026, 'month' => 6, 'status' => 'open']);

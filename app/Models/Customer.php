@@ -26,6 +26,7 @@ class Customer extends Model
         'code', 'name', 'company', 'tax_code', 'phone', 'email',
         'address', 'lead_status', 'assigned_to', 'notes',
         'payment_term_id', 'credit_limit', 'is_fdi',
+        'receivable_account_code',
     ];
 
     protected function casts(): array
@@ -52,6 +53,22 @@ class Customer extends Model
     public function assignedUser(): BelongsTo
     {
         return $this->belongsTo(User::class, 'assigned_to');
+    }
+
+    public function receivableAccount(): BelongsTo
+    {
+        return $this->belongsTo(AccountCode::class, 'receivable_account_code', 'code');
+    }
+
+    public function getReceivableAccount(): string
+    {
+        if (!$this->receivable_account_code) {
+            throw new \RuntimeException(
+                "Khách hàng \"{$this->name}\" chưa cấu hình tài khoản phải thu. "
+                . 'Vào Danh mục → Khách hàng → Sửa để chọn tài khoản.'
+            );
+        }
+        return $this->receivable_account_code;
     }
 
     public function contacts(): HasMany

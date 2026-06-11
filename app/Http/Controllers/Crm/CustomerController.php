@@ -6,9 +6,11 @@ use App\Enums\LeadStatus;
 use App\Exports\TemplateExport;
 use App\Http\Controllers\Controller;
 use App\Imports\CustomerImport;
+use App\Models\AccountCode;
 use App\Models\Customer;
 use App\Models\PaymentTerm;
 use App\Models\User;
+use Illuminate\Validation\Rule;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -47,10 +49,11 @@ class CustomerController extends Controller
     public function create(): Response
     {
         return Inertia::render('Crm/Customers/Form', [
-            'nextCode'      => Customer::generateCode(),
-            'lead_statuses' => collect(LeadStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
-            'sales_users'   => User::role(['admin', 'sales', 'director'])->orderBy('name')->get(['id', 'name']),
-            'payment_terms' => PaymentTerm::where('is_active', true)->orderBy('days')->get(['id', 'name', 'days']),
+            'nextCode'           => Customer::generateCode(),
+            'lead_statuses'      => collect(LeadStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
+            'sales_users'        => User::role(['admin', 'sales', 'director'])->orderBy('name')->get(['id', 'name']),
+            'payment_terms'      => PaymentTerm::where('is_active', true)->orderBy('days')->get(['id', 'name', 'days']),
+            'receivable_accounts'=> $this->getReceivableAccountOptions(),
         ]);
     }
 
@@ -67,9 +70,10 @@ class CustomerController extends Controller
             'lead_status'     => ['required', 'string'],
             'assigned_to'     => ['nullable', 'exists:users,id'],
             'notes'           => ['nullable', 'string'],
-            'payment_term_id' => ['nullable', 'exists:payment_terms,id'],
-            'credit_limit'    => ['nullable', 'numeric', 'min:0'],
-            'is_fdi'          => ['boolean'],
+            'payment_term_id'         => ['nullable', 'exists:payment_terms,id'],
+            'credit_limit'            => ['nullable', 'numeric', 'min:0'],
+            'is_fdi'                  => ['boolean'],
+            'receivable_account_code' => ['required', Rule::exists('account_codes', 'code')->where('is_detail', true)],
         ]);
 
         Customer::create($data);
@@ -111,24 +115,26 @@ class CustomerController extends Controller
     {
         return Inertia::render('Crm/Customers/Form', [
             'customer' => [
-                'id'              => $customer->id,
-                'code'            => $customer->code,
-                'name'            => $customer->name,
-                'company'         => $customer->company,
-                'tax_code'        => $customer->tax_code,
-                'phone'           => $customer->phone,
-                'email'           => $customer->email,
-                'address'         => $customer->address,
-                'lead_status'     => $customer->lead_status->value,
-                'assigned_to'     => $customer->assigned_to,
-                'notes'           => $customer->notes,
-                'payment_term_id' => $customer->payment_term_id,
-                'credit_limit'    => $customer->credit_limit,
-                'is_fdi'          => (bool) $customer->is_fdi,
+                'id'                      => $customer->id,
+                'code'                    => $customer->code,
+                'name'                    => $customer->name,
+                'company'                 => $customer->company,
+                'tax_code'                => $customer->tax_code,
+                'phone'                   => $customer->phone,
+                'email'                   => $customer->email,
+                'address'                 => $customer->address,
+                'lead_status'             => $customer->lead_status->value,
+                'assigned_to'             => $customer->assigned_to,
+                'notes'                   => $customer->notes,
+                'payment_term_id'         => $customer->payment_term_id,
+                'credit_limit'            => $customer->credit_limit,
+                'is_fdi'                  => (bool) $customer->is_fdi,
+                'receivable_account_code' => $customer->receivable_account_code,
             ],
-            'lead_statuses' => collect(LeadStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
-            'sales_users'   => User::role(['admin', 'sales', 'director'])->orderBy('name')->get(['id', 'name']),
-            'payment_terms' => PaymentTerm::where('is_active', true)->orderBy('days')->get(['id', 'name', 'days']),
+            'lead_statuses'       => collect(LeadStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
+            'sales_users'         => User::role(['admin', 'sales', 'director'])->orderBy('name')->get(['id', 'name']),
+            'payment_terms'       => PaymentTerm::where('is_active', true)->orderBy('days')->get(['id', 'name', 'days']),
+            'receivable_accounts' => $this->getReceivableAccountOptions(),
         ]);
     }
 
@@ -145,9 +151,10 @@ class CustomerController extends Controller
             'lead_status'     => ['required', 'string'],
             'assigned_to'     => ['nullable', 'exists:users,id'],
             'notes'           => ['nullable', 'string'],
-            'payment_term_id' => ['nullable', 'exists:payment_terms,id'],
-            'credit_limit'    => ['nullable', 'numeric', 'min:0'],
-            'is_fdi'          => ['boolean'],
+            'payment_term_id'         => ['nullable', 'exists:payment_terms,id'],
+            'credit_limit'            => ['nullable', 'numeric', 'min:0'],
+            'is_fdi'                  => ['boolean'],
+            'receivable_account_code' => ['required', Rule::exists('account_codes', 'code')->where('is_detail', true)],
         ]);
 
         $customer->update($data);
@@ -190,5 +197,15 @@ class CustomerController extends Controller
              'Vietcombank', '1234567890', 'CÔNG TY TNHH ABC', 'HN - Hoàn Kiếm', 'Khách hàng mẫu'],
         ];
         return Excel::download(new TemplateExport($headers, 'Customers', $sample), 'customer-template.xlsx');
+    }
+
+    private function getReceivableAccountOptions(): array
+    {
+        return AccountCode::where('is_detail', true)
+            ->where('code', 'like', '13%')
+            ->orderBy('code')
+            ->get(['code', 'name'])
+            ->map(fn ($a) => ['code' => $a->code, 'label' => "{$a->code} — {$a->name}"])
+            ->all();
     }
 }

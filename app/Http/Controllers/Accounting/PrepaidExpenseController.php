@@ -60,7 +60,8 @@ class PrepaidExpenseController extends Controller
                 ['code' => '635',  'label' => '635 — Chi phí tài chính'],
             ],
             'creditOptions' => [
-                ['code' => '331',  'label' => '331 — Phải trả người bán'],
+                ['code' => '3311', 'label' => '3311 — NCC trong nước'],
+                ['code' => '3312', 'label' => '3312 — NCC nước ngoài'],
                 ['code' => '1111', 'label' => '1111 — Tiền mặt VND'],
                 ['code' => '1121', 'label' => '1121 — Tiền gửi VND'],
             ],

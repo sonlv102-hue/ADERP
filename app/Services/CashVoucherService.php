@@ -88,9 +88,14 @@ class CashVoucherService
     /** Tài khoản đối ứng mặc định */
     private function resolveCounterAccount(CashVoucher $voucher, string $direction): string
     {
-        // Thu từ KH (gắn HD bán hàng) → 131
+        // Thu từ KH (gắn HD bán hàng) → lấy receivable_account từ customer qua invoice
         if ($direction === 'receipt' && $voucher->reference_type === 'invoice') {
-            return '131';
+            $invoice = \App\Models\Invoice::find($voucher->reference_id);
+            if ($invoice?->customer_id) {
+                $invoice->loadMissing('customer');
+                return $invoice->customer->getReceivableAccount();
+            }
+            return '1311'; // fallback nếu không tìm được invoice/customer
         }
         // Liên quan NCC: có supplier_id → lấy payable_account_code từ NCC
         if ($voucher->supplier_id) {
@@ -102,7 +107,7 @@ class CashVoucherService
         if ($voucher->reference_type === 'purchase_invoice') {
             return '3311';
         }
-        // Mặc định: thu → 131, chi → 6422 (Chi phí QLDN)
-        return $direction === 'receipt' ? '131' : '6422';
+        // Mặc định: thu → 1311 (phải thu KH trong nước), chi → 6422 (Chi phí QLDN)
+        return $direction === 'receipt' ? '1311' : '6422';
     }
 }

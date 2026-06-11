@@ -124,6 +124,19 @@
           <p v-if="form.errors.address" class="mt-1 text-xs text-red-600">{{ form.errors.address }}</p>
         </div>
 
+        <!-- Tài khoản phải thu -->
+        <div class="bg-white rounded-xl border border-gray-200 p-4">
+          <h2 class="text-sm font-semibold text-gray-800 mb-3">Tài khoản phải thu</h2>
+          <select v-model="form.receivable_account_code"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none"
+            :class="{ 'border-red-500': form.errors.receivable_account_code }">
+            <option :value="null" disabled>-- Chọn tài khoản --</option>
+            <option v-for="ac in receivable_accounts" :key="ac.code" :value="ac.code">{{ ac.label }}</option>
+          </select>
+          <p v-if="form.errors.receivable_account_code" class="mt-1 text-xs text-red-600">{{ form.errors.receivable_account_code }}</p>
+          <p v-if="form.receivable_account_code" class="mt-1 text-xs text-green-600">Bút toán ghi nhận doanh thu sẽ Dr TK {{ form.receivable_account_code }}</p>
+        </div>
+
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
           <textarea v-model="form.notes" rows="3"
@@ -155,6 +168,7 @@ const props = defineProps({
   lead_statuses: Array,
   sales_users: Array,
   payment_terms: Array,
+  receivable_accounts: { type: Array, default: () => [] },
 });
 
 const form = useForm({
@@ -169,8 +183,9 @@ const form = useForm({
   address:         props.customer?.address         ?? '',
   notes:           props.customer?.notes           ?? '',
   payment_term_id: props.customer?.payment_term_id ?? null,
-  credit_limit:    props.customer?.credit_limit    ?? null,
-  is_fdi:          props.customer?.is_fdi          ?? false,
+  credit_limit:             props.customer?.credit_limit             ?? null,
+  is_fdi:                   props.customer?.is_fdi                   ?? false,
+  receivable_account_code:  props.customer?.receivable_account_code  ?? null,
 });
 
 const submit = () => {

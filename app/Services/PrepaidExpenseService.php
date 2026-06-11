@@ -38,7 +38,7 @@ class PrepaidExpenseService
             ]);
 
             // Bút toán ghi nhận: Dr 142/242 / Cr nguồn tiền
-            $creditAccount = $data['credit_account'] ?? '331';
+            $creditAccount = $data['credit_account'] ?? '3311';
             $this->accounting->tryPost(
                 description: 'Ghi nhận chi phí trả trước: ' . $expense->description,
                 date: Carbon::parse($data['start_date']),

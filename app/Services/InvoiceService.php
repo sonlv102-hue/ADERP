@@ -119,9 +119,11 @@ class InvoiceService
 
         if ($totalCredit <= 0) return;
 
-        // Dr 131 = tổng Có đã round — đảm bảo bút toán cân bằng
+        // Dr <receivable> = tổng Có đã round — đảm bảo bút toán cân bằng
+        $invoice->loadMissing('customer');
+        $receivableAccount = $invoice->customer->getReceivableAccount();
         $lines = [
-            ['account' => '131', 'debit' => $totalCredit, 'credit' => 0,
+            ['account' => $receivableAccount, 'debit' => $totalCredit, 'credit' => 0,
              'description'  => "Phải thu KH - {$invoice->code}",
              'partner_type' => 'customer', 'partner_id' => $invoice->customer_id],
         ];
@@ -151,13 +153,16 @@ class InvoiceService
             : ($payment->method ?? 'cash');
         $cashAccount = $this->resolvePaymentAccount($method);
 
+        $invoice->loadMissing('customer');
+        $receivableAccount = $invoice->customer->getReceivableAccount();
+
         $this->accounting->tryPost(
             "Thu tiền {$invoice->code}",
             Carbon::parse($payment->payment_date),
             [
                 ['account' => $cashAccount, 'debit' => $amount, 'credit' => 0,
                  'description' => "Thu tiền - {$invoice->code}"],
-                ['account' => '131', 'debit' => 0, 'credit' => $amount,
+                ['account' => $receivableAccount, 'debit' => 0, 'credit' => $amount,
                  'description'  => "Xóa công nợ KH - {$invoice->code}",
                  'partner_type' => 'customer', 'partner_id' => $invoice->customer_id],
             ],
