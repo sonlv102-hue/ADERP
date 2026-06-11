@@ -16,14 +16,16 @@ use Illuminate\Support\Facades\DB;
 class AuditParentAccounts extends Command
 {
     protected $signature = 'accounting:audit-parent-accounts
-                                {--account= : Lọc theo mã tài khoản cụ thể (vd: 131)}
-                                {--export   : Xuất kết quả ra file CSV}';
+                                {--account=          : Lọc theo mã tài khoản cụ thể (vd: 131)}
+                                {--include-adjusted  : Hiển thị cả JE đã có bút toán điều chỉnh}
+                                {--export            : Xuất kết quả ra file CSV}';
 
     protected $description = 'Audit toàn bộ journal lines dùng tài khoản cha (is_detail=false)';
 
     public function handle(): int
     {
-        $filterAccount = $this->option('account');
+        $filterAccount   = $this->option('account');
+        $includeAdjusted = $this->option('include-adjusted');
 
         // Lấy tất cả tài khoản cha đang được dùng trong journal_entry_lines
         $query = DB::table('journal_entry_lines as jel')
@@ -41,6 +43,13 @@ class AuditParentAccounts extends Command
             // Bỏ qua các bút toán điều chỉnh tạo bởi apply-payable-adjustment
             ->where(fn ($q) => $q->whereNull('je.source_type')
                                   ->orWhere('je.source_type', '!=', 'payable_reclassification'))
+            // Mặc định bỏ qua JE đã có bút toán điều chỉnh (reference_id trỏ vào JE gốc)
+            ->when(!$includeAdjusted, fn ($q) => $q->whereNotExists(function ($sub) {
+                $sub->select(DB::raw(1))
+                    ->from('journal_entries as adj')
+                    ->where('adj.source_type', 'payable_reclassification')
+                    ->whereColumn('adj.reference_id', 'je.id');
+            }))
             ->select(
                 'je.id as je_id',
                 'je.code as je_code',
