@@ -3,7 +3,6 @@
 namespace App\Exports\Reports;
 
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
@@ -11,130 +10,113 @@ use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
+/**
+ * Export Báo cáo tình hình tài chính B01a-DNN.
+ * Nhận kết quả đã tính từ FinancialPositionReportService — không tính lại.
+ */
 class BalanceSheetExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithTitle
 {
-    public function __construct(private array $filters = []) {}
+    public function __construct(private array $reportData) {}
 
-    public function title(): string { return 'Cân đối kế toán'; }
+    public function title(): string
+    {
+        return 'B01a-DNN';
+    }
 
     public function collection(): Collection
     {
-        $asOf = $this->filters['as_of'] ?? now()->toDateString();
-        $bal  = $this->accountBalancesAsOf($asOf);
-        $b    = fn(string $code) => $this->sumPrefix($bal, $code);
+        $rows    = $this->reportData['rows']    ?? [];
+        $summary = $this->reportData['summary'] ?? [];
+        $asOf    = $this->reportData['as_of']   ?? '';
 
-        $cashOnHand  = $b('111');
-        $bankBalance = $b('112');
-        $ar131Net    = $b('131');
-        $arAsset     = max(0.0, $ar131Net);
-        $arLiability = max(0.0, -$ar131Net);
-        $prepaidST   = $b('142');
-        $inventory   = $b('156') + $b('155') + $b('152') + $b('153');
-        $faGross     = $b('211') + $b('213');
-        $faAccDep    = $b('214');
-        $faNet       = max(0.0, $faGross - $faAccDep);
-        $prepaidLT   = $b('242');
+        $items = [];
 
-        $cash                  = $cashOnHand + $bankBalance;
-        $ap331Net      = $b('331');
-        $apLiability   = max(0.0, $ap331Net);
-        $apAsset       = max(0.0, -$ap331Net);
-        $vatPayable    = $b('3331') + $b('3332') + $b('3333');
-        $citPayable    = $b('3334');
-        $pitPayable    = $b('3335');
-        $bhxhPayable   = $b('3383') + $b('3384') + $b('3389');
-        $salaryPayable = $b('334');
-        $totalLiabilities     = $apLiability + $arLiability + $vatPayable + $citPayable + $pitPayable + $bhxhPayable + $salaryPayable;
-        $totalCurrentAssets    = $cash + $arAsset + $apAsset + $prepaidST + $inventory;
-        $totalNonCurrentAssets = $faNet + $prepaidLT;
-        $totalAssets           = $totalCurrentAssets + $totalNonCurrentAssets;
+        // Tiêu đề
+        $items[] = (object) [
+            'code'   => '',
+            'name'   => 'BÁO CÁO TÌNH HÌNH TÀI CHÍNH — Mẫu B01a-DNN (TT 133/2016/TT-BTC)',
+            'amount' => null,
+            'bold'   => true,
+        ];
+        $items[] = (object) ['code' => '', 'name' => 'Tại ngày: ' . $asOf, 'amount' => null, 'bold' => false];
+        $items[] = (object) ['code' => '', 'name' => '', 'amount' => null, 'bold' => false];
 
-        $charterCapital   = $b('411');
-        $account421       = $this->sumPrefix($bal, '421');
-        $balance4211      = $this->sumPrefix($bal, '4211');
-        $balance4212      = $this->sumPrefix($bal, '4212');
-        $revenue          = $this->sumPrefix($bal, '5');
-        $expenses         = $this->sumPrefix($bal, '6') + $this->sumPrefix($bal, '8');
-        $currentNetIncome = $revenue - $expenses;
-        $retainedEarnings = $account421 + $currentNetIncome;
-        $totalEquity      = $charterCapital + $retainedEarnings;
-        $totalLiabEquity  = $totalLiabilities + $totalEquity;
-
-        return collect([
-            (object)['label' => 'BẢNG CÂN ĐỐI KẾ TOÁN tại ' . $asOf, 'amount' => null],
-            (object)['label' => '', 'amount' => null],
-            (object)['label' => 'A. TÀI SẢN NGẮN HẠN',                       'amount' => $totalCurrentAssets],
-            (object)['label' => '  I. Tiền và tương đương tiền',               'amount' => $cash],
-            (object)['label' => '     - Tiền mặt (TK 111)',                    'amount' => $cashOnHand],
-            (object)['label' => '     - Tiền gửi ngân hàng (TK 112)',          'amount' => $bankBalance],
-            (object)['label' => '  II. Phải thu ngắn hạn – KH (TK 131)',      'amount' => $arAsset],
-            (object)['label' => '     + Trả trước cho NCC (TK 331)',          'amount' => $apAsset],
-            (object)['label' => '  III. Hàng tồn kho (TK 152/153/155/156)',   'amount' => $inventory],
-            (object)['label' => '  IV. Chi phí trả trước ngắn hạn (TK 142)', 'amount' => $prepaidST],
-            (object)['label' => 'B. TÀI SẢN DÀI HẠN',                        'amount' => $totalNonCurrentAssets],
-            (object)['label' => '  I. TSCĐ – Nguyên giá (TK 211)',            'amount' => $faGross],
-            (object)['label' => '     Hao mòn lũy kế (TK 214)',               'amount' => -$faAccDep],
-            (object)['label' => '     Giá trị còn lại',                       'amount' => $faNet],
-            (object)['label' => '  II. Chi phí trả trước dài hạn (TK 242)',   'amount' => $prepaidLT],
-            (object)['label' => 'TỔNG CỘNG TÀI SẢN (A+B)',                    'amount' => $totalAssets],
-            (object)['label' => '', 'amount' => null],
-            (object)['label' => 'A. NỢ PHẢI TRẢ',                             'amount' => $totalLiabilities],
-            (object)['label' => '  I. Phải trả người bán (TK 331)',            'amount' => $apLiability],
-            (object)['label' => '     + Người mua trả trước (TK 131)',         'amount' => $arLiability],
-            (object)['label' => '  II. Thuế GTGT phải nộp (TK 3331)',         'amount' => $vatPayable],
-            (object)['label' => '  III. Thuế TNDN (TK 3334)',                  'amount' => $citPayable],
-            (object)['label' => '  IV. Thuế TNCN (TK 3335)',                   'amount' => $pitPayable],
-            (object)['label' => '  V. Phải trả NLĐ (TK 334)',                  'amount' => $salaryPayable],
-            (object)['label' => '  VI. BHXH/BHYT/BHTN (TK 338)',               'amount' => $bhxhPayable],
-            (object)['label' => 'B. VỐN CHỦ SỞ HỮU',                          'amount' => $totalEquity],
-            (object)['label' => '  Vốn đầu tư của CSH (TK 411)',               'amount' => $charterCapital],
-            (object)['label' => '  Lợi nhuận chưa phân phối (TK 421)',           'amount' => $retainedEarnings],
-            (object)['label' => '     - LNST năm trước (TK 4211)',              'amount' => $balance4211],
-            (object)['label' => '     - LNST năm nay (TK 4212)',               'amount' => $balance4212],
-            (object)['label' => '     - Lãi/(lỗ) chưa kết chuyển',             'amount' => $currentNetIncome],
-            (object)['label' => 'TỔNG CỘNG NGUỒN VỐN (A+B)',                   'amount' => $totalLiabEquity],
-        ]);
-    }
-
-    private function accountBalancesAsOf(string $asOf): array
-    {
-        $rows = DB::table('journal_entry_lines as jel')
-            ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
-            ->join('account_codes as ac', 'ac.code', '=', 'jel.account_code')
-            ->where('je.status', 'posted')
-            ->whereDate('je.entry_date', '<=', $asOf)
-            ->select('jel.account_code', 'ac.normal_balance',
-                DB::raw('SUM(jel.debit) as dr'),
-                DB::raw('SUM(jel.credit) as cr'))
-            ->groupBy('jel.account_code', 'ac.normal_balance')
-            ->get();
-
-        $result = [];
-        foreach ($rows as $r) {
-            $result[$r->account_code] = $r->normal_balance === 'debit'
-                ? (float) $r->dr - (float) $r->cr
-                : (float) $r->cr - (float) $r->dr;
+        // Asset rows
+        $items[] = (object) ['code' => '', 'name' => 'PHẦN I — TÀI SẢN', 'amount' => null, 'bold' => true];
+        foreach (array_filter($rows, fn($r) => $r['section'] === 'asset') as $row) {
+            $indent  = $row['level'] === 2 ? '    ' : '';
+            $items[] = (object) [
+                'code'   => $row['item_code'] ?? '',
+                'name'   => $indent . $row['item_name'],
+                'amount' => $row['amount'],
+                'bold'   => $row['is_total'] || ($row['level'] === 1 && $row['is_formula']),
+            ];
         }
-        return $result;
-    }
 
-    private function sumPrefix(array $balances, string $prefix): float
-    {
-        $total = 0.0;
-        foreach ($balances as $code => $balance) {
-            if (str_starts_with((string) $code, $prefix)) {
-                $total += $balance;
-            }
+        $items[] = (object) ['code' => '', 'name' => '', 'amount' => null, 'bold' => false];
+
+        // Source rows
+        $items[] = (object) ['code' => '', 'name' => 'PHẦN II — NGUỒN VỐN', 'amount' => null, 'bold' => true];
+        foreach (array_filter($rows, fn($r) => $r['section'] === 'source') as $row) {
+            $indent  = $row['level'] === 2 ? '    ' : '';
+            $items[] = (object) [
+                'code'   => $row['item_code'] ?? '',
+                'name'   => $indent . $row['item_name'],
+                'amount' => $row['amount'],
+                'bold'   => $row['is_total'] || $row['is_section_header']
+                          || ($row['level'] === 1 && $row['is_formula']),
+            ];
         }
-        return $total;
+
+        // Cảnh báo nếu không cân
+        if (!($summary['balanced'] ?? true)) {
+            $items[] = (object) ['code' => '', 'name' => '', 'amount' => null, 'bold' => false];
+            $items[] = (object) [
+                'code'   => '',
+                'name'   => '⚠ Báo cáo chưa cân. Chênh lệch: ' . number_format(abs($summary['difference'] ?? 0), 0, ',', '.') . ' đ',
+                'amount' => null,
+                'bold'   => true,
+            ];
+        }
+
+        return collect($items);
     }
 
-    public function headings(): array { return ['Chỉ tiêu', 'Số tiền (VND)']; }
+    public function headings(): array
+    {
+        return ['Mã chỉ tiêu', 'Chỉ tiêu', 'Số tiền (VND)'];
+    }
 
     public function map($row): array
     {
-        return [$row->label, $row->amount !== null ? $row->amount : ''];
+        return [
+            $row->code,
+            $row->name,
+            $row->amount !== null ? $row->amount : '',
+        ];
     }
 
-    public function styles(Worksheet $sheet): array { return [1 => ['font' => ['bold' => true]]]; }
+    public function styles(Worksheet $sheet): array
+    {
+        $highestRow = $sheet->getHighestRow();
+        $styles     = [
+            1 => ['font' => ['bold' => true]],
+        ];
+
+        for ($i = 1; $i <= $highestRow; $i++) {
+            $cell = $sheet->getCell("A{$i}")->getValue();
+            // Bold rows: mã 200, 300, 400, 500
+            if (in_array($cell, ['200', '300', '400', '500'])) {
+                $styles[$i] = ['font' => ['bold' => true]];
+            }
+        }
+
+        // Căn phải cột số tiền
+        $sheet->getColumnDimension('A')->setWidth(12);
+        $sheet->getColumnDimension('B')->setWidth(55);
+        $sheet->getColumnDimension('C')->setWidth(20);
+        $sheet->getStyle("C2:C{$highestRow}")->getNumberFormat()->setFormatCode('#,##0');
+
+        return $styles;
+    }
 }
