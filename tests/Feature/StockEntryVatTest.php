@@ -33,17 +33,23 @@ class StockEntryVatTest extends TestCase
         $this->user->givePermissionTo(['warehouse.view', 'warehouse.create']);
         $this->actingAs($this->user);
 
-        $this->supplier  = Supplier::create(['code' => 'NCC-001', 'name' => 'NCC Test', 'is_active' => true]);
         $this->warehouse = Warehouse::create(['name' => 'Kho chính', 'address' => 'HN', 'manager_id' => $this->user->id, 'is_active' => true]);
 
         // Account codes required by postEntryJournal FK constraint
         foreach ([
-            ['code' => '156',  'name' => 'Hàng hoá', 'type' => 'asset', 'normal_balance' => 'debit'],
-            ['code' => '1331', 'name' => 'Thuế GTGT đầu vào', 'type' => 'asset', 'normal_balance' => 'debit'],
-            ['code' => '331',  'name' => 'Phải trả NCC', 'type' => 'liability', 'normal_balance' => 'credit'],
+            ['code' => '156',  'name' => 'Hàng hoá',           'type' => 'asset',     'normal_balance' => 'debit',  'is_detail' => true],
+            ['code' => '1331', 'name' => 'Thuế GTGT đầu vào',  'type' => 'asset',     'normal_balance' => 'debit',  'is_detail' => true],
+            ['code' => '331',  'name' => 'Phải trả NCC',        'type' => 'liability', 'normal_balance' => 'credit', 'is_detail' => false],
+            ['code' => '3311', 'name' => 'NCC trong nước',      'type' => 'liability', 'normal_balance' => 'credit', 'is_detail' => true],
         ] as $acc) {
-            \App\Models\AccountCode::firstOrCreate(['code' => $acc['code']], array_merge($acc, ['level' => 3, 'is_detail' => true, 'is_active' => true]));
+            \App\Models\AccountCode::updateOrCreate(['code' => $acc['code']], array_merge($acc, ['level' => 3, 'is_active' => true]));
         }
+
+        // Supplier cần payable_account_code để postEntryJournal dùng TK chi tiết
+        $this->supplier = Supplier::create([
+            'code' => 'NCC-001', 'name' => 'NCC Test',
+            'is_active' => true, 'payable_account_code' => '3311',
+        ]);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -227,14 +233,14 @@ class StockEntryVatTest extends TestCase
 
         $this->assertNotNull($journal);
 
-        $lines = $journal->lines;
-        $cr331 = $lines->where('account_code', '331')->sum('credit');
-        $dr156 = $lines->where('account_code', '156')->sum('debit');
+        $lines  = $journal->lines;
+        $cr3311 = $lines->where('account_code', '3311')->sum('credit');
+        $dr156  = $lines->where('account_code', '156')->sum('debit');
         $dr1331 = $lines->where('account_code', '1331')->sum('debit');
 
         $this->assertEquals(5000000, $dr156);
         $this->assertEquals(500000,  $dr1331);
-        $this->assertEquals(5500000, $cr331);
+        $this->assertEquals(5500000, $cr3311);
     }
 
     public function test_journal_cr331_vat_8_percent(): void
@@ -248,14 +254,14 @@ class StockEntryVatTest extends TestCase
         $journal = \App\Models\JournalEntry::where('reference_type', 'stock_entry')
             ->where('reference_id', $entry->id)->first();
 
-        $lines = $journal->lines;
-        $cr331 = $lines->where('account_code', '331')->sum('credit');
-        $dr156 = $lines->where('account_code', '156')->sum('debit');
+        $lines  = $journal->lines;
+        $cr3311 = $lines->where('account_code', '3311')->sum('credit');
+        $dr156  = $lines->where('account_code', '156')->sum('debit');
         $dr1331 = $lines->where('account_code', '1331')->sum('debit');
 
         $this->assertEquals(4462964, $dr156);
         $this->assertEqualsWithDelta(357037, $dr1331, 1);
-        $this->assertEquals($dr156 + $dr1331, $cr331); // journal must balance
+        $this->assertEquals($dr156 + $dr1331, $cr3311); // journal must balance
     }
 
     public function test_journal_balanced_multi_item_mixed_vat(): void
@@ -275,8 +281,8 @@ class StockEntryVatTest extends TestCase
         $totalCredit = $lines->sum('credit');
         $this->assertEquals($totalDebit, $totalCredit); // journal is balanced
 
-        $cr331 = $lines->where('account_code', '331')->sum('credit');
+        $cr3311 = $lines->where('account_code', '3311')->sum('credit');
         // SP H: 3×1_000_000×1.10 = 3_300_000, SP I: 2×2_000_000 = 4_000_000 → total = 7_300_000
-        $this->assertEquals(7300000, $cr331);
+        $this->assertEquals(7300000, $cr3311);
     }
 }

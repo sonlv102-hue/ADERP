@@ -116,12 +116,19 @@ class ArApOpeningBalanceController extends Controller
                 ]);
 
                 if ($abs > 0) {
-                    $partyName = $isAr
-                        ? (Customer::find($item['customer_id'])?->name ?? '?')
-                        : (Supplier::find($item['supplier_id'])?->name ?? '?');
+                    if ($isAr) {
+                        $partyName      = Customer::find($item['customer_id'])?->name ?? '?';
+                        $partyAccount   = '131';
+                    } else {
+                        $partySupplier  = Supplier::find($item['supplier_id']);
+                        $partyName      = $partySupplier?->name ?? '?';
+                        $partyAccount   = $partySupplier
+                            ? $partySupplier->getPayableAccount()
+                            : throw new \RuntimeException("Nhà cung cấp không tồn tại (id={$item['supplier_id']}).");
+                    }
 
                     $lines[] = [
-                        'account'      => $isAr ? '131' : '331',
+                        'account'      => $partyAccount,
                         'debit'        => $lineDr,
                         'credit'       => $lineCr,
                         'description'  => ($isAr ? 'Phải thu ĐK' : 'Phải trả ĐK') . " {$partyName}" .
@@ -211,9 +218,11 @@ class ArApOpeningBalanceController extends Controller
                 ];
                 $desc = "Thu công nợ đầu kỳ {$docRef}";
             } else {
-                // AP: Trả tiền NCC → Dr 331 / Cr 111/112
+                // AP: Trả tiền NCC → Dr 3311/3312/... / Cr 1111/1121
+                $arApOpeningBalance->loadMissing('supplier');
+                $payableAccount = $arApOpeningBalance->supplier->getPayableAccount();
                 $lines = [
-                    ['account' => '331', 'debit' => $amount, 'credit' => 0,
+                    ['account' => $payableAccount, 'debit' => $amount, 'credit' => 0,
                      'description'  => "Xóa CN ĐK NCC - {$docRef}",
                      'partner_type' => 'supplier',
                      'partner_id'   => $arApOpeningBalance->supplier_id],

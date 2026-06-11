@@ -14,7 +14,7 @@ class Supplier extends Model
     protected $fillable = [
         'code', 'name', 'tax_code', 'phone', 'email', 'address',
         'bank_name', 'bank_account', 'bank_account_name', 'bank_branch',
-        'notes', 'is_active', 'payment_term_id',
+        'notes', 'is_active', 'payment_term_id', 'payable_account_code',
     ];
 
     protected function casts(): array
@@ -27,6 +27,26 @@ class Supplier extends Model
         $last = self::withTrashed()->orderByDesc('id')->value('code');
         $num = $last ? ((int) substr($last, 4)) + 1 : 1;
         return 'NCC-' . str_pad($num, 4, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Trả về mã TK công nợ phải trả chi tiết (3311/3312/3318...).
+     * Ném RuntimeException nếu NCC chưa cấu hình — không fallback ngầm về 331.
+     */
+    public function getPayableAccount(): string
+    {
+        if (!$this->payable_account_code) {
+            throw new \RuntimeException(
+                "Nhà cung cấp \"{$this->name}\" chưa cấu hình tài khoản công nợ phải trả chi tiết. "
+                . 'Vào Danh mục → Nhà cung cấp → Sửa để chọn tài khoản.'
+            );
+        }
+        return $this->payable_account_code;
+    }
+
+    public function payableAccount(): BelongsTo
+    {
+        return $this->belongsTo(AccountCode::class, 'payable_account_code', 'code');
     }
 
     public function paymentTerm(): BelongsTo

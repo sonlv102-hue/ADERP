@@ -92,9 +92,15 @@ class CashVoucherService
         if ($direction === 'receipt' && $voucher->reference_type === 'invoice') {
             return '131';
         }
-        // Liên quan NCC: có supplier_id hoặc gắn HD mua hàng → 331
-        if ($voucher->supplier_id || $voucher->reference_type === 'purchase_invoice') {
-            return '331';
+        // Liên quan NCC: có supplier_id → lấy payable_account_code từ NCC
+        if ($voucher->supplier_id) {
+            $voucher->loadMissing('supplier');
+            return $voucher->supplier->getPayableAccount();
+        }
+        // Gắn HD mua hàng (không có supplier_id trực tiếp trên voucher) → fallback 3311
+        // Trường hợp này hiếm — phiếu chi nên luôn gắn supplier_id khi thanh toán NCC
+        if ($voucher->reference_type === 'purchase_invoice') {
+            return '3311';
         }
         // Mặc định: thu → 131, chi → 6422 (Chi phí QLDN)
         return $direction === 'receipt' ? '131' : '6422';

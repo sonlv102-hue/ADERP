@@ -93,6 +93,27 @@
           </div>
         </div>
 
+        <!-- Tài khoản công nợ phải trả -->
+        <div class="bg-white rounded-xl border border-gray-200 p-6">
+          <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-1">Tài khoản công nợ phải trả</h2>
+          <p class="text-xs text-gray-400 mb-4">Dùng để hạch toán bút toán Cr khi nhập kho, thanh toán NCC. Chỉ chọn tài khoản chi tiết.</p>
+          <div class="max-w-xs">
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              Tài khoản phải trả <span class="text-red-500">*</span>
+            </label>
+            <select v-model="form.payable_account_code"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+              :class="{ 'border-red-500': form.errors.payable_account_code }">
+              <option :value="null" disabled>-- Chọn tài khoản --</option>
+              <option v-for="ac in payable_accounts" :key="ac.code" :value="ac.code">{{ ac.label }}</option>
+            </select>
+            <p v-if="form.errors.payable_account_code" class="mt-1 text-xs text-red-600">{{ form.errors.payable_account_code }}</p>
+            <p v-if="form.payable_account_code" class="mt-1 text-xs text-green-600">
+              Bút toán sẽ dùng TK {{ form.payable_account_code }}
+            </p>
+          </div>
+        </div>
+
         <!-- Thông tin ngân hàng -->
         <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
           <h2 class="text-sm font-semibold text-gray-500 uppercase tracking-wide">Tài khoản ngân hàng</h2>
@@ -220,10 +241,11 @@ import { Link, useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 
 const props = defineProps({
-  supplier:      { type: Object, default: null },
-  nextCode:      String,
-  payment_terms: { type: Array, default: () => [] },
-  bankAccounts:  { type: Array, default: () => [] },
+  supplier:         { type: Object, default: null },
+  nextCode:         String,
+  payment_terms:    { type: Array, default: () => [] },
+  payable_accounts: { type: Array, default: () => [] },
+  bankAccounts:     { type: Array, default: () => [] },
 });
 
 const form = useForm({
@@ -233,13 +255,14 @@ const form = useForm({
   phone:             props.supplier?.phone             ?? '',
   email:             props.supplier?.email             ?? '',
   address:           props.supplier?.address           ?? '',
-  bank_name:         props.supplier?.bank_name         ?? '',
-  bank_account:      props.supplier?.bank_account      ?? '',
-  bank_account_name: props.supplier?.bank_account_name ?? '',
-  bank_branch:       props.supplier?.bank_branch       ?? '',
-  notes:             props.supplier?.notes             ?? '',
-  is_active:         props.supplier?.is_active         ?? true,
-  payment_term_id:   props.supplier?.payment_term_id   ?? null,
+  bank_name:             props.supplier?.bank_name             ?? '',
+  bank_account:          props.supplier?.bank_account          ?? '',
+  bank_account_name:     props.supplier?.bank_account_name     ?? '',
+  bank_branch:           props.supplier?.bank_branch           ?? '',
+  notes:                 props.supplier?.notes                 ?? '',
+  is_active:             props.supplier?.is_active             ?? true,
+  payment_term_id:       props.supplier?.payment_term_id       ?? null,
+  payable_account_code:  props.supplier?.payable_account_code  ?? null,
 });
 
 const submit = () => {

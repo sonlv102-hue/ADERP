@@ -337,6 +337,7 @@ class StockService
         $supplierId = $entry->purchase_order_id
             ? DB::table('purchase_orders')->where('id', $entry->purchase_order_id)->value('supplier_id')
             : null;
+        $supplier = $supplierId ? \App\Models\Supplier::find($supplierId) : null;
         $lines = [];
 
         foreach ($entry->items as $item) {
@@ -366,7 +367,12 @@ class StockService
         $totalCredit = array_sum(array_column($lines, 'debit'));
         if ($totalCredit <= 0) return;
 
-        $lines[] = ['account' => '331', 'debit' => 0, 'credit' => $totalCredit,
+        if (!$supplier) {
+            throw new \RuntimeException(
+                "Phiếu nhập kho {$entry->code} không xác định được nhà cung cấp. Không thể tạo bút toán."
+            );
+        }
+        $lines[] = ['account' => $supplier->getPayableAccount(), 'debit' => 0, 'credit' => $totalCredit,
                     'description'  => "Phải trả NCC - phiếu {$entry->code}",
                     'partner_type' => 'supplier', 'partner_id' => $supplierId];
 

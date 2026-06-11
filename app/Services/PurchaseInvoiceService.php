@@ -72,19 +72,21 @@ class PurchaseInvoiceService
         $amount = (float) $payment->amount;
         if ($amount <= 0) return;
 
-        $cashAccount = match($payment->method) {
+        $cashAccount    = match($payment->method) {
             'bank_transfer', 'bank' => '1121',
             default                 => '1111',
         };
+        $invoice->loadMissing('supplier');
+        $payableAccount = $invoice->supplier->getPayableAccount();
 
         $this->accounting->tryPost(
             "Trả tiền NCC {$invoice->code}",
             Carbon::parse($payment->payment_date),
             [
-                ['account' => '331',        'debit' => (int) $amount, 'credit' => 0,
+                ['account' => $payableAccount, 'debit' => (int) $amount, 'credit' => 0,
                  'description'  => "Xóa công nợ NCC - {$invoice->code}",
                  'partner_type' => 'supplier', 'partner_id' => $invoice->supplier_id],
-                ['account' => $cashAccount, 'debit' => 0, 'credit' => (int) $amount,
+                ['account' => $cashAccount,    'debit' => 0, 'credit' => (int) $amount,
                  'description' => "Trả tiền NCC - {$invoice->code}"],
             ],
             'purchase_invoice_payment', $payment->id, 'payment'
