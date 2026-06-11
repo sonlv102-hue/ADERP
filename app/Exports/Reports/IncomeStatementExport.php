@@ -78,9 +78,10 @@ class IncomeStatementExport implements FromCollection, WithHeadings, WithMapping
 
         $result = [];
         foreach ($rows as $r) {
+            // One-sided: expense TK → debit total; revenue TK → credit total
             $result[$r->account_code] = $r->normal_balance === 'debit'
-                ? (float) $r->dr - (float) $r->cr
-                : (float) $r->cr - (float) $r->dr;
+                ? (float) $r->dr
+                : (float) $r->cr;
         }
         return $result;
     }

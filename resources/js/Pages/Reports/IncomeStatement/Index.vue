@@ -45,6 +45,30 @@
         </button>
       </div>
 
+      <!-- Warnings -->
+      <div v-if="warnings?.length" class="space-y-2">
+        <div v-for="(w, i) in warnings" :key="i"
+          class="rounded-lg px-4 py-3 flex items-start gap-2 border"
+          :class="{
+            'bg-red-50 border-red-300':    w.level === 'error',
+            'bg-yellow-50 border-yellow-300': w.level === 'warning',
+            'bg-blue-50 border-blue-200':  w.level === 'info',
+          }">
+          <svg class="w-4 h-4 flex-shrink-0 mt-0.5"
+            :class="{ 'text-red-500': w.level === 'error', 'text-yellow-600': w.level === 'warning', 'text-blue-500': w.level === 'info' }"
+            fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path v-if="w.level !== 'info'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+            <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 110 20A10 10 0 0112 2z" />
+          </svg>
+          <p class="text-sm"
+            :class="{ 'text-red-800': w.level === 'error', 'text-yellow-800': w.level === 'warning', 'text-blue-800': w.level === 'info' }">
+            {{ w.message }}
+          </p>
+        </div>
+      </div>
+
       <!-- KPI cards -->
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 transition-opacity" :class="{ 'opacity-60': isLoading }">
         <div class="bg-white rounded-xl border border-gray-200 p-4">
@@ -177,6 +201,7 @@ const props = defineProps({
   statement:   Array,
   monthly:     Array,
   summary:     Object,
+  warnings:    Array,
   filters:     Object,
   currentYear: Number,
 });

@@ -19,8 +19,9 @@ class IncomeStatementController extends Controller
         $dateFrom = $request->input('date_from') ?: "{$year}-01-01";
         $dateTo   = $request->input('date_to')   ?: "{$year}-12-31";
 
-        $bal = $this->periodBalances($dateFrom, $dateTo);
-        $b   = fn(string $prefix) => $this->sumPrefix($bal, $prefix);
+        $bal      = $this->periodBalances($dateFrom, $dateTo);
+        $b        = fn(string $prefix) => $this->sumPrefix($bal, $prefix);
+        $warnings = $this->detectWarnings($dateFrom, $dateTo, $bal);
 
         // Doanh thu (TK 511 + TK 512, loại trừ TK 515 để tránh double-count)
         $revenue      = $b('511') + $b('512');
@@ -85,6 +86,7 @@ class IncomeStatementController extends Controller
             'statement'   => $statement,
             'monthly'     => $monthly,
             'summary'     => $summary,
+            'warnings'    => $warnings,
             'filters'     => $request->only(['year', 'date_from', 'date_to']),
             'currentYear' => $year,
         ]);
@@ -92,7 +94,13 @@ class IncomeStatementController extends Controller
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
-    /** Map [account_code => net_balance] cho các TK P&L trong kỳ */
+    /**
+     * Tổng phát sinh một chiều trong kỳ [account_code => amount].
+     * Dùng SUM(credit) cho TK doanh thu (credit-normal),
+     *      SUM(debit)  cho TK chi phí (debit-normal).
+     * Cách này miễn nhiễm với kết chuyển cuối kỳ (Dr 511/Cr 911, Dr 911/Cr 632…)
+     * vì kết chuyển chỉ tác động đến chiều ngược lại.
+     */
     private function periodBalances(string $from, string $to): array
     {
         $rows = DB::table('journal_entry_lines as jel')
@@ -108,9 +116,10 @@ class IncomeStatementController extends Controller
 
         $result = [];
         foreach ($rows as $r) {
+            // One-sided: expense TK → debit total; revenue TK → credit total
             $result[$r->account_code] = $r->normal_balance === 'debit'
-                ? (float) $r->dr - (float) $r->cr
-                : (float) $r->cr - (float) $r->dr;
+                ? (float) $r->dr
+                : (float) $r->cr;
         }
         return $result;
     }
@@ -144,8 +153,8 @@ class IncomeStatementController extends Controller
             $mBal = [];
             foreach ($monthRows as $r) {
                 $mBal[$r->account_code] = $r->normal_balance === 'debit'
-                    ? (float) $r->dr - (float) $r->cr
-                    : (float) $r->cr - (float) $r->dr;
+                    ? (float) $r->dr
+                    : (float) $r->cr;
             }
             $mb = function(string $prefix) use ($mBal) {
                 $total = 0.0;
@@ -171,6 +180,81 @@ class IncomeStatementController extends Controller
         }
 
         return $monthly;
+    }
+
+    private function detectWarnings(string $from, string $to, array $bal): array
+    {
+        $warnings = [];
+
+        // 1. Không có bút toán posted nào trong kỳ
+        $totalPosted = DB::table('journal_entries')
+            ->where('status', 'posted')
+            ->whereBetween('entry_date', [$from, $to])
+            ->count();
+
+        if ($totalPosted === 0) {
+            $warnings[] = [
+                'level'   => 'error',
+                'message' => "Không có bút toán nào được posted trong kỳ {$from} – {$to}. "
+                           . "Kiểm tra lại bộ lọc ngày hoặc trạng thái bút toán.",
+            ];
+            // Không cần check thêm
+            return $warnings;
+        }
+
+        // 2. Có bút toán kết chuyển TK 911
+        $has911 = DB::table('journal_entry_lines as jel')
+            ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
+            ->where('je.status', 'posted')
+            ->whereBetween('je.entry_date', [$from, $to])
+            ->where('jel.account_code', '911')
+            ->exists();
+
+        if ($has911) {
+            $warnings[] = [
+                'level'   => 'info',
+                'message' => 'Đã có bút toán kết chuyển (TK 911) trong kỳ. '
+                           . 'Báo cáo tính theo tổng phát sinh Có của TK doanh thu và tổng phát sinh Nợ của TK chi phí — '
+                           . 'không bị ảnh hưởng bởi kết chuyển.',
+            ];
+        }
+
+        // 3. Doanh thu = 0 dù có bút toán
+        $revenue = $this->sumPrefix($bal, '511') + $this->sumPrefix($bal, '512');
+        if ($revenue == 0) {
+            $warnings[] = [
+                'level'   => 'warning',
+                'message' => 'Doanh thu (TK 511/512) = 0 trong kỳ. '
+                           . 'Kiểm tra: (1) hóa đơn bán hàng đã được xác nhận/posted chưa; '
+                           . '(2) doanh thu có được hạch toán vào TK 511x không.',
+            ];
+        }
+
+        // 4. Có doanh thu nhưng giá vốn = 0
+        $cogs = $this->sumPrefix($bal, '632');
+        if ($revenue > 0 && $cogs == 0) {
+            $warnings[] = [
+                'level'   => 'warning',
+                'message' => 'Doanh thu có nhưng giá vốn (TK 632) = 0. '
+                           . 'Kiểm tra: phiếu xuất kho đã được posted chưa.',
+            ];
+        }
+
+        // 5. Bút toán chưa posted trong kỳ
+        $draftCount = DB::table('journal_entries')
+            ->whereIn('status', ['draft', 'pending'])
+            ->whereBetween('entry_date', [$from, $to])
+            ->count();
+
+        if ($draftCount > 0) {
+            $warnings[] = [
+                'level'   => 'warning',
+                'message' => "Có {$draftCount} bút toán chưa được posted trong kỳ — "
+                           . 'số liệu chưa đầy đủ. Kiểm tra và post các bút toán còn draft.',
+            ];
+        }
+
+        return $warnings;
     }
 
     private function sumPrefix(array $balances, string $prefix): float
