@@ -15,11 +15,13 @@ use Illuminate\Support\Facades\DB;
  */
 class AuditPayableAccounts extends Command
 {
-    protected $signature   = 'accounting:audit-payable-accounts {--export : Xuất ra file CSV}';
+    protected $signature   = 'accounting:audit-payable-accounts {--export : Xuất ra file CSV} {--all : Bao gồm cả JE đã có bút toán điều chỉnh}';
     protected $description = 'Liệt kê các dòng JE đang dùng TK 331 (cha), đề xuất TK chi tiết theo supplier';
 
     public function handle(): int
     {
+        $includeAdjusted = $this->option('all');
+
         $rows = DB::table('journal_entry_lines as jel')
             ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
             ->leftJoin('suppliers as s', function ($join) {
@@ -29,6 +31,13 @@ class AuditPayableAccounts extends Command
             ->where('jel.account_code', '331')
             ->where(fn ($q) => $q->whereNull('je.source_type')
                                   ->orWhere('je.source_type', '!=', 'payable_reclassification'))
+            // Mặc định bỏ qua JE đã được điều chỉnh bởi payable_reclassification entry
+            ->when(!$includeAdjusted, fn ($q) => $q->whereNotExists(function ($sub) {
+                $sub->select(DB::raw(1))
+                    ->from('journal_entries as adj')
+                    ->where('adj.source_type', 'payable_reclassification')
+                    ->whereColumn('adj.reference_id', 'je.id');
+            }))
             ->select(
                 'je.code as je_code',
                 'je.status',
