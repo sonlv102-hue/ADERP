@@ -35,8 +35,9 @@ class AccountingService
         ?string $journalSourceType = null,
         bool $excludeFromPeriodMovement = false,
         ?string $fiscalPeriod = null,
+        bool $skipParentAccountCheck = false,
     ): JournalEntry {
-        $this->validateLines($lines);
+        $this->validateLines($lines, $skipParentAccountCheck);
         $this->checkPeriodOpen($date);
 
         // fiscal_period tự suy ra từ entry_date nếu không truyền
@@ -141,6 +142,7 @@ class AccountingService
         ])->all();
 
         // Bút toán đảo luôn posted ngay (isAuto=false) — đây là bút toán điều chỉnh, không cần duyệt lại
+        // skipParentAccountCheck=true: cho phép đảo JE legacy dùng TK tổng hợp (vd 331) mà không bị chặn
         $reversal = $this->post(
             description: 'Đảo: ' . $entry->description,
             date: now(),
@@ -149,6 +151,7 @@ class AccountingService
             referenceId: $entry->reference_id,
             isAuto: false,
             notes: $reason,
+            skipParentAccountCheck: true,
         );
 
         $entry->update(['status' => 'reversed', 'reversed_by_id' => $reversal->id]);
@@ -323,7 +326,7 @@ class AccountingService
         return 'UNKNOWN';
     }
 
-    private function validateLines(array $lines): void
+    private function validateLines(array $lines, bool $skipParentAccountCheck = false): void
     {
         if (count($lines) < 2) {
             throw new \InvalidArgumentException('Bút toán phải có ít nhất 2 dòng.');
@@ -339,18 +342,21 @@ class AccountingService
         }
 
         // Không được ghi bút toán vào tài khoản tổng hợp (is_detail = false)
-        $codes = array_unique(array_column($lines, 'account'));
-        $parentCodes = AccountCode::whereIn('code', $codes)
-            ->where('is_detail', false)
-            ->pluck('code')
-            ->toArray();
+        // Ngoại lệ: bút toán đảo (reverse) được phép dùng TK cha của JE gốc để cancel đúng entry
+        if (! $skipParentAccountCheck) {
+            $codes = array_unique(array_column($lines, 'account'));
+            $parentCodes = AccountCode::whereIn('code', $codes)
+                ->where('is_detail', false)
+                ->pluck('code')
+                ->toArray();
 
-        if (! empty($parentCodes)) {
-            $list = implode(', ', $parentCodes);
-            throw new \InvalidArgumentException(
-                "Tài khoản tổng hợp không được ghi bút toán trực tiếp: {$list}. " .
-                "Vui lòng chọn tài khoản chi tiết (cấp cuối cùng)."
-            );
+            if (! empty($parentCodes)) {
+                $list = implode(', ', $parentCodes);
+                throw new \InvalidArgumentException(
+                    "Tài khoản tổng hợp không được ghi bút toán trực tiếp: {$list}. " .
+                    "Vui lòng chọn tài khoản chi tiết (cấp cuối cùng)."
+                );
+            }
         }
     }
 
