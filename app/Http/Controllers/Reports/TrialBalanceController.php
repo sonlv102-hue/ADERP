@@ -20,31 +20,25 @@ class TrialBalanceController extends Controller
         $dateTo   = $request->input('date_to')   ?: "{$year}-12-31";
         $mode     = in_array($request->input('mode'), ['raw', 'adjusted']) ? $request->input('mode') : 'adjusted';
 
-        $allAccounts = $this->buildAccounts($dateFrom, $dateTo);
+        $directRows = $this->buildAccounts($dateFrom, $dateTo);
 
-        // Totals always from ALL accounts — preserves Nợ = Có balance check
+        // Totals always from ALL direct balances — Dr=Cr guaranteed by JE construction
         $totals = [
-            'opening_debit'  => array_sum(array_column($allAccounts, 'openingDebit')),
-            'opening_credit' => array_sum(array_column($allAccounts, 'openingCredit')),
-            'debit'          => array_sum(array_column($allAccounts, 'dr')),
-            'credit'         => array_sum(array_column($allAccounts, 'cr')),
-            'closing_debit'  => array_sum(array_column($allAccounts, 'closingDebit')),
-            'closing_credit' => array_sum(array_column($allAccounts, 'closingCredit')),
+            'opening_debit'  => array_sum(array_column($directRows, 'openingDebit')),
+            'opening_credit' => array_sum(array_column($directRows, 'openingCredit')),
+            'debit'          => array_sum(array_column($directRows, 'dr')),
+            'credit'         => array_sum(array_column($directRows, 'cr')),
+            'closing_debit'  => array_sum(array_column($directRows, 'closingDebit')),
+            'closing_credit' => array_sum(array_column($directRows, 'closingCredit')),
         ];
 
-        // In adjusted mode: hide parent accounts (is_detail=false) with zero closing balance
-        // These are fully-reclassified accounts (e.g. TK 331 after payable_reclassification JEs)
-        $accounts   = $allAccounts;
-        $hiddenCount = 0;
-        if ($mode === 'adjusted') {
-            $accounts = array_values(array_filter($allAccounts, function ($row) {
-                if (!$row['is_detail'] && $row['closingDebit'] == 0 && $row['closingCredit'] == 0) {
-                    return false;
-                }
-                return true;
-            }));
-            $hiddenCount = count($allAccounts) - count($accounts);
-        }
+        // hiddenCount = số TK tổng hợp có ghi nợ/có trực tiếp (legacy/sai nguyên tắc)
+        $hiddenCount = count(array_filter($directRows, fn ($r) => !$r['is_detail']));
+
+        // adjusted: TK cha hiển thị roll-up từ TK con; raw: direct postings as-is
+        $accounts = $mode === 'adjusted'
+            ? $this->buildAdjustedView($directRows)
+            : $directRows;
 
         return Inertia::render('Reports/TrialBalance/Index', [
             'accounts'    => $accounts,
@@ -53,6 +47,86 @@ class TrialBalanceController extends Controller
             'filters'     => ['year' => $year, 'date_from' => $dateFrom, 'date_to' => $dateTo, 'mode' => $mode],
             'currentYear' => $year,
         ]);
+    }
+
+    /**
+     * Adjusted view: TK cha hiển thị roll-up từ TK con (không tính direct postings vào TK cha).
+     * TK con hiển thị direct balance như thường.
+     * TK cha không có direct postings nhưng có con → vẫn xuất hiện với roll-up.
+     */
+    private function buildAdjustedView(array $directRows): array
+    {
+        $hierarchy = DB::table('account_codes')
+            ->select('code', 'name', 'parent_code', 'level', 'is_detail', 'type')
+            ->get()->keyBy('code');
+
+        // Seed roll-up từ TK chi tiết (is_detail=true) có direct balance
+        $rollNet = [];
+        $rollDr  = [];
+        $rollCr  = [];
+
+        foreach ($directRows as $row) {
+            if ($row['is_detail']) {
+                $c = $row['code'];
+                $rollNet[$c] = $row['openingDebit'] - $row['openingCredit'];
+                $rollDr[$c]  = $row['dr'];
+                $rollCr[$c]  = $row['cr'];
+            }
+        }
+
+        // Bottom-up: từ sâu nhất → TK cha
+        foreach ($hierarchy->sortByDesc('level') as $code => $acc) {
+            if (!$acc->parent_code || !array_key_exists($code, $rollNet)) continue;
+            $p = $acc->parent_code;
+            $rollNet[$p] = ($rollNet[$p] ?? 0.0) + $rollNet[$code];
+            $rollDr[$p]  = ($rollDr[$p]  ?? 0.0) + $rollDr[$code];
+            $rollCr[$p]  = ($rollCr[$p]  ?? 0.0) + $rollCr[$code];
+        }
+
+        $result = [];
+
+        // TK chi tiết: giữ nguyên direct balance
+        foreach ($directRows as $row) {
+            if ($row['is_detail']) {
+                $result[] = $row;
+            }
+            // TK tổng hợp có direct postings: BỎ QUA (replaced by roll-up row below)
+        }
+
+        // TK cha: hiển thị roll-up (chỉ từ con, không tính direct posting vào cha)
+        foreach ($rollNet as $code => $openNet) {
+            $acc = $hierarchy->get($code);
+            if (!$acc || $acc->is_detail) continue;
+
+            $dr = $rollDr[$code] ?? 0.0;
+            $cr = $rollCr[$code] ?? 0.0;
+            $openingDebit  = max(0.0, (float) $openNet);
+            $openingCredit = max(0.0, -(float) $openNet);
+            $closingNet    = $openNet + $dr - $cr;
+            $closingDebit  = max(0.0, $closingNet);
+            $closingCredit = max(0.0, -$closingNet);
+
+            if ($openingDebit == 0 && $openingCredit == 0 && $dr == 0 && $cr == 0) continue;
+
+            $result[] = [
+                'code'          => $code,
+                'name'          => $acc->name,
+                'level'         => $acc->level,
+                'type'          => $acc->type ?? '',
+                'is_detail'     => false,
+                'is_rollup'     => true,
+                'openingDebit'  => $openingDebit,
+                'openingCredit' => $openingCredit,
+                'dr'            => $dr,
+                'cr'            => $cr,
+                'closingDebit'  => $closingDebit,
+                'closingCredit' => $closingCredit,
+            ];
+        }
+
+        usort($result, fn ($a, $b) => strcmp($a['code'], $b['code']));
+
+        return $result;
     }
 
     private function buildAccounts(string $from, string $to): array
@@ -119,6 +193,7 @@ class TrialBalanceController extends Controller
                 'level'         => $acc?->level ?? 1,
                 'type'          => $acc?->type ?? '',
                 'is_detail'     => (bool) ($acc?->is_detail ?? true),
+                'is_rollup'     => false,
                 'openingDebit'  => $openingDebit,
                 'openingCredit' => $openingCredit,
                 'dr'            => $dr,

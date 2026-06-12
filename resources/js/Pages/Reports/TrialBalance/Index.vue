@@ -58,16 +58,17 @@
         </div>
       </div>
 
-      <!-- Hidden accounts notice (adjusted mode) -->
+      <!-- Adjusted mode notice -->
       <div v-if="mode === 'adjusted' && hiddenCount > 0"
         class="bg-amber-50 border border-amber-200 rounded-lg px-5 py-3 flex items-center gap-3 text-sm text-amber-800">
         <svg class="w-4 h-4 flex-shrink-0 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-            d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+            d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
         </svg>
         <span>
-          <strong>{{ hiddenCount }} tài khoản tổng hợp có số dư cuối kỳ = 0</strong> đang ẩn (đã được tái phân loại sang TK chi tiết).
-          Tổng cộng ở cuối bảng vẫn tính đầy đủ. Chuyển sang chế độ <strong>Đầy đủ</strong> để xem.
+          <strong>{{ hiddenCount }} tài khoản tổng hợp</strong> có ghi nợ/có trực tiếp (dữ liệu legacy) —
+          đang ẩn, thay bằng dòng roll-up <strong>∑</strong> từ TK chi tiết.
+          Tổng cộng cuối bảng vẫn tính đầy đủ (bao gồm cả ghi trực tiếp). Chuyển sang <strong>Đầy đủ</strong> để xem audit trail.
         </span>
       </div>
 
@@ -80,17 +81,22 @@
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
             d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
         </svg>
-        <span>Chế độ <strong>Đầy đủ (Raw)</strong>: hiển thị toàn bộ kể cả tài khoản tổng hợp đã được tái phân loại. Dùng để kiểm tra audit trail.</span>
+        <span>
+          Chế độ <strong>Đầy đủ (Raw)</strong>: hiển thị direct postings vào tất cả TK kể cả TK tổng hợp.
+          Dòng <span class="text-orange-600 font-semibold">⚠</span> là TK cha có ghi trực tiếp (nên = 0 sau reclassification). Dùng để kiểm tra audit trail.
+        </span>
       </div>
 
       <!-- Hướng dẫn đọc báo cáo -->
       <div class="bg-blue-50 border border-blue-200 rounded-lg px-5 py-3 text-sm text-blue-800 space-y-1">
-        <p class="font-semibold">📋 Hướng dẫn đọc Bảng cân đối số phát sinh (CDPS):</p>
+        <p class="font-semibold">Hướng dẫn đọc Bảng cân đối số phát sinh (CDPS):</p>
         <ul class="list-disc list-inside space-y-0.5 text-blue-700">
           <li><strong>Số dư đầu kỳ:</strong> Số dư TK tại thời điểm trước ngày bắt đầu kỳ.</li>
           <li><strong>Phát sinh Nợ/Có:</strong> Tổng phát sinh trong kỳ được chọn.</li>
           <li><strong>Số dư cuối kỳ:</strong> = Đầu kỳ + Phát sinh trong kỳ.</li>
-          <li><strong>Kiểm tra:</strong> Tổng Nợ = Tổng Có ở cả 3 cột → đây là dấu hiệu bút toán cân bằng.</li>
+          <li><strong>Kiểm tra:</strong> Tổng Nợ = Tổng Có ở cả 3 cột → bút toán cân bằng.</li>
+          <li><strong class="text-sky-700">∑ (dòng xanh):</strong> TK tổng hợp — hiển thị roll-up từ TK chi tiết (không phải direct posting).</li>
+          <li><strong class="text-orange-600">⚠ (dòng cam):</strong> TK tổng hợp có ghi nợ/có trực tiếp — chỉ hiển thị trong chế độ Đầy đủ.</li>
         </ul>
       </div>
 
@@ -137,14 +143,20 @@
             <tbody class="divide-y divide-gray-100">
               <tr v-for="acc in accounts" :key="acc.code"
                 :class="[
-                  'hover:bg-gray-50',
-                  !acc.is_detail ? 'bg-orange-50 text-orange-800' : '',
+                  acc.is_rollup  ? 'bg-sky-50 hover:bg-sky-100' :
+                  !acc.is_detail ? 'bg-orange-50 hover:bg-orange-100' :
+                                   'hover:bg-gray-50',
                 ]">
-                <td class="px-4 py-2 font-mono font-semibold text-xs" :class="!acc.is_detail ? 'text-orange-700' : 'text-gray-800'">
+                <td class="px-4 py-2 font-mono font-semibold text-xs"
+                  :class="acc.is_rollup ? 'text-sky-800' : (!acc.is_detail ? 'text-orange-700' : 'text-gray-800')">
                   {{ acc.code }}
-                  <span v-if="!acc.is_detail" class="ml-1 text-orange-400 text-xs font-normal" title="Tài khoản tổng hợp">⚠</span>
+                  <span v-if="acc.is_rollup"  class="ml-1 text-sky-500 text-xs font-normal" title="Roll-up từ TK chi tiết">∑</span>
+                  <span v-if="!acc.is_detail && !acc.is_rollup" class="ml-1 text-orange-400 text-xs font-normal" title="Ghi trực tiếp vào TK tổng hợp (legacy)">⚠</span>
                 </td>
-                <td class="px-4 py-2 text-xs" :class="!acc.is_detail ? 'text-orange-700 italic' : 'text-gray-700'">{{ acc.name }}</td>
+                <td class="px-4 py-2 text-xs font-semibold"
+                  :class="acc.is_rollup ? 'text-sky-800' : (!acc.is_detail ? 'text-orange-700 italic font-normal' : 'text-gray-700 font-normal')">
+                  {{ acc.name }}
+                </td>
                 <td class="px-4 py-2 text-right text-xs border-l border-gray-100">{{ acc.openingDebit > 0 ? fmt(acc.openingDebit) : '—' }}</td>
                 <td class="px-4 py-2 text-right text-xs">{{ acc.openingCredit > 0 ? fmt(acc.openingCredit) : '—' }}</td>
                 <td class="px-4 py-2 text-right text-blue-700 text-xs border-l border-gray-100">{{ acc.dr > 0 ? fmt(acc.dr) : '—' }}</td>
@@ -157,7 +169,9 @@
               <tr>
                 <td colspan="2" class="px-4 py-2 font-bold text-gray-800 text-xs">
                   TỔNG CỘNG
-                  <span v-if="mode === 'adjusted' && hiddenCount > 0" class="font-normal text-gray-500">(gồm {{ hiddenCount }} TK tổng hợp ẩn)</span>
+                  <span v-if="hiddenCount > 0" class="font-normal text-gray-500 text-xs">
+                    (gồm ghi trực tiếp {{ hiddenCount }} TK tổng hợp)
+                  </span>
                 </td>
                 <td class="px-4 py-2 text-right font-bold text-xs border-l border-gray-100">{{ fmt(totals.opening_debit) }}</td>
                 <td class="px-4 py-2 text-right font-bold text-xs">{{ fmt(totals.opening_credit) }}</td>

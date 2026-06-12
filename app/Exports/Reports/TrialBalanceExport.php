@@ -24,15 +24,78 @@ class TrialBalanceExport implements FromCollection, WithHeadings, WithMapping, W
         $to   = $this->filters['date_to']   ?? "{$year}-12-31";
         $mode = in_array($this->filters['mode'] ?? '', ['raw', 'adjusted']) ? $this->filters['mode'] : 'adjusted';
 
-        $accounts = $this->buildAccounts($from, $to);
-
-        if ($mode === 'adjusted') {
-            $accounts = array_values(array_filter($accounts, function ($row) {
-                return $row->is_detail || $row->closing_debit > 0 || $row->closing_credit > 0;
-            }));
-        }
+        $directRows = $this->buildAccounts($from, $to);
+        $accounts = $mode === 'adjusted' ? $this->buildAdjustedView($directRows) : $directRows;
 
         return collect($accounts);
+    }
+
+    private function buildAdjustedView(array $directRows): array
+    {
+        $hierarchy = DB::table('account_codes')
+            ->select('code', 'name', 'parent_code', 'level', 'is_detail', 'type')
+            ->get()->keyBy('code');
+
+        $rollNet = [];
+        $rollDr  = [];
+        $rollCr  = [];
+
+        foreach ($directRows as $row) {
+            if ($row->is_detail) {
+                $c = $row->code;
+                $rollNet[$c] = $row->opening_debit - $row->opening_credit;
+                $rollDr[$c]  = $row->dr;
+                $rollCr[$c]  = $row->cr;
+            }
+        }
+
+        foreach ($hierarchy->sortByDesc('level') as $code => $acc) {
+            if (!$acc->parent_code || !array_key_exists($code, $rollNet)) continue;
+            $p = $acc->parent_code;
+            $rollNet[$p] = ($rollNet[$p] ?? 0.0) + $rollNet[$code];
+            $rollDr[$p]  = ($rollDr[$p]  ?? 0.0) + $rollDr[$code];
+            $rollCr[$p]  = ($rollCr[$p]  ?? 0.0) + $rollCr[$code];
+        }
+
+        $result = [];
+
+        foreach ($directRows as $row) {
+            if ($row->is_detail) {
+                $result[] = $row;
+            }
+        }
+
+        foreach ($rollNet as $code => $openNet) {
+            $acc = $hierarchy->get($code);
+            if (!$acc || $acc->is_detail) continue;
+
+            $dr = $rollDr[$code] ?? 0.0;
+            $cr = $rollCr[$code] ?? 0.0;
+            $openingDebit  = max(0.0, (float) $openNet);
+            $openingCredit = max(0.0, -(float) $openNet);
+            $closingNet    = $openNet + $dr - $cr;
+            $closingDebit  = max(0.0, $closingNet);
+            $closingCredit = max(0.0, -$closingNet);
+
+            if ($openingDebit == 0 && $openingCredit == 0 && $dr == 0 && $cr == 0) continue;
+
+            $result[] = (object) [
+                'code'           => $code,
+                'name'           => '[∑] ' . $acc->name,
+                'is_detail'      => false,
+                'is_rollup'      => true,
+                'opening_debit'  => $openingDebit,
+                'opening_credit' => $openingCredit,
+                'dr'             => $dr,
+                'cr'             => $cr,
+                'closing_debit'  => $closingDebit,
+                'closing_credit' => $closingCredit,
+            ];
+        }
+
+        usort($result, fn ($a, $b) => strcmp($a->code, $b->code));
+
+        return $result;
     }
 
     private function buildAccounts(string $from, string $to): array
@@ -91,6 +154,7 @@ class TrialBalanceExport implements FromCollection, WithHeadings, WithMapping, W
                 'code'           => $code,
                 'name'           => $acc?->name ?? '—',
                 'is_detail'      => (bool) ($acc?->is_detail ?? true),
+                'is_rollup'      => false,
                 'opening_debit'  => $openingDebit,
                 'opening_credit' => $openingCredit,
                 'dr'             => $dr,
