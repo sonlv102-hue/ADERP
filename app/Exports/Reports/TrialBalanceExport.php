@@ -22,8 +22,16 @@ class TrialBalanceExport implements FromCollection, WithHeadings, WithMapping, W
         $year = (int) ($this->filters['year'] ?? now()->year);
         $from = $this->filters['date_from'] ?? "{$year}-01-01";
         $to   = $this->filters['date_to']   ?? "{$year}-12-31";
+        $mode = in_array($this->filters['mode'] ?? '', ['raw', 'adjusted']) ? $this->filters['mode'] : 'adjusted';
 
         $accounts = $this->buildAccounts($from, $to);
+
+        if ($mode === 'adjusted') {
+            $accounts = array_values(array_filter($accounts, function ($row) {
+                return $row->is_detail || $row->closing_debit > 0 || $row->closing_credit > 0;
+            }));
+        }
+
         return collect($accounts);
     }
 
@@ -60,7 +68,7 @@ class TrialBalanceExport implements FromCollection, WithHeadings, WithMapping, W
 
         $accountInfo = DB::table('account_codes')
             ->whereIn('code', $allCodes)
-            ->select('code', 'name', 'normal_balance')
+            ->select('code', 'name', 'normal_balance', 'is_detail')
             ->get()->keyBy('code');
 
         $result = [];
@@ -82,6 +90,7 @@ class TrialBalanceExport implements FromCollection, WithHeadings, WithMapping, W
             $result[] = (object) [
                 'code'           => $code,
                 'name'           => $acc?->name ?? '—',
+                'is_detail'      => (bool) ($acc?->is_detail ?? true),
                 'opening_debit'  => $openingDebit,
                 'opening_credit' => $openingCredit,
                 'dr'             => $dr,

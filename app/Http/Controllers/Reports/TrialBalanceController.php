@@ -18,22 +18,39 @@ class TrialBalanceController extends Controller
         $year     = (int) $request->input('year', now()->year);
         $dateFrom = $request->input('date_from') ?: "{$year}-01-01";
         $dateTo   = $request->input('date_to')   ?: "{$year}-12-31";
+        $mode     = in_array($request->input('mode'), ['raw', 'adjusted']) ? $request->input('mode') : 'adjusted';
 
-        $accounts = $this->buildAccounts($dateFrom, $dateTo);
+        $allAccounts = $this->buildAccounts($dateFrom, $dateTo);
 
+        // Totals always from ALL accounts — preserves Nợ = Có balance check
         $totals = [
-            'opening_debit'  => array_sum(array_column($accounts, 'openingDebit')),
-            'opening_credit' => array_sum(array_column($accounts, 'openingCredit')),
-            'debit'          => array_sum(array_column($accounts, 'dr')),
-            'credit'         => array_sum(array_column($accounts, 'cr')),
-            'closing_debit'  => array_sum(array_column($accounts, 'closingDebit')),
-            'closing_credit' => array_sum(array_column($accounts, 'closingCredit')),
+            'opening_debit'  => array_sum(array_column($allAccounts, 'openingDebit')),
+            'opening_credit' => array_sum(array_column($allAccounts, 'openingCredit')),
+            'debit'          => array_sum(array_column($allAccounts, 'dr')),
+            'credit'         => array_sum(array_column($allAccounts, 'cr')),
+            'closing_debit'  => array_sum(array_column($allAccounts, 'closingDebit')),
+            'closing_credit' => array_sum(array_column($allAccounts, 'closingCredit')),
         ];
+
+        // In adjusted mode: hide parent accounts (is_detail=false) with zero closing balance
+        // These are fully-reclassified accounts (e.g. TK 331 after payable_reclassification JEs)
+        $accounts   = $allAccounts;
+        $hiddenCount = 0;
+        if ($mode === 'adjusted') {
+            $accounts = array_values(array_filter($allAccounts, function ($row) {
+                if (!$row['is_detail'] && $row['closingDebit'] == 0 && $row['closingCredit'] == 0) {
+                    return false;
+                }
+                return true;
+            }));
+            $hiddenCount = count($allAccounts) - count($accounts);
+        }
 
         return Inertia::render('Reports/TrialBalance/Index', [
             'accounts'    => $accounts,
             'totals'      => $totals,
-            'filters'     => ['year' => $year, 'date_from' => $dateFrom, 'date_to' => $dateTo],
+            'hiddenCount' => $hiddenCount,
+            'filters'     => ['year' => $year, 'date_from' => $dateFrom, 'date_to' => $dateTo, 'mode' => $mode],
             'currentYear' => $year,
         ]);
     }
@@ -74,7 +91,7 @@ class TrialBalanceController extends Controller
 
         $accountInfo = DB::table('account_codes')
             ->whereIn('code', $allCodes)
-            ->select('code', 'name', 'normal_balance', 'type', 'level')
+            ->select('code', 'name', 'normal_balance', 'type', 'level', 'is_detail')
             ->get()->keyBy('code');
 
         $result = [];
@@ -101,6 +118,7 @@ class TrialBalanceController extends Controller
                 'name'          => $acc?->name ?? '—',
                 'level'         => $acc?->level ?? 1,
                 'type'          => $acc?->type ?? '',
+                'is_detail'     => (bool) ($acc?->is_detail ?? true),
                 'openingDebit'  => $openingDebit,
                 'openingCredit' => $openingCredit,
                 'dr'            => $dr,
@@ -115,9 +133,10 @@ class TrialBalanceController extends Controller
 
     public function export(Request $request): BinaryFileResponse
     {
+        $suffix = $request->input('mode', 'adjusted') === 'raw' ? '-raw' : '';
         return Excel::download(
             new TrialBalanceExport($request->all()),
-            'trial-balance-' . $request->input('year', now()->year) . '.xlsx'
+            'trial-balance-' . $request->input('year', now()->year) . $suffix . '.xlsx'
         );
     }
 }

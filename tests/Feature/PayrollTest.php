@@ -152,15 +152,16 @@ class PayrollTest extends TestCase
         $this->assertEquals(12000000, $item->base_salary);
         $this->assertEquals(1500000, $item->allowance);
         $this->assertEquals(2000000, $item->bonus);
-        $this->assertEquals(225000, $item->deductions);
-        $this->assertEquals(15275000, $item->net_salary);
+        // gross = 15_500_000 = PERSONAL_DEDUCTION (15.5M per TT 79/2022) → taxable = 0 → PIT = 0
+        $this->assertEquals(0, $item->deductions);
+        $this->assertEquals(15500000, $item->net_salary);
 
         $payroll->refresh();
         $this->assertEquals(12000000, $payroll->total_base_salary);
         $this->assertEquals(1500000, $payroll->total_allowance);
         $this->assertEquals(2000000, $payroll->total_bonus);
-        $this->assertEquals(225000, $payroll->total_deductions);
-        $this->assertEquals(15275000, $payroll->total_net_salary);
+        $this->assertEquals(0, $payroll->total_deductions);
+        $this->assertEquals(15500000, $payroll->total_net_salary);
     }
 
     public function test_can_confirm_payroll_and_pay_employee(): void
