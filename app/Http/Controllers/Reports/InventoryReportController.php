@@ -28,8 +28,10 @@ class InventoryReportController extends Controller
                 "product_id,
                  SUM(CASE WHEN DATE(created_at) < ? THEN quantity ELSE 0 END) as stock_begin,
                  SUM(CASE WHEN DATE(created_at) BETWEEN ? AND ? AND quantity > 0 THEN quantity ELSE 0 END) as stock_in,
-                 SUM(CASE WHEN DATE(created_at) BETWEEN ? AND ? AND quantity < 0 THEN ABS(quantity) ELSE 0 END) as stock_out",
-                [$dateFrom, $dateFrom, $dateTo, $dateFrom, $dateTo]
+                 SUM(CASE WHEN DATE(created_at) BETWEEN ? AND ? AND quantity < 0 THEN ABS(quantity) ELSE 0 END) as stock_out,
+                 MAX(CASE WHEN DATE(created_at) BETWEEN ? AND ? AND quantity > 0 THEN DATE(created_at) END) as last_in_date,
+                 MAX(CASE WHEN DATE(created_at) BETWEEN ? AND ? AND quantity < 0 THEN DATE(created_at) END) as last_out_date",
+                [$dateFrom, $dateFrom, $dateTo, $dateFrom, $dateTo, $dateFrom, $dateTo, $dateFrom, $dateTo]
             )
             ->groupBy('product_id');
 
@@ -67,17 +69,22 @@ class InventoryReportController extends Controller
             $cost  = (float) $row->cost_price;
 
             return [
-                'id'          => $row->id,
-                'code'        => $row->code,
-                'name'        => $row->name,
-                'unit'        => $row->unit,
-                'category'    => $row->category,
-                'cost_price'  => $cost,
-                'stock_begin' => $begin,
-                'stock_in'    => $in,
-                'stock_out'   => $out,
-                'stock_end'   => $end,
-                'value_end'   => $end * $cost,
+                'id'           => $row->id,
+                'code'         => $row->code,
+                'name'         => $row->name,
+                'unit'         => $row->unit,
+                'category'     => $row->category,
+                'cost_price'   => $cost,
+                'stock_begin'  => $begin,
+                'stock_in'     => $in,
+                'stock_out'    => $out,
+                'stock_end'    => $end,
+                'value_begin'  => $begin * $cost,
+                'value_in'     => $in  * $cost,
+                'value_out'    => $out * $cost,
+                'value_end'    => $end * $cost,
+                'last_in_date' => $row->last_in_date,
+                'last_out_date'=> $row->last_out_date,
             ];
         });
 

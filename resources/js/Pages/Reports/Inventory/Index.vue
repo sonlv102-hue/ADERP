@@ -72,48 +72,67 @@
 
       <!-- Table -->
       <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto transition-opacity" :class="{ 'opacity-60': isLoading }">
-        <table class="w-full text-sm">
-          <thead class="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th class="text-left px-4 py-3 font-semibold text-gray-600">Mã SP</th>
-              <th class="text-left px-4 py-3 font-semibold text-gray-600">Tên sản phẩm</th>
-              <th class="text-left px-4 py-3 font-semibold text-gray-600">ĐVT</th>
-              <th class="text-left px-4 py-3 font-semibold text-gray-600">Danh mục</th>
-              <th class="text-right px-4 py-3 font-semibold text-gray-600">Tồn đầu</th>
-              <th class="text-right px-4 py-3 font-semibold text-gray-600">Nhập</th>
-              <th class="text-right px-4 py-3 font-semibold text-gray-600">Xuất</th>
-              <th class="text-right px-4 py-3 font-semibold text-gray-600">Tồn cuối</th>
-              <th class="text-right px-4 py-3 font-semibold text-gray-600">Đơn giá vốn</th>
-              <th class="text-right px-4 py-3 font-semibold text-gray-600">Giá trị tồn</th>
+        <table class="w-full text-sm min-w-max">
+          <thead class="bg-gray-50">
+            <tr class="border-b border-gray-200">
+              <th rowspan="2" class="text-left px-4 py-2 font-semibold text-gray-600 border-r border-gray-200 align-middle">Mã SP</th>
+              <th rowspan="2" class="text-left px-4 py-2 font-semibold text-gray-600 border-r border-gray-200 align-middle">Tên sản phẩm</th>
+              <th rowspan="2" class="text-left px-4 py-2 font-semibold text-gray-600 border-r border-gray-200 align-middle">ĐVT</th>
+              <th rowspan="2" class="text-left px-4 py-2 font-semibold text-gray-600 border-r border-gray-200 align-middle">Danh mục</th>
+              <th colspan="2" class="text-center px-4 py-2 font-semibold text-gray-600 border-r border-gray-200">Tồn đầu kỳ</th>
+              <th colspan="3" class="text-center px-4 py-2 font-semibold text-blue-700 border-r border-gray-200 bg-blue-50">Nhập trong kỳ</th>
+              <th colspan="3" class="text-center px-4 py-2 font-semibold text-orange-700 border-r border-gray-200 bg-orange-50">Xuất trong kỳ</th>
+              <th colspan="2" class="text-center px-4 py-2 font-semibold text-green-700 bg-green-50">Tồn cuối kỳ</th>
+            </tr>
+            <tr class="border-b-2 border-gray-200">
+              <th class="text-right px-3 py-2 font-medium text-gray-500 text-xs whitespace-nowrap">SL</th>
+              <th class="text-right px-3 py-2 font-medium text-gray-500 text-xs border-r border-gray-200 whitespace-nowrap">Giá trị</th>
+              <th class="text-right px-3 py-2 font-medium text-blue-600 text-xs bg-blue-50 whitespace-nowrap">SL</th>
+              <th class="text-center px-3 py-2 font-medium text-blue-600 text-xs bg-blue-50 whitespace-nowrap">Ngày nhập g.nhất</th>
+              <th class="text-right px-3 py-2 font-medium text-blue-600 text-xs bg-blue-50 border-r border-gray-200 whitespace-nowrap">Giá trị</th>
+              <th class="text-right px-3 py-2 font-medium text-orange-600 text-xs bg-orange-50 whitespace-nowrap">SL</th>
+              <th class="text-center px-3 py-2 font-medium text-orange-600 text-xs bg-orange-50 whitespace-nowrap">Ngày xuất g.nhất</th>
+              <th class="text-right px-3 py-2 font-medium text-orange-600 text-xs bg-orange-50 border-r border-gray-200 whitespace-nowrap">Giá trị</th>
+              <th class="text-right px-3 py-2 font-medium text-green-600 text-xs bg-green-50 whitespace-nowrap">SL</th>
+              <th class="text-right px-3 py-2 font-medium text-green-600 text-xs bg-green-50 whitespace-nowrap">Giá trị</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
             <tr v-for="row in rows.data" :key="row.id" class="hover:bg-gray-50">
-              <td class="px-4 py-3 font-mono text-xs text-primary-700">{{ row.code }}</td>
-              <td class="px-4 py-3 text-gray-800">{{ row.name }}</td>
-              <td class="px-4 py-3 text-gray-500 text-xs">{{ row.unit }}</td>
-              <td class="px-4 py-3 text-gray-500 text-xs">{{ row.category ?? '—' }}</td>
-              <td class="px-4 py-3 text-right text-gray-700">{{ fmtQty(row.stock_begin) }}</td>
-              <td class="px-4 py-3 text-right text-blue-700">{{ fmtQty(row.stock_in) }}</td>
-              <td class="px-4 py-3 text-right text-orange-700">{{ fmtQty(row.stock_out) }}</td>
-              <td class="px-4 py-3 text-right font-semibold" :class="row.stock_end < 0 ? 'text-red-700' : 'text-gray-800'">
-                {{ fmtQty(row.stock_end) }}
-              </td>
-              <td class="px-4 py-3 text-right text-gray-600 text-xs">{{ fmt(row.cost_price) }}</td>
-              <td class="px-4 py-3 text-right font-semibold text-green-700">{{ fmt(row.value_end) }}</td>
+              <td class="px-4 py-2.5 font-mono text-xs text-primary-700 border-r border-gray-100">{{ row.code }}</td>
+              <td class="px-4 py-2.5 text-gray-800 border-r border-gray-100">{{ row.name }}</td>
+              <td class="px-4 py-2.5 text-gray-500 text-xs border-r border-gray-100">{{ row.unit }}</td>
+              <td class="px-4 py-2.5 text-gray-500 text-xs border-r border-gray-100">{{ row.category ?? '—' }}</td>
+              <!-- Tồn đầu -->
+              <td class="px-3 py-2.5 text-right text-gray-700">{{ fmtQty(row.stock_begin) }}</td>
+              <td class="px-3 py-2.5 text-right text-gray-600 text-xs border-r border-gray-100">{{ fmt(row.value_begin) }}</td>
+              <!-- Nhập -->
+              <td class="px-3 py-2.5 text-right text-blue-700">{{ fmtQty(row.stock_in) }}</td>
+              <td class="px-3 py-2.5 text-center text-gray-500 text-xs">{{ fmtDate(row.last_in_date) }}</td>
+              <td class="px-3 py-2.5 text-right text-blue-700 border-r border-gray-100">{{ fmt(row.value_in) }}</td>
+              <!-- Xuất -->
+              <td class="px-3 py-2.5 text-right text-orange-700">{{ fmtQty(row.stock_out) }}</td>
+              <td class="px-3 py-2.5 text-center text-gray-500 text-xs">{{ fmtDate(row.last_out_date) }}</td>
+              <td class="px-3 py-2.5 text-right text-orange-700 border-r border-gray-100">{{ fmt(row.value_out) }}</td>
+              <!-- Tồn cuối -->
+              <td class="px-3 py-2.5 text-right font-semibold" :class="row.stock_end < 0 ? 'text-red-700' : 'text-gray-800'">{{ fmtQty(row.stock_end) }}</td>
+              <td class="px-3 py-2.5 text-right font-semibold text-green-700">{{ fmt(row.value_end) }}</td>
             </tr>
             <tr v-if="!rows.data?.length">
-              <td colspan="10" class="px-4 py-10 text-center text-gray-400">Không có dữ liệu</td>
+              <td colspan="14" class="px-4 py-10 text-center text-gray-400">Không có dữ liệu</td>
             </tr>
           </tbody>
           <tfoot v-if="rows.data?.length" class="bg-gray-50 border-t-2 border-gray-300">
             <tr>
-              <td colspan="4" class="px-4 py-3 font-semibold text-gray-700">Tổng giá trị (trang này)</td>
-              <td class="px-4 py-3 text-right font-semibold text-gray-800">{{ fmt(summary.total_begin_value) }}</td>
-              <td class="px-4 py-3 text-right font-semibold text-blue-700">{{ fmt(summary.total_in_value) }}</td>
-              <td class="px-4 py-3 text-right font-semibold text-orange-700">{{ fmt(summary.total_out_value) }}</td>
-              <td colspan="2"></td>
-              <td class="px-4 py-3 text-right font-bold text-green-700">{{ fmt(summary.total_end_value) }}</td>
+              <td colspan="4" class="px-4 py-3 font-semibold text-gray-700 text-sm">Tổng cộng</td>
+              <td></td>
+              <td class="px-3 py-3 text-right font-semibold text-gray-800">{{ fmt(summary.total_begin_value) }}</td>
+              <td></td><td></td>
+              <td class="px-3 py-3 text-right font-semibold text-blue-700">{{ fmt(summary.total_in_value) }}</td>
+              <td></td><td></td>
+              <td class="px-3 py-3 text-right font-semibold text-orange-700">{{ fmt(summary.total_out_value) }}</td>
+              <td></td>
+              <td class="px-3 py-3 text-right font-bold text-green-700">{{ fmt(summary.total_end_value) }}</td>
             </tr>
           </tfoot>
         </table>
@@ -178,5 +197,11 @@ function clearFilters() {
 
 function fmtQty(n) {
   return Number(n).toLocaleString('vi-VN');
+}
+
+function fmtDate(d) {
+  if (!d) return '—';
+  const [y, m, day] = d.split('-');
+  return `${day}/${m}/${y}`;
 }
 </script>

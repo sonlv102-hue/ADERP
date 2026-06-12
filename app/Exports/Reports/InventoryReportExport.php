@@ -24,14 +24,18 @@ class InventoryReportExport implements FromCollection, WithHeadings, WithMapping
         $warehouseId = $this->filters['warehouse_id'] ?? null;
         $categoryId  = $this->filters['category_id'] ?? null;
 
+        $wh = $warehouseId ? " AND sm.warehouse_id = {$warehouseId}" : "";
+
         return DB::table('products')
             ->leftJoin('product_categories', 'product_categories.id', '=', 'products.category_id')
             ->select([
                 'products.code', 'products.name', 'products.unit', 'products.cost_price',
                 'product_categories.name as category',
-                DB::raw("COALESCE((SELECT SUM(sm.quantity) FROM stock_movements sm WHERE sm.product_id = products.id AND DATE(sm.created_at) < '{$dateFrom}'" . ($warehouseId ? " AND sm.warehouse_id = {$warehouseId}" : "") . "), 0) as stock_begin"),
-                DB::raw("COALESCE((SELECT SUM(sm.quantity) FROM stock_movements sm WHERE sm.product_id = products.id AND sm.quantity > 0 AND DATE(sm.created_at) BETWEEN '{$dateFrom}' AND '{$dateTo}'" . ($warehouseId ? " AND sm.warehouse_id = {$warehouseId}" : "") . "), 0) as stock_in"),
-                DB::raw("COALESCE((SELECT ABS(SUM(sm.quantity)) FROM stock_movements sm WHERE sm.product_id = products.id AND sm.quantity < 0 AND DATE(sm.created_at) BETWEEN '{$dateFrom}' AND '{$dateTo}'" . ($warehouseId ? " AND sm.warehouse_id = {$warehouseId}" : "") . "), 0) as stock_out"),
+                DB::raw("COALESCE((SELECT SUM(sm.quantity) FROM stock_movements sm WHERE sm.product_id = products.id AND DATE(sm.created_at) < '{$dateFrom}'{$wh}), 0) as stock_begin"),
+                DB::raw("COALESCE((SELECT SUM(sm.quantity) FROM stock_movements sm WHERE sm.product_id = products.id AND sm.quantity > 0 AND DATE(sm.created_at) BETWEEN '{$dateFrom}' AND '{$dateTo}'{$wh}), 0) as stock_in"),
+                DB::raw("COALESCE((SELECT ABS(SUM(sm.quantity)) FROM stock_movements sm WHERE sm.product_id = products.id AND sm.quantity < 0 AND DATE(sm.created_at) BETWEEN '{$dateFrom}' AND '{$dateTo}'{$wh}), 0) as stock_out"),
+                DB::raw("(SELECT MAX(DATE(sm.created_at)) FROM stock_movements sm WHERE sm.product_id = products.id AND sm.quantity > 0 AND DATE(sm.created_at) BETWEEN '{$dateFrom}' AND '{$dateTo}'{$wh}) as last_in_date"),
+                DB::raw("(SELECT MAX(DATE(sm.created_at)) FROM stock_movements sm WHERE sm.product_id = products.id AND sm.quantity < 0 AND DATE(sm.created_at) BETWEEN '{$dateFrom}' AND '{$dateTo}'{$wh}) as last_out_date"),
             ])
             ->whereNull('products.deleted_at')
             ->when($search, fn ($q) => $q->where(fn ($q2) => $q2->where('products.code', 'ilike', "%{$search}%")->orWhere('products.name', 'ilike', "%{$search}%")))
@@ -42,7 +46,13 @@ class InventoryReportExport implements FromCollection, WithHeadings, WithMapping
 
     public function headings(): array
     {
-        return ['Mã SP', 'Tên SP', 'ĐVT', 'Danh mục', 'Tồn đầu kỳ', 'Nhập trong kỳ', 'Xuất trong kỳ', 'Tồn cuối kỳ', 'Đơn giá vốn', 'Giá trị tồn'];
+        return [
+            'Mã SP', 'Tên SP', 'ĐVT', 'Danh mục',
+            'Tồn đầu kỳ (SL)', 'Giá trị đầu kỳ',
+            'Nhập (SL)', 'Ngày nhập g.nhất', 'TT nhập',
+            'Xuất (SL)', 'Ngày xuất g.nhất', 'TT xuất',
+            'Tồn cuối kỳ (SL)', 'Giá trị tồn cuối',
+        ];
     }
 
     public function map($row): array
@@ -53,7 +63,13 @@ class InventoryReportExport implements FromCollection, WithHeadings, WithMapping
         $end   = $begin + $in - $out;
         $cost  = (float) $row->cost_price;
 
-        return [$row->code, $row->name, $row->unit, $row->category ?? '—', $begin, $in, $out, $end, $cost, $end * $cost];
+        return [
+            $row->code, $row->name, $row->unit, $row->category ?? '—',
+            $begin, $begin * $cost,
+            $in, $row->last_in_date ?? '', $in * $cost,
+            $out, $row->last_out_date ?? '', $out * $cost,
+            $end, $end * $cost,
+        ];
     }
 
     public function styles(Worksheet $sheet): array
