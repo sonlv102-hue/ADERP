@@ -6,6 +6,7 @@ use App\Enums\EmployeeStatus;
 use App\Enums\EmploymentType;
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
+use App\Services\PayrollService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -182,6 +183,8 @@ class EmployeeController extends Controller
         ]);
 
         $employee->update($this->coerceSalaryFields($data));
+
+        app(PayrollService::class)->syncEmployeeToDraftPayrolls($employee);
 
         return redirect()->route('admin.employees.show', $employee)
             ->with('success', 'Đã cập nhật.');
