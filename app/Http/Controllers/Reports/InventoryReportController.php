@@ -48,6 +48,8 @@ class InventoryReportController extends Controller
                 DB::raw('COALESCE(sm_agg.stock_begin, 0) as stock_begin'),
                 DB::raw('COALESCE(sm_agg.stock_in, 0) as stock_in'),
                 DB::raw('COALESCE(sm_agg.stock_out, 0) as stock_out'),
+                DB::raw('sm_agg.last_in_date'),
+                DB::raw('sm_agg.last_out_date'),
             ])
             ->whereNull('products.deleted_at')
             ->when($search, fn ($q) =>
