@@ -137,6 +137,7 @@ class PayrollController extends Controller
             'allowance_performance'    => 'nullable|numeric|min:0',
             'allowance'                => 'nullable|numeric|min:0',
             'bonus'                    => 'nullable|numeric|min:0',
+            'standard_days'            => 'nullable|integer|min:1|max:31',
             'working_days'             => 'nullable|integer|min:0|max:31',
             'advance'                  => 'nullable|numeric|min:0',
             'insurance_subject'        => 'nullable|boolean',
@@ -164,8 +165,8 @@ class PayrollController extends Controller
         $totalAllw      = $allocResp + $allocLunch + $allocPhone + $allocTransport + $allocPerf + $allocOther;
         $dependents     = (int)   ($data['dependents_count']         ?? $item->dependents_count         ?? 0);
         $insSubject     = (bool)  ($data['insurance_subject']        ?? $item->insurance_subject        ?? true);
-        $workingDays    = (int)   ($data['working_days']             ?? $item->working_days             ?? $item->standard_days ?? 26);
-        $standardDays   = (int)   ($item->standard_days              ?? 26);
+        $workingDays    = (int)   ($data['working_days']  ?? $item->working_days  ?? $item->standard_days ?? 26);
+        $standardDays   = (int)   ($data['standard_days'] ?? $item->standard_days ?? 26);
 
         // Phân loại theo Nghị định 158/2025:
         //   BHXH-subject  : allocResp + allocOther (phụ cấp lương ổn định trong HĐLĐ)
@@ -215,6 +216,7 @@ class PayrollController extends Controller
             'dependents_count'         => $dependents,
             'deductions'               => $insEmpTotal + $pitFinal,
             'net_salary'               => $netFinal,
+            'standard_days'            => $standardDays,
             'working_days'             => $workingDays,
             'advance'                  => (float) ($data['advance'] ?? $item->advance ?? 0),
             'insurance_subject'        => $insSubject,

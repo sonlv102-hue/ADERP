@@ -363,10 +363,16 @@
                 class="form-input text-right font-mono text-sm" />
             </div>
             <div>
-              <label class="form-label text-xs">Ngày công thực tế</label>
+              <label class="form-label text-xs">Ngày công chuẩn tháng này</label>
+              <input type="number" v-model.number="editForm.standard_days" min="1" max="31"
+                class="form-input text-right text-sm" />
+              <p class="text-xs text-gray-400 mt-0.5">Số ngày làm việc thực tế của tháng</p>
+            </div>
+            <div>
+              <label class="form-label text-xs">Ngày công thực tế (NV)</label>
               <input type="number" v-model.number="editForm.working_days" min="0" max="31"
                 class="form-input text-right text-sm" />
-              <p class="text-xs text-gray-400 mt-0.5">Chuẩn: {{ activeItem.standard_days }}</p>
+              <p class="text-xs text-gray-400 mt-0.5">Tỷ lệ: {{ editForm.standard_days > 0 ? Math.min((editForm.working_days / editForm.standard_days * 100).toFixed(1), 100) : 100 }}%</p>
             </div>
           </div>
 
@@ -684,6 +690,7 @@ const editForm = useForm({
   allowance:                0,
   bonus:                    0,
   dependents_count:         0,
+  standard_days:            26,
   working_days:             26,
   advance:                  0,
   insurance_subject:        true,
@@ -714,7 +721,7 @@ const previewNonBhxh  = computed(() =>
 
 // Tỷ lệ ngày công — phải nhất quán với PitCalculatorService::breakdown()
 const previewRate = computed(() => {
-  const std = activeItem.value?.standard_days || 26;
+  const std = editForm.standard_days || 26;
   const wd  = editForm.working_days || 0;
   return std > 0 ? Math.min(wd / std, 1.0) : 1.0;
 });
@@ -763,6 +770,7 @@ function openEditModal(item) {
   editForm.allowance                = item.allowance;
   editForm.bonus                    = item.bonus;
   editForm.dependents_count         = item.dependents_count;
+  editForm.standard_days            = item.standard_days;
   editForm.working_days             = item.working_days;
   editForm.advance                  = item.advance;
   editForm.insurance_subject        = item.insurance_subject;
