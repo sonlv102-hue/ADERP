@@ -266,7 +266,7 @@ class PurchaseInvoiceController extends Controller
 
     public function recallPayments(Request $request, PurchaseInvoice $purchaseInvoice): RedirectResponse
     {
-        $this->authorize('purchasing.manage');
+        $this->authorize('purchasing.approve');
 
         $data = $request->validate([
             'reason' => ['required', 'string', 'min:5', 'max:500'],
