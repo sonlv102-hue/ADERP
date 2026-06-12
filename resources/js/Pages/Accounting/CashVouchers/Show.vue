@@ -26,6 +26,10 @@
             class="bg-red-100 hover:bg-red-200 text-red-700 px-4 py-2 rounded-lg text-sm font-medium">
             Hủy phiếu
           </button>
+          <button v-if="voucher.status === 'cancelled'" @click="handleDelete"
+            class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            Xóa phiếu
+          </button>
         </div>
       </div>
 
@@ -88,6 +92,12 @@ function handleConfirm() {
 function handleCancel() {
   if (window.confirm('Hủy phiếu này?')) {
     router.post(route('accounting.cash-vouchers.cancel', props.voucher.id));
+  }
+}
+
+function handleDelete() {
+  if (window.confirm('Xóa vĩnh viễn phiếu này? Không thể hoàn tác.')) {
+    router.delete(route('accounting.cash-vouchers.destroy', props.voucher.id));
   }
 }
 </script>

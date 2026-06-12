@@ -54,6 +54,7 @@
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Ngày</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">Số tiền</th>
               <th class="text-center px-5 py-3 font-semibold text-gray-600">Trạng thái</th>
+              <th class="px-5 py-3"></th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
@@ -74,9 +75,13 @@
               <td class="px-5 py-3 text-center">
                 <StatusBadge :color="v.status_color">{{ v.status_label }}</StatusBadge>
               </td>
+              <td class="px-5 py-3 text-right" @click.stop>
+                <button v-if="v.status === 'cancelled'" @click="handleDelete(v)"
+                  class="text-red-600 hover:text-red-800 text-xs font-medium">Xóa</button>
+              </td>
             </tr>
             <tr v-if="!vouchers.data.length">
-              <td colspan="7" class="px-5 py-8 text-center text-gray-400">Không có phiếu nào</td>
+              <td colspan="8" class="px-5 py-8 text-center text-gray-400">Không có phiếu nào</td>
             </tr>
           </tbody>
         </table>
@@ -106,5 +111,11 @@ const filters = ref({
 
 function applyFilters() {
   router.get(route('accounting.cash-vouchers.index'), filters.value, { preserveState: true });
+}
+
+function handleDelete(v) {
+  if (window.confirm(`Xóa vĩnh viễn phiếu ${v.code}? Không thể hoàn tác.`)) {
+    router.delete(route('accounting.cash-vouchers.destroy', v.id), {}, { preserveScroll: true });
+  }
 }
 </script>
