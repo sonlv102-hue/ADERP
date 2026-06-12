@@ -111,13 +111,13 @@ class InventoryCountService
 
                 $productLabel = $item->product->name;
                 if ($difference > 0) {
-                    // Thừa kho: Nợ 156 / Có 711 (Thu nhập khác)
-                    $journalLines[] = ['account' => '156', 'debit' => $costAmount, 'credit' => 0, 'description' => "Thừa kho: {$productLabel}"];
+                    // Thừa kho: Nợ 1561 / Có 711 (Thu nhập khác)
+                    $journalLines[] = ['account' => '1561', 'debit' => $costAmount, 'credit' => 0, 'description' => "Thừa kho: {$productLabel}"];
                     $journalLines[] = ['account' => '711', 'debit' => 0, 'credit' => $costAmount, 'description' => "Thừa kho: {$productLabel}"];
                 } else {
-                    // Thiếu kho: Nợ 811 / Có 156 (Chi phí khác)
+                    // Thiếu kho: Nợ 811 / Có 1561 (Chi phí khác)
                     $journalLines[] = ['account' => '811', 'debit' => $costAmount, 'credit' => 0, 'description' => "Thiếu kho: {$productLabel}"];
-                    $journalLines[] = ['account' => '156', 'debit' => 0, 'credit' => $costAmount, 'description' => "Thiếu kho: {$productLabel}"];
+                    $journalLines[] = ['account' => '1561', 'debit' => 0, 'credit' => $costAmount, 'description' => "Thiếu kho: {$productLabel}"];
                 }
             }
 

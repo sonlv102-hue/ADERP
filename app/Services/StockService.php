@@ -352,7 +352,7 @@ class StockService
             $taxRounded  = (int) round($lineTax);
 
             if ($exclRounded > 0) {
-                $lines[] = ['account' => '156', 'debit' => $exclRounded, 'credit' => 0,
+                $lines[] = ['account' => '1561', 'debit' => $exclRounded, 'credit' => 0,
                             'description' => "Nhập kho {$item->product?->name}"];
             }
             if ($taxRounded > 0) {
@@ -363,7 +363,7 @@ class StockService
 
         if (empty($lines)) return;
 
-        // Cr 331 = tổng các dòng Nợ đã round — đảm bảo bút toán luôn cân bằng
+        // Cr TK phải trả NCC = tổng các dòng Nợ đã round — đảm bảo bút toán luôn cân bằng
         $totalCredit = array_sum(array_column($lines, 'debit'));
         if ($totalCredit <= 0) return;
 
@@ -413,7 +413,7 @@ class StockService
                     'project_id' => $projectId,
                 ];
                 $lines[] = [
-                    'account'    => '156',
+                    'account'    => '1561',
                     'debit'      => 0,
                     'credit'     => (int) round($cogs),
                     'description' => "Xuất kho {$item->product?->name}",
