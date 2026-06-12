@@ -7,6 +7,7 @@ use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoicePayment;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class PurchaseInvoiceService
 {
@@ -58,11 +59,70 @@ class PurchaseInvoiceService
 
     public function removePayment(PurchaseInvoice $invoice, PurchaseInvoicePayment $payment): void
     {
+        if ($payment->isVoided()) {
+            throw new \RuntimeException('Khoản thanh toán này đã bị thu hồi trước đó.');
+        }
+
         DB::transaction(function () use ($invoice, $payment) {
-            $this->accounting->reverseOrDelete('purchase_invoice_payment', $payment->id, "Trả NCC {$invoice->code}");
-            $payment->delete();
+            $this->accounting->reverseOrDelete('purchase_invoice_payment', $payment->id, "Thu hồi thanh toán {$invoice->code}");
+            $payment->update([
+                'status'     => 'voided',
+                'void_reason'=> 'Xóa từng khoản',
+                'voided_by'  => auth()->id(),
+                'voided_at'  => now(),
+            ]);
             $this->recalculatePaid($invoice);
         });
+    }
+
+    /**
+     * Thu hồi toàn bộ thanh toán của một hóa đơn.
+     * - Đảo JE từng khoản (hoặc xóa nếu còn draft)
+     * - Đánh dấu voided (không xóa record)
+     * - Reset trạng thái hóa đơn về valid
+     */
+    public function recallPayments(PurchaseInvoice $invoice, string $reason): int
+    {
+        $allowedStatuses = [
+            PurchaseInvoiceStatus::Paid,
+            PurchaseInvoiceStatus::PartialPaid,
+        ];
+
+        if (!in_array($invoice->status, $allowedStatuses)) {
+            throw new \RuntimeException('Chỉ thu hồi thanh toán được hóa đơn đã thanh toán hoặc thanh toán một phần.');
+        }
+
+        $activePayments = $invoice->payments()->active()->get();
+        if ($activePayments->isEmpty()) {
+            throw new \RuntimeException('Hóa đơn này không có khoản thanh toán nào để thu hồi.');
+        }
+
+        DB::transaction(function () use ($invoice, $activePayments, $reason) {
+            $userId = auth()->id();
+
+            foreach ($activePayments as $payment) {
+                $this->accounting->reverseOrDelete(
+                    'purchase_invoice_payment',
+                    $payment->id,
+                    "Thu hồi thanh toán {$invoice->code}: {$reason}"
+                );
+                $payment->update([
+                    'status'      => 'voided',
+                    'void_reason' => $reason,
+                    'voided_by'   => $userId,
+                    'voided_at'   => now(),
+                ]);
+            }
+
+            $invoice->update([
+                'paid_amount' => 0,
+                'status'      => PurchaseInvoiceStatus::Valid,
+            ]);
+
+            Log::info("PurchaseInvoice #{$invoice->id} ({$invoice->code}): recall {$activePayments->count()} payments by user {$userId}. Reason: {$reason}");
+        });
+
+        return $activePayments->count();
     }
 
     // ─── Private helpers ────────────────────────────────────────────────────
@@ -95,7 +155,7 @@ class PurchaseInvoiceService
 
     private function recalculatePaid(PurchaseInvoice $invoice): void
     {
-        $paid = (float) $invoice->payments()->sum('amount');
+        $paid = (float) $invoice->payments()->active()->sum('amount');
         $total = (float) $invoice->total;
 
         $status = match(true) {

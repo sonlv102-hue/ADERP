@@ -25,7 +25,7 @@ class PurchaseInvoiceController extends Controller
         $status = request('status');
 
         return Inertia::render('Purchasing/PurchaseInvoices/Index', [
-            'invoices' => PurchaseInvoice::with(['supplier', 'purchaseOrder', 'creator'])
+            'invoices' => PurchaseInvoice::with(['supplier', 'purchaseOrder', 'creator', 'payments.creator'])
                 ->when($search, fn ($q) => $q->where(fn ($q2) =>
                     $q2->where('code', 'ilike', "%{$search}%")
                        ->orWhere('invoice_number', 'ilike', "%{$search}%")
@@ -45,11 +45,25 @@ class PurchaseInvoiceController extends Controller
                     'status_label'   => $inv->status->label(),
                     'status_color'   => $inv->status->color(),
                     'supplier'       => $inv->supplier->name,
+                    'supplier_id'    => $inv->supplier_id,
                     'purchase_order' => $inv->purchaseOrder->code,
                     'total'          => $inv->total,
                     'paid_amount'    => $inv->paid_amount,
                     'remaining'      => $inv->remaining,
                     'creator'        => $inv->creator->name,
+                    'payments'       => $inv->payments->map(fn ($p) => [
+                        'id'           => $p->id,
+                        'amount'       => (float) $p->amount,
+                        'payment_date' => $p->payment_date->format('d/m/Y'),
+                        'method_label' => match($p->method) {
+                            'cash'          => 'Tiền mặt',
+                            'bank_transfer' => 'Chuyển khoản',
+                            default         => 'Khác',
+                        },
+                        'reference'    => $p->reference,
+                        'creator'      => $p->creator->name,
+                        'status'       => $p->status,
+                    ]),
                 ]),
         ]);
     }
@@ -143,7 +157,7 @@ class PurchaseInvoiceController extends Controller
                 'creator'           => $purchaseInvoice->creator->name,
                 'payments'          => $purchaseInvoice->payments->map(fn ($p) => [
                     'id'           => $p->id,
-                    'amount'       => $p->amount,
+                    'amount'       => (float) $p->amount,
                     'payment_date' => $p->payment_date->format('d/m/Y'),
                     'method'       => $p->method,
                     'method_label' => match($p->method) {
@@ -151,9 +165,12 @@ class PurchaseInvoiceController extends Controller
                         'bank_transfer' => 'Chuyển khoản',
                         default         => 'Khác',
                     },
-                    'reference' => $p->reference,
-                    'notes'     => $p->notes,
-                    'creator'   => $p->creator->name,
+                    'reference'   => $p->reference,
+                    'notes'       => $p->notes,
+                    'creator'     => $p->creator->name,
+                    'status'      => $p->status,
+                    'void_reason' => $p->void_reason,
+                    'voided_at'   => $p->voided_at?->format('d/m/Y H:i'),
                 ]),
                 'transitions' => $this->allowedTransitions($purchaseInvoice->status),
             ],
@@ -225,20 +242,43 @@ class PurchaseInvoiceController extends Controller
 
     public function destroy(PurchaseInvoice $purchaseInvoice): RedirectResponse
     {
-        if ($purchaseInvoice->status !== PurchaseInvoiceStatus::Cancelled) {
-            return back()->with('error', 'Chỉ có thể xóa hóa đơn đã hủy.');
+        $deletableStatuses = [PurchaseInvoiceStatus::Cancelled, PurchaseInvoiceStatus::Valid];
+        if (!in_array($purchaseInvoice->status, $deletableStatuses)) {
+            return back()->with('error', 'Chỉ có thể xóa hóa đơn đã hủy hoặc chưa thanh toán. Thu hồi thanh toán trước nếu hóa đơn đã thanh toán.');
+        }
+
+        if ($purchaseInvoice->amountPaid() > 0) {
+            return back()->with('error', 'Hóa đơn còn thanh toán chưa thu hồi. Vui lòng thu hồi toàn bộ thanh toán trước khi xóa.');
         }
 
         DB::transaction(function () use ($purchaseInvoice) {
-            if ($purchaseInvoice->file_path) {
-                Storage::disk('public')->delete($purchaseInvoice->file_path);
+            foreach ($purchaseInvoice->attachments as $att) {
+                Storage::disk('public')->delete($att->file_path);
+                $att->delete();
             }
-            $purchaseInvoice->payments()->delete();
+            $purchaseInvoice->payments()->delete(); // xóa cả voided records
             $purchaseInvoice->delete();
         });
 
         return redirect()->route('purchasing.purchase-invoices.index')
             ->with('success', 'Đã xóa hóa đơn đầu vào.');
+    }
+
+    public function recallPayments(Request $request, PurchaseInvoice $purchaseInvoice): RedirectResponse
+    {
+        $this->authorize('purchasing.manage');
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'min:5', 'max:500'],
+        ]);
+
+        try {
+            $count = $this->service->recallPayments($purchaseInvoice, $data['reason']);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', "Đã thu hồi {$count} khoản thanh toán của hóa đơn {$purchaseInvoice->code}. Hóa đơn chuyển về trạng thái Hợp lệ.");
     }
 
     public function transition(Request $request, PurchaseInvoice $purchaseInvoice): RedirectResponse

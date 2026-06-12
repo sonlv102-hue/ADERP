@@ -12,7 +12,13 @@
           <h1 class="text-2xl font-bold text-gray-900">{{ invoice.code }}</h1>
           <StatusBadge :color="invoice.status_color">{{ invoice.status_label }}</StatusBadge>
         </div>
-        <div class="flex gap-2">
+        <div class="flex gap-2 flex-wrap">
+          <!-- Thu hồi thanh toán -->
+          <button v-if="canRecall && hasPermission('purchasing.manage')"
+            @click="showRecallModal = true" :disabled="busy"
+            class="border border-orange-400 text-orange-600 hover:bg-orange-50 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-60">
+            Thu hồi thanh toán
+          </button>
           <!-- FSM transition buttons -->
           <template v-for="tr in invoice.transitions" :key="tr.value">
             <button @click="doTransition(tr.value)" :disabled="busy"
@@ -21,11 +27,11 @@
               {{ tr.label }}
             </button>
           </template>
-          <Link v-if="invoice.status === 'pending'" :href="route('purchasing.purchase-invoices.edit', invoice.id)"
+          <Link v-if="canEditInvoice" :href="route('purchasing.purchase-invoices.edit', invoice.id)"
             class="border border-gray-300 text-gray-600 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium">
             Sửa
           </Link>
-          <button v-if="invoice.status === 'cancelled'" @click="showDeleteModal = true" :disabled="busy"
+          <button v-if="canDeleteInvoice" @click="showDeleteModal = true" :disabled="busy"
             class="border border-red-400 text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-60">
             Xóa
           </button>
@@ -192,29 +198,83 @@
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Hình thức</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã GD / Số CT</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">Số tiền</th>
+              <th class="text-left px-5 py-3 font-semibold text-gray-600">Trạng thái</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Người ghi</th>
               <th class="px-5 py-3"></th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <tr v-for="p in invoice.payments" :key="p.id" class="hover:bg-gray-50">
-              <td class="px-5 py-3 text-gray-700">{{ p.payment_date }}</td>
+            <tr v-for="p in invoice.payments" :key="p.id"
+              :class="p.status === 'voided' ? 'bg-gray-50 opacity-60' : 'hover:bg-gray-50'">
+              <td class="px-5 py-3 text-gray-700" :class="p.status === 'voided' ? 'line-through' : ''">{{ p.payment_date }}</td>
               <td class="px-5 py-3 text-gray-700">{{ p.method_label }}</td>
               <td class="px-5 py-3 text-gray-600">{{ p.reference ?? '—' }}</td>
-              <td class="px-5 py-3 text-right font-medium text-green-700">{{ formatVnd(p.amount) }}</td>
+              <td class="px-5 py-3 text-right font-medium"
+                :class="p.status === 'voided' ? 'text-gray-400 line-through' : 'text-green-700'">
+                {{ formatVnd(p.amount) }}
+              </td>
+              <td class="px-5 py-3">
+                <span v-if="p.status === 'voided'"
+                  class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-gray-200 text-gray-600"
+                  :title="p.void_reason">Đã thu hồi</span>
+                <span v-else class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-700">Hợp lệ</span>
+              </td>
               <td class="px-5 py-3 text-gray-600">{{ p.creator }}</td>
               <td class="px-5 py-3 text-right">
-                <button v-if="canPay" @click="deletePayment(p.id)"
+                <button v-if="canPay && p.status === 'active'" @click="deletePayment(p.id)"
                   class="text-red-500 hover:text-red-700 text-xs">Xóa</button>
               </td>
             </tr>
             <tr v-if="!invoice.payments?.length">
-              <td colspan="6" class="px-5 py-6 text-center text-gray-400 text-sm">Chưa có thanh toán nào</td>
+              <td colspan="7" class="px-5 py-6 text-center text-gray-400 text-sm">Chưa có thanh toán nào</td>
             </tr>
           </tbody>
         </table>
       </div>
     </div>
+
+    <!-- ── Modal: Thu hồi thanh toán ── -->
+    <Teleport to="body">
+      <div v-if="showRecallModal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-md">
+          <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="font-bold text-gray-900 text-lg">Thu hồi thanh toán — {{ invoice.code }}</h3>
+          </div>
+          <div class="p-6 space-y-4">
+            <div class="grid grid-cols-2 gap-2 text-sm bg-gray-50 p-3 rounded-lg">
+              <div><span class="text-gray-500">Đã thanh toán:</span>
+                <span class="font-semibold text-green-700 ml-1">{{ formatVnd(invoice.paid_amount) }}</span></div>
+              <div><span class="text-gray-500">Số khoản TT:</span>
+                <span class="font-semibold ml-1">{{ activePaymentCount }}</span></div>
+            </div>
+            <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-sm text-amber-800">
+              <p class="font-semibold mb-1">⚠ Cảnh báo</p>
+              <p>Thao tác này sẽ đảo toàn bộ bút toán thanh toán, cập nhật lại công nợ NCC, sổ cái và chuyển hóa đơn về trạng thái <strong>Hợp lệ</strong>.</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                Lý do thu hồi <span class="text-red-500">*</span>
+              </label>
+              <textarea v-model="recallReason" rows="2" placeholder="Nhập lý do..."
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                :class="{ 'border-red-500': recallReasonError }" />
+              <p v-if="recallReasonError" class="mt-1 text-xs text-red-600">{{ recallReasonError }}</p>
+            </div>
+            <label class="flex items-start gap-2 cursor-pointer text-sm text-gray-700">
+              <input type="checkbox" v-model="recallConfirmed" class="mt-0.5 shrink-0" />
+              <span>Tôi xác nhận thu hồi toàn bộ thanh toán của hóa đơn này</span>
+            </label>
+          </div>
+          <div class="px-6 py-4 border-t border-gray-100 flex justify-end gap-3">
+            <button @click="showRecallModal = false" class="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50">Hủy</button>
+            <button @click="submitRecall" :disabled="!recallConfirmed || busy"
+              class="px-5 py-2 text-sm font-medium bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-40">
+              Xác nhận thu hồi
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </AppLayout>
 </template>
 
@@ -232,9 +292,28 @@ const props = defineProps({ invoice: Object });
 const { hasPermission } = usePermission();
 const { formatVnd } = useCurrency();
 const busy = ref(false);
-const showPayForm    = ref(false);
+const showPayForm     = ref(false);
 const showDeleteModal = ref(false);
+const showRecallModal = ref(false);
+const recallReason      = ref('');
+const recallConfirmed   = ref(false);
+const recallReasonError = ref('');
 
+const canRecall = computed(() =>
+  ['paid', 'partial_paid'].includes(props.invoice.status)
+);
+
+const canEditInvoice = computed(() =>
+  ['valid', 'pending', 'received', 'reviewing', 'need_supplement'].includes(props.invoice.status)
+);
+
+const canDeleteInvoice = computed(() =>
+  ['cancelled', 'valid'].includes(props.invoice.status)
+);
+
+const activePaymentCount = computed(() =>
+  props.invoice.payments?.filter(p => p.status === 'active').length ?? 0
+);
 
 const canPay = computed(() =>
   hasPermission('purchasing.create') &&
@@ -272,8 +351,24 @@ function submitPayment() {
 }
 
 function deletePayment(paymentId) {
-  if (!confirm('Xóa thanh toán này?')) return;
+  if (!confirm('Xóa thanh toán này? Bút toán liên quan sẽ bị đảo.')) return;
   router.delete(route('purchasing.purchase-invoices.payments.destroy', [props.invoice.id, paymentId]));
 }
 
+function submitRecall() {
+  recallReasonError.value = '';
+  if (!recallReason.value.trim() || recallReason.value.trim().length < 5) {
+    recallReasonError.value = 'Lý do thu hồi phải ít nhất 5 ký tự.';
+    return;
+  }
+  if (!recallConfirmed.value || busy.value) return;
+  busy.value = true;
+  router.post(route('purchasing.purchase-invoices.recall-payments', props.invoice.id),
+    { reason: recallReason.value.trim() },
+    {
+      onSuccess: () => { showRecallModal.value = false; recallReason.value = ''; recallConfirmed.value = false; },
+      onFinish: ()  => { busy.value = false; },
+    }
+  );
+}
 </script>

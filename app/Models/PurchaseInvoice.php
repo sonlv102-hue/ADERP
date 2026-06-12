@@ -60,7 +60,12 @@ class PurchaseInvoice extends Model
 
     public function amountPaid(): float
     {
-        return (float) $this->payments()->sum('amount');
+        return (float) $this->payments()->active()->sum('amount');
+    }
+
+    public function activePayments(): HasMany
+    {
+        return $this->hasMany(PurchaseInvoicePayment::class)->where('status', 'active');
     }
 
     public function amountDue(): float

@@ -402,6 +402,7 @@ Route::middleware('auth')->group(function () {
 
         Route::resource('purchase-invoices', PurchaseInvoiceController::class);
         Route::post('purchase-invoices/{purchaseInvoice}/transition', [PurchaseInvoiceController::class, 'transition'])->name('purchase-invoices.transition');
+        Route::post('purchase-invoices/{purchaseInvoice}/recall-payments', [PurchaseInvoiceController::class, 'recallPayments'])->name('purchase-invoices.recall-payments')->middleware('can:purchasing.manage');
         Route::post('purchase-invoices/{purchaseInvoice}/payments', [PurchaseInvoicePaymentController::class, 'store'])->name('purchase-invoices.payments.store');
         Route::delete('purchase-invoices/{purchaseInvoice}/payments/{payment}', [PurchaseInvoicePaymentController::class, 'destroy'])->name('purchase-invoices.payments.destroy');
         Route::post('purchase-invoices/{purchaseInvoice}/attachment', [PurchaseInvoiceController::class, 'uploadAttachment'])->name('purchase-invoices.attachment.upload');
