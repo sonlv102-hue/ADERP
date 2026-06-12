@@ -39,10 +39,11 @@ class ExpenseDetailController extends Controller
         // ── TK 632 – Vật tư dự án ────────────────────────────────────────────
         $cogs632Materials = DB::table('project_materials')
             ->join('projects', 'projects.id', '=', 'project_materials.project_id')
+            ->join('products', 'products.id', '=', 'project_materials.product_id')
             ->whereBetween('projects.start_date', [$dateFrom, $dateTo])
             ->whereNotIn('projects.status', ['cancelled'])
             ->select('projects.start_date as date', 'projects.code as ref',
-                     'project_materials.name as description',
+                     'products.name as description',
                      DB::raw('project_materials.quantity * project_materials.unit_price as amount'))
             ->orderBy('projects.start_date')
             ->get()

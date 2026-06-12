@@ -38,9 +38,10 @@ class ExpenseDetailExport implements FromCollection, WithHeadings, WithMapping, 
 
         foreach (DB::table('project_materials')
             ->join('projects', 'projects.id', '=', 'project_materials.project_id')
+            ->join('products', 'products.id', '=', 'project_materials.product_id')
             ->whereBetween('projects.start_date', [$from, $to])
             ->whereNotIn('projects.status', ['cancelled'])
-            ->select('projects.start_date as date', 'projects.code as ref', 'project_materials.name as description',
+            ->select('projects.start_date as date', 'projects.code as ref', 'products.name as description',
                      DB::raw('project_materials.quantity * project_materials.unit_price as amount'))
             ->get() as $r) {
             $rows[] = (object)['date' => $r->date, 'ref' => $r->ref, 'tk' => '632', 'description' => 'Vật tư DA: ' . $r->description, 'amount' => (float)$r->amount];
