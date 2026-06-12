@@ -597,10 +597,10 @@ const groupedItems = computed(() => {
   return groups;
 });
 
-// JS mirror of PitCalculatorService (Nghị định 158/2025)
+// JS mirror of PitCalculatorService (TT 79/2022 + Nghị định 158/2025)
 const INS_CAP       = 46_800_000;
-const PERSONAL_DED  = 11_000_000;
-const DEPENDENT_DED = 4_400_000;
+const PERSONAL_DED  = 15_500_000;  // TT 79/2022
+const DEPENDENT_DED = 6_200_000;   // TT 79/2022
 const BRACKETS = [[5e6,5],[10e6,10],[18e6,15],[32e6,20],[52e6,25],[80e6,30],[null,35]];
 
 function calcInsBase(base, bhxhAllw, insSubject) {
@@ -712,7 +712,24 @@ const previewNonBhxh  = computed(() =>
   + (editForm.bonus                || 0)
 );
 
-const previewGross   = computed(() => (editForm.base_salary || 0) + previewBhxhAllw.value + previewNonBhxh.value);
+// Tỷ lệ ngày công — phải nhất quán với PitCalculatorService::breakdown()
+const previewRate = computed(() => {
+  const std = activeItem.value?.standard_days || 26;
+  const wd  = editForm.working_days || 0;
+  return std > 0 ? Math.min(wd / std, 1.0) : 1.0;
+});
+
+const previewGross   = computed(() => {
+  const r = previewRate.value;
+  return Math.round((editForm.base_salary || 0) * r)
+       + Math.round(previewBhxhAllw.value * r)
+       + Math.round(previewNonBhxh.value  * r);
+});
+const previewInsBase = computed(() =>
+  calcInsBase(Math.round((editForm.base_salary || 0) * previewRate.value),
+              Math.round(previewBhxhAllw.value  * previewRate.value),
+              editForm.insurance_subject)
+);
 const previewInsEmp  = computed(() =>
   (editForm.bhxh_employee || 0) + (editForm.bhyt_employee || 0) + (editForm.bhtn_employee || 0)
 );
@@ -723,7 +740,6 @@ const previewPit     = computed(() =>
     : previewPitAuto.value
 );
 const previewNet     = computed(() => previewGross.value - previewInsEmp.value - previewPit.value);
-const previewInsBase = computed(() => calcInsBase(editForm.base_salary || 0, previewBhxhAllw.value, editForm.insurance_subject));
 
 function calcBhxhFromBase(insBase) {
   return {
