@@ -48,6 +48,7 @@ class CashVoucherService
         $amount  = (float) $voucher->amount;
         $account = $this->resolveFundAccount($voucher);
         $date    = Carbon::parse($voucher->voucher_date);
+        [$partnerType, $partnerId] = $this->resolvePartnerInfo($voucher);
 
         if ($voucher->type === CashVoucherType::Receipt) {
             // Phiếu thu: Dr 111/112 / Cr 131 hoặc 511
@@ -56,14 +57,16 @@ class CashVoucherService
                 ['account' => $account, 'debit' => (int) $amount, 'credit' => 0,
                  'description' => "Thu: {$voucher->description}"],
                 ['account' => $counterAccount, 'debit' => 0, 'credit' => (int) $amount,
-                 'description' => "Thu: {$voucher->description}"],
+                 'description' => "Thu: {$voucher->description}",
+                 'partner_type' => $partnerType, 'partner_id' => $partnerId],
             ];
         } else {
-            // Phiếu chi: Dr 642/641/... / Cr 111/112
+            // Phiếu chi: Dr 642/641/141/... / Cr 111/112
             $counterAccount = $this->resolveCounterAccount($voucher, 'payment');
             $lines = [
                 ['account' => $counterAccount, 'debit' => (int) $amount, 'credit' => 0,
-                 'description' => "Chi: {$voucher->description}"],
+                 'description' => "Chi: {$voucher->description}",
+                 'partner_type' => $partnerType, 'partner_id' => $partnerId],
                 ['account' => $account, 'debit' => 0, 'credit' => (int) $amount,
                  'description' => "Chi: {$voucher->description}"],
             ];
@@ -85,29 +88,59 @@ class CashVoucherService
         return '1111'; // Tiền mặt VND — chi tiết của 111
     }
 
-    /** Tài khoản đối ứng mặc định */
+    /** Tài khoản đối ứng theo loại đối tác */
     private function resolveCounterAccount(CashVoucher $voucher, string $direction): string
     {
-        // Thu từ KH (gắn HD bán hàng) → lấy receivable_account từ customer qua invoice
-        if ($direction === 'receipt' && $voucher->reference_type === 'invoice') {
-            $invoice = \App\Models\Invoice::find($voucher->reference_id);
-            if ($invoice?->customer_id) {
-                $invoice->loadMissing('customer');
-                return $invoice->customer->getReceivableAccount();
-            }
-            return '1311'; // fallback nếu không tìm được invoice/customer
+        switch ($voucher->partner_type) {
+            case 'customer':
+                if ($voucher->customer_id) {
+                    $voucher->loadMissing('customer');
+                    return $voucher->customer->getReceivableAccount();
+                }
+                return '1311';
+
+            case 'supplier':
+                if ($voucher->supplier_id) {
+                    $voucher->loadMissing('supplier');
+                    return $voucher->supplier->getPayableAccount();
+                }
+                return '3311';
+
+            case 'employee':
+                return '141'; // Tạm ứng nhân viên
+
+            default:
+                // Legacy: thu từ KH qua HD bán hàng
+                if ($direction === 'receipt' && $voucher->reference_type === 'invoice') {
+                    $invoice = \App\Models\Invoice::find($voucher->reference_id);
+                    if ($invoice?->customer_id) {
+                        $invoice->loadMissing('customer');
+                        return $invoice->customer->getReceivableAccount();
+                    }
+                    return '1311';
+                }
+                // Legacy: supplier_id trực tiếp
+                if ($voucher->supplier_id) {
+                    $voucher->loadMissing('supplier');
+                    return $voucher->supplier->getPayableAccount();
+                }
+                if ($voucher->reference_type === 'purchase_invoice') {
+                    return '3311';
+                }
+                return $direction === 'receipt' ? '1311' : '6422';
         }
-        // Liên quan NCC: có supplier_id → lấy payable_account_code từ NCC
-        if ($voucher->supplier_id) {
-            $voucher->loadMissing('supplier');
-            return $voucher->supplier->getPayableAccount();
-        }
-        // Gắn HD mua hàng (không có supplier_id trực tiếp trên voucher) → fallback 3311
-        // Trường hợp này hiếm — phiếu chi nên luôn gắn supplier_id khi thanh toán NCC
-        if ($voucher->reference_type === 'purchase_invoice') {
-            return '3311';
-        }
-        // Mặc định: thu → 1311 (phải thu KH trong nước), chi → 6422 (Chi phí QLDN)
-        return $direction === 'receipt' ? '1311' : '6422';
+    }
+
+    /** Thông tin đối tác để gắn vào dòng bút toán AR/AP/141 */
+    private function resolvePartnerInfo(CashVoucher $voucher): array
+    {
+        return match ($voucher->partner_type) {
+            'customer' => ['customer', $voucher->customer_id],
+            'supplier' => ['supplier', $voucher->supplier_id],
+            'employee' => ['employee', $voucher->employee_id],
+            default    => $voucher->supplier_id
+                ? ['supplier', $voucher->supplier_id]
+                : [null, null],
+        };
     }
 }
