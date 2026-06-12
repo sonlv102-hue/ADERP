@@ -1,6 +1,6 @@
 # Mini ERP — Project State
 
-Cập nhật: 2026-06-07. File này ghi trạng thái ngắn gọn để tránh phải đọc lại toàn bộ phase-history.
+Cập nhật: 2026-06-12. File này ghi trạng thái ngắn gọn để tránh phải đọc lại toàn bộ phase-history.
 
 ## Trạng thái hiện tại
 
@@ -44,9 +44,9 @@ Dự án đang ở giai đoạn **vận hành và cải tiến**, các module co
 
 ## Migration sequence hiện tại
 
-- Last 900xxx: `2026_06_07_900056` — Next: **900057**
+- Last 900xxx: `2026_06_12_900065` (receivable_account_code on customers) — Next: **900066**
 - Last Phase E / bank: `2026_06_05_100006` — Next (nếu cùng chủ đề bank): **100007**
-- Khi tạo migration mới không liên quan bank: dùng **900057** với date hiện tại
+- Khi tạo migration mới không liên quan bank: dùng **900066** với date hiện tại
 
 ## Known issues / risks
 
@@ -58,6 +58,23 @@ Dự án đang ở giai đoạn **vận hành và cải tiến**, các module co
 6. **M1 revenue mapping pending:** products có item_type='software'|'other' chưa được cấu hình revenue_account_code. InvoiceService fallback 5111 và ghi Log::warning. Kế toán cần cấu hình từng sản phẩm trong admin.
 7. **M3 proration:** Khi không có bảng chấm công đã chốt, PayrollService dùng standard_days (không prorate). Cần quyết định chính sách: có bắt buộc chốt CC trước khi tính lương không?
 8. **project_materials.unit_price:** Chưa xác định là giá bán hay giá vốn — ProfitController chưa sửa phần này. Cần kế toán xác nhận.
+
+## Accounting cleanup (2026-06-12)
+
+- `Customer.receivable_account_code` (migration 900065): per-customer TK phải thu, mặc định 1311.
+  - `Customer::getReceivableAccount()` ném RuntimeException nếu null.
+  - InvoiceService, CashVoucherService, ArApOpeningBalanceController đã dùng method này.
+- `Supplier.payable_account_code` (migration 900064): per-supplier TK phải trả, mặc định 3311.
+  - `Supplier::getPayableAccount()` ném RuntimeException nếu null.
+- Toàn bộ hardcode TK cha (131, 331) đã được xử lý trong services.
+- 34 legacy JEs dùng TK 331 cha đã có bút toán điều chỉnh `payable_reclassification`.
+  - TK 331 net balance = 0 (verified trên VPS).
+  - `php artisan accounting:audit-parent-accounts` (mặc định sạch; `--include-adjusted` để xem đầy đủ).
+- **Trial Balance** có 2 mode:
+  - `?mode=adjusted` (mặc định): ẩn TK tổng hợp có số dư cuối kỳ = 0. Tổng cộng vẫn từ tất cả TK.
+  - `?mode=raw`: hiển thị đầy đủ kể cả TK 331 với reclassification noise, dùng cho audit trail.
+- **PIT constants** (TT 79/2022): PERSONAL_DEDUCTION = 15,500,000 VND; DEPENDENT = 6,200,000 VND.
+  - CLAUDE.md cũ ghi 11M/4.4M là sai — đã fix trong memory.
 
 ## Môi trường
 
