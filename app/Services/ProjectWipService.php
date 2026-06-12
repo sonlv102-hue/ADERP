@@ -2,7 +2,9 @@
 
 namespace App\Services;
 
+use App\Enums\ExpenseCategory;
 use App\Models\Project;
+use App\Models\ProjectExpense;
 use App\Models\ProjectWipEntry;
 use App\Models\StockExit;
 use Carbon\Carbon;
@@ -44,6 +46,56 @@ class ProjectWipService
             'journal_entry_id' => $journalEntryId,
             'created_by'       => auth()->id(),
         ]);
+    }
+
+    /**
+     * Ghi nhận chi phí phát sinh dự án vào WIP.
+     * Nợ 154 / Có 627x (chi phí sản xuất chung tương ứng)
+     */
+    public function createFromExpense(ProjectExpense $expense): void
+    {
+        $amount = (int) round((float) $expense->amount);
+        if ($amount <= 0 || !$expense->project_id) return;
+
+        $creditAccount = match ($expense->category) {
+            ExpenseCategory::Labor     => '6271', // Lương giám sát
+            ExpenseCategory::Material  => '6272', // Vật tư phụ
+            ExpenseCategory::Transport => '6278', // Chi phí vận chuyển
+            ExpenseCategory::Other     => '6279', // Chi phí khác
+        };
+
+        DB::transaction(function () use ($expense, $amount, $creditAccount) {
+            $projectCode = $expense->project?->code ?? $expense->project_id;
+            $je = $this->accounting->post(
+                "Chi phí phát sinh dự án {$projectCode}",
+                Carbon::parse($expense->expense_date),
+                [
+                    ['account' => '154', 'debit' => $amount, 'credit' => 0,
+                     'description' => $expense->description, 'project_id' => $expense->project_id],
+                    ['account' => $creditAccount, 'debit' => 0, 'credit' => $amount,
+                     'description' => $expense->description, 'project_id' => $expense->project_id],
+                ],
+                ProjectExpense::class, $expense->id, true
+            );
+
+            $wipType = match ($expense->category) {
+                ExpenseCategory::Labor    => 'labor',
+                ExpenseCategory::Material => 'material',
+                default                   => 'overhead',
+            };
+
+            ProjectWipEntry::create([
+                'project_id'       => $expense->project_id,
+                'source_type'      => ProjectExpense::class,
+                'source_id'        => $expense->id,
+                'cost_type'        => $wipType,
+                'amount'           => $amount,
+                'description'      => $expense->description,
+                'entry_date'       => $expense->expense_date,
+                'journal_entry_id' => $je->id,
+                'created_by'       => auth()->id(),
+            ]);
+        });
     }
 
     /**
@@ -109,8 +161,8 @@ class ProjectWipService
                 "Kết chuyển giá thành dự án {$project->code}",
                 Carbon::today(),
                 [
-                    ['account' => '632', 'debit' => $total, 'credit' => 0,
-                     'description' => "Giá vốn dự án {$project->name}", 'project_id' => $project->id],
+                    ['account' => '6322', 'debit' => $total, 'credit' => 0,
+                     'description' => "Giá vốn công trình {$project->name}", 'project_id' => $project->id],
                     ['account' => '154', 'debit' => 0, 'credit' => $total,
                      'description' => "Kết chuyển CP dở dang {$project->name}", 'project_id' => $project->id],
                 ],

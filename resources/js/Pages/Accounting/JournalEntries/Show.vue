@@ -19,6 +19,11 @@
           <span v-if="entry.is_auto" class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-600 border border-blue-200">
             Tự động
           </span>
+          <button v-if="can('accounting.manage')"
+            @click="openEditModal"
+            class="text-sm px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50">
+            Sửa diễn giải
+          </button>
           <button v-if="entry.status === 'draft' && can('accounting.manage')"
             @click="showPostModal = true"
             class="text-sm px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700">
@@ -122,6 +127,37 @@
       </div>
     </div>
 
+    <!-- Modal: Sửa diễn giải / ghi chú -->
+    <div v-if="showEditModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-md">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="font-semibold text-gray-900">Sửa bút toán {{ entry.code }}</h3>
+        </div>
+        <form @submit.prevent="submitEdit" class="p-6 space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Diễn giải <span class="text-red-500">*</span></label>
+            <input v-model="editForm.description" type="text" maxlength="500"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            <p v-if="editForm.errors.description" class="mt-1 text-xs text-red-600">{{ editForm.errors.description }}</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
+            <textarea v-model="editForm.notes" rows="3" maxlength="1000"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <p class="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
+            Chỉ có thể sửa diễn giải và ghi chú. Dòng bút toán và số tiền không thay đổi.
+          </p>
+          <div class="flex justify-end gap-3">
+            <button type="button" @click="showEditModal = false" class="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700">Hủy</button>
+            <button type="submit" :disabled="editForm.processing" class="px-4 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50">
+              Lưu
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Modal: Đảo bút toán -->
     <div v-if="showReverseModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-xl shadow-xl w-full max-w-sm">
@@ -157,6 +193,21 @@ import { useCurrency } from '@/composables/useCurrency';
 const props = defineProps({ entry: Object });
 const { hasPermission: can } = usePermission();
 const { formatVnd } = useCurrency();
+
+const showEditModal = ref(false);
+const editForm = useForm({ description: '', notes: '' });
+
+function openEditModal() {
+  editForm.description = props.entry.description;
+  editForm.notes = props.entry.notes ?? '';
+  showEditModal.value = true;
+}
+
+function submitEdit() {
+  editForm.patch(route('accounting.journal-entries.update', props.entry.id), {
+    onSuccess: () => { showEditModal.value = false; },
+  });
+}
 
 const showPostModal = ref(false);
 

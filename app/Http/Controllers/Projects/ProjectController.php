@@ -321,10 +321,19 @@ class ProjectController extends Controller
             'expense_date' => ['required', 'date'],
         ]);
 
-        $project->expenses()->create([
+        $expense = $project->expenses()->create([
             ...$data,
             'created_by' => auth()->id(),
         ]);
+
+        if ((float) $expense->amount > 0) {
+            $expense->loadMissing('project');
+            try {
+                $this->wip->createFromExpense($expense);
+            } catch (\Throwable $e) {
+                \Log::warning("ProjectWip expense journal failed #{$expense->id}: {$e->getMessage()}");
+            }
+        }
 
         return back()->with('success', 'Đã ghi nhận chi phí.');
     }

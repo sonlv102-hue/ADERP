@@ -113,13 +113,16 @@
       <div class="space-y-2 text-sm text-slate-600">
         <p>Bạn có chắc muốn xóa bút toán <strong>{{ deleteTarget?.code }}</strong>?</p>
         <p class="italic text-slate-500">{{ deleteTarget?.description }}</p>
-        <p v-if="deleteTarget?.is_auto" class="text-amber-600 font-medium bg-amber-50 px-3 py-2 rounded-lg">
-          ⚠ Đây là bút toán tự động — xóa sẽ ảnh hưởng đến cân đối kế toán.
+        <p v-if="deleteTarget?.status === 'posted'" class="text-red-600 font-medium bg-red-50 px-3 py-2 rounded-lg">
+          ⚠ Bút toán đã hạch toán không thể xóa. Vui lòng dùng "Đảo bút toán" để hủy hiệu lực.
+        </p>
+        <p v-else-if="deleteTarget?.is_auto" class="text-amber-600 font-medium bg-amber-50 px-3 py-2 rounded-lg">
+          ⚠ Đây là bút toán tự động ở trạng thái nháp — xóa sẽ cần tạo lại nếu cần.
         </p>
       </div>
       <template #footer>
         <button @click="deleteTarget = null" class="erp-btn-secondary">Hủy</button>
-        <button @click="doDelete" class="erp-btn-danger">Xóa</button>
+        <button v-if="deleteTarget?.status !== 'posted'" @click="doDelete" class="erp-btn-danger">Xóa</button>
       </template>
     </Modal>
 

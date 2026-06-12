@@ -348,7 +348,7 @@ Route::middleware('auth')->group(function () {
         Route::delete('ar-ap-opening-balance/{arApOpeningBalance}',     [ArApOpeningBalanceController::class, 'destroy'])->name('ar-ap-opening-balance.destroy')->middleware('can:accounting.manage');
 
         // Phiếu kế toán / Bút toán (Journal Entries)
-        Route::resource('journal-entries', JournalEntryController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
+        Route::resource('journal-entries', JournalEntryController::class)->only(['index', 'create', 'store', 'show', 'update', 'destroy']);
         Route::post('journal-entries/{journalEntry}/post', [JournalEntryController::class, 'markPosted'])->name('journal-entries.post')->middleware('can:accounting.manage');
         Route::post('journal-entries/{journalEntry}/reverse', [JournalEntryController::class, 'reverse'])->name('journal-entries.reverse')->middleware('can:accounting.manage');
         Route::post('journal-entries/bulk-approve', [JournalEntryController::class, 'bulkApprove'])->name('journal-entries.bulk-approve')->middleware('can:accounting.manage');

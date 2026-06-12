@@ -143,6 +143,19 @@ class JournalEntryController extends Controller
         ]);
     }
 
+    public function update(Request $request, JournalEntry $journalEntry): RedirectResponse
+    {
+        // Chỉ cho phép sửa description và notes — không sửa dòng bút toán đã posted
+        $data = $request->validate([
+            'description' => ['required', 'string', 'max:500'],
+            'notes'       => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $journalEntry->update($data);
+
+        return back()->with('success', 'Đã cập nhật bút toán.');
+    }
+
     public function markPosted(JournalEntry $journalEntry): RedirectResponse
     {
         $this->authorize('accounting.manage');
@@ -160,9 +173,12 @@ class JournalEntryController extends Controller
     {
         $this->authorize('accounting.manage');
 
-        // Không cho xóa bút toán tự động đang posted — phải dùng "Đảo bút toán"
-        if ($journalEntry->is_auto && $journalEntry->status === 'posted') {
-            return back()->with('error', 'Không thể xóa bút toán tự động đang hạch toán. Vui lòng dùng "Đảo bút toán" để hủy hiệu lực.');
+        // Không cho xóa bút toán đã posted — phải dùng "Đảo bút toán"
+        if ($journalEntry->status === 'posted') {
+            return back()->with('error', 'Không thể xóa bút toán đã hạch toán. Vui lòng dùng "Đảo bút toán" để hủy hiệu lực.');
+        }
+        if ($journalEntry->status === 'reversed') {
+            return back()->with('error', 'Không thể xóa bút toán đã đảo.');
         }
 
         $journalEntry->lines()->delete();
