@@ -63,12 +63,12 @@
               <td class="px-5 py-3 text-right whitespace-nowrap">
                 <Link :href="route('purchasing.purchase-invoices.show', inv.id)"
                   class="text-primary-600 hover:text-primary-800 text-xs font-medium mr-3">Xem</Link>
-                <button v-if="canRecall(inv) && can('purchasing.manage')"
+                <button v-if="canRecall(inv) && can('purchasing.approve')"
                   @click="openRecallModal(inv)"
                   class="text-orange-600 hover:text-orange-800 text-xs font-medium mr-3">Thu hồi TT</button>
                 <Link v-if="canEdit(inv)" :href="route('purchasing.purchase-invoices.edit', inv.id)"
                   class="text-gray-600 hover:text-gray-800 text-xs font-medium mr-3">Sửa</Link>
-                <button v-if="canDelete(inv) && can('purchasing.manage')"
+                <button v-if="canDelete(inv) && can('purchasing.approve')"
                   @click="openDeleteConfirm(inv)"
                   class="text-red-600 hover:text-red-800 text-xs font-medium">Xóa</button>
               </td>

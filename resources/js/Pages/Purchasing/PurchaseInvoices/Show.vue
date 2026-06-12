@@ -14,7 +14,7 @@
         </div>
         <div class="flex gap-2 flex-wrap">
           <!-- Thu hồi thanh toán -->
-          <button v-if="canRecall && hasPermission('purchasing.manage')"
+          <button v-if="canRecall && hasPermission('purchasing.approve')"
             @click="showRecallModal = true" :disabled="busy"
             class="border border-orange-400 text-orange-600 hover:bg-orange-50 px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-60">
             Thu hồi thanh toán
