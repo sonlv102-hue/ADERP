@@ -211,7 +211,7 @@
 import { ref } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
 import AppLayout from '@/Components/Layout/AppLayout.vue'
-import StatusBadge from '@/Components/StatusBadge.vue'
+import StatusBadge from '@/Components/Shared/StatusBadge.vue'
 import { usePermission } from '@/composables/usePermission'
 
 const { hasPermission: can } = usePermission()
