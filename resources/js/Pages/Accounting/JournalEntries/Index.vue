@@ -116,6 +116,9 @@
         <p v-if="deleteTarget?.status === 'posted'" class="text-red-600 font-medium bg-red-50 px-3 py-2 rounded-lg">
           ⚠ Bút toán đã hạch toán không thể xóa. Vui lòng dùng "Đảo bút toán" để hủy hiệu lực.
         </p>
+        <p v-else-if="deleteTarget?.status === 'reversed'" class="text-amber-600 font-medium bg-amber-50 px-3 py-2 rounded-lg">
+          Bút toán này đã bị đảo. Xóa sẽ xóa cả bút toán đảo ngược đi kèm.
+        </p>
         <p v-else-if="deleteTarget?.is_auto" class="text-amber-600 font-medium bg-amber-50 px-3 py-2 rounded-lg">
           ⚠ Đây là bút toán tự động ở trạng thái nháp — xóa sẽ cần tạo lại nếu cần.
         </p>

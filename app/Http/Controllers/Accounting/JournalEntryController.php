@@ -9,6 +9,7 @@ use App\Services\AccountingService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -177,8 +178,20 @@ class JournalEntryController extends Controller
         if ($journalEntry->status === 'posted') {
             return back()->with('error', 'Không thể xóa bút toán đã hạch toán. Vui lòng dùng "Đảo bút toán" để hủy hiệu lực.');
         }
+
+        // Bút toán "Đã đảo": phải xóa cả bút toán đảo ngược đi kèm để giữ cân đối sổ
         if ($journalEntry->status === 'reversed') {
-            return back()->with('error', 'Không thể xóa bút toán đã đảo.');
+            $reversalEntry = $journalEntry->reversedBy;
+            DB::transaction(function () use ($journalEntry, $reversalEntry) {
+                if ($reversalEntry) {
+                    $reversalEntry->lines()->delete();
+                    $reversalEntry->delete();
+                }
+                $journalEntry->lines()->delete();
+                $journalEntry->delete();
+            });
+            return redirect()->route('accounting.journal-entries.index')
+                ->with('success', "Đã xóa bút toán {$journalEntry->code} và bút toán đảo ngược đi kèm.");
         }
 
         $journalEntry->lines()->delete();

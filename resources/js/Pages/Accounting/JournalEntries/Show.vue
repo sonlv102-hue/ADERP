@@ -34,6 +34,11 @@
             class="text-sm px-3 py-1.5 border border-red-300 text-red-600 rounded-lg hover:bg-red-50">
             Đảo bút toán
           </button>
+          <button v-if="entry.status === 'reversed' && can('accounting.manage')"
+            @click="showDeleteReversedModal = true"
+            class="text-sm px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700">
+            Xóa cặp bút toán
+          </button>
         </div>
       </div>
 
@@ -158,6 +163,23 @@
       </div>
     </div>
 
+    <!-- Modal: Xóa cặp bút toán đảo -->
+    <div v-if="showDeleteReversedModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-sm">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="font-semibold text-gray-900">Xóa bút toán {{ entry.code }}</h3>
+        </div>
+        <div class="p-6 space-y-3 text-sm text-gray-700">
+          <p>Bút toán này đã bị đảo ngược. Hành động sẽ xóa <strong>cả hai</strong>: bút toán gốc và bút toán đảo đi kèm.</p>
+          <p class="text-red-600 bg-red-50 px-3 py-2 rounded-lg font-medium">Không thể hoàn tác. Bạn có chắc không?</p>
+        </div>
+        <div class="flex justify-end gap-3 px-6 pb-6">
+          <button @click="showDeleteReversedModal = false" class="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700">Hủy</button>
+          <button @click="submitDeleteReversed" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700">Xóa</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal: Đảo bút toán -->
     <div v-if="showReverseModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-xl shadow-xl w-full max-w-sm">
@@ -223,6 +245,14 @@ const reverseForm = useForm({ reason: '' });
 function submitReverse() {
   reverseForm.post(route('accounting.journal-entries.reverse', props.entry.id), {
     onSuccess: () => { showReverseModal.value = false; },
+  });
+}
+
+const showDeleteReversedModal = ref(false);
+
+function submitDeleteReversed() {
+  router.delete(route('accounting.journal-entries.destroy', props.entry.id), {
+    onSuccess: () => { showDeleteReversedModal.value = false; },
   });
 }
 </script>
