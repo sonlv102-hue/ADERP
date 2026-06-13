@@ -102,6 +102,7 @@
           <NavItem v-if="can('accounting.manage')" :href="route('accounting.payment-terms.index')"       icon="tag"       sub>Điều khoản TT</NavItem>
           <NavItem v-if="can('accounting.manage')" :href="route('accounting.account-codes.index')"       icon="view-list" sub>Hệ thống tài khoản</NavItem>
           <NavItem v-if="can('accounting.manage')" :href="route('accounting.accounting-periods.index')"  icon="calendar"  sub>Kỳ kế toán</NavItem>
+          <NavItem v-if="can('accounting.manage')" :href="route('accounting.period-close.index')"         icon="check-circle" sub>Kết chuyển cuối kỳ</NavItem>
         </NavGroup>
 
         <NavGroup v-if="can('documents.view')"

@@ -33,7 +33,7 @@ class IncomeStatementExport implements FromCollection, WithHeadings, WithMapping
         $grossProfit     = $netRevenue - $cogs;
         $financialIncome = $b('515');
         $financialExpense= $b('635');
-        $sellingExpense  = $b('641');
+        $sellingExpense  = $b('6421');
         $adminExpense    = $b('642');
         $otherIncome     = $b('711');
         $otherExpense    = $b('811');
@@ -52,7 +52,7 @@ class IncomeStatementExport implements FromCollection, WithHeadings, WithMapping
             (object)['label' => 'Lợi nhuận gộp',                              'amount' => $grossProfit],
             (object)['label' => 'Doanh thu hoạt động tài chính (TK 515)',     'amount' => $financialIncome],
             (object)['label' => 'Chi phí tài chính (TK 635)',                  'amount' => -$financialExpense],
-            (object)['label' => 'Chi phí bán hàng (TK 641)',                   'amount' => -$sellingExpense],
+            (object)['label' => 'Chi phí bán hàng (TK 6421)',                  'amount' => -$sellingExpense],
             (object)['label' => 'Chi phí QLDN (TK 642)',                       'amount' => -$adminExpense],
             (object)['label' => 'Lợi nhuận thuần từ HĐKD',                    'amount' => $netOpProfit],
             (object)['label' => 'Thu nhập khác (TK 711)',                      'amount' => $otherIncome],

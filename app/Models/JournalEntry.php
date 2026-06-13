@@ -24,7 +24,7 @@ class JournalEntry extends Model
         'code', 'entry_date', 'description', 'reference_type', 'reference_id',
         'status', 'is_auto', 'reversed_by_id', 'created_by', 'posted_at', 'notes',
         'source_type', 'fiscal_period', 'exclude_from_period_movement',
-        'voided_at', 'voided_by', 'void_reason',
+        'voided_at', 'voided_by', 'void_reason', 'period_close_batch_id',
     ];
 
     protected $casts = [
@@ -53,6 +53,11 @@ class JournalEntry extends Model
     public function voidedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'voided_by');
+    }
+
+    public function periodCloseBatch(): BelongsTo
+    {
+        return $this->belongsTo(PeriodCloseBatch::class);
     }
 
     public function totalDebit(): float

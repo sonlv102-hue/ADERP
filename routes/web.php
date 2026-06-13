@@ -38,6 +38,7 @@ use App\Http\Controllers\Support\TicketController;
 use App\Http\Controllers\Support\WarrantyController;
 use App\Http\Controllers\Accounting\AccountCodeController;
 use App\Http\Controllers\Accounting\AccountingPeriodController;
+use App\Http\Controllers\Accounting\PeriodCloseBatchController;
 use App\Http\Controllers\Accounting\CashVoucherController;
 use App\Http\Controllers\Accounting\FundController;
 use App\Http\Controllers\Accounting\InvoiceController;
@@ -328,6 +329,15 @@ Route::middleware('auth')->group(function () {
         Route::post('account-codes', [AccountCodeController::class, 'store'])->name('account-codes.store')->middleware('can:accounting.manage');
         Route::put('account-codes/{accountCode}', [AccountCodeController::class, 'update'])->name('account-codes.update')->middleware('can:accounting.manage');
         Route::delete('account-codes/{accountCode}', [AccountCodeController::class, 'destroy'])->name('account-codes.destroy')->middleware('can:accounting.manage');
+
+        // Kết chuyển cuối kỳ
+        Route::prefix('period-close')->name('period-close.')->middleware('can:accounting.manage')->group(function () {
+            Route::get('/',                                  [PeriodCloseBatchController::class, 'index'])  ->name('index');
+            Route::post('/preview',                          [PeriodCloseBatchController::class, 'preview'])->name('preview');
+            Route::post('/',                                 [PeriodCloseBatchController::class, 'store'])  ->name('store');
+            Route::get('/{batch}',                           [PeriodCloseBatchController::class, 'show'])   ->name('show');
+            Route::post('/{batch}/reverse',                  [PeriodCloseBatchController::class, 'reverse'])->name('reverse');
+        });
 
         // Kỳ kế toán (Accounting Periods)
         Route::get('accounting-periods', [AccountingPeriodController::class, 'index'])->name('accounting-periods.index');

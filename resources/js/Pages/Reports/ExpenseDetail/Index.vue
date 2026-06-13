@@ -4,7 +4,7 @@
       <div class="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 class="text-2xl font-bold text-gray-900">Chi tiết tài khoản chi phí</h1>
-          <p class="text-sm text-gray-500 mt-0.5">TK 632 Giá vốn · TK 641 Bán hàng · TK 642 Quản lý</p>
+          <p class="text-sm text-gray-500 mt-0.5">TK 632 Giá vốn · TK 6421 Bán hàng · TK 6422 QLDN</p>
         </div>
         <a :href="exportUrl" class="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -44,8 +44,8 @@
           <p class="text-lg font-bold text-red-700">{{ fmt(summary.total_632) }}</p>
         </div>
         <div class="bg-white rounded-xl border border-orange-200 bg-orange-50 p-4">
-          <p class="text-xs text-orange-600 mb-1">TK 641 – Chi phí bán hàng</p>
-          <p class="text-lg font-bold text-orange-700">{{ fmt(summary.total_641) }}</p>
+          <p class="text-xs text-orange-600 mb-1">TK 6421 – Chi phí bán hàng (TT133)</p>
+          <p class="text-lg font-bold text-orange-700">{{ fmt(summary.total_6421) }}</p>
         </div>
         <div class="bg-white rounded-xl border border-yellow-200 bg-yellow-50 p-4">
           <p class="text-xs text-yellow-600 mb-1">TK 642 – Chi phí QLDN</p>

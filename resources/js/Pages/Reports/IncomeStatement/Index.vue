@@ -115,7 +115,7 @@
           <p class="font-semibold text-red-800 text-sm">Cảnh báo: Kinh doanh lỗ trong kỳ này</p>
           <p class="text-red-700 text-xs mt-0.5">
             Lợi nhuận sau thuế: {{ fmt(summary.net_profit) }}.
-            Kiểm tra chi phí bán hàng (TK 641), chi phí QLDN (TK 642), và giá vốn (TK 632).
+            Kiểm tra chi phí bán hàng (TK 6421), chi phí QLDN (TK 6422), và giá vốn (TK 632).
           </p>
         </div>
       </div>

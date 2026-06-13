@@ -69,7 +69,7 @@ class ExpenseDetailController extends Controller
 
         $total642 = array_sum(array_column($tk642, 'amount'));
 
-        // ── TK 641 – Hoa hồng bán hàng ───────────────────────────────────────
+        // ── TK 6421 – Hoa hồng bán hàng (TT133) ─────────────────────────────
         $tk641 = DB::table('commissions')
             ->whereNotIn('status', ['draft', 'cancelled'])
             ->whereBetween('created_at', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59'])
@@ -79,7 +79,7 @@ class ExpenseDetailController extends Controller
                      'amount')
             ->orderBy('created_at')
             ->get()
-            ->map(fn ($r) => ['date' => $r->date, 'ref' => $r->ref, 'tk' => '641',
+            ->map(fn ($r) => ['date' => $r->date, 'ref' => $r->ref, 'tk' => '6421',
                               'description' => 'Hoa hồng: ' . ($r->description ?: $r->ref), 'amount' => (float)$r->amount])
             ->all();
 
@@ -89,12 +89,12 @@ class ExpenseDetailController extends Controller
             ['tk' => '632', 'name' => 'Giá vốn hàng bán – Từ đơn hàng',    'rows' => $cogs632Orders,   'total' => $total632Orders],
             ['tk' => '632', 'name' => 'Giá vốn hàng bán – Vật tư dự án',   'rows' => $cogs632Materials,'total' => $total632Materials],
             ['tk' => '642', 'name' => 'Chi phí quản lý – CP phát sinh DA',  'rows' => $tk642,           'total' => $total642],
-            ['tk' => '641', 'name' => 'Chi phí bán hàng – Hoa hồng',        'rows' => $tk641,           'total' => $total641],
+            ['tk' => '6421', 'name' => 'Chi phí bán hàng – Hoa hồng (TT133)', 'rows' => $tk641,           'total' => $total641],
         ];
 
         $summary = [
             'total_632' => $total632Orders + $total632Materials,
-            'total_641' => $total641,
+            'total_6421' => $total641,
             'total_642' => $total642,
             'grand_total' => $total632Orders + $total632Materials + $total641 + $total642,
         ];

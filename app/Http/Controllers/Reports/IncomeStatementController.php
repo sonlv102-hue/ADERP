@@ -38,7 +38,7 @@ class IncomeStatementController extends Controller
         // Chi phí hoạt động
         $financialIncome  = $b('515');
         $financialExpense = $b('635');
-        $sellingExpense   = $b('641');
+        $sellingExpense   = $b('6421');
         $adminExpense     = $b('642');
         $otherIncome      = $b('711');
         $otherExpense     = $b('811');
@@ -59,7 +59,7 @@ class IncomeStatementController extends Controller
             ['label' => 'Lợi nhuận gộp',                             'amount' => $grossProfit,      'bold' => true,  'indent' => 0],
             ['label' => 'Doanh thu hoạt động tài chính (TK 515)',    'amount' => $financialIncome,  'bold' => false, 'indent' => 1],
             ['label' => 'Chi phí tài chính (TK 635)',                 'amount' => -$financialExpense,'bold' => false, 'indent' => 1],
-            ['label' => 'Chi phí bán hàng (TK 641)',                  'amount' => -$sellingExpense,  'bold' => false, 'indent' => 1],
+            ['label' => 'Chi phí bán hàng (TK 6421)',                 'amount' => -$sellingExpense,  'bold' => false, 'indent' => 1],
             ['label' => 'Chi phí QLDN (TK 642)',                      'amount' => -$adminExpense,    'bold' => false, 'indent' => 1],
             ['label' => 'Lợi nhuận thuần từ HĐKD',                   'amount' => $netOpProfit,      'bold' => true,  'indent' => 0],
             ['label' => 'Thu nhập khác (TK 711)',                     'amount' => $otherIncome,      'bold' => false, 'indent' => 1],
@@ -167,7 +167,7 @@ class IncomeStatementController extends Controller
             };
             $mRevenue   = $mb('511') + $mb('512');
             $mCogs      = $mb('632');
-            $mSelling   = $mb('641');
+            $mSelling   = $mb('6421');
             $mAdmin     = $mb('642');
             $mCost      = $mCogs + $mSelling + $mAdmin;
 
