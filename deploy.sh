@@ -20,10 +20,17 @@ docker compose up -d
 echo "[5/6] Restarting nginx..."
 docker restart mini_erp_nginx
 
-echo "[6/6] Migrations and cache..."
+echo "[6/7] Migrations and cache..."
 docker compose exec -T app php artisan migrate --force
 docker compose exec -T app php artisan config:cache
 docker compose exec -T app php artisan route:cache
 docker compose exec -T app php artisan view:clear
+
+echo "[7/7] Smoke test (DB schema check)..."
+if docker compose exec -T app php artisan app:smoke-test; then
+    echo "✓ Smoke test passed"
+else
+    echo "⚠ Smoke test FAILED — kiểm tra log để biết column/table nào bị thiếu"
+fi
 
 echo "=== Deploy done at $(date '+%Y-%m-%d %H:%M:%S') ==="

@@ -75,7 +75,7 @@ class ExpenseDetailController extends Controller
             ->whereBetween('created_at', [$dateFrom . ' 00:00:00', $dateTo . ' 23:59:59'])
             ->select(DB::raw("DATE(created_at) as date"),
                      'code as ref',
-                     'description',
+                     DB::raw("notes as description"),
                      'amount')
             ->orderBy('created_at')
             ->get()
