@@ -81,7 +81,7 @@ class StockEntryController extends Controller
                 ->with('error', 'Vui lòng tạo phiếu nhập kho từ đơn mua hàng.');
         }
 
-        $po = PurchaseOrder::with(['items.product', 'supplier', 'warehouse'])->findOrFail($poId);
+        $po = PurchaseOrder::with(['items.product', 'items.project', 'supplier', 'warehouse'])->findOrFail($poId);
 
         if (!in_array($po->status, [PurchaseOrderStatus::Sent, PurchaseOrderStatus::PartialReceived])) {
             return redirect()->route('purchasing.purchase-orders.show', $po)
@@ -107,6 +107,8 @@ class StockEntryController extends Controller
             'received_qty'  => (int) ($receivedQtys[$item->product_id] ?? 0),
             'remaining_qty' => $item->quantity - (int) ($receivedQtys[$item->product_id] ?? 0),
             'unit_price'    => (float) $item->unit_price,
+            'project_id'    => $item->project_id,
+            'project_name'  => $item->project?->name,
         ])->filter(fn ($item) => $item['remaining_qty'] > 0)->values();
 
         if ($poItems->isEmpty()) {
@@ -200,7 +202,7 @@ class StockEntryController extends Controller
             return back()->withErrors($errors)->withInput();
         }
 
-        $entry = DB::transaction(function () use ($data, $po) {
+        $entry = DB::transaction(function () use ($data, $po, $poProductMap) {
             $entry = StockEntry::create([
                 'code'              => $data['code'],
                 'warehouse_id'      => $po->warehouse_id,
@@ -212,11 +214,15 @@ class StockEntryController extends Controller
             ]);
 
             foreach ($data['items'] as $item) {
+                $poItem    = $poProductMap[$item['product_id']] ?? null;
                 $entryItem = $entry->items()->create([
-                    'product_id' => $item['product_id'],
-                    'quantity'   => $item['quantity'],
-                    'unit_price' => $item['unit_price'],
-                    'tax_rate'   => $item['tax_rate'] ?? 10,
+                    'product_id'             => $item['product_id'],
+                    'quantity'               => $item['quantity'],
+                    'unit_price'             => $item['unit_price'],
+                    'tax_rate'               => $item['tax_rate'] ?? 10,
+                    'purchase_order_item_id' => $poItem?->id,
+                    'project_id'             => $poItem?->project_id ?? $po->project_id,
+                    'unit_cost'              => (float) $item['unit_price'],
                 ]);
 
                 $serials = array_values(array_filter($item['serials'] ?? [], fn ($s) => $s !== '' && $s !== null));
@@ -245,7 +251,7 @@ class StockEntryController extends Controller
                 ->with('error', 'Chỉ có thể sửa phiếu ở trạng thái nháp.');
         }
 
-        $po = PurchaseOrder::with(['items.product', 'supplier', 'warehouse'])
+        $po = PurchaseOrder::with(['items.product', 'items.project', 'supplier', 'warehouse'])
             ->find($stockEntry->purchase_order_id);
 
         if (! $po) {
@@ -272,6 +278,8 @@ class StockEntryController extends Controller
             'received_qty'  => (int) ($receivedQtys[$item->product_id] ?? 0),
             'remaining_qty' => $item->quantity - (int) ($receivedQtys[$item->product_id] ?? 0),
             'unit_price'    => (float) $item->unit_price,
+            'project_id'    => $item->project_id,
+            'project_name'  => $item->project?->name,
         ])->values();
 
         $hasPurchaseContract = PurchaseContract::where('purchase_order_id', $po->id)->exists();
@@ -380,7 +388,7 @@ class StockEntryController extends Controller
             return back()->withErrors($errors)->withInput();
         }
 
-        DB::transaction(function () use ($data, $stockEntry, $po, $oldItemIds) {
+        DB::transaction(function () use ($data, $stockEntry, $po, $oldItemIds, $poProductMap) {
             ProductSerial::whereIn('stock_entry_item_id', $oldItemIds)->delete();
             $stockEntry->items()->delete();
 
@@ -391,11 +399,15 @@ class StockEntryController extends Controller
             ]);
 
             foreach ($data['items'] as $item) {
+                $poItem    = $poProductMap[$item['product_id']] ?? null;
                 $entryItem = $stockEntry->items()->create([
-                    'product_id' => $item['product_id'],
-                    'quantity'   => $item['quantity'],
-                    'unit_price' => $item['unit_price'],
-                    'tax_rate'   => $item['tax_rate'] ?? 10,
+                    'product_id'             => $item['product_id'],
+                    'quantity'               => $item['quantity'],
+                    'unit_price'             => $item['unit_price'],
+                    'tax_rate'               => $item['tax_rate'] ?? 10,
+                    'purchase_order_item_id' => $poItem?->id,
+                    'project_id'             => $poItem?->project_id ?? $po->project_id,
+                    'unit_cost'              => (float) $item['unit_price'],
                 ]);
 
                 $serials = array_values(array_filter($item['serials'] ?? [], fn ($s) => $s !== '' && $s !== null));

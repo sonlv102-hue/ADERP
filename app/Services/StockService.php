@@ -7,11 +7,16 @@ use App\Enums\SerialStatus;
 use App\Enums\StockEntryStatus;
 use App\Enums\StockExitStatus;
 use App\Jobs\NotifyLowStockJob;
+use App\Models\Product;
 use App\Models\ProductSerial;
+use App\Models\ProjectInventoryLot;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderItem;
 use App\Models\StockEntry;
 use App\Models\StockEntryItem;
 use App\Models\StockExit;
+use App\Models\StockExitItem;
+use App\Models\StockExitItemLotAllocation;
 use App\Models\StockMovement;
 use App\Services\ProjectWipService;
 use Carbon\Carbon;
@@ -62,17 +67,71 @@ class StockService
         }
 
         DB::transaction(function () use ($entry) {
+            $entry->load('items.product');
+            $po = $entry->purchase_order_id
+                ? PurchaseOrder::find($entry->purchase_order_id)
+                : null;
+
             foreach ($entry->items as $item) {
-                StockMovement::create([
-                    'product_id' => $item->product_id,
-                    'warehouse_id' => $entry->warehouse_id,
-                    'type' => 'in',
-                    'quantity' => $item->quantity,
-                    'source_type' => StockEntry::class,
-                    'source_id' => $entry->id,
-                    'created_by' => auth()->id(),
-                    'notes' => "Nhập kho từ phiếu {$entry->code}",
+                // Resolve project_id: item → PO line → PO header
+                $projectId = $item->project_id;
+                if (!$projectId && $item->purchase_order_item_id) {
+                    $poItem = PurchaseOrderItem::lockForUpdate()->find($item->purchase_order_item_id);
+                    if ($poItem) {
+                        $projectId = $poItem->project_id;
+                        // Validate per PO line + update received_quantity
+                        if ($poItem->received_quantity + $item->quantity > $poItem->quantity) {
+                            throw new RuntimeException(
+                                "Vượt số lượng đơn mua tại dòng \"{$item->product?->name}\": đã nhận {$poItem->received_quantity}, phiếu này {$item->quantity}, tối đa {$poItem->quantity}."
+                            );
+                        }
+                        $poItem->increment('received_quantity', $item->quantity);
+                    }
+                }
+                if (!$projectId) {
+                    $projectId = $po?->project_id;
+                }
+
+                // unit_cost = unit_price excl VAT (business rule: unit_price IS excl VAT)
+                $unitCost = (float) ($item->unit_cost ?? $item->unit_price ?? 0);
+
+                // Persist project_id and unit_cost on item
+                $item->update([
+                    'project_id' => $projectId,
+                    'unit_cost'  => $unitCost,
                 ]);
+
+                StockMovement::create([
+                    'product_id'  => $item->product_id,
+                    'warehouse_id' => $entry->warehouse_id,
+                    'type'        => 'in',
+                    'quantity'    => $item->quantity,
+                    'source_type' => StockEntry::class,
+                    'source_id'   => $entry->id,
+                    'created_by'  => auth()->id(),
+                    'notes'       => "Nhập kho từ phiếu {$entry->code}",
+                    'project_id'  => $projectId,
+                    'unit_cost'   => $unitCost,
+                    'amount'      => $unitCost * (float) $item->quantity,
+                ]);
+
+                // Tạo project inventory lot nếu hàng thuộc dự án
+                if ($projectId) {
+                    ProjectInventoryLot::create([
+                        'project_id'             => $projectId,
+                        'product_id'             => $item->product_id,
+                        'warehouse_id'           => $entry->warehouse_id,
+                        'stock_entry_id'         => $entry->id,
+                        'stock_entry_item_id'    => $item->id,
+                        'purchase_order_id'      => $entry->purchase_order_id,
+                        'purchase_order_item_id' => $item->purchase_order_item_id,
+                        'received_qty'           => $item->quantity,
+                        'issued_qty'             => 0,
+                        'unit_cost'              => $unitCost,
+                        'received_at'            => $entry->entry_date ?? now(),
+                        'status'                 => 'active',
+                    ]);
+                }
             }
 
             $entry->update(['status' => StockEntryStatus::Confirmed]);
@@ -206,33 +265,105 @@ class StockService
             $exit->load('items.product', 'items.serials');
 
             foreach ($exit->items as $item) {
-                // Lock các movement rows của sản phẩm này trong kho để tránh race condition
-                // khi 2 phiếu xuất cùng sản phẩm được confirm đồng thời
-                StockMovement::where('product_id', $item->product_id)
-                    ->where('warehouse_id', $exit->warehouse_id)
-                    ->lockForUpdate()
-                    ->get();
+                $qty = (float) $item->quantity;
 
-                $currentStock = StockMovement::where('product_id', $item->product_id)
-                    ->where('warehouse_id', $exit->warehouse_id)
-                    ->sum('quantity');
+                if ($this->isProjectScopedExit($exit)) {
+                    // ── Project-scoped: FIFO từ project_inventory_lots ──────────────────
+                    $lots = ProjectInventoryLot::where('project_id', $exit->project_id)
+                        ->where('product_id', $item->product_id)
+                        ->where('warehouse_id', $exit->warehouse_id)
+                        ->where('status', 'active')
+                        ->whereRaw('issued_qty < received_qty')
+                        ->orderBy('received_at', 'ASC')
+                        ->lockForUpdate()
+                        ->get();
 
-                if ($currentStock < $item->quantity) {
-                    throw new RuntimeException(
-                        "Sản phẩm [{$item->product->name}] không đủ tồn kho. Hiện có: {$currentStock}, cần: {$item->quantity}."
-                    );
+                    $available = $lots->sum(fn($l) => (float)$l->received_qty - (float)$l->issued_qty);
+                    if ($available < $qty) {
+                        throw new RuntimeException(
+                            "Sản phẩm [{$item->product->name}]: tồn kho dự án chỉ còn {$available} đơn vị, cần {$qty}."
+                        );
+                    }
+
+                    $remaining = $qty;
+                    $totalCost = 0.0;
+                    foreach ($lots as $lot) {
+                        if ($remaining <= 0) break;
+                        $lotAvail = (float)$lot->received_qty - (float)$lot->issued_qty;
+                        $allocQty = min($lotAvail, $remaining);
+                        $allocAmt = $allocQty * (float)$lot->unit_cost;
+
+                        StockExitItemLotAllocation::create([
+                            'stock_exit_id'            => $exit->id,
+                            'stock_exit_item_id'       => $item->id,
+                            'project_inventory_lot_id' => $lot->id,
+                            'project_id'               => $exit->project_id,
+                            'product_id'               => $item->product_id,
+                            'warehouse_id'             => $exit->warehouse_id,
+                            'allocated_qty'            => $allocQty,
+                            'unit_cost'                => $lot->unit_cost,
+                            'amount'                   => $allocAmt,
+                        ]);
+
+                        $lot->issued_qty = (float)$lot->issued_qty + $allocQty;
+                        if ($lot->issued_qty >= (float)$lot->received_qty) {
+                            $lot->status = 'depleted';
+                        }
+                        $lot->save();
+
+                        $totalCost += $allocAmt;
+                        $remaining -= $allocQty;
+                    }
+
+                    $sourceCost = $qty > 0 ? $totalCost / $qty : 0;
+                    $item->update([
+                        'project_id'  => $exit->project_id,
+                        'source_cost' => $sourceCost,
+                        'total_cost'  => $totalCost,
+                    ]);
+
+                    StockMovement::create([
+                        'product_id'  => $item->product_id,
+                        'warehouse_id' => $exit->warehouse_id,
+                        'type'        => 'out',
+                        'quantity'    => -$qty,
+                        'source_type' => StockExit::class,
+                        'source_id'   => $exit->id,
+                        'created_by'  => auth()->id(),
+                        'notes'       => "Xuất kho dự án từ phiếu {$exit->code}",
+                        'project_id'  => $exit->project_id,
+                        'unit_cost'   => $sourceCost,
+                        'amount'      => -$totalCost,
+                    ]);
+                } else {
+                    // ── Non-project: kiểm tra tổng kho warehouse ───────────────────────
+                    StockMovement::where('product_id', $item->product_id)
+                        ->where('warehouse_id', $exit->warehouse_id)
+                        ->lockForUpdate()
+                        ->get();
+
+                    $currentStock = StockMovement::where('product_id', $item->product_id)
+                        ->where('warehouse_id', $exit->warehouse_id)
+                        ->sum('quantity');
+
+                    if ($currentStock < $qty) {
+                        throw new RuntimeException(
+                            "Sản phẩm [{$item->product->name}] không đủ tồn kho. Hiện có: {$currentStock}, cần: {$qty}."
+                        );
+                    }
+
+                    StockMovement::create([
+                        'product_id'  => $item->product_id,
+                        'warehouse_id' => $exit->warehouse_id,
+                        'type'        => 'out',
+                        'quantity'    => -$qty,
+                        'source_type' => StockExit::class,
+                        'source_id'   => $exit->id,
+                        'created_by'  => auth()->id(),
+                        'notes'       => "Xuất kho từ phiếu {$exit->code}",
+                        'project_id'  => $exit->project_id,
+                    ]);
                 }
-
-                StockMovement::create([
-                    'product_id' => $item->product_id,
-                    'warehouse_id' => $exit->warehouse_id,
-                    'type' => 'out',
-                    'quantity' => -$item->quantity,
-                    'source_type' => StockExit::class,
-                    'source_id' => $exit->id,
-                    'created_by' => auth()->id(),
-                    'notes' => "Xuất kho từ phiếu {$exit->code}",
-                ]);
 
                 // Chuyển trạng thái serial → sold
                 foreach ($item->serials as $serial) {
@@ -304,7 +435,29 @@ class StockService
         }
 
         DB::transaction(function () use ($exit) {
+            // Null out WIP journal_entry_id references before reversing JE (FK constraint)
+            \App\Models\ProjectWipEntry::where('source_type', StockExit::class)
+                ->where('source_id', $exit->id)
+                ->update(['journal_entry_id' => null]);
+
             $this->accounting->reverseOrDelete('stock_exit', $exit->id, "Hủy phiếu xuất kho {$exit->code}");
+
+            // Void lot allocations và hoàn issued_qty
+            $allocations = StockExitItemLotAllocation::where('stock_exit_id', $exit->id)
+                ->whereNull('voided_at')
+                ->get();
+
+            foreach ($allocations as $alloc) {
+                $lot = ProjectInventoryLot::lockForUpdate()->find($alloc->project_inventory_lot_id);
+                if ($lot) {
+                    $lot->issued_qty = max(0, (float)$lot->issued_qty - (float)$alloc->allocated_qty);
+                    if ($lot->status === 'depleted' && $lot->issued_qty < (float)$lot->received_qty) {
+                        $lot->status = 'active';
+                    }
+                    $lot->save();
+                }
+                $alloc->update(['voided_at' => now()]);
+            }
 
             // Tạo movement dương để đảo ngược tồn kho (giữ audit trail)
             foreach ($exit->items as $item) {
@@ -317,6 +470,9 @@ class StockService
                     'source_id'    => $exit->id,
                     'created_by'   => auth()->id(),
                     'notes'        => "Hủy phiếu xuất kho {$exit->code}",
+                    'project_id'   => $item->project_id,
+                    'unit_cost'    => $item->source_cost,
+                    'amount'       => $item->total_cost,
                 ]);
             }
 
@@ -326,6 +482,11 @@ class StockService
                     $serial->transition(SerialStatus::InStock);
                 }
             }
+
+            // Xóa WIP entries nếu có
+            \App\Models\ProjectWipEntry::where('source_type', 'stock_exit')
+                ->where('source_id', $exit->id)
+                ->delete();
 
             $exit->update(['status' => StockExitStatus::Cancelled]);
         });
@@ -395,50 +556,106 @@ class StockService
         );
     }
 
+    private function postEntryInventoryAccount(StockEntryItem $item): string
+    {
+        $product = $item->product ?? Product::find($item->product_id);
+        return $product?->inventory_account ?? '1561';
+    }
+
+    private function resolveInventoryAccount(int $productId, StockExit $exit): string
+    {
+        $product = Product::find($productId);
+        return $product?->inventory_account
+            ?? $exit->inventory_account
+            ?? '1561';
+    }
+
+    private function resolveDebitAccount(StockExit $exit): string
+    {
+        if ($exit->cost_account) {
+            return $exit->cost_account;
+        }
+
+        $purpose = $exit->issue_purpose;
+
+        // Backward compat: nếu chưa set issue_purpose thì dùng item_usage_type
+        if (!$purpose) {
+            return $exit->item_usage_type === ItemUsageType::Project ? '154' : '632';
+        }
+
+        return match($purpose) {
+            'project_cost'    => '154',
+            'sale_delivery'   => '632',
+            'selling_expense' => '6421',
+            'admin_expense'   => '6422',
+            'internal_use'    => throw new RuntimeException(
+                "Xuất kho mục đích internal_use phải cấu hình cost_account."
+            ),
+            default => throw new RuntimeException("issue_purpose '{$purpose}' không hợp lệ."),
+        };
+    }
+
+    private function isProjectScopedExit(StockExit $exit): bool
+    {
+        return $exit->issue_purpose === 'project_cost'
+            || $exit->item_usage_type === ItemUsageType::Project;
+    }
+
     private function postExitJournal(StockExit $exit): void
     {
         $exit->load('items.product');
 
-        $isProject = $exit->item_usage_type === ItemUsageType::Project;
-        $debitAccount = $isProject ? '154' : '632';
+        $debitAccount = $this->resolveDebitAccount($exit);
+        $isProject    = $this->isProjectScopedExit($exit);
         $projectId    = $isProject ? $exit->project_id : null;
 
         $totalCogs = 0;
         $lines     = [];
 
         foreach ($exit->items as $item) {
-            $vatRate     = (float) ($item->product?->vat_percent ?? 10);
-            $costInclTax = (float) ($item->product?->cost_price ?? 0);
-            $divisor     = $vatRate > 0 ? (1 + $vatRate / 100) : 1;
-            $costExclTax = $costInclTax / $divisor;
-            $cogs        = $costExclTax * $item->quantity;
-            $totalCogs  += $cogs;
+            // Ưu tiên dùng FIFO cost đã tính, fallback về product cost_price
+            if ($item->total_cost !== null && (float)$item->total_cost > 0) {
+                $cogs = (float) $item->total_cost;
+            } else {
+                $vatRate     = (float) ($item->product?->vat_percent ?? 10);
+                $costInclTax = (float) ($item->product?->cost_price ?? 0);
+                $divisor     = $vatRate > 0 ? (1 + $vatRate / 100) : 1;
+                $cogs        = ($costInclTax / $divisor) * (float)$item->quantity;
+            }
+            $totalCogs += $cogs;
+
+            $inventoryAccount = $this->resolveInventoryAccount($item->product_id, $exit);
 
             if ($cogs > 0) {
                 $lines[] = [
-                    'account'    => $debitAccount,
-                    'debit'      => (int) round($cogs),
-                    'credit'     => 0,
+                    'account'     => $debitAccount,
+                    'debit'       => (int) round($cogs),
+                    'credit'      => 0,
                     'description' => $isProject
                         ? "CP vật tư dự án {$item->product?->name}"
                         : "Giá vốn {$item->product?->name}",
-                    'project_id' => $projectId,
+                    'project_id'  => $projectId,
                 ];
                 $lines[] = [
-                    'account'    => '1561',
-                    'debit'      => 0,
-                    'credit'     => (int) round($cogs),
+                    'account'     => $inventoryAccount,
+                    'debit'       => 0,
+                    'credit'      => (int) round($cogs),
                     'description' => "Xuất kho {$item->product?->name}",
-                    'project_id' => $projectId,
+                    'project_id'  => $projectId,
                 ];
             }
         }
 
         if ($totalCogs <= 0 || empty($lines)) return;
 
-        $description = $isProject
-            ? "Xuất vật tư dự án {$exit->code}"
-            : "Giá vốn hàng bán {$exit->code}";
+        $description = match($exit->issue_purpose) {
+            'project_cost'    => "Xuất vật tư dự án {$exit->code}",
+            'selling_expense' => "Chi phí bán hàng {$exit->code}",
+            'admin_expense'   => "Chi phí QLDN {$exit->code}",
+            default           => $isProject
+                ? "Xuất vật tư dự án {$exit->code}"
+                : "Giá vốn hàng bán {$exit->code}",
+        };
 
         $journalEntry = $this->accounting->tryPost(
             $description,
@@ -446,9 +663,12 @@ class StockService
             $lines, 'stock_exit', $exit->id, 'outbound'
         );
 
-        // Tạo WIP entry để theo dõi chi phí dở dang theo dự án
+        // Tạo WIP entry nếu xuất cho dự án
         if ($isProject && $journalEntry) {
-            $this->wip->createFromStockExit($exit, $journalEntry->id);
+            $exit->load('items');
+            foreach ($exit->items as $item) {
+                $this->wip->createFromStockExitItem($exit, $item, $journalEntry->id);
+            }
         }
     }
 }

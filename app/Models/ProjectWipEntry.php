@@ -14,11 +14,14 @@ class ProjectWipEntry extends Model
         'project_id', 'source_type', 'source_id',
         'cost_type', 'amount', 'description',
         'entry_date', 'journal_entry_id', 'created_by',
+        'product_id', 'quantity', 'unit_cost', 'stock_exit_item_id',
     ];
 
     protected $casts = [
         'entry_date' => 'date',
         'amount'     => 'decimal:2',
+        'quantity'   => 'decimal:3',
+        'unit_cost'  => 'decimal:2',
     ];
 
     public static array $costTypeLabels = [

@@ -88,6 +88,7 @@
             <thead class="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th class="text-left px-5 py-3 font-semibold text-gray-600">Sản phẩm</th>
+                <th class="text-left px-3 py-3 font-semibold text-gray-600">Dự án</th>
                 <th class="text-right px-5 py-3 font-semibold text-gray-600">Đặt</th>
                 <th class="text-right px-5 py-3 font-semibold text-gray-600">Đã nhận</th>
                 <th class="text-right px-5 py-3 font-semibold text-gray-600">Còn lại</th>
@@ -103,6 +104,14 @@
                   <td class="px-5 py-3">
                     <p class="font-medium text-gray-800">{{ poItems[index].product_name }}</p>
                     <p class="text-xs text-gray-400 font-mono">{{ poItems[index].product_code }}</p>
+                  </td>
+                  <td class="px-3 py-3">
+                    <span v-if="poItems[index].project_name"
+                      class="inline-block max-w-[140px] truncate rounded-md bg-blue-50 px-2 py-0.5 text-xs text-blue-700"
+                      :title="poItems[index].project_name">
+                      {{ poItems[index].project_name }}
+                    </span>
+                    <span v-else class="text-xs text-gray-300">—</span>
                   </td>
                   <td class="px-5 py-3 text-right text-gray-500">
                     {{ poItems[index].ordered_qty.toLocaleString('vi-VN') }} {{ poItems[index].unit }}
@@ -144,7 +153,7 @@
 
                 <!-- Serial scan panel -->
                 <tr v-if="item.quantity > 0" class="bg-blue-50">
-                  <td colspan="8" class="px-5 py-3">
+                  <td colspan="9" class="px-5 py-3">
                     <div class="space-y-2.5">
                       <div class="flex items-center justify-between">
                         <div class="flex items-center gap-2">
@@ -209,7 +218,7 @@
             </tbody>
             <tfoot class="bg-gray-50 border-t border-gray-200">
               <tr>
-                <td colspan="7" class="px-5 py-3 text-right font-semibold text-gray-700">Tổng cộng:</td>
+                <td colspan="8" class="px-5 py-3 text-right font-semibold text-gray-700">Tổng cộng:</td>
                 <td class="px-5 py-3 text-right font-bold text-gray-900">{{ formatVnd(grandTotal) }}</td>
               </tr>
             </tfoot>

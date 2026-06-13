@@ -7,6 +7,7 @@ use App\Models\Project;
 use App\Models\ProjectExpense;
 use App\Models\ProjectWipEntry;
 use App\Models\StockExit;
+use App\Models\StockExitItem;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -45,6 +46,45 @@ class ProjectWipService
             'entry_date'       => $exit->exit_date,
             'journal_entry_id' => $journalEntryId,
             'created_by'       => auth()->id(),
+        ]);
+    }
+
+    /**
+     * Tạo WIP entry cho từng dòng xuất kho (per-item traceability).
+     * Ghi product_id, quantity, unit_cost, stock_exit_item_id để truy vết vật tư.
+     */
+    public function createFromStockExitItem(StockExit $exit, StockExitItem $item, int $journalEntryId): void
+    {
+        if (!$exit->project_id) return;
+
+        // Ưu tiên FIFO cost, fallback về product cost
+        if ($item->total_cost !== null && (float)$item->total_cost > 0) {
+            $amount   = (int) round((float)$item->total_cost);
+            $unitCost = (float)($item->source_cost ?? 0);
+        } else {
+            $vatRate     = (float) ($item->product?->vat_percent ?? 10);
+            $costInclTax = (float) ($item->product?->cost_price ?? 0);
+            $divisor     = $vatRate > 0 ? (1 + $vatRate / 100) : 1;
+            $unitCost    = $costInclTax / $divisor;
+            $amount      = (int) round($unitCost * (float)$item->quantity);
+        }
+
+        if ($amount <= 0) return;
+
+        ProjectWipEntry::create([
+            'project_id'        => $exit->project_id,
+            'source_type'       => StockExit::class,
+            'source_id'         => $exit->id,
+            'cost_type'         => 'material',
+            'amount'            => $amount,
+            'description'       => "Xuất vật tư {$item->product?->name} - phiếu {$exit->code}",
+            'entry_date'        => $exit->exit_date,
+            'journal_entry_id'  => $journalEntryId,
+            'created_by'        => auth()->id(),
+            'product_id'        => $item->product_id,
+            'quantity'          => $item->quantity,
+            'unit_cost'         => $unitCost,
+            'stock_exit_item_id' => $item->id,
         ]);
     }
 

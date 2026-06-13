@@ -15,6 +15,7 @@ use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductSerial;
 use App\Models\Project;
+use App\Models\ProjectInventoryLot;
 use App\Models\StockExit;
 use App\Models\Warehouse;
 use App\Services\AccountingService;
@@ -25,6 +26,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Http\JsonResponse;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -81,7 +83,7 @@ class StockExitController extends Controller
             'warehouses'    => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'customers'     => Customer::orderBy('name')->get(['id', 'code', 'name']),
             'products'      => Product::where('is_active', true)->orderBy('name')
-                ->get(['id', 'code', 'name', 'unit', 'sell_price', 'has_serial']),
+                ->get(['id', 'code', 'name', 'unit', 'sell_price', 'has_serial', 'inventory_account']),
             'serials'       => ProductSerial::where('status', SerialStatus::InStock)
                 ->get(['id', 'product_id', 'warehouse_id', 'serial_number']),
             'orders'        => $this->pendingOrdersForDropdown(),
@@ -90,7 +92,69 @@ class StockExitController extends Controller
                 'value' => $t->value,
                 'label' => $t->label(),
             ])->all(),
+            'issuePurposes' => $this->issuePurposesForDropdown(),
         ]);
+    }
+
+    /**
+     * API: lấy danh sách sản phẩm còn tồn theo project_inventory_lots.
+     * GET /warehouse/stock-exits/available-lots?project_id=X&warehouse_id=Y
+     */
+    public function availableLots(Request $request): JsonResponse
+    {
+        $request->validate([
+            'project_id'  => ['required', 'exists:projects,id'],
+            'warehouse_id' => ['required', 'exists:warehouses,id'],
+        ]);
+
+        $projectId   = $request->integer('project_id');
+        $warehouseId = $request->integer('warehouse_id');
+
+        $lots = ProjectInventoryLot::with(['product', 'purchaseOrder', 'stockEntry'])
+            ->where('project_id', $projectId)
+            ->where('warehouse_id', $warehouseId)
+            ->where('status', 'active')
+            ->whereRaw('issued_qty < received_qty')
+            ->orderBy('received_at', 'asc')
+            ->get();
+
+        // Group by product
+        $grouped = $lots->groupBy('product_id')->map(function ($productLots) {
+            $first = $productLots->first();
+            return [
+                'product_id'         => $first->product_id,
+                'product_code'       => $first->product?->code,
+                'product_name'       => $first->product?->name,
+                'unit'               => $first->product?->unit,
+                'inventory_account'  => $first->product?->inventory_account,
+                'total_received_qty' => $productLots->sum(fn($l) => (float)$l->received_qty),
+                'total_issued_qty'   => $productLots->sum(fn($l) => (float)$l->issued_qty),
+                'available_qty'      => $productLots->sum(fn($l) => (float)$l->received_qty - (float)$l->issued_qty),
+                'lots'               => $productLots->map(fn($l) => [
+                    'id'                   => $l->id,
+                    'purchase_order_code'  => $l->purchaseOrder?->code,
+                    'stock_entry_code'     => $l->stockEntry?->code,
+                    'received_at'          => $l->received_at?->format('Y-m-d'),
+                    'received_qty'         => (float) $l->received_qty,
+                    'issued_qty'           => (float) $l->issued_qty,
+                    'available_qty'        => (float) $l->received_qty - (float) $l->issued_qty,
+                    'unit_cost'            => (float) $l->unit_cost,
+                ])->values(),
+            ];
+        })->values();
+
+        return response()->json($grouped);
+    }
+
+    private function issuePurposesForDropdown(): array
+    {
+        return [
+            ['value' => 'project_cost',    'label' => 'Xuất cho dự án (Nợ 154)'],
+            ['value' => 'sale_delivery',   'label' => 'Xuất bán hàng (Nợ 632)'],
+            ['value' => 'selling_expense', 'label' => 'Chi phí bán hàng (Nợ 6421)'],
+            ['value' => 'admin_expense',   'label' => 'Chi phí QLDN (Nợ 6422)'],
+            ['value' => 'internal_use',    'label' => 'Dùng nội bộ (cần cấu hình TK)'],
+        ];
     }
 
     private function activeProjectsForDropdown(): array
@@ -159,6 +223,9 @@ class StockExitController extends Controller
             'customer_id'             => ['nullable', 'exists:customers,id'],
             'order_id'                => ['nullable', 'exists:orders,id'],
             'item_usage_type'         => ['required', 'string', 'in:commercial,project'],
+            'issue_purpose'           => ['nullable', 'string', 'in:project_cost,sale_delivery,selling_expense,admin_expense,internal_use'],
+            'cost_account'            => ['nullable', 'string', 'max:20'],
+            'inventory_account'       => ['nullable', 'string', 'max:20'],
             'project_id'              => ['nullable', 'exists:projects,id'],
             'exit_date'               => ['required', 'date'],
             'reason'                  => ['nullable', 'string', 'max:255'],
@@ -171,7 +238,11 @@ class StockExitController extends Controller
             'items.*.serial_ids.*'    => ['integer', 'exists:product_serials,id'],
         ]);
 
-        if ($data['item_usage_type'] === 'project' && empty($data['project_id'])) {
+        $purpose = $data['issue_purpose'] ?? null;
+
+        // project_id bắt buộc khi issue_purpose=project_cost hoặc item_usage_type=project
+        $requiresProject = $purpose === 'project_cost' || $data['item_usage_type'] === 'project';
+        if ($requiresProject && empty($data['project_id'])) {
             return back()->withErrors(['project_id' => 'Vui lòng chọn dự án khi xuất hàng cho dự án.'])->withInput();
         }
 
@@ -203,16 +274,19 @@ class StockExitController extends Controller
         }
 
         $exit = StockExit::create([
-            'code'            => $data['code'],
-            'warehouse_id'    => $data['warehouse_id'],
-            'customer_id'     => $data['customer_id'] ?? null,
-            'order_id'        => $data['order_id'] ?? null,
-            'item_usage_type' => $data['item_usage_type'],
-            'project_id'      => $data['item_usage_type'] === 'project' ? ($data['project_id'] ?? null) : null,
-            'created_by'      => auth()->id(),
-            'exit_date'       => $data['exit_date'],
-            'reason'          => $data['reason'] ?? null,
-            'notes'           => $data['notes'] ?? null,
+            'code'              => $data['code'],
+            'warehouse_id'      => $data['warehouse_id'],
+            'customer_id'       => $data['customer_id'] ?? null,
+            'order_id'          => $data['order_id'] ?? null,
+            'item_usage_type'   => $data['item_usage_type'],
+            'issue_purpose'     => $data['issue_purpose'] ?? null,
+            'cost_account'      => $data['cost_account'] ?? null,
+            'inventory_account' => $data['inventory_account'] ?? null,
+            'project_id'        => $requiresProject ? ($data['project_id'] ?? null) : ($data['project_id'] ?? null),
+            'created_by'        => auth()->id(),
+            'exit_date'         => $data['exit_date'],
+            'reason'            => $data['reason'] ?? null,
+            'notes'             => $data['notes'] ?? null,
         ]);
 
         foreach ($data['items'] as $itemData) {

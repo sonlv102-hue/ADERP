@@ -30,6 +30,7 @@ class StockExit extends Model
         'code', 'warehouse_id', 'customer_id', 'order_id', 'created_by',
         'exit_date', 'reason', 'status', 'notes',
         'item_usage_type', 'project_id',
+        'issue_purpose', 'cost_account', 'inventory_account',
     ];
 
     protected function casts(): array
@@ -81,5 +82,10 @@ class StockExit extends Model
     {
         return $this->hasMany(StockMovement::class, 'source_id')
             ->where('source_type', self::class);
+    }
+
+    public function lotAllocations(): HasMany
+    {
+        return $this->hasMany(StockExitItemLotAllocation::class);
     }
 }

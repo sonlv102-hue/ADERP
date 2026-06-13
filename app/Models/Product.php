@@ -12,9 +12,9 @@ class Product extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'code', 'category_id', 'item_type', 'revenue_account_code', 'name', 'unit',
-        'cost_price', 'business_cost', 'vat_percent', 'total_cost', 'sell_price',
-        'has_serial', 'warranty_months', 'min_stock', 'description', 'is_active',
+        'code', 'category_id', 'item_type', 'revenue_account_code', 'inventory_account',
+        'name', 'unit', 'cost_price', 'business_cost', 'vat_percent', 'total_cost',
+        'sell_price', 'has_serial', 'warranty_months', 'min_stock', 'description', 'is_active',
     ];
 
     protected function casts(): array

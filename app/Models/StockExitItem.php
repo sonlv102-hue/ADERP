@@ -8,11 +8,19 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class StockExitItem extends Model
 {
-    protected $fillable = ['stock_exit_id', 'product_id', 'quantity', 'unit_price'];
+    protected $fillable = [
+        'stock_exit_id', 'project_id',
+        'product_id', 'quantity', 'unit_price', 'source_cost', 'total_cost',
+    ];
 
     protected function casts(): array
     {
-        return ['unit_price' => 'decimal:2'];
+        return [
+            'unit_price'  => 'decimal:2',
+            'source_cost' => 'decimal:2',
+            'total_cost'  => 'decimal:2',
+            'quantity'    => 'decimal:3',
+        ];
     }
 
     public function stockExit(): BelongsTo
@@ -23,6 +31,16 @@ class StockExitItem extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
+    }
+
+    public function lotAllocations(): HasMany
+    {
+        return $this->hasMany(StockExitItemLotAllocation::class);
     }
 
     public function serials(): HasMany

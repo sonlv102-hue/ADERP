@@ -81,16 +81,17 @@
               </FormField>
 
               <!-- Mục đích xuất kho -->
-              <FormField label="Mục đích xuất" required :error="form.errors.item_usage_type">
+              <FormField label="Mục đích xuất" required :error="form.errors.issue_purpose">
                 <select
-                  v-model="form.item_usage_type"
-                  @change="onUsageTypeChange"
+                  v-model="form.issue_purpose"
+                  @change="onIssuePurposeChange"
                   class="w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow]"
-                  :class="form.errors.item_usage_type
+                  :class="form.errors.issue_purpose
                     ? 'border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-2 focus:ring-red-100'
                     : 'border-gray-200 bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100'"
                 >
-                  <option v-for="t in usageTypes" :key="t.value" :value="t.value">{{ t.label }}</option>
+                  <option value="">— Chọn mục đích —</option>
+                  <option v-for="t in issuePurposes" :key="t.value" :value="t.value">{{ t.label }}</option>
                 </select>
               </FormField>
 
@@ -129,8 +130,8 @@
                 </div>
               </FormField>
 
-              <!-- Dự án (conditional) -->
-              <FormField v-if="form.item_usage_type === 'project'" label="Dự án" required :error="form.errors.project_id">
+              <!-- Dự án (project_cost only) -->
+              <FormField v-if="form.issue_purpose === 'project_cost'" label="Dự án" required :error="form.errors.project_id">
                 <select
                   v-model="form.project_id"
                   class="w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow]"
@@ -143,9 +144,36 @@
                 </select>
               </FormField>
 
+              <!-- Available lots panel -->
+              <template v-if="form.issue_purpose === 'project_cost' && form.project_id && form.warehouse_id">
+                <div class="sm:col-span-2">
+                  <div v-if="lotsLoading" class="text-xs italic text-gray-400">Đang tải lô hàng...</div>
+                  <div v-else-if="availableLots.length"
+                    class="space-y-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
+                    <p class="text-xs font-semibold text-emerald-700">Lô hàng sẵn có (FIFO):</p>
+                    <div v-for="lot in availableLots" :key="lot.product_id">
+                      <div class="flex items-center justify-between text-xs">
+                        <span class="font-medium text-gray-700">{{ lot.product_code }} — {{ lot.product_name }}</span>
+                        <span class="font-semibold text-emerald-700">Sẵn có: {{ lot.available_qty }} {{ lot.unit }}</span>
+                      </div>
+                      <div class="mt-1 flex flex-wrap gap-1">
+                        <span v-for="l in lot.lots" :key="l.id"
+                          class="rounded-md border border-emerald-200 bg-white px-1.5 py-0.5 text-xs text-gray-600">
+                          {{ l.entry_code }}: {{ l.available }}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                  <div v-else
+                    class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-2.5 text-xs text-amber-700">
+                    Chưa có lô hàng nào trong kho cho dự án này.
+                  </div>
+                </div>
+              </template>
+
               <!-- Lý do xuất -->
               <FormField label="Lý do xuất" optional :error="form.errors.reason"
-                :wrapClass="form.item_usage_type === 'project' ? '' : 'sm:col-span-2'">
+                :wrapClass="form.issue_purpose === 'project_cost' ? '' : 'sm:col-span-2'">
                 <input
                   v-model="form.reason"
                   type="text"
@@ -266,7 +294,10 @@
                         min="1"
                         @change="onQuantityChange(index)"
                         class="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-right outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
-                        :class="form.errors[`items.${index}.quantity`] && 'border-red-400 bg-red-50/40'"
+                        :class="[
+                          form.errors[`items.${index}.quantity`] && 'border-red-400 bg-red-50/40',
+                          !form.errors[`items.${index}.quantity`] && productAvailableQty(item.product_id) !== null && item.quantity > productAvailableQty(item.product_id) && 'border-amber-400 bg-amber-50/40',
+                        ]"
                       />
                     </td>
                     <td class="px-3 py-2.5">
@@ -377,7 +408,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import FormField from '@/Components/Shared/FormField.vue';
@@ -393,6 +424,7 @@ const props = defineProps({
   orders: { type: Array, default: () => [] },
   projects: { type: Array, default: () => [] },
   usageTypes: { type: Array, default: () => [] },
+  issuePurposes: { type: Array, default: () => [] },
   exit: { type: Object, default: null },
 });
 
@@ -407,6 +439,7 @@ const form = useForm({
   customer_id:      props.exit?.customer_id      ?? null,
   order_id:         props.exit?.order_id         ?? null,
   item_usage_type:  props.exit?.item_usage_type  ?? 'commercial',
+  issue_purpose:    props.exit?.issue_purpose    ?? (props.exit?.item_usage_type === 'project' ? 'project_cost' : ''),
   project_id:       props.exit?.project_id       ?? null,
   reason:           props.exit?.reason           ?? '',
   notes:            props.exit?.notes            ?? '',
@@ -437,6 +470,42 @@ const hasOrderContract = computed(() =>
 const onUsageTypeChange = () => {
   if (form.item_usage_type !== 'project') {
     form.project_id = null;
+  }
+};
+
+const availableLots = ref([]);
+const lotsLoading = ref(false);
+
+const fetchAvailableLots = async () => {
+  if (form.issue_purpose !== 'project_cost' || !form.project_id || !form.warehouse_id) {
+    availableLots.value = [];
+    return;
+  }
+  lotsLoading.value = true;
+  try {
+    const url = route('stock-exits.available-lots') + `?project_id=${form.project_id}&warehouse_id=${form.warehouse_id}`;
+    const res = await fetch(url, { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+    const data = await res.json();
+    availableLots.value = data.lots ?? [];
+  } catch {
+    availableLots.value = [];
+  } finally {
+    lotsLoading.value = false;
+  }
+};
+
+watch([() => form.project_id, () => form.warehouse_id], fetchAvailableLots);
+
+const productAvailableQty = (productId) => {
+  if (form.issue_purpose !== 'project_cost') return null;
+  return availableLots.value.find(l => l.product_id === productId)?.available_qty ?? null;
+};
+
+const onIssuePurposeChange = () => {
+  form.item_usage_type = form.issue_purpose === 'project_cost' ? 'project' : 'commercial';
+  if (form.issue_purpose !== 'project_cost') {
+    form.project_id = null;
+    availableLots.value = [];
   }
 };
 

@@ -11,7 +11,17 @@ class StockMovement extends Model
     protected $fillable = [
         'product_id', 'warehouse_id', 'type', 'quantity',
         'source_type', 'source_id', 'created_by', 'notes',
+        'project_id', 'unit_cost', 'amount',
     ];
+
+    protected function casts(): array
+    {
+        return [
+            'quantity'  => 'decimal:3',
+            'unit_cost' => 'decimal:2',
+            'amount'    => 'decimal:2',
+        ];
+    }
 
     public function product(): BelongsTo
     {
@@ -26,6 +36,11 @@ class StockMovement extends Model
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 
     public function source(): MorphTo
