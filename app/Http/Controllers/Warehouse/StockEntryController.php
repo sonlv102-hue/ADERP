@@ -417,6 +417,11 @@ class StockEntryController extends Controller
 
     public function show(StockEntry $stockEntry): Response
     {
+        $pj = \App\Models\AccountingPostingJob::where('source_type', 'stock_entry')
+            ->where('source_id', $stockEntry->id)
+            ->where('posting_type', 'inbound')
+            ->first();
+
         return Inertia::render('Warehouse/StockEntries/Show', [
             'entry' => [
                 'id' => $stockEntry->id,
@@ -429,6 +434,12 @@ class StockEntryController extends Controller
                 'supplier' => $stockEntry->supplier?->name,
                 'creator' => $stockEntry->creator->name,
                 'notes' => $stockEntry->notes,
+                'posting_job' => $pj ? [
+                    'status'        => $pj->status->value,
+                    'status_label'  => $pj->status->label(),
+                    'error_message' => $pj->error_message,
+                    'job_id'        => $pj->id,
+                ] : null,
                 'items' => $stockEntry->items->load('serials')->map(fn ($item) => [
                     'id' => $item->id,
                     'product_code' => $item->product->code,

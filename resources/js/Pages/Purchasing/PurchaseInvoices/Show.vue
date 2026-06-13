@@ -56,6 +56,33 @@
         </div>
       </Teleport>
 
+      <!-- H2: banner hóa đơn dịch vụ (bút toán auto draft) -->
+      <div v-if="invoice.is_service_purchase && invoice.status === 'valid'"
+        class="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
+        <svg class="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <p class="text-sm text-blue-800">
+          <strong>Hóa đơn dịch vụ</strong> — bút toán nháp đã được tạo tự động (Dr CP / Cr 331).
+          Vào <strong>Kế toán › Bút toán</strong> để duyệt trước khi hạch toán chính thức.
+        </p>
+      </div>
+
+      <!-- H1: posting job failure banner -->
+      <div v-if="invoice.posting_job && invoice.posting_job.status === 'failed'"
+        class="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+        <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        </svg>
+        <div>
+          <p class="text-sm font-medium text-red-800">Hạch toán tự động thất bại</p>
+          <p class="text-xs text-red-600 mt-0.5">{{ invoice.posting_job.error_message }}</p>
+          <p class="text-xs text-red-500 mt-1">Vào <strong>Kế toán › Bút toán › Thử lại</strong> (Job #{{ invoice.posting_job.job_id }}).</p>
+        </div>
+      </div>
+
       <!-- Thông tin chung -->
       <div class="bg-white rounded-xl border border-gray-200 p-6">
         <div class="grid grid-cols-2 sm:grid-cols-3 gap-5 text-sm">

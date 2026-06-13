@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Purchasing;
 
 use App\Enums\PurchaseInvoiceStatus;
 use App\Http\Controllers\Controller;
+use App\Models\AccountCode;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\Supplier;
@@ -90,25 +91,27 @@ class PurchaseInvoiceController extends Controller
                         - $i->quantity * $i->unit_price / (1 + (($i->product?->vat_percent ?? 0) / 100))
                     ),
                 ]),
-            'suppliers' => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'name', 'tax_code']),
-            'selectedOrderId' => $request->input('purchase_order_id'),
+            'suppliers'        => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'name', 'tax_code']),
+            'selectedOrderId'  => $request->input('purchase_order_id'),
+            'expenseAccounts'  => $this->expenseAccountList(),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'code'              => ['required', 'string', 'unique:purchase_invoices,code'],
-            'purchase_order_id' => ['required', 'exists:purchase_orders,id'],
-            'supplier_id'       => ['required', 'exists:suppliers,id'],
-            'invoice_number'    => ['nullable', 'string', 'max:100'],
-            'invoice_date'      => ['nullable', 'date'],
-            'supplier_tax_code' => ['nullable', 'string', 'max:50'],
-            'subtotal'          => ['required', 'numeric', 'min:0'],
-            'tax_amount'        => ['required', 'numeric', 'min:0'],
-            'total'             => ['required', 'numeric', 'min:0'],
-            'due_date'          => ['nullable', 'date'],
-            'notes'             => ['nullable', 'string'],
+            'code'                 => ['required', 'string', 'unique:purchase_invoices,code'],
+            'purchase_order_id'    => ['required', 'exists:purchase_orders,id'],
+            'supplier_id'          => ['required', 'exists:suppliers,id'],
+            'invoice_number'       => ['nullable', 'string', 'max:100'],
+            'invoice_date'         => ['nullable', 'date'],
+            'supplier_tax_code'    => ['nullable', 'string', 'max:50'],
+            'subtotal'             => ['required', 'numeric', 'min:0'],
+            'tax_amount'           => ['required', 'numeric', 'min:0'],
+            'total'                => ['required', 'numeric', 'min:0'],
+            'due_date'             => ['nullable', 'date'],
+            'notes'                => ['nullable', 'string'],
+            'expense_account_code' => ['nullable', 'string', 'max:20'],
         ]);
 
         $invoice = PurchaseInvoice::create([
@@ -125,6 +128,16 @@ class PurchaseInvoiceController extends Controller
     public function show(PurchaseInvoice $purchaseInvoice): Response
     {
         $purchaseInvoice->load(['supplier', 'purchaseOrder.items.product', 'creator', 'payments.creator', 'attachments.creator']);
+
+        $pj = \App\Models\AccountingPostingJob::where('source_type', 'purchase_invoice')
+            ->where('source_id', $purchaseInvoice->id)
+            ->where('posting_type', 'ap')
+            ->first();
+
+        $isServicePurchase = $purchaseInvoice->purchase_order_id
+            && !\App\Models\StockEntry::where('purchase_order_id', $purchaseInvoice->purchase_order_id)
+                ->where('status', \App\Enums\StockEntryStatus::Confirmed)
+                ->exists();
 
         return Inertia::render('Purchasing/PurchaseInvoices/Show', [
             'invoice' => [
@@ -145,7 +158,8 @@ class PurchaseInvoiceController extends Controller
                 'total'             => $purchaseInvoice->total,
                 'paid_amount'       => $purchaseInvoice->paid_amount,
                 'remaining'         => $purchaseInvoice->remaining,
-                'notes'             => $purchaseInvoice->notes,
+                'notes'                => $purchaseInvoice->notes,
+                'expense_account_code' => $purchaseInvoice->expense_account_code,
                 'attachments' => $purchaseInvoice->attachments->map(fn ($a) => [
                     'id'        => $a->id,
                     'file_name' => $a->file_name,
@@ -172,7 +186,14 @@ class PurchaseInvoiceController extends Controller
                     'void_reason' => $p->void_reason,
                     'voided_at'   => $p->voided_at?->format('d/m/Y H:i'),
                 ]),
-                'transitions' => $this->allowedTransitions($purchaseInvoice->status),
+                'transitions'         => $this->allowedTransitions($purchaseInvoice->status),
+                'is_service_purchase' => $isServicePurchase,
+                'posting_job'         => $pj ? [
+                    'status'        => $pj->status->value,
+                    'status_label'  => $pj->status->label(),
+                    'error_message' => $pj->error_message,
+                    'job_id'        => $pj->id,
+                ] : null,
             ],
         ]);
     }
@@ -192,21 +213,23 @@ class PurchaseInvoiceController extends Controller
                     'supplier_id' => $po->supplier_id,
                     'supplier'    => $po->supplier->name,
                 ]),
-            'suppliers' => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'name', 'tax_code']),
+            'suppliers'       => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'name', 'tax_code']),
+            'expenseAccounts' => $this->expenseAccountList(),
         ]);
     }
 
     public function update(Request $request, PurchaseInvoice $purchaseInvoice): RedirectResponse
     {
         $data = $request->validate([
-            'invoice_number'    => ['nullable', 'string', 'max:100'],
-            'invoice_date'      => ['nullable', 'date'],
-            'supplier_tax_code' => ['nullable', 'string', 'max:50'],
-            'subtotal'          => ['required', 'numeric', 'min:0'],
-            'tax_amount'        => ['required', 'numeric', 'min:0'],
-            'total'             => ['required', 'numeric', 'min:0'],
-            'due_date'          => ['nullable', 'date'],
-            'notes'             => ['nullable', 'string'],
+            'invoice_number'       => ['nullable', 'string', 'max:100'],
+            'invoice_date'         => ['nullable', 'date'],
+            'supplier_tax_code'    => ['nullable', 'string', 'max:50'],
+            'subtotal'             => ['required', 'numeric', 'min:0'],
+            'tax_amount'           => ['required', 'numeric', 'min:0'],
+            'total'                => ['required', 'numeric', 'min:0'],
+            'due_date'             => ['nullable', 'date'],
+            'notes'                => ['nullable', 'string'],
+            'expense_account_code' => ['nullable', 'string', 'max:20'],
         ]);
 
         $purchaseInvoice->update($data);
@@ -252,6 +275,8 @@ class PurchaseInvoiceController extends Controller
         }
 
         DB::transaction(function () use ($purchaseInvoice) {
+            // Đảo JE dịch vụ (nếu có) trước khi xóa
+            $this->service->cleanupJeForDelete($purchaseInvoice);
             foreach ($purchaseInvoice->attachments as $att) {
                 Storage::disk('public')->delete($att->file_path);
                 $att->delete();
@@ -297,6 +322,22 @@ class PurchaseInvoiceController extends Controller
         }
 
         return back()->with('success', 'Đã cập nhật trạng thái hóa đơn.');
+    }
+
+    private function expenseAccountList(): array
+    {
+        return AccountCode::where('is_detail', true)
+            ->where('is_active', true)
+            ->where(fn ($q) => $q
+                ->where('code', 'like', '642%')
+                ->orWhere('code', 'like', '154%')
+                ->orWhere('code', 'like', '632%')
+                ->orWhere('code', 'like', '811%')
+            )
+            ->orderBy('code')
+            ->get(['code', 'name'])
+            ->map(fn ($a) => ['code' => $a->code, 'name' => "{$a->code} — {$a->name}"])
+            ->toArray();
     }
 
     private function allowedTransitions(PurchaseInvoiceStatus $status): array

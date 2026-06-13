@@ -36,11 +36,13 @@ class StockEntryVatTest extends TestCase
         $this->warehouse = Warehouse::create(['name' => 'Kho chính', 'address' => 'HN', 'manager_id' => $this->user->id, 'is_active' => true]);
 
         // Account codes required by postEntryJournal FK constraint
+        // postEntryJournal uses '1561' (detail) not '156' (parent) per TT133
         foreach ([
-            ['code' => '156',  'name' => 'Hàng hoá',           'type' => 'asset',     'normal_balance' => 'debit',  'is_detail' => true],
-            ['code' => '1331', 'name' => 'Thuế GTGT đầu vào',  'type' => 'asset',     'normal_balance' => 'debit',  'is_detail' => true],
-            ['code' => '331',  'name' => 'Phải trả NCC',        'type' => 'liability', 'normal_balance' => 'credit', 'is_detail' => false],
-            ['code' => '3311', 'name' => 'NCC trong nước',      'type' => 'liability', 'normal_balance' => 'credit', 'is_detail' => true],
+            ['code' => '156',  'name' => 'Hàng hoá',           'type' => 'asset',     'normal_balance' => 'debit',  'is_detail' => false, 'parent_code' => null],
+            ['code' => '1561', 'name' => 'Hàng hoá kho',        'type' => 'asset',     'normal_balance' => 'debit',  'is_detail' => true,  'parent_code' => '156'],
+            ['code' => '1331', 'name' => 'Thuế GTGT đầu vào',  'type' => 'asset',     'normal_balance' => 'debit',  'is_detail' => true,  'parent_code' => null],
+            ['code' => '331',  'name' => 'Phải trả NCC',        'type' => 'liability', 'normal_balance' => 'credit', 'is_detail' => false, 'parent_code' => null],
+            ['code' => '3311', 'name' => 'NCC trong nước',      'type' => 'liability', 'normal_balance' => 'credit', 'is_detail' => true,  'parent_code' => '331'],
         ] as $acc) {
             \App\Models\AccountCode::updateOrCreate(['code' => $acc['code']], array_merge($acc, ['level' => 3, 'is_active' => true]));
         }
@@ -235,10 +237,10 @@ class StockEntryVatTest extends TestCase
 
         $lines  = $journal->lines;
         $cr3311 = $lines->where('account_code', '3311')->sum('credit');
-        $dr156  = $lines->where('account_code', '156')->sum('debit');
+        $dr1561 = $lines->where('account_code', '1561')->sum('debit');
         $dr1331 = $lines->where('account_code', '1331')->sum('debit');
 
-        $this->assertEquals(5000000, $dr156);
+        $this->assertEquals(5000000, $dr1561);
         $this->assertEquals(500000,  $dr1331);
         $this->assertEquals(5500000, $cr3311);
     }
@@ -246,7 +248,7 @@ class StockEntryVatTest extends TestCase
     public function test_journal_cr331_vat_8_percent(): void
     {
         // unit_price = 2_231_482, qty=2, VAT 8%
-        // Dr 156 = 4_462_964, Dr 1331 = 357_037, Cr 331 = 4_820_001
+        // Dr 1561 = 4_462_964, Dr 1331 = 357_037, Cr 3311 = 4_820_001
         $po    = $this->makePo([['name' => 'SP G', 'unit_price' => 2231482, 'vat_rate' => 8, 'qty' => 2]]);
         $entry = $this->createEntry($po);
         $this->post(route('warehouse.stock-entries.confirm', $entry->id));
@@ -256,12 +258,12 @@ class StockEntryVatTest extends TestCase
 
         $lines  = $journal->lines;
         $cr3311 = $lines->where('account_code', '3311')->sum('credit');
-        $dr156  = $lines->where('account_code', '156')->sum('debit');
+        $dr1561 = $lines->where('account_code', '1561')->sum('debit');
         $dr1331 = $lines->where('account_code', '1331')->sum('debit');
 
-        $this->assertEquals(4462964, $dr156);
+        $this->assertEquals(4462964, $dr1561);
         $this->assertEqualsWithDelta(357037, $dr1331, 1);
-        $this->assertEquals($dr156 + $dr1331, $cr3311); // journal must balance
+        $this->assertEquals($dr1561 + $dr1331, $cr3311); // journal must balance
     }
 
     public function test_journal_balanced_multi_item_mixed_vat(): void

@@ -14,7 +14,7 @@ class PurchaseInvoice extends Model
         'code', 'purchase_order_id', 'supplier_id',
         'invoice_number', 'invoice_date', 'supplier_tax_code',
         'subtotal', 'tax_amount', 'total', 'paid_amount',
-        'due_date', 'status', 'notes', 'created_by',
+        'due_date', 'status', 'notes', 'expense_account_code', 'created_by',
         'file_path', 'file_name',
     ];
 

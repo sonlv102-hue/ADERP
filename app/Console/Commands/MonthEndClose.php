@@ -44,8 +44,16 @@ class MonthEndClose extends Command
         }
 
         // 3. Đánh dấu hóa đơn quá hạn
-        $this->info("\n[3/3] Đánh dấu hóa đơn quá hạn...");
+        $this->info("\n[3/4] Đánh dấu hóa đơn quá hạn...");
         $this->call('accounting:mark-overdue');
+
+        // 4. Kết chuyển cuối kỳ (DT/CP → 911 → 4212)
+        $this->info("\n[4/4] Kết chuyển cuối kỳ...");
+        $code = $this->call('accounting:period-close', ['period' => $period]);
+        if ($code !== 0) {
+            $this->warn("  Kết chuyển cuối kỳ có lỗi (có thể đã kết chuyển rồi) — xem log.");
+            $errors++;
+        }
 
         $this->newLine();
         if ($errors === 0) {

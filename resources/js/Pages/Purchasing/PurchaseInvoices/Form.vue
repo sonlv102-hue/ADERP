@@ -95,6 +95,19 @@
           </div>
         </div>
 
+        <!-- TK chi phí (mua dịch vụ) -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">
+            TK chi phí
+            <span class="text-gray-400 font-normal text-xs ml-1">(chỉ áp dụng khi mua dịch vụ, không nhập kho)</span>
+          </label>
+          <select v-model="form.expense_account_code"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <option value="">-- Tự động theo loại (mặc định 6422) --</option>
+            <option v-for="acc in expenseAccounts" :key="acc.code" :value="acc.code">{{ acc.name }}</option>
+          </select>
+        </div>
+
         <!-- Ghi chú -->
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
@@ -122,27 +135,29 @@ import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 
 const props = defineProps({
-  invoice:        Object,
-  nextCode:       String,
-  purchaseOrders: Array,
-  suppliers:      Array,
+  invoice:         Object,
+  nextCode:        String,
+  purchaseOrders:  Array,
+  suppliers:       Array,
+  expenseAccounts: Array,
   selectedOrderId: [Number, String],
 });
 
 const today = new Date().toISOString().split('T')[0];
 
 const form = useForm({
-  code:               props.invoice?.code            ?? props.nextCode,
-  purchase_order_id:  props.invoice?.purchase_order_id ?? props.selectedOrderId ?? '',
-  supplier_id:        props.invoice?.supplier_id     ?? '',
-  invoice_number:     props.invoice?.invoice_number  ?? '',
-  invoice_date:       props.invoice?.invoice_date    ?? today,
-  supplier_tax_code:  props.invoice?.supplier_tax_code ?? '',
-  subtotal:           props.invoice?.subtotal        ?? 0,
-  tax_amount:         props.invoice?.tax_amount      ?? 0,
-  total:              props.invoice?.total           ?? 0,
-  due_date:           props.invoice?.due_date        ?? '',
-  notes:              props.invoice?.notes           ?? '',
+  code:                 props.invoice?.code              ?? props.nextCode,
+  purchase_order_id:    props.invoice?.purchase_order_id ?? props.selectedOrderId ?? '',
+  supplier_id:          props.invoice?.supplier_id       ?? '',
+  invoice_number:       props.invoice?.invoice_number    ?? '',
+  invoice_date:         props.invoice?.invoice_date      ?? today,
+  supplier_tax_code:    props.invoice?.supplier_tax_code ?? '',
+  subtotal:             props.invoice?.subtotal          ?? 0,
+  tax_amount:           props.invoice?.tax_amount        ?? 0,
+  total:                props.invoice?.total             ?? 0,
+  due_date:             props.invoice?.due_date          ?? '',
+  notes:                props.invoice?.notes             ?? '',
+  expense_account_code: props.invoice?.expense_account_code ?? '',
 });
 
 function onOrderChange() {

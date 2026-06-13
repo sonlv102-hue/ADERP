@@ -96,6 +96,28 @@
         </div>
       </Teleport>
 
+      <!-- Posting status banner -->
+      <div v-if="entry.posting_job && entry.posting_job.status === 'failed'"
+        class="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+        <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        </svg>
+        <div class="flex-1 min-w-0">
+          <p class="text-sm font-medium text-red-800">Hạch toán tự động thất bại</p>
+          <p class="text-xs text-red-600 mt-0.5">{{ entry.posting_job.error_message }}</p>
+          <p class="text-xs text-red-500 mt-1">Vào <strong>Kế toán › Bút toán › Thử lại</strong> để hạch toán lại (Job #{{ entry.posting_job.job_id }}).</p>
+        </div>
+      </div>
+      <div v-if="entry.posting_job && entry.posting_job.status === 'pending'"
+        class="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center gap-3">
+        <svg class="w-5 h-5 text-yellow-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <p class="text-sm text-yellow-800">Đang chờ hạch toán tự động...</p>
+      </div>
+
       <div class="bg-white rounded-xl border border-gray-200 p-6">
         <h2 class="text-base font-semibold text-gray-800 mb-4">Thông tin phiếu nhập</h2>
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-8 text-sm">

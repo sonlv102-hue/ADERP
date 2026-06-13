@@ -76,13 +76,13 @@ class StockService
             }
 
             $entry->update(['status' => StockEntryStatus::Confirmed]);
+
+            // Hạch toán nhập kho trong cùng transaction — nếu JE fail, toàn bộ rollback
+            $this->postEntryJournal($entry);
         });
 
         Cache::forget('dashboard.stock_overview');
         Cache::forget('dashboard.stats');
-
-        // Hạch toán nhập kho: Dr 156 / Cr 331
-        $this->postEntryJournal($entry);
     }
 
     public function cancelEntry(StockEntry $entry): void
@@ -241,13 +241,13 @@ class StockService
             }
 
             $exit->update(['status' => StockExitStatus::Confirmed]);
+
+            // Hạch toán xuất kho trong cùng transaction — nếu JE fail, toàn bộ rollback
+            $this->postExitJournal($exit);
         });
 
         Cache::forget('dashboard.stock_overview');
         Cache::forget('dashboard.stats');
-
-        // Hạch toán: Dr 632/154 / Cr 156 tuỳ mục đích xuất
-        $this->postExitJournal($exit);
 
         // After transaction: check low stock threshold and dispatch async notification job
         // Dispatch AFTER transaction commit — đảm bảo job chỉ chạy khi dữ liệu đã được lưu
@@ -277,6 +277,18 @@ class StockService
                 $exit->update(['status' => StockExitStatus::Cancelled]);
             });
             return;
+        }
+
+        // Confirmed: kiểm tra đơn hàng liên kết có hóa đơn chưa hủy không
+        if ($exit->order_id) {
+            $hasActiveInvoice = \App\Models\Invoice::where('order_id', $exit->order_id)
+                ->whereIn('status', ['sent', 'paid', 'overdue'])
+                ->exists();
+            if ($hasActiveInvoice) {
+                throw new RuntimeException(
+                    "Không thể hủy phiếu xuất: đơn hàng đã có hóa đơn. Hủy hóa đơn trước rồi mới hủy phiếu xuất."
+                );
+            }
         }
 
         // Confirmed: kiểm tra serial chưa bị chuyển trạng thái thêm
