@@ -351,6 +351,7 @@ Route::middleware('auth')->group(function () {
         Route::resource('journal-entries', JournalEntryController::class)->only(['index', 'create', 'store', 'show', 'update', 'destroy']);
         Route::post('journal-entries/{journalEntry}/post', [JournalEntryController::class, 'markPosted'])->name('journal-entries.post')->middleware('can:accounting.manage');
         Route::post('journal-entries/{journalEntry}/reverse', [JournalEntryController::class, 'reverse'])->name('journal-entries.reverse')->middleware('can:accounting.manage');
+        Route::post('journal-entries/{journalEntry}/void', [JournalEntryController::class, 'void'])->name('journal-entries.void')->middleware('can:accounting.manage');
         Route::post('journal-entries/bulk-approve', [JournalEntryController::class, 'bulkApprove'])->name('journal-entries.bulk-approve')->middleware('can:accounting.manage');
 
         // Chi phí trả trước (Prepaid Expenses)

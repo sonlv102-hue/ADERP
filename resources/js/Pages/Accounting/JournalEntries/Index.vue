@@ -31,6 +31,7 @@
           <option value="draft">Nháp</option>
           <option value="posted">Đã hạch toán</option>
           <option value="reversed">Đã đảo</option>
+          <option value="voided">Đã hủy</option>
         </select>
         <input v-model="from" @change="applyFilters" type="date" class="erp-input w-40" />
         <input v-model="to" @change="applyFilters" type="date" class="erp-input w-40" />
@@ -50,7 +51,9 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-slate-100">
-            <tr v-for="e in entries.data" :key="e.id" class="hover:bg-slate-50/70 transition-colors">
+            <tr v-for="e in entries.data" :key="e.id"
+              class="hover:bg-slate-50/70 transition-colors"
+              :class="e.status === 'voided' ? 'opacity-60' : ''">
               <td class="px-5 py-3 font-mono text-xs font-semibold text-slate-700">{{ e.code }}</td>
               <td class="px-5 py-3 text-slate-600 whitespace-nowrap">{{ e.entry_date }}</td>
               <td class="px-5 py-3 text-slate-800">{{ e.description }}</td>
@@ -71,8 +74,10 @@
                   class="text-primary-600 hover:text-primary-800 font-medium mr-3 text-xs">Xem →</Link>
                 <button v-if="can('accounting.manage') && e.status === 'draft'" @click="confirmPost(e)"
                   class="text-green-600 hover:text-green-800 font-medium mr-3 text-xs">Duyệt</button>
-                <button v-if="can('accounting.manage')" @click="confirmDelete(e)"
+                <button v-if="can('accounting.manage') && e.status === 'draft'" @click="confirmDelete(e)"
                   class="text-red-500 hover:text-red-700 font-medium text-xs">Xóa</button>
+                <button v-if="can('accounting.manage') && (e.status === 'posted' || e.status === 'reversed')" @click="confirmVoid(e)"
+                  class="text-red-500 hover:text-red-700 font-medium text-xs">Hủy</button>
               </td>
             </tr>
             <tr v-if="!entries.data?.length">
@@ -107,25 +112,45 @@
       </template>
     </Modal>
 
-    <!-- Delete Modal -->
+    <!-- Delete Modal (chỉ cho draft) -->
     <Modal :show="deleteTarget !== null" @close="deleteTarget = null">
-      <template #title>Xác nhận xóa bút toán</template>
+      <template #title>Xóa bút toán nháp</template>
       <div class="space-y-2 text-sm text-slate-600">
         <p>Bạn có chắc muốn xóa bút toán <strong>{{ deleteTarget?.code }}</strong>?</p>
         <p class="italic text-slate-500">{{ deleteTarget?.description }}</p>
-        <p v-if="deleteTarget?.status === 'posted'" class="text-red-600 font-medium bg-red-50 px-3 py-2 rounded-lg">
-          ⚠ Bút toán đã hạch toán không thể xóa. Vui lòng dùng "Đảo bút toán" để hủy hiệu lực.
+        <p v-if="deleteTarget?.is_auto" class="text-amber-600 font-medium bg-amber-50 px-3 py-2 rounded-lg">
+          Đây là bút toán tự động — xóa sẽ cần tạo lại nếu cần.
         </p>
-        <p v-else-if="deleteTarget?.status === 'reversed'" class="text-amber-600 font-medium bg-amber-50 px-3 py-2 rounded-lg">
-          Bút toán này đã bị đảo. Xóa sẽ xóa cả bút toán đảo ngược đi kèm.
-        </p>
-        <p v-else-if="deleteTarget?.is_auto" class="text-amber-600 font-medium bg-amber-50 px-3 py-2 rounded-lg">
-          ⚠ Đây là bút toán tự động ở trạng thái nháp — xóa sẽ cần tạo lại nếu cần.
-        </p>
+        <p class="text-red-600 font-medium bg-red-50 px-3 py-2 rounded-lg">Không thể hoàn tác sau khi xóa.</p>
       </div>
       <template #footer>
         <button @click="deleteTarget = null" class="erp-btn-secondary">Hủy</button>
-        <button v-if="deleteTarget?.status !== 'posted'" @click="doDelete" class="erp-btn-danger">Xóa</button>
+        <button @click="doDelete" class="erp-btn-danger">Xóa</button>
+      </template>
+    </Modal>
+
+    <!-- Void Modal (cho posted và reversed) -->
+    <Modal :show="voidTarget !== null" @close="voidTarget = null">
+      <template #title>
+        {{ voidTarget?.status === 'reversed' ? 'Hủy cặp bút toán' : 'Hủy bút toán' }}
+      </template>
+      <div class="space-y-3 text-sm text-slate-600">
+        <p>Bút toán <strong>{{ voidTarget?.code }}</strong>: {{ voidTarget?.description }}</p>
+        <template v-if="voidTarget?.status === 'reversed'">
+          <p>Bút toán này đã được đảo. Khi hủy, hệ thống sẽ hủy cả bút toán gốc và bút toán đảo ngược liên quan.</p>
+        </template>
+        <p>Sau khi hủy, bút toán không còn ảnh hưởng đến sổ cái và báo cáo, nhưng vẫn được lưu lại để tra cứu lịch sử.</p>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1">Lý do hủy (tùy chọn)</label>
+          <textarea v-model="voidReason" rows="2" maxlength="500" placeholder="Nhập lý do..."
+            class="erp-input w-full" />
+        </div>
+      </div>
+      <template #footer>
+        <button @click="voidTarget = null" class="erp-btn-secondary">Hủy</button>
+        <button @click="doVoid" class="erp-btn-danger">
+          {{ voidTarget?.status === 'reversed' ? 'Hủy cặp bút toán' : 'Hủy bút toán' }}
+        </button>
       </template>
     </Modal>
 
@@ -179,13 +204,24 @@ const doBulkApprove = () => {
   });
 };
 
-// Delete
+// Delete (draft only)
 const deleteTarget = ref(null);
 const confirmDelete = (entry) => { deleteTarget.value = entry; };
 const doDelete = () => {
   router.delete(route('accounting.journal-entries.destroy', deleteTarget.value.id), {
     onSuccess: () => { deleteTarget.value = null; },
   });
+};
+
+// Void (posted / reversed)
+const voidTarget = ref(null);
+const voidReason = ref('');
+const confirmVoid = (entry) => { voidTarget.value = entry; voidReason.value = ''; };
+const doVoid = () => {
+  router.post(route('accounting.journal-entries.void', voidTarget.value.id),
+    { void_reason: voidReason.value },
+    { onSuccess: () => { voidTarget.value = null; } }
+  );
 };
 
 // Single post

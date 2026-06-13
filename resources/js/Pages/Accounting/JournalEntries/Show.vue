@@ -19,7 +19,7 @@
           <span v-if="entry.is_auto" class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-600 border border-blue-200">
             Tự động
           </span>
-          <button v-if="can('accounting.manage')"
+          <button v-if="entry.status !== 'voided' && can('accounting.manage')"
             @click="openEditModal"
             class="text-sm px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50">
             Sửa diễn giải
@@ -29,16 +29,32 @@
             class="text-sm px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700">
             Duyệt & Hạch toán
           </button>
-          <button v-if="entry.status === 'posted' && !entry.description.startsWith('Đảo:') && can('accounting.manage')"
-            @click="showReverseModal = true"
+          <button v-if="entry.status === 'draft' && can('accounting.manage')"
+            @click="showDeleteDraftModal = true"
             class="text-sm px-3 py-1.5 border border-red-300 text-red-600 rounded-lg hover:bg-red-50">
-            Đảo bút toán
+            Xóa
           </button>
-          <button v-if="entry.status === 'reversed' && can('accounting.manage')"
-            @click="showDeleteReversedModal = true"
-            class="text-sm px-3 py-1.5 bg-red-600 text-white rounded-lg hover:bg-red-700">
-            Xóa cặp bút toán
-          </button>
+          <template v-if="entry.status === 'posted' && can('accounting.manage')">
+            <button v-if="!entry.description.startsWith('Đảo:')"
+              @click="showReverseModal = true"
+              class="text-sm px-3 py-1.5 border border-orange-300 text-orange-600 rounded-lg hover:bg-orange-50">
+              Đảo bút toán
+            </button>
+            <button v-if="!entry.period_locked"
+              @click="showVoidModal = true"
+              class="text-sm px-3 py-1.5 border border-red-300 text-red-600 rounded-lg hover:bg-red-50">
+              Hủy bút toán
+            </button>
+            <span v-else class="text-xs text-gray-400 italic">Kỳ đã khóa sổ</span>
+          </template>
+          <template v-if="entry.status === 'reversed' && can('accounting.manage')">
+            <button v-if="!entry.period_locked"
+              @click="showVoidModal = true"
+              class="text-sm px-3 py-1.5 border border-red-300 text-red-600 rounded-lg hover:bg-red-50">
+              Hủy cặp bút toán
+            </button>
+            <span v-else class="text-xs text-gray-400 italic">Kỳ đã khóa sổ</span>
+          </template>
         </div>
       </div>
 
@@ -69,7 +85,26 @@
             <dt class="text-gray-500">Ghi chú</dt>
             <dd class="text-gray-700 mt-1">{{ entry.notes }}</dd>
           </div>
+          <!-- Void metadata -->
+          <template v-if="entry.status === 'voided'">
+            <div>
+              <dt class="text-gray-500">Hủy lúc</dt>
+              <dd class="font-medium text-gray-900 mt-1">{{ entry.voided_at }}</dd>
+            </div>
+            <div>
+              <dt class="text-gray-500">Người hủy</dt>
+              <dd class="font-medium text-gray-900 mt-1">{{ entry.voided_by ?? '—' }}</dd>
+            </div>
+            <div v-if="entry.void_reason" class="col-span-2">
+              <dt class="text-gray-500">Lý do hủy</dt>
+              <dd class="text-gray-700 mt-1">{{ entry.void_reason }}</dd>
+            </div>
+          </template>
         </dl>
+        <!-- Voided banner -->
+        <div v-if="entry.status === 'voided'" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm text-slate-600">
+          Bút toán này đã được hủy và không còn ảnh hưởng đến sổ cái hay báo cáo tài chính. Dữ liệu được giữ lại để phục vụ tra cứu lịch sử.
+        </div>
       </div>
 
       <!-- Journal Lines -->
@@ -77,7 +112,7 @@
         <div class="px-5 py-3 border-b border-gray-100 bg-gray-50">
           <h3 class="font-semibold text-gray-700 text-sm">Các dòng bút toán</h3>
         </div>
-        <table class="w-full text-sm">
+        <table class="w-full text-sm" :class="entry.status === 'voided' ? 'opacity-50' : ''">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600 w-36">Tài khoản</th>
@@ -132,6 +167,55 @@
       </div>
     </div>
 
+    <!-- Modal: Xóa bút toán nháp -->
+    <div v-if="showDeleteDraftModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-sm">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="font-semibold text-gray-900">Xóa bút toán {{ entry.code }}</h3>
+        </div>
+        <div class="p-6 space-y-3 text-sm text-gray-700">
+          <p>Bạn có chắc muốn xóa bút toán nháp này?</p>
+          <p class="text-red-600 bg-red-50 px-3 py-2 rounded-lg font-medium">Không thể hoàn tác sau khi xóa.</p>
+        </div>
+        <div class="flex justify-end gap-3 px-6 pb-6">
+          <button @click="showDeleteDraftModal = false" class="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700">Hủy</button>
+          <button @click="submitDeleteDraft" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700">Xóa bút toán</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Hủy bút toán (posted hoặc reversed) -->
+    <div v-if="showVoidModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-md">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="font-semibold text-gray-900">
+            {{ entry.status === 'reversed' ? 'Hủy cặp bút toán' : 'Hủy bút toán' }} {{ entry.code }}
+          </h3>
+        </div>
+        <form @submit.prevent="submitVoid" class="p-6 space-y-4 text-sm text-gray-700">
+          <template v-if="entry.status === 'reversed'">
+            <p>Bút toán này đã được đảo.</p>
+            <p>Khi hủy, hệ thống sẽ hủy cả bút toán gốc và bút toán đảo ngược liên quan. Hai bút toán sẽ không còn ảnh hưởng đến sổ cái và báo cáo, nhưng vẫn được lưu lại để phục vụ truy vết.</p>
+            <p>Bạn có chắc chắn muốn tiếp tục?</p>
+          </template>
+          <template v-else>
+            <p>Bút toán này sẽ được hủy và không còn ảnh hưởng đến sổ cái và báo cáo tài chính. Dữ liệu sẽ được giữ lại để tra cứu lịch sử.</p>
+          </template>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Lý do hủy (tùy chọn)</label>
+            <textarea v-model="voidForm.void_reason" rows="2" maxlength="500"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          </div>
+          <div class="flex justify-end gap-3 pt-2">
+            <button type="button" @click="showVoidModal = false" class="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700">Không</button>
+            <button type="submit" :disabled="voidForm.processing" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50">
+              {{ entry.status === 'reversed' ? 'Hủy cặp bút toán' : 'Hủy bút toán' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
     <!-- Modal: Sửa diễn giải / ghi chú -->
     <div v-if="showEditModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-xl shadow-xl w-full max-w-md">
@@ -163,23 +247,6 @@
       </div>
     </div>
 
-    <!-- Modal: Xóa cặp bút toán đảo -->
-    <div v-if="showDeleteReversedModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div class="bg-white rounded-xl shadow-xl w-full max-w-sm">
-        <div class="px-6 py-4 border-b border-gray-200">
-          <h3 class="font-semibold text-gray-900">Xóa bút toán {{ entry.code }}</h3>
-        </div>
-        <div class="p-6 space-y-3 text-sm text-gray-700">
-          <p>Bút toán này đã bị đảo ngược. Hành động sẽ xóa <strong>cả hai</strong>: bút toán gốc và bút toán đảo đi kèm.</p>
-          <p class="text-red-600 bg-red-50 px-3 py-2 rounded-lg font-medium">Không thể hoàn tác. Bạn có chắc không?</p>
-        </div>
-        <div class="flex justify-end gap-3 px-6 pb-6">
-          <button @click="showDeleteReversedModal = false" class="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700">Hủy</button>
-          <button @click="submitDeleteReversed" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700">Xóa</button>
-        </div>
-      </div>
-    </div>
-
     <!-- Modal: Đảo bút toán -->
     <div v-if="showReverseModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-xl shadow-xl w-full max-w-sm">
@@ -194,7 +261,7 @@
           </div>
           <div class="flex justify-end gap-3">
             <button type="button" @click="showReverseModal = false" class="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700">Hủy</button>
-            <button type="submit" :disabled="reverseForm.processing" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:opacity-50">
+            <button type="submit" :disabled="reverseForm.processing" class="px-4 py-2 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50">
               Xác nhận đảo
             </button>
           </div>
@@ -248,11 +315,18 @@ function submitReverse() {
   });
 }
 
-const showDeleteReversedModal = ref(false);
+const showDeleteDraftModal = ref(false);
 
-function submitDeleteReversed() {
-  router.delete(route('accounting.journal-entries.destroy', props.entry.id), {
-    onSuccess: () => { showDeleteReversedModal.value = false; },
+function submitDeleteDraft() {
+  router.delete(route('accounting.journal-entries.destroy', props.entry.id));
+}
+
+const showVoidModal = ref(false);
+const voidForm = useForm({ void_reason: '' });
+
+function submitVoid() {
+  voidForm.post(route('accounting.journal-entries.void', props.entry.id), {
+    onSuccess: () => { showVoidModal.value = false; },
   });
 }
 </script>

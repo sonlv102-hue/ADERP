@@ -24,11 +24,13 @@ class JournalEntry extends Model
         'code', 'entry_date', 'description', 'reference_type', 'reference_id',
         'status', 'is_auto', 'reversed_by_id', 'created_by', 'posted_at', 'notes',
         'source_type', 'fiscal_period', 'exclude_from_period_movement',
+        'voided_at', 'voided_by', 'void_reason',
     ];
 
     protected $casts = [
         'entry_date'                   => 'date',
         'posted_at'                    => 'datetime',
+        'voided_at'                    => 'datetime',
         'is_auto'                      => 'boolean',
         'exclude_from_period_movement' => 'boolean',
     ];
@@ -46,6 +48,11 @@ class JournalEntry extends Model
     public function reversedBy(): BelongsTo
     {
         return $this->belongsTo(JournalEntry::class, 'reversed_by_id');
+    }
+
+    public function voidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by');
     }
 
     public function totalDebit(): float
@@ -69,6 +76,7 @@ class JournalEntry extends Model
             'draft'    => 'Nháp',
             'posted'   => 'Đã hạch toán',
             'reversed' => 'Đã đảo',
+            'voided'   => 'Đã hủy',
             default    => $this->status,
         };
     }
@@ -79,6 +87,7 @@ class JournalEntry extends Model
             'draft'    => 'gray',
             'posted'   => 'green',
             'reversed' => 'red',
+            'voided'   => 'slate',
             default    => 'gray',
         };
     }

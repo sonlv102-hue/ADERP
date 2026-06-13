@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Accounting;
 
 use App\Http\Controllers\Controller;
 use App\Models\AccountCode;
+use App\Models\AccountingPeriod;
 use App\Models\JournalEntry;
 use App\Services\AccountingService;
 use Carbon\Carbon;
@@ -113,7 +114,7 @@ class JournalEntryController extends Controller
 
     public function show(JournalEntry $journalEntry): Response
     {
-        $journalEntry->load('lines.account', 'creator');
+        $journalEntry->load('lines.account', 'creator', 'voidedBy');
 
         return Inertia::render('Accounting/JournalEntries/Show', [
             'entry' => [
@@ -130,6 +131,10 @@ class JournalEntryController extends Controller
                 'notes'          => $journalEntry->notes,
                 'creator'        => $journalEntry->creator?->name ?? 'Hệ thống',
                 'posted_at'      => $journalEntry->posted_at?->format('d/m/Y H:i'),
+                'voided_at'      => $journalEntry->voided_at?->format('d/m/Y H:i'),
+                'voided_by'      => $journalEntry->voidedBy?->name,
+                'void_reason'    => $journalEntry->void_reason,
+                'period_locked'  => $this->isPeriodLocked($journalEntry),
                 'total_debit'    => $journalEntry->totalDebit(),
                 'total_credit'   => $journalEntry->totalCredit(),
                 'lines'          => $journalEntry->lines->map(fn ($l) => [
@@ -174,24 +179,9 @@ class JournalEntryController extends Controller
     {
         $this->authorize('accounting.manage');
 
-        // Không cho xóa bút toán đã posted — phải dùng "Đảo bút toán"
-        if ($journalEntry->status === 'posted') {
-            return back()->with('error', 'Không thể xóa bút toán đã hạch toán. Vui lòng dùng "Đảo bút toán" để hủy hiệu lực.');
-        }
-
-        // Bút toán "Đã đảo": phải xóa cả bút toán đảo ngược đi kèm để giữ cân đối sổ
-        if ($journalEntry->status === 'reversed') {
-            $reversalEntry = $journalEntry->reversedBy;
-            DB::transaction(function () use ($journalEntry, $reversalEntry) {
-                if ($reversalEntry) {
-                    $reversalEntry->lines()->delete();
-                    $reversalEntry->delete();
-                }
-                $journalEntry->lines()->delete();
-                $journalEntry->delete();
-            });
-            return redirect()->route('accounting.journal-entries.index')
-                ->with('success', "Đã xóa bút toán {$journalEntry->code} và bút toán đảo ngược đi kèm.");
+        // Chỉ cho hard-delete bút toán nháp (chưa ảnh hưởng sổ cái)
+        if ($journalEntry->status !== 'draft') {
+            return back()->with('error', 'Chỉ có thể xóa bút toán ở trạng thái Nháp. Dùng "Hủy bút toán" với bút toán đã hạch toán.');
         }
 
         $journalEntry->lines()->delete();
@@ -199,6 +189,72 @@ class JournalEntryController extends Controller
 
         return redirect()->route('accounting.journal-entries.index')
             ->with('success', "Đã xóa bút toán {$journalEntry->code}.");
+    }
+
+    /**
+     * Hủy bút toán đã ghi sổ (posted hoặc reversed).
+     * - posted: hủy đơn lẻ
+     * - reversed: hủy cả cặp (gốc + đảo ngược)
+     * Không hard delete — giữ lại lịch sử để tra cứu.
+     */
+    public function void(JournalEntry $journalEntry, Request $request): RedirectResponse
+    {
+        $this->authorize('accounting.manage');
+
+        $data = $request->validate([
+            'void_reason' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        if ($journalEntry->status === 'draft') {
+            return back()->with('error', 'Bút toán nháp không cần hủy — dùng "Xóa" để xóa khỏi hệ thống.');
+        }
+
+        if ($journalEntry->status === 'voided') {
+            return back()->with('error', 'Bút toán này đã được hủy trước đó.');
+        }
+
+        if ($this->isPeriodLocked($journalEntry)) {
+            return back()->with('error', 'Kỳ kế toán của bút toán này đã khóa sổ. Vui lòng lập bút toán điều chỉnh ở kỳ hiện tại.');
+        }
+
+        $voidData = [
+            'status'      => 'voided',
+            'voided_at'   => now(),
+            'voided_by'   => auth()->id(),
+            'void_reason' => $data['void_reason'] ?? null,
+        ];
+
+        if ($journalEntry->status === 'reversed') {
+            // Hủy cả cặp: bút toán gốc + bút toán đảo ngược
+            $reversalEntry = $journalEntry->reversedBy;
+
+            if (! $reversalEntry) {
+                return back()->with('error', 'Không xác định được bút toán đảo ngược đi kèm. Không thể hủy.');
+            }
+
+            DB::transaction(function () use ($journalEntry, $reversalEntry, $voidData) {
+                $journalEntry->update($voidData);
+                $reversalEntry->update($voidData);
+            });
+
+            return redirect()->route('accounting.journal-entries.index')
+                ->with('success', 'Đã hủy cặp bút toán thành công. Các bút toán này không còn ảnh hưởng đến báo cáo, nhưng vẫn được lưu trong lịch sử.');
+        }
+
+        // posted: hủy đơn lẻ
+        $journalEntry->update($voidData);
+
+        return back()->with('success', "Đã hủy bút toán {$journalEntry->code}. Bút toán không còn ảnh hưởng đến báo cáo, nhưng vẫn được lưu trong lịch sử.");
+    }
+
+    private function isPeriodLocked(JournalEntry $entry): bool
+    {
+        $date = $entry->entry_date;
+        $period = AccountingPeriod::where('year', $date->year)
+            ->where('month', $date->month)
+            ->first();
+
+        return $period && $period->status === 'locked';
     }
 
     public function reverse(JournalEntry $journalEntry, Request $request): RedirectResponse
