@@ -23,7 +23,7 @@ class SmokeTest extends Command
         });
 
         $this->checkQuery('customers.is_active', function () {
-            DB::table('customers')->select('id', 'code', 'name')->where('is_active', true)->limit(1)->get();
+            DB::table('customers')->select('id', 'code', 'name', 'is_active')->limit(1)->get();
         });
 
         $this->checkQuery('project_inventory_lots table', function () {
@@ -40,8 +40,8 @@ class SmokeTest extends Command
                 ->limit(1)->get();
         });
 
-        $this->checkQuery('stock_exit_items.cost_price/total_cost', function () {
-            DB::table('stock_exit_items')->select('id', 'cost_price', 'total_cost')->limit(1)->get();
+        $this->checkQuery('stock_exit_items.source_cost/total_cost', function () {
+            DB::table('stock_exit_items')->select('id', 'source_cost', 'total_cost')->limit(1)->get();
         });
 
         $this->checkQuery('stock_exits.issue_purpose', function () {
@@ -54,8 +54,8 @@ class SmokeTest extends Command
                 ->limit(1)->get();
         });
 
-        $this->checkQuery('products.inventory_account_code', function () {
-            DB::table('products')->select('id', 'inventory_account_code')->limit(1)->get();
+        $this->checkQuery('products.inventory_account', function () {
+            DB::table('products')->select('id', 'inventory_account')->limit(1)->get();
         });
 
         $this->checkQuery('journal_entries.voided_at', function () {
