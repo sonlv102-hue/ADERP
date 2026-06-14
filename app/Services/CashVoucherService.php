@@ -9,6 +9,7 @@ use App\Models\AccountCode;
 use App\Models\CashVoucher;
 use App\Models\CashVoucherLine;
 use App\Models\JournalEntry;
+use App\Services\AccountingSettings;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
@@ -244,7 +245,9 @@ class CashVoucherService
     private function resolveFundAccount(CashVoucher $voucher): string
     {
         $voucher->loadMissing('fund');
-        return ($voucher->fund && $voucher->fund->type === 'bank') ? '1121' : '1111';
+        return ($voucher->fund && $voucher->fund->type === 'bank')
+            ? AccountingSettings::get('bank_account', '1121')
+            : AccountingSettings::get('cash_account', '1111');
     }
 
     private function resolveCounterAccountForType(CashVoucher $voucher, CashVoucherBusinessType $bt): string
@@ -272,7 +275,7 @@ class CashVoucherService
             $voucher->loadMissing('supplier');
             return $voucher->supplier->getPayableAccount();
         }
-        return '3311';
+        return AccountingSettings::get('default_ap_account', '3311');
     }
 
     private function getCustomerReceivable(CashVoucher $voucher): string
@@ -281,6 +284,6 @@ class CashVoucherService
             $voucher->loadMissing('customer');
             return $voucher->customer->getReceivableAccount();
         }
-        return '1311';
+        return AccountingSettings::get('default_ar_account', '1311');
     }
 }

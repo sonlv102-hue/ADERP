@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\PrepaidExpenseStatus;
 use App\Models\PrepaidExpense;
 use App\Models\PrepaidExpenseAllocation;
+use App\Services\AccountingSettings;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -38,7 +39,7 @@ class PrepaidExpenseService
             ]);
 
             // Bút toán ghi nhận: Dr 142/242 / Cr nguồn tiền
-            $creditAccount = $data['credit_account'] ?? '3311';
+            $creditAccount = $data['credit_account'] ?? AccountingSettings::get('default_ap_account', '3311');
             $this->accounting->tryPost(
                 description: 'Ghi nhận chi phí trả trước: ' . $expense->description,
                 date: Carbon::parse($data['start_date']),

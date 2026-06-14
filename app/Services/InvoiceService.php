@@ -6,6 +6,7 @@ use App\Enums\InvoiceStatus;
 use App\Models\Invoice;
 use App\Models\JournalEntry;
 use App\Models\Payment;
+use App\Services\AccountingSettings;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -175,12 +176,14 @@ class InvoiceService
     // Nếu order_item có revenue_account_code = null → log warning + gộp vào 5111.
     private function buildRevenueLines(Invoice $invoice, int $creditSubtotal): array
     {
+        $defaultRevAccount = AccountingSettings::get('product_revenue_account', '5111');
+
         if (!$invoice->order_id) {
             $account = $invoice->revenue_account_code;
             if (!$account) {
                 \Log::warning("Invoice {$invoice->code} (standalone): thiếu revenue_account_code. "
-                    . 'Fallback 5111. Vào form hóa đơn để chọn tài khoản doanh thu phù hợp.');
-                $account = '5111';
+                    . "Fallback {$defaultRevAccount}. Vào form hóa đơn để chọn tài khoản doanh thu phù hợp.");
+                $account = $defaultRevAccount;
             }
             return [['account' => $account, 'debit' => 0, 'credit' => $creditSubtotal,
                      'description' => "Doanh thu ({$account}) - {$invoice->code}"]];
@@ -188,14 +191,14 @@ class InvoiceService
 
         $groups = DB::table('order_items')
             ->where('order_id', $invoice->order_id)
-            ->selectRaw('COALESCE(revenue_account_code, \'5111\') as account_code,
-                         SUM(quantity * unit_price) as group_total')
+            ->selectRaw('COALESCE(revenue_account_code, ?) as account_code, SUM(quantity * unit_price) as group_total',
+                        [$defaultRevAccount])
             ->groupBy('account_code')
             ->orderByDesc('group_total')
             ->get();
 
         if ($groups->isEmpty()) {
-            return [['account' => '5111', 'debit' => 0, 'credit' => $creditSubtotal,
+            return [['account' => $defaultRevAccount, 'debit' => 0, 'credit' => $creditSubtotal,
                      'description' => "Doanh thu - {$invoice->code}"]];
         }
 
@@ -206,12 +209,12 @@ class InvoiceService
             ->exists();
         if ($hasNull) {
             \Log::warning("Invoice {$invoice->code}: có order_item thiếu revenue_account_code. "
-                . 'Đã fallback về 5111. Cần kế toán cấu hình products.item_type cho các sản phẩm này.');
+                . "Đã fallback về {$defaultRevAccount}. Cần kế toán cấu hình products.item_type cho các sản phẩm này.");
         }
 
         $orderTotal = $groups->sum('group_total');
         if ($orderTotal <= 0) {
-            return [['account' => '5111', 'debit' => 0, 'credit' => $creditSubtotal,
+            return [['account' => $defaultRevAccount, 'debit' => 0, 'credit' => $creditSubtotal,
                      'description' => "Doanh thu - {$invoice->code}"]];
         }
 
@@ -221,7 +224,7 @@ class InvoiceService
 
         foreach ($groups as $key => $group) {
             if ($key === $lastKey) {
-                $amount = $creditSubtotal - $allocated; // phần dư để tránh sai số làm lệch bút toán
+                $amount = $creditSubtotal - $allocated;
             } else {
                 $amount = (int) round($creditSubtotal * ($group->group_total / $orderTotal));
             }
@@ -233,15 +236,15 @@ class InvoiceService
             $allocated += $amount;
         }
 
-        return $lines ?: [['account' => '5111', 'debit' => 0, 'credit' => $creditSubtotal,
+        return $lines ?: [['account' => $defaultRevAccount, 'debit' => 0, 'credit' => $creditSubtotal,
                             'description' => "Doanh thu - {$invoice->code}"]];
     }
 
     private function resolvePaymentAccount(string $method): string
     {
         return match($method) {
-            'bank_transfer', 'bank' => '1121',
-            default => '1111',
+            'bank_transfer', 'bank' => AccountingSettings::get('bank_account', '1121'),
+            default => AccountingSettings::get('cash_account', '1111'),
         };
     }
 

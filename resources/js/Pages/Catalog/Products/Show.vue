@@ -50,6 +50,26 @@
         </div>
       </div>
 
+      <!-- Tài khoản kế toán -->
+      <div v-if="product.item_type || product.revenue_account_code || product.inventory_account"
+        class="bg-white rounded-xl border border-gray-200 p-5">
+        <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">Tài khoản kế toán</h2>
+        <div class="grid grid-cols-2 sm:grid-cols-3 gap-5 text-sm">
+          <div v-if="product.item_type">
+            <span class="text-gray-500">Loại sản phẩm</span>
+            <p class="font-medium text-gray-900 mt-0.5">{{ product.item_type === 'goods' ? 'Hàng hóa' : 'Dịch vụ' }}</p>
+          </div>
+          <div v-if="product.revenue_account_code">
+            <span class="text-gray-500">TK doanh thu</span>
+            <p class="font-medium text-gray-900 mt-0.5 font-mono">{{ product.revenue_account_code }}</p>
+          </div>
+          <div v-if="product.inventory_account">
+            <span class="text-gray-500">TK hàng tồn kho</span>
+            <p class="font-medium text-gray-900 mt-0.5 font-mono">{{ product.inventory_account }}</p>
+          </div>
+        </div>
+      </div>
+
       <!-- Tồn kho -->
       <div class="bg-white rounded-xl border border-gray-200 p-5">
         <h2 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-4">Tồn kho</h2>

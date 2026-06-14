@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Catalog;
 use App\Exports\TemplateExport;
 use App\Http\Controllers\Controller;
 use App\Imports\ProductImport;
+use App\Models\AccountCode;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use Illuminate\Http\RedirectResponse;
@@ -56,22 +57,25 @@ class ProductController extends Controller
 
         return Inertia::render('Catalog/Products/Show', [
             'product' => [
-                'id'              => $product->id,
-                'code'            => $product->code,
-                'name'            => $product->name,
-                'unit'            => $product->unit,
-                'category'        => $product->category?->name,
-                'has_serial'      => $product->has_serial,
-                'is_active'       => $product->is_active,
-                'warranty_months' => $product->warranty_months,
-                'min_stock'       => $product->min_stock,
-                'description'     => $product->description,
-                'cost_price'      => $product->cost_price,
-                'business_cost'   => $product->business_cost,
-                'vat_percent'     => $product->vat_percent,
-                'total_cost'      => $product->total_cost,
-                'sell_price'      => $product->sell_price,
-                'stock'           => (int) $stock,
+                'id'                   => $product->id,
+                'code'                 => $product->code,
+                'name'                 => $product->name,
+                'unit'                 => $product->unit,
+                'category'             => $product->category?->name,
+                'has_serial'           => $product->has_serial,
+                'is_active'            => $product->is_active,
+                'warranty_months'      => $product->warranty_months,
+                'min_stock'            => $product->min_stock,
+                'description'          => $product->description,
+                'cost_price'           => $product->cost_price,
+                'business_cost'        => $product->business_cost,
+                'vat_percent'          => $product->vat_percent,
+                'total_cost'           => $product->total_cost,
+                'sell_price'           => $product->sell_price,
+                'stock'                => (int) $stock,
+                'item_type'            => $product->item_type,
+                'revenue_account_code' => $product->revenue_account_code,
+                'inventory_account'    => $product->inventory_account,
             ],
         ]);
     }
@@ -80,25 +84,30 @@ class ProductController extends Controller
     {
         return Inertia::render('Catalog/Products/Form', [
             'categories' => ProductCategory::orderBy('name')->get(['id', 'name']),
-            'nextCode' => Product::generateCode(),
+            'nextCode'   => Product::generateCode(),
+            'accounts'   => AccountCode::where('is_active', true)->where('is_detail', true)
+                ->orderBy('code')->get(['code', 'name']),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'code' => ['required', 'string', 'unique:products,code'],
-            'name' => ['required', 'string', 'max:255'],
-            'category_id' => ['nullable', 'exists:product_categories,id'],
-            'unit' => ['required', 'string', 'max:50'],
-            'cost_price' => ['required', 'numeric', 'min:0'],
-            'business_cost' => ['numeric', 'min:0'],
-            'vat_percent' => ['numeric', 'min:0', 'max:100'],
-            'sell_price' => ['required', 'numeric', 'min:0'],
-            'has_serial' => ['boolean'],
-            'warranty_months' => ['integer', 'min:0'],
-            'min_stock' => ['integer', 'min:0'],
-            'description' => ['nullable', 'string'],
+            'code'                 => ['required', 'string', 'unique:products,code'],
+            'name'                 => ['required', 'string', 'max:255'],
+            'category_id'          => ['nullable', 'exists:product_categories,id'],
+            'unit'                 => ['required', 'string', 'max:50'],
+            'cost_price'           => ['required', 'numeric', 'min:0'],
+            'business_cost'        => ['numeric', 'min:0'],
+            'vat_percent'          => ['numeric', 'min:0', 'max:100'],
+            'sell_price'           => ['required', 'numeric', 'min:0'],
+            'has_serial'           => ['boolean'],
+            'warranty_months'      => ['integer', 'min:0'],
+            'min_stock'            => ['integer', 'min:0'],
+            'description'          => ['nullable', 'string'],
+            'item_type'            => ['nullable', 'in:goods,service'],
+            'revenue_account_code' => ['nullable', 'string', 'exists:account_codes,code'],
+            'inventory_account'    => ['nullable', 'string', 'exists:account_codes,code'],
         ]);
 
         $data['total_cost'] = $this->calcTotalCost($data);
@@ -113,42 +122,50 @@ class ProductController extends Controller
     {
         return Inertia::render('Catalog/Products/Form', [
             'product' => [
-                'id' => $product->id,
-                'code' => $product->code,
-                'name' => $product->name,
-                'category_id' => $product->category_id,
-                'unit' => $product->unit,
-                'cost_price' => $product->cost_price,
-                'business_cost' => $product->business_cost,
-                'vat_percent' => $product->vat_percent,
-                'total_cost' => $product->total_cost,
-                'sell_price' => $product->sell_price,
-                'has_serial' => $product->has_serial,
-                'warranty_months' => $product->warranty_months,
-                'min_stock' => $product->min_stock,
-                'description' => $product->description,
-                'is_active' => $product->is_active,
+                'id'                   => $product->id,
+                'code'                 => $product->code,
+                'name'                 => $product->name,
+                'category_id'          => $product->category_id,
+                'unit'                 => $product->unit,
+                'cost_price'           => $product->cost_price,
+                'business_cost'        => $product->business_cost,
+                'vat_percent'          => $product->vat_percent,
+                'total_cost'           => $product->total_cost,
+                'sell_price'           => $product->sell_price,
+                'has_serial'           => $product->has_serial,
+                'warranty_months'      => $product->warranty_months,
+                'min_stock'            => $product->min_stock,
+                'description'          => $product->description,
+                'is_active'            => $product->is_active,
+                'item_type'            => $product->item_type,
+                'revenue_account_code' => $product->revenue_account_code,
+                'inventory_account'    => $product->inventory_account,
             ],
             'categories' => ProductCategory::orderBy('name')->get(['id', 'name']),
+            'accounts'   => AccountCode::where('is_active', true)->where('is_detail', true)
+                ->orderBy('code')->get(['code', 'name']),
         ]);
     }
 
     public function update(Request $request, Product $product): RedirectResponse
     {
         $data = $request->validate([
-            'code' => ['required', 'string', 'unique:products,code,' . $product->id],
-            'name' => ['required', 'string', 'max:255'],
-            'category_id' => ['nullable', 'exists:product_categories,id'],
-            'unit' => ['required', 'string', 'max:50'],
-            'cost_price' => ['required', 'numeric', 'min:0'],
-            'business_cost' => ['numeric', 'min:0'],
-            'vat_percent' => ['numeric', 'min:0', 'max:100'],
-            'sell_price' => ['required', 'numeric', 'min:0'],
-            'has_serial' => ['boolean'],
-            'warranty_months' => ['integer', 'min:0'],
-            'min_stock' => ['integer', 'min:0'],
-            'description' => ['nullable', 'string'],
-            'is_active' => ['boolean'],
+            'code'                 => ['required', 'string', 'unique:products,code,' . $product->id],
+            'name'                 => ['required', 'string', 'max:255'],
+            'category_id'          => ['nullable', 'exists:product_categories,id'],
+            'unit'                 => ['required', 'string', 'max:50'],
+            'cost_price'           => ['required', 'numeric', 'min:0'],
+            'business_cost'        => ['numeric', 'min:0'],
+            'vat_percent'          => ['numeric', 'min:0', 'max:100'],
+            'sell_price'           => ['required', 'numeric', 'min:0'],
+            'has_serial'           => ['boolean'],
+            'warranty_months'      => ['integer', 'min:0'],
+            'min_stock'            => ['integer', 'min:0'],
+            'description'          => ['nullable', 'string'],
+            'is_active'            => ['boolean'],
+            'item_type'            => ['nullable', 'in:goods,service'],
+            'revenue_account_code' => ['nullable', 'string', 'exists:account_codes,code'],
+            'inventory_account'    => ['nullable', 'string', 'exists:account_codes,code'],
         ]);
 
         $data['total_cost'] = $this->calcTotalCost($data);

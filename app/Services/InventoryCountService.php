@@ -6,6 +6,7 @@ use App\Enums\InventoryCountStatus;
 use App\Models\InventoryCount;
 use App\Models\InventoryCountItem;
 use App\Models\StockMovement;
+use App\Services\AccountingSettings;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use App\Services\AccountingService;
@@ -110,14 +111,17 @@ class InventoryCountService
                 }
 
                 $productLabel = $item->product->name;
+                $inventoryAccount = $item->product->inventory_account
+                    ?? AccountingSettings::get('default_inventory_account', '1561');
+
                 if ($difference > 0) {
-                    // Thừa kho: Nợ 1561 / Có 711 (Thu nhập khác)
-                    $journalLines[] = ['account' => '1561', 'debit' => $costAmount, 'credit' => 0, 'description' => "Thừa kho: {$productLabel}"];
-                    $journalLines[] = ['account' => '711', 'debit' => 0, 'credit' => $costAmount, 'description' => "Thừa kho: {$productLabel}"];
+                    // Thừa kho: Nợ 156x / Có 711
+                    $journalLines[] = ['account' => $inventoryAccount, 'debit' => $costAmount, 'credit' => 0, 'description' => "Thừa kho: {$productLabel}"];
+                    $journalLines[] = ['account' => AccountingSettings::get('inventory_surplus_account', '711'), 'debit' => 0, 'credit' => $costAmount, 'description' => "Thừa kho: {$productLabel}"];
                 } else {
-                    // Thiếu kho: Nợ 811 / Có 1561 (Chi phí khác)
-                    $journalLines[] = ['account' => '811', 'debit' => $costAmount, 'credit' => 0, 'description' => "Thiếu kho: {$productLabel}"];
-                    $journalLines[] = ['account' => '1561', 'debit' => 0, 'credit' => $costAmount, 'description' => "Thiếu kho: {$productLabel}"];
+                    // Thiếu kho: Nợ 811 / Có 156x
+                    $journalLines[] = ['account' => AccountingSettings::get('inventory_shortage_account', '811'), 'debit' => $costAmount, 'credit' => 0, 'description' => "Thiếu kho: {$productLabel}"];
+                    $journalLines[] = ['account' => $inventoryAccount, 'debit' => 0, 'credit' => $costAmount, 'description' => "Thiếu kho: {$productLabel}"];
                 }
             }
 

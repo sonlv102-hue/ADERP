@@ -8,6 +8,7 @@ use App\Models\ProjectExpense;
 use App\Models\ProjectWipEntry;
 use App\Models\StockExit;
 use App\Models\StockExitItem;
+use App\Services\AccountingSettings;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -98,19 +99,20 @@ class ProjectWipService
         if ($amount <= 0 || !$expense->project_id) return;
 
         $creditAccount = match ($expense->category) {
-            ExpenseCategory::Labor     => '6271', // Lương giám sát
-            ExpenseCategory::Material  => '6272', // Vật tư phụ
-            ExpenseCategory::Transport => '6278', // Chi phí vận chuyển
-            ExpenseCategory::Other     => '6279', // Chi phí khác
+            ExpenseCategory::Labor     => AccountingSettings::get('project_labor_account', '6271'),
+            ExpenseCategory::Material  => AccountingSettings::get('project_material_account', '6272'),
+            ExpenseCategory::Transport => AccountingSettings::get('project_transport_account', '6278'),
+            ExpenseCategory::Other     => AccountingSettings::get('project_other_account', '6279'),
         };
 
         DB::transaction(function () use ($expense, $amount, $creditAccount) {
             $projectCode = $expense->project?->code ?? $expense->project_id;
+            $wipAccount  = AccountingSettings::get('project_wip_account', '154');
             $je = $this->accounting->post(
                 "Chi phí phát sinh dự án {$projectCode}",
                 Carbon::parse($expense->expense_date),
                 [
-                    ['account' => '154', 'debit' => $amount, 'credit' => 0,
+                    ['account' => $wipAccount, 'debit' => $amount, 'credit' => 0,
                      'description' => $expense->description, 'project_id' => $expense->project_id],
                     ['account' => $creditAccount, 'debit' => 0, 'credit' => $amount,
                      'description' => $expense->description, 'project_id' => $expense->project_id],
@@ -201,9 +203,9 @@ class ProjectWipService
                 "Kết chuyển giá thành dự án {$project->code}",
                 Carbon::today(),
                 [
-                    ['account' => '6322', 'debit' => $total, 'credit' => 0,
+                    ['account' => AccountingSettings::get('default_cogs_account', '632'), 'debit' => $total, 'credit' => 0,
                      'description' => "Giá vốn công trình {$project->name}", 'project_id' => $project->id],
-                    ['account' => '154', 'debit' => 0, 'credit' => $total,
+                    ['account' => AccountingSettings::get('project_wip_account', '154'), 'debit' => 0, 'credit' => $total,
                      'description' => "Kết chuyển CP dở dang {$project->name}", 'project_id' => $project->id],
                 ],
                 'project', $project->id, true, $notes

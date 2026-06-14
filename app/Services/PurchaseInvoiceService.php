@@ -7,6 +7,7 @@ use App\Enums\StockEntryStatus;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoicePayment;
 use App\Models\StockEntry;
+use App\Services\AccountingSettings;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -174,7 +175,8 @@ class PurchaseInvoiceService
 
         if ($total <= 0) return;
 
-        $expenseAccount = $invoice->expense_account_code ?? '6422';
+        $expenseAccount = $invoice->expense_account_code
+            ?? AccountingSettings::get('admin_expense_account', '6422');
 
         $invoice->loadMissing('supplier');
         $payableAccount = $invoice->supplier->getPayableAccount();
@@ -192,7 +194,7 @@ class PurchaseInvoiceService
 
         if ($tax > 0) {
             $lines[] = [
-                'account'     => '1331',
+                'account'     => AccountingSettings::get('vat_input_account', '1331'),
                 'debit'       => (int) round($tax),
                 'credit'      => 0,
                 'description' => "Thuế GTGT đầu vào - {$invoice->code}",
@@ -246,8 +248,8 @@ class PurchaseInvoiceService
         if ($amount <= 0) return;
 
         $cashAccount    = match($payment->method) {
-            'bank_transfer', 'bank' => '1121',
-            default                 => '1111',
+            'bank_transfer', 'bank' => AccountingSettings::get('bank_account', '1121'),
+            default                 => AccountingSettings::get('cash_account', '1111'),
         };
         $invoice->loadMissing('supplier');
         $payableAccount = $invoice->supplier->getPayableAccount();

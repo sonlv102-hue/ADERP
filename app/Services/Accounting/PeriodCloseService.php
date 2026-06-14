@@ -6,6 +6,7 @@ use App\Models\AccountingPeriod;
 use App\Models\JournalEntry;
 use App\Models\PeriodCloseBatch;
 use App\Services\AccountingService;
+use App\Services\AccountingSettings;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -44,6 +45,9 @@ class PeriodCloseService
         $totalRevenue = 0;
         $totalExpense = 0;
 
+        $pnlAccount      = AccountingSettings::get('period_close_pnl_account', '911');
+        $retainedAccount = AccountingSettings::get('period_close_retained_earnings_account', '4212');
+
         foreach ($balances as $code => $b) {
             $name = $accountMap[$code] ?? $code;
 
@@ -51,9 +55,9 @@ class PeriodCloseService
                 $amount = (int) round($b['total_credit'] - $b['total_debit']);
                 if ($amount <= 0) continue;
 
-                $revenueLines[] = ['account' => $code,  'debit' => $amount, 'credit' => 0,
+                $revenueLines[] = ['account' => $code,        'debit' => $amount, 'credit' => 0,
                                    'description' => "KC doanh thu {$code} kỳ {$period}"];
-                $revenueLines[] = ['account' => '911',  'debit' => 0,       'credit' => $amount,
+                $revenueLines[] = ['account' => $pnlAccount,  'debit' => 0,       'credit' => $amount,
                                    'description' => "KC doanh thu {$code} kỳ {$period}"];
                 $accountLines[] = [
                     'code'          => $code,
@@ -62,8 +66,8 @@ class PeriodCloseService
                     'amount'        => $amount,
                     'journal_debit' => $amount,
                     'journal_credit'=> 0,
-                    'counterpart'   => '911',
-                    'entry_text'    => "Nợ {$code} / Có 911",
+                    'counterpart'   => $pnlAccount,
+                    'entry_text'    => "Nợ {$code} / Có {$pnlAccount}",
                 ];
                 $totalRevenue += $amount;
             }
@@ -72,9 +76,9 @@ class PeriodCloseService
                 $amount = (int) round($b['total_debit'] - $b['total_credit']);
                 if ($amount <= 0) continue;
 
-                $expenseLines[] = ['account' => '911',  'debit' => $amount, 'credit' => 0,
+                $expenseLines[] = ['account' => $pnlAccount, 'debit' => $amount, 'credit' => 0,
                                    'description' => "KC chi phí {$code} kỳ {$period}"];
-                $expenseLines[] = ['account' => $code,  'debit' => 0,       'credit' => $amount,
+                $expenseLines[] = ['account' => $code,        'debit' => 0,       'credit' => $amount,
                                    'description' => "KC chi phí {$code} kỳ {$period}"];
                 $accountLines[] = [
                     'code'          => $code,
@@ -83,8 +87,8 @@ class PeriodCloseService
                     'amount'        => $amount,
                     'journal_debit' => 0,
                     'journal_credit'=> $amount,
-                    'counterpart'   => '911',
-                    'entry_text'    => "Nợ 911 / Có {$code}",
+                    'counterpart'   => $pnlAccount,
+                    'entry_text'    => "Nợ {$pnlAccount} / Có {$code}",
                 ];
                 $totalExpense += $amount;
             }
@@ -95,17 +99,17 @@ class PeriodCloseService
 
         if ($profitOrLoss > 0) {
             $profitLines = [
-                ['account' => '911',  'debit' => $profitOrLoss, 'credit' => 0,
+                ['account' => $pnlAccount,      'debit' => $profitOrLoss, 'credit' => 0,
                  'description' => "KC lợi nhuận kỳ {$period}"],
-                ['account' => '4212', 'debit' => 0,             'credit' => $profitOrLoss,
+                ['account' => $retainedAccount, 'debit' => 0,             'credit' => $profitOrLoss,
                  'description' => "KC lợi nhuận kỳ {$period}"],
             ];
         } elseif ($profitOrLoss < 0) {
             $loss = abs($profitOrLoss);
             $profitLines = [
-                ['account' => '4212', 'debit' => $loss, 'credit' => 0,
+                ['account' => $retainedAccount, 'debit' => $loss, 'credit' => 0,
                  'description' => "KC lỗ kỳ {$period}"],
-                ['account' => '911',  'debit' => 0,     'credit' => $loss,
+                ['account' => $pnlAccount,      'debit' => 0,     'credit' => $loss,
                  'description' => "KC lỗ kỳ {$period}"],
             ];
         }

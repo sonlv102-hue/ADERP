@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\ItemUsageType;
+use App\Services\AccountingSettings;
 use App\Enums\SerialStatus;
 use App\Enums\StockEntryStatus;
 use App\Enums\StockExitStatus;
@@ -525,11 +526,11 @@ class StockService
             $taxRounded  = (int) round($lineTax);
 
             if ($exclRounded > 0) {
-                $lines[] = ['account' => '1561', 'debit' => $exclRounded, 'credit' => 0,
+                $lines[] = ['account' => $this->postEntryInventoryAccount($item), 'debit' => $exclRounded, 'credit' => 0,
                             'description' => "Nhập kho {$item->product?->name}"];
             }
             if ($taxRounded > 0) {
-                $lines[] = ['account' => '1331', 'debit' => $taxRounded, 'credit' => 0,
+                $lines[] = ['account' => AccountingSettings::get('vat_input_account', '1331'), 'debit' => $taxRounded, 'credit' => 0,
                             'description' => "Thuế GTGT đầu vào {$item->product?->name}"];
             }
         }
@@ -559,7 +560,8 @@ class StockService
     private function postEntryInventoryAccount(StockEntryItem $item): string
     {
         $product = $item->product ?? Product::find($item->product_id);
-        return $product?->inventory_account ?? '1561';
+        return $product?->inventory_account
+            ?? AccountingSettings::get('default_inventory_account', '1561');
     }
 
     private function resolveInventoryAccount(int $productId, StockExit $exit): string
@@ -567,7 +569,7 @@ class StockService
         $product = Product::find($productId);
         return $product?->inventory_account
             ?? $exit->inventory_account
-            ?? '1561';
+            ?? AccountingSettings::get('default_inventory_account', '1561');
     }
 
     private function resolveDebitAccount(StockExit $exit): string
@@ -580,14 +582,16 @@ class StockService
 
         // Backward compat: nếu chưa set issue_purpose thì dùng item_usage_type
         if (!$purpose) {
-            return $exit->item_usage_type === ItemUsageType::Project ? '154' : '632';
+            return $exit->item_usage_type === ItemUsageType::Project
+                ? AccountingSettings::get('project_wip_account', '154')
+                : AccountingSettings::get('default_cogs_account', '632');
         }
 
         return match($purpose) {
-            'project_cost'    => '154',
-            'sale_delivery'   => '632',
-            'selling_expense' => '6421',
-            'admin_expense'   => '6422',
+            'project_cost'    => AccountingSettings::get('project_wip_account', '154'),
+            'sale_delivery'   => AccountingSettings::get('default_cogs_account', '632'),
+            'selling_expense' => AccountingSettings::get('selling_expense_account', '6421'),
+            'admin_expense'   => AccountingSettings::get('admin_expense_account', '6422'),
             'internal_use'    => throw new RuntimeException(
                 "Xuất kho mục đích internal_use phải cấu hình cost_account."
             ),

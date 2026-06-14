@@ -37,6 +37,18 @@
           <p v-if="form.errors.description" class="mt-1 text-xs text-red-600">{{ form.errors.description }}</p>
         </div>
 
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">TK doanh thu mặc định cho danh mục</label>
+          <select v-model="form.revenue_account_code"
+            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+            :class="{ 'border-red-500': form.errors.revenue_account_code }">
+            <option :value="null">-- Dùng mặc định hệ thống --</option>
+            <option v-for="a in accounts" :key="a.code" :value="a.code">{{ a.code }} — {{ a.name }}</option>
+          </select>
+          <p v-if="form.errors.revenue_account_code" class="mt-1 text-xs text-red-600">{{ form.errors.revenue_account_code }}</p>
+          <p class="mt-1 text-xs text-gray-400">Khi sản phẩm trong danh mục không có TK doanh thu riêng, hệ thống dùng TK này</p>
+        </div>
+
         <div class="flex gap-3 pt-2">
           <button type="submit" :disabled="form.processing"
             class="bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white px-6 py-2 rounded-lg font-medium text-sm">
@@ -57,12 +69,14 @@ import AppLayout from '@/Components/Layout/AppLayout.vue';
 const props = defineProps({
   category: { type: Object, default: null },
   parents: Array,
+  accounts: { type: Array, default: () => [] },
 });
 
 const form = useForm({
-  name: props.category?.name ?? '',
-  parent_id: props.category?.parent?.id ?? null,
-  description: props.category?.description ?? '',
+  name:                 props.category?.name ?? '',
+  parent_id:            props.category?.parent_id ?? null,
+  description:          props.category?.description ?? '',
+  revenue_account_code: props.category?.revenue_account_code ?? null,
 });
 
 const submit = () => {

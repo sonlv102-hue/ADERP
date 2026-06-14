@@ -15,6 +15,7 @@ use App\Models\AccountCode;
 use App\Models\AccountingPostingJob;
 use App\Models\JournalEntry;
 use App\Models\Setting;
+use App\Services\AccountingSettings;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -133,7 +134,7 @@ class PayrollService
                 description: "Chi lương {$employeeName} tháng {$payroll->period} — CK {$bankAccount->account_number}",
                 date: now(),
                 lines: [
-                    ['account' => '334',   'debit' => $net, 'credit' => 0,   'description' => "Lương {$employeeName} tháng {$payroll->period}"],
+                    ['account' => AccountingSettings::get('salary_payable_account', '334'),   'debit' => $net, 'credit' => 0,   'description' => "Lương {$employeeName} tháng {$payroll->period}"],
                     ['account' => $bankTk, 'debit' => 0,   'credit' => $net, 'description' => "CK lương {$bankAccount->bank_name} - {$bankAccount->account_number}"],
                 ],
                 referenceType: PayrollItem::class,
@@ -523,28 +524,28 @@ class PayrollService
         }
 
         // Cr: phải trả người lao động (lương thực nhận)
-        $lines[] = ['account' => '334',  'debit' => 0, 'credit' => $net,  'description' => "Lương thực nhận NLĐ tháng {$payroll->period}", 'sort_order' => $sortOrder++];
-        // Cr: thuế TNCN (TK 3335)
+        $lines[] = ['account' => AccountingSettings::get('salary_payable_account', '334'),  'debit' => 0, 'credit' => $net,  'description' => "Lương thực nhận NLĐ tháng {$payroll->period}", 'sort_order' => $sortOrder++];
+        // Cr: thuế TNCN
         if ($pit > 0) {
-            $lines[] = ['account' => '3335', 'debit' => 0, 'credit' => $pit, 'description' => "Thuế TNCN tháng {$payroll->period}", 'sort_order' => $sortOrder++];
+            $lines[] = ['account' => AccountingSettings::get('pit_payable_account', '3335'), 'debit' => 0, 'credit' => $pit, 'description' => "Thuế TNCN tháng {$payroll->period}", 'sort_order' => $sortOrder++];
         }
-        // Cr: BHXH phải nộp (TK 3383) — NLĐ + NSDLĐ
+        // Cr: BHXH phải nộp — NLĐ + NSDLĐ
         if ($bhxh > 0) {
-            $lines[] = ['account' => '3383', 'debit' => 0, 'credit' => $bhxh, 'description' => "BHXH phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
+            $lines[] = ['account' => AccountingSettings::get('bhxh_payable_account', '3383'), 'debit' => 0, 'credit' => $bhxh, 'description' => "BHXH phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
         }
-        // Cr: BHYT phải nộp (TK 3384)
+        // Cr: BHYT phải nộp
         if ($bhyt > 0) {
-            $lines[] = ['account' => '3384', 'debit' => 0, 'credit' => $bhyt, 'description' => "BHYT phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
+            $lines[] = ['account' => AccountingSettings::get('bhyt_payable_account', '3384'), 'debit' => 0, 'credit' => $bhyt, 'description' => "BHYT phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
         }
-        // Cr: BHTN phải nộp (TK 3385)
+        // Cr: BHTN phải nộp
         if ($bhtn > 0) {
-            $lines[] = ['account' => '3385', 'debit' => 0, 'credit' => $bhtn, 'description' => "BHTN phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
+            $lines[] = ['account' => AccountingSettings::get('bhtn_payable_account', '3385'), 'debit' => 0, 'credit' => $bhtn, 'description' => "BHTN phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
         }
-        // Cr: KPCĐ phải nộp (TK 3382) — ghi nhận khi $includeUnionFee (phải nhất quán với Dr total_cost)
+        // Cr: KPCĐ phải nộp — ghi nhận khi $includeUnionFee (phải nhất quán với Dr total_cost)
         if ($includeUnionFee) {
             $unionFee = round((float)$payroll->total_trade_union_fee);
             if ($unionFee > 0) {
-                $lines[] = ['account' => '3382', 'debit' => 0, 'credit' => $unionFee, 'description' => "KPCĐ phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
+                $lines[] = ['account' => AccountingSettings::get('union_fee_payable_account', '3382'), 'debit' => 0, 'credit' => $unionFee, 'description' => "KPCĐ phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
             }
         }
 
@@ -635,14 +636,14 @@ class PayrollService
 
         $salesKeywords = ['kinh doanh', 'sales', 'bán hàng', 'marketing'];
         foreach ($salesKeywords as $kw) {
-            if (str_contains($dept, $kw)) return '6421';
+            if (str_contains($dept, $kw)) return AccountingSettings::get('payroll_sales_labor_account', '6421');
         }
 
         $techKeywords = ['kỹ thuật', 'technical', 'it ', 'công nghệ', 'triển khai', 'dự án', 'thi công'];
         foreach ($techKeywords as $kw) {
-            if (str_contains($dept, $kw)) return '627';
+            if (str_contains($dept, $kw)) return AccountingSettings::get('payroll_production_labor_account', '627');
         }
 
-        return '6422'; // mặc định: chi phí quản lý doanh nghiệp
+        return AccountingSettings::get('payroll_admin_labor_account', '6422');
     }
 }

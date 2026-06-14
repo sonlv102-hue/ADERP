@@ -65,6 +65,7 @@ use App\Http\Controllers\Purchasing\SupplierBankAccountController;
 use App\Http\Controllers\Accounting\InternalBankAccountController;
 use App\Http\Controllers\Accounting\InternalTransferReportController;
 use App\Http\Controllers\Accounting\AccountingPostingJobController;
+use App\Http\Controllers\Accounting\AccountingSettingsController;
 use App\Http\Controllers\Purchasing\PurchaseContractPaymentScheduleController;
 use App\Http\Controllers\Purchasing\PurchaseReturnController;
 use App\Http\Controllers\Documents\DocumentController;
@@ -393,6 +394,10 @@ Route::middleware('auth')->group(function () {
         // Accounting posting jobs — theo dõi và retry bút toán tự động
         Route::get('posting-jobs', [AccountingPostingJobController::class, 'index'])->name('posting-jobs.index');
         Route::post('posting-jobs/{accountingPostingJob}/retry', [AccountingPostingJobController::class, 'retry'])->name('posting-jobs.retry')->middleware('can:accounting.manage');
+
+        // Cài đặt tài khoản kế toán
+        Route::get('settings', [AccountingSettingsController::class, 'index'])->name('settings.index');
+        Route::put('settings', [AccountingSettingsController::class, 'update'])->name('settings.update')->middleware('can:accounting.manage');
     });
 
     // Support - ticket kỹ thuật và bảo hành
