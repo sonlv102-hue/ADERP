@@ -159,6 +159,131 @@ class AccountingService
         return $reversal;
     }
 
+    /** Tạo bút toán thủ công ở trạng thái Nháp (không kiểm tra kỳ kế toán). */
+    public function createDraft(
+        string $description,
+        CarbonInterface $date,
+        array $lines,
+        ?string $notes = null,
+    ): JournalEntry {
+        $this->validateLines($lines);
+
+        return DB::transaction(function () use ($description, $date, $lines, $notes) {
+            $entry = JournalEntry::create([
+                'code'          => JournalEntry::generateCode(),
+                'entry_date'    => $date,
+                'description'   => $description,
+                'status'        => 'draft',
+                'is_auto'       => false,
+                'created_by'    => auth()->id() ?? 1,
+                'notes'         => $notes,
+                'fiscal_period' => $date->format('Y-m'),
+            ]);
+
+            foreach ($lines as $i => $line) {
+                JournalEntryLine::create([
+                    'journal_entry_id' => $entry->id,
+                    'account_code'     => $line['account'],
+                    'description'      => $line['description'] ?? null,
+                    'debit'            => (int) ($line['debit'] ?? 0),
+                    'credit'           => (int) ($line['credit'] ?? 0),
+                    'sort_order'       => $i,
+                    'partner_type'     => $line['partner_type'] ?? null,
+                    'partner_id'       => $line['partner_id'] ?? null,
+                ]);
+            }
+
+            return $entry;
+        });
+    }
+
+    /**
+     * Cập nhật dòng bút toán (chỉ khi draft).
+     * Bút toán tự động bị sửa lần đầu: snapshot original_lines.
+     */
+    public function updateLines(JournalEntry $entry, array $lines, ?string $editReason = null): void
+    {
+        if ($entry->status !== 'draft') {
+            throw new \RuntimeException('Chỉ có thể sửa dòng bút toán khi ở trạng thái Nháp.');
+        }
+        $this->validateLines($lines);
+
+        DB::transaction(function () use ($entry, $lines, $editReason) {
+            if ($entry->is_auto && ! $entry->edited_by_user) {
+                $entry->load('lines');
+                $snapshot = $entry->lines->map(fn ($l) => [
+                    'account_code' => $l->account_code,
+                    'debit'        => (int) $l->debit,
+                    'credit'       => (int) $l->credit,
+                    'description'  => $l->description,
+                ])->toArray();
+                $entry->update([
+                    'original_lines' => $snapshot,
+                    'edited_by_user' => true,
+                    'edit_reason'    => $editReason,
+                ]);
+            } elseif ($entry->edited_by_user && $editReason) {
+                $entry->update(['edit_reason' => $editReason]);
+            }
+
+            $entry->lines()->delete();
+            foreach ($lines as $i => $line) {
+                JournalEntryLine::create([
+                    'journal_entry_id' => $entry->id,
+                    'account_code'     => $line['account'],
+                    'description'      => $line['description'] ?? null,
+                    'debit'            => (int) ($line['debit'] ?? 0),
+                    'credit'           => (int) ($line['credit'] ?? 0),
+                    'sort_order'       => $i,
+                    'partner_type'     => $line['partner_type'] ?? null,
+                    'partner_id'       => $line['partner_id'] ?? null,
+                ]);
+            }
+        });
+    }
+
+    /** Thu hồi hạch toán: posted → draft (chỉ khi kỳ chưa khóa). */
+    public function unpost(JournalEntry $entry): void
+    {
+        if ($entry->status !== 'posted') {
+            throw new \RuntimeException('Chỉ có thể thu hồi bút toán đã hạch toán.');
+        }
+        $this->checkPeriodOpen(Carbon::parse($entry->entry_date));
+        $entry->update(['status' => 'draft', 'posted_at' => null]);
+    }
+
+    /** Khôi phục dòng bút toán về trạng thái gốc (trước khi kế toán sửa). */
+    public function restoreOriginalLines(JournalEntry $entry): void
+    {
+        if (! $entry->edited_by_user || ! $entry->original_lines) {
+            throw new \RuntimeException('Không có bản sao bút toán gốc để khôi phục.');
+        }
+        if ($entry->status !== 'draft') {
+            throw new \RuntimeException('Thu hồi hạch toán trước khi khôi phục dòng bút toán.');
+        }
+
+        $originalLines = $entry->original_lines;
+
+        DB::transaction(function () use ($entry, $originalLines) {
+            $entry->lines()->delete();
+            foreach ($originalLines as $i => $line) {
+                JournalEntryLine::create([
+                    'journal_entry_id' => $entry->id,
+                    'account_code'     => $line['account_code'],
+                    'debit'            => (int) $line['debit'],
+                    'credit'           => (int) $line['credit'],
+                    'description'      => $line['description'] ?? null,
+                    'sort_order'       => $i,
+                ]);
+            }
+            $entry->update([
+                'edited_by_user' => false,
+                'edit_reason'    => null,
+                'original_lines' => null,
+            ]);
+        });
+    }
+
     /**
      * Số dư tài khoản trong khoảng thời gian.
      * Trả về: ['debit' => float, 'credit' => float, 'balance' => float]

@@ -14,26 +14,58 @@
             <p class="text-sm text-gray-500">{{ entry.entry_date }}</p>
           </div>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2 flex-wrap justify-end">
           <StatusBadge :color="entry.status_color">{{ entry.status_label }}</StatusBadge>
           <span v-if="entry.is_auto" class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-blue-50 text-blue-600 border border-blue-200">
             Tự động
           </span>
+          <span v-if="entry.edited_by_user" class="inline-flex px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-600 border border-amber-200">
+            Đã điều chỉnh
+          </span>
+
+          <!-- Sửa dòng bút toán: draft only -->
+          <Link v-if="entry.status === 'draft' && can('accounting.manage')"
+            :href="route('accounting.journal-entries.edit', entry.id)"
+            class="text-sm px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50">
+            Sửa bút toán
+          </Link>
+
+          <!-- Sửa diễn giải: all non-voided -->
           <button v-if="entry.status !== 'voided' && can('accounting.manage')"
             @click="openEditModal"
             class="text-sm px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50">
             Sửa diễn giải
           </button>
+
+          <!-- Khôi phục bút toán gốc: draft + auto + has_original -->
+          <button v-if="entry.status === 'draft' && entry.is_auto && entry.has_original && can('accounting.manage')"
+            @click="showRestoreOriginalModal = true"
+            class="text-sm px-3 py-1.5 border border-amber-300 text-amber-600 rounded-lg hover:bg-amber-50">
+            Khôi phục bút toán gốc
+          </button>
+
+          <!-- Duyệt & Hạch toán -->
           <button v-if="entry.status === 'draft' && can('accounting.manage')"
             @click="showPostModal = true"
             class="text-sm px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700">
             Duyệt & Hạch toán
           </button>
+
+          <!-- Xóa nháp -->
           <button v-if="entry.status === 'draft' && can('accounting.manage')"
             @click="showDeleteDraftModal = true"
             class="text-sm px-3 py-1.5 border border-red-300 text-red-600 rounded-lg hover:bg-red-50">
             Xóa
           </button>
+
+          <!-- Thu hồi hạch toán: posted + period not locked -->
+          <button v-if="entry.status === 'posted' && !entry.period_locked && can('accounting.manage')"
+            @click="showUnpostModal = true"
+            class="text-sm px-3 py-1.5 border border-amber-300 text-amber-600 rounded-lg hover:bg-amber-50">
+            Thu hồi hạch toán
+          </button>
+
+          <!-- posted actions -->
           <template v-if="entry.status === 'posted' && can('accounting.manage')">
             <button v-if="!entry.description.startsWith('Đảo:')"
               @click="showReverseModal = true"
@@ -47,6 +79,8 @@
             </button>
             <span v-else class="text-xs text-gray-400 italic">Kỳ đã khóa sổ</span>
           </template>
+
+          <!-- reversed actions -->
           <template v-if="entry.status === 'reversed' && can('accounting.manage')">
             <button v-if="!entry.period_locked"
               @click="showVoidModal = true"
@@ -56,6 +90,14 @@
             <span v-else class="text-xs text-gray-400 italic">Kỳ đã khóa sổ</span>
           </template>
         </div>
+      </div>
+
+      <!-- Flash messages -->
+      <div v-if="$page.props.flash?.success" class="bg-green-50 border border-green-200 text-green-800 rounded-xl px-4 py-3 text-sm">
+        {{ $page.props.flash.success }}
+      </div>
+      <div v-if="$page.props.flash?.error" class="bg-red-50 border border-red-200 text-red-800 rounded-xl px-4 py-3 text-sm">
+        {{ $page.props.flash.error }}
       </div>
 
       <!-- Info card -->
@@ -85,7 +127,6 @@
             <dt class="text-gray-500">Ghi chú</dt>
             <dd class="text-gray-700 mt-1">{{ entry.notes }}</dd>
           </div>
-          <!-- Void metadata -->
           <template v-if="entry.status === 'voided'">
             <div>
               <dt class="text-gray-500">Hủy lúc</dt>
@@ -101,6 +142,18 @@
             </div>
           </template>
         </dl>
+
+        <!-- Edit reason banner -->
+        <div v-if="entry.edited_by_user && entry.edit_reason"
+          class="mt-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 text-sm text-amber-800">
+          <p class="font-semibold mb-1">Lý do điều chỉnh thủ công</p>
+          <p>{{ entry.edit_reason }}</p>
+        </div>
+        <div v-else-if="entry.edited_by_user"
+          class="mt-4 bg-amber-50 border border-amber-200 rounded-lg px-4 py-2 text-sm text-amber-700 italic">
+          Dòng bút toán đã được điều chỉnh thủ công (không có lý do).
+        </div>
+
         <!-- Voided banner -->
         <div v-if="entry.status === 'voided'" class="mt-4 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm text-slate-600">
           Bút toán này đã được hủy và không còn ảnh hưởng đến sổ cái hay báo cáo tài chính. Dữ liệu được giữ lại để phục vụ tra cứu lịch sử.
@@ -184,6 +237,39 @@
       </div>
     </div>
 
+    <!-- Modal: Thu hồi hạch toán -->
+    <div v-if="showUnpostModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-sm">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="font-semibold text-gray-900">Thu hồi hạch toán {{ entry.code }}</h3>
+        </div>
+        <div class="p-6 space-y-3 text-sm text-gray-700">
+          <p>Bút toán sẽ được đưa về trạng thái <strong>Nháp</strong>. Hiệu lực kế toán sẽ bị xóa khỏi sổ cái.</p>
+          <p class="text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">Chỉ thực hiện khi kỳ kế toán chưa khóa sổ.</p>
+        </div>
+        <div class="flex justify-end gap-3 px-6 pb-6">
+          <button @click="showUnpostModal = false" class="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700">Hủy</button>
+          <button @click="submitUnpost" class="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700">Thu hồi hạch toán</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Khôi phục bút toán gốc -->
+    <div v-if="showRestoreOriginalModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-sm">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="font-semibold text-gray-900">Khôi phục bút toán gốc</h3>
+        </div>
+        <div class="p-6 space-y-3 text-sm text-gray-700">
+          <p>Hệ thống sẽ khôi phục lại các dòng bút toán gốc (trước khi điều chỉnh thủ công). Các thay đổi hiện tại sẽ bị mất.</p>
+        </div>
+        <div class="flex justify-end gap-3 px-6 pb-6">
+          <button @click="showRestoreOriginalModal = false" class="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700">Hủy</button>
+          <button @click="submitRestoreOriginal" class="px-4 py-2 text-sm bg-amber-600 text-white rounded-lg hover:bg-amber-700">Khôi phục</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal: Hủy bút toán (posted hoặc reversed) -->
     <div v-if="showVoidModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-xl shadow-xl w-full max-w-md">
@@ -196,7 +282,6 @@
           <template v-if="entry.status === 'reversed'">
             <p>Bút toán này đã được đảo.</p>
             <p>Khi hủy, hệ thống sẽ hủy cả bút toán gốc và bút toán đảo ngược liên quan. Hai bút toán sẽ không còn ảnh hưởng đến sổ cái và báo cáo, nhưng vẫn được lưu lại để phục vụ truy vết.</p>
-            <p>Bạn có chắc chắn muốn tiếp tục?</p>
           </template>
           <template v-else>
             <p>Bút toán này sẽ được hủy và không còn ảnh hưởng đến sổ cái và báo cáo tài chính. Dữ liệu sẽ được giữ lại để tra cứu lịch sử.</p>
@@ -220,7 +305,7 @@
     <div v-if="showEditModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-xl shadow-xl w-full max-w-md">
         <div class="px-6 py-4 border-b border-gray-200">
-          <h3 class="font-semibold text-gray-900">Sửa bút toán {{ entry.code }}</h3>
+          <h3 class="font-semibold text-gray-900">Sửa diễn giải {{ entry.code }}</h3>
         </div>
         <form @submit.prevent="submitEdit" class="p-6 space-y-4">
           <div>
@@ -235,7 +320,7 @@
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
           </div>
           <p class="text-xs text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
-            Chỉ có thể sửa diễn giải và ghi chú. Dòng bút toán và số tiền không thay đổi.
+            Chỉ sửa diễn giải và ghi chú. Dùng "Sửa bút toán" để sửa dòng bút toán.
           </p>
           <div class="flex justify-end gap-3">
             <button type="button" @click="showEditModal = false" class="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700">Hủy</button>
@@ -283,6 +368,7 @@ const props = defineProps({ entry: Object });
 const { hasPermission: can } = usePermission();
 const { formatVnd } = useCurrency();
 
+// Edit description modal
 const showEditModal = ref(false);
 const editForm = useForm({ description: '', notes: '' });
 
@@ -298,6 +384,7 @@ function submitEdit() {
   });
 }
 
+// Post modal
 const showPostModal = ref(false);
 
 function submitPost() {
@@ -306,6 +393,25 @@ function submitPost() {
   });
 }
 
+// Unpost modal
+const showUnpostModal = ref(false);
+
+function submitUnpost() {
+  router.post(route('accounting.journal-entries.unpost', props.entry.id), {}, {
+    onSuccess: () => { showUnpostModal.value = false; },
+  });
+}
+
+// Restore original lines modal
+const showRestoreOriginalModal = ref(false);
+
+function submitRestoreOriginal() {
+  router.post(route('accounting.journal-entries.restore-original', props.entry.id), {}, {
+    onSuccess: () => { showRestoreOriginalModal.value = false; },
+  });
+}
+
+// Reverse modal
 const showReverseModal = ref(false);
 const reverseForm = useForm({ reason: '' });
 
@@ -315,12 +421,14 @@ function submitReverse() {
   });
 }
 
+// Delete draft modal
 const showDeleteDraftModal = ref(false);
 
 function submitDeleteDraft() {
   router.delete(route('accounting.journal-entries.destroy', props.entry.id));
 }
 
+// Void modal
 const showVoidModal = ref(false);
 const voidForm = useForm({ void_reason: '' });
 

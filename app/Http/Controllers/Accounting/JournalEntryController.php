@@ -66,7 +66,41 @@ class JournalEntryController extends Controller
     public function create(): Response
     {
         return Inertia::render('Accounting/JournalEntries/Form', [
+            'entry'    => null,
             'nextCode' => JournalEntry::generateCode(),
+            'accounts' => AccountCode::where('is_active', true)
+                ->where('is_detail', true)
+                ->orderBy('code')
+                ->get(['code', 'name', 'type', 'normal_balance']),
+        ]);
+    }
+
+    public function edit(JournalEntry $journalEntry): Response|RedirectResponse
+    {
+        if ($journalEntry->status !== 'draft') {
+            return redirect()->route('accounting.journal-entries.show', $journalEntry)
+                ->with('error', 'Chỉ có thể sửa bút toán ở trạng thái Nháp.');
+        }
+
+        $journalEntry->load('lines');
+
+        return Inertia::render('Accounting/JournalEntries/Form', [
+            'entry'    => [
+                'id'             => $journalEntry->id,
+                'code'           => $journalEntry->code,
+                'entry_date'     => $journalEntry->entry_date->format('Y-m-d'),
+                'description'    => $journalEntry->description,
+                'notes'          => $journalEntry->notes,
+                'is_auto'        => $journalEntry->is_auto,
+                'edited_by_user' => $journalEntry->edited_by_user,
+                'lines'          => $journalEntry->lines->map(fn ($l) => [
+                    'account_code' => $l->account_code,
+                    'description'  => $l->description,
+                    'debit'        => (float) $l->debit,
+                    'credit'       => (float) $l->credit,
+                ])->values()->toArray(),
+            ],
+            'nextCode' => null,
             'accounts' => AccountCode::where('is_active', true)
                 ->where('is_detail', true)
                 ->orderBy('code')
@@ -77,14 +111,15 @@ class JournalEntryController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'entry_date'          => ['required', 'date'],
-            'description'         => ['required', 'string', 'max:500'],
-            'notes'               => ['nullable', 'string', 'max:1000'],
-            'lines'               => ['required', 'array', 'min:2'],
-            'lines.*.account_code'=> ['required', 'exists:account_codes,code'],
-            'lines.*.description' => ['nullable', 'string', 'max:500'],
-            'lines.*.debit'       => ['required', 'numeric', 'min:0'],
-            'lines.*.credit'      => ['required', 'numeric', 'min:0'],
+            'entry_date'           => ['required', 'date'],
+            'description'          => ['required', 'string', 'max:500'],
+            'notes'                => ['nullable', 'string', 'max:1000'],
+            'save_as_draft'        => ['nullable', 'boolean'],
+            'lines'                => ['required', 'array', 'min:2'],
+            'lines.*.account_code' => ['required', 'exists:account_codes,code'],
+            'lines.*.description'  => ['nullable', 'string', 'max:500'],
+            'lines.*.debit'        => ['required', 'numeric', 'min:0'],
+            'lines.*.credit'       => ['required', 'numeric', 'min:0'],
         ]);
 
         $lines = array_map(fn ($l) => [
@@ -95,21 +130,31 @@ class JournalEntryController extends Controller
         ], $data['lines']);
 
         try {
-            $entry = $this->accounting->post(
-                $data['description'],
-                Carbon::parse($data['entry_date']),
-                $lines,
-                null, null, false,
-                $data['notes'] ?? null
-            );
+            if ($request->boolean('save_as_draft')) {
+                $entry = $this->accounting->createDraft(
+                    $data['description'],
+                    Carbon::parse($data['entry_date']),
+                    $lines,
+                    $data['notes'] ?? null
+                );
+                $msg = 'Đã lưu bút toán nháp.';
+            } else {
+                $entry = $this->accounting->post(
+                    $data['description'],
+                    Carbon::parse($data['entry_date']),
+                    $lines,
+                    null, null, false,
+                    $data['notes'] ?? null
+                );
+                $msg = 'Đã hạch toán bút toán.';
+            }
         } catch (\InvalidArgumentException $e) {
             return back()->withErrors(['lines' => $e->getMessage()]);
         } catch (\RuntimeException $e) {
             return back()->with('error', $e->getMessage());
         }
 
-        return redirect()->route('accounting.journal-entries.show', $entry)
-            ->with('success', 'Đã hạch toán bút toán.');
+        return redirect()->route('accounting.journal-entries.show', $entry)->with('success', $msg);
     }
 
     public function show(JournalEntry $journalEntry): Response
@@ -128,6 +173,9 @@ class JournalEntryController extends Controller
                 'status_label'   => $journalEntry->statusLabel(),
                 'status_color'   => $journalEntry->statusColor(),
                 'is_auto'        => $journalEntry->is_auto,
+                'edited_by_user' => $journalEntry->edited_by_user,
+                'edit_reason'    => $journalEntry->edit_reason,
+                'has_original'   => $journalEntry->original_lines !== null,
                 'notes'          => $journalEntry->notes,
                 'creator'        => $journalEntry->creator?->name ?? 'Hệ thống',
                 'posted_at'      => $journalEntry->posted_at?->format('d/m/Y H:i'),
@@ -151,15 +199,41 @@ class JournalEntryController extends Controller
 
     public function update(Request $request, JournalEntry $journalEntry): RedirectResponse
     {
-        // Chỉ cho phép sửa description và notes — không sửa dòng bút toán đã posted
         $data = $request->validate([
-            'description' => ['required', 'string', 'max:500'],
-            'notes'       => ['nullable', 'string', 'max:1000'],
+            'description'          => ['required', 'string', 'max:500'],
+            'notes'                => ['nullable', 'string', 'max:1000'],
+            'edit_reason'          => ['nullable', 'string', 'max:500'],
+            'lines'                => ['nullable', 'array', 'min:2'],
+            'lines.*.account_code' => ['required_with:lines', 'exists:account_codes,code'],
+            'lines.*.description'  => ['nullable', 'string', 'max:500'],
+            'lines.*.debit'        => ['required_with:lines', 'numeric', 'min:0'],
+            'lines.*.credit'       => ['required_with:lines', 'numeric', 'min:0'],
         ]);
 
-        $journalEntry->update($data);
+        $journalEntry->update([
+            'description' => $data['description'],
+            'notes'       => $data['notes'] ?? null,
+        ]);
 
-        return back()->with('success', 'Đã cập nhật bút toán.');
+        if (! empty($data['lines'])) {
+            if ($journalEntry->status !== 'draft') {
+                return back()->with('error', 'Chỉ có thể sửa dòng bút toán khi ở trạng thái Nháp.');
+            }
+            $lines = array_map(fn ($l) => [
+                'account'     => $l['account_code'],
+                'description' => $l['description'] ?? null,
+                'debit'       => (int) $l['debit'],
+                'credit'      => (int) $l['credit'],
+            ], $data['lines']);
+            try {
+                $this->accounting->updateLines($journalEntry, $lines, $data['edit_reason'] ?? null);
+            } catch (\InvalidArgumentException|\RuntimeException $e) {
+                return back()->with('error', $e->getMessage());
+            }
+        }
+
+        return redirect()->route('accounting.journal-entries.show', $journalEntry)
+            ->with('success', 'Đã cập nhật bút toán.');
     }
 
     public function markPosted(JournalEntry $journalEntry): RedirectResponse
@@ -175,11 +249,36 @@ class JournalEntryController extends Controller
         return back()->with('success', "Đã duyệt và hạch toán bút toán {$journalEntry->code}.");
     }
 
+    public function unpost(JournalEntry $journalEntry): RedirectResponse
+    {
+        $this->authorize('accounting.manage');
+
+        try {
+            $this->accounting->unpost($journalEntry);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', "Đã thu hồi hạch toán. Bút toán {$journalEntry->code} về trạng thái Nháp.");
+    }
+
+    public function restoreOriginal(JournalEntry $journalEntry): RedirectResponse
+    {
+        $this->authorize('accounting.manage');
+
+        try {
+            $this->accounting->restoreOriginalLines($journalEntry);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Đã khôi phục dòng bút toán về trạng thái ban đầu.');
+    }
+
     public function destroy(JournalEntry $journalEntry): RedirectResponse
     {
         $this->authorize('accounting.manage');
 
-        // Chỉ cho hard-delete bút toán nháp (chưa ảnh hưởng sổ cái)
         if ($journalEntry->status !== 'draft') {
             return back()->with('error', 'Chỉ có thể xóa bút toán ở trạng thái Nháp. Dùng "Hủy bút toán" với bút toán đã hạch toán.');
         }
@@ -195,7 +294,6 @@ class JournalEntryController extends Controller
      * Hủy bút toán đã ghi sổ (posted hoặc reversed).
      * - posted: hủy đơn lẻ
      * - reversed: hủy cả cặp (gốc + đảo ngược)
-     * Không hard delete — giữ lại lịch sử để tra cứu.
      */
     public function void(JournalEntry $journalEntry, Request $request): RedirectResponse
     {
@@ -225,7 +323,6 @@ class JournalEntryController extends Controller
         ];
 
         if ($journalEntry->status === 'reversed') {
-            // Hủy cả cặp: bút toán gốc + bút toán đảo ngược
             $reversalEntry = $journalEntry->reversedBy;
 
             if (! $reversalEntry) {
@@ -241,7 +338,6 @@ class JournalEntryController extends Controller
                 ->with('success', 'Đã hủy cặp bút toán thành công. Các bút toán này không còn ảnh hưởng đến báo cáo, nhưng vẫn được lưu trong lịch sử.');
         }
 
-        // posted: hủy đơn lẻ
         $journalEntry->update($voidData);
 
         return back()->with('success', "Đã hủy bút toán {$journalEntry->code}. Bút toán không còn ảnh hưởng đến báo cáo, nhưng vẫn được lưu trong lịch sử.");
@@ -249,7 +345,7 @@ class JournalEntryController extends Controller
 
     private function isPeriodLocked(JournalEntry $entry): bool
     {
-        $date = $entry->entry_date;
+        $date   = $entry->entry_date;
         $period = AccountingPeriod::where('year', $date->year)
             ->where('month', $date->month)
             ->first();
@@ -275,11 +371,19 @@ class JournalEntryController extends Controller
     {
         $this->authorize('accounting.manage');
 
-        $drafts = JournalEntry::where('status', 'draft')->get();
+        $drafts   = JournalEntry::where('status', 'draft')->with('lines')->get();
         $approved = 0;
-        $errors = [];
+        $errors   = [];
 
         foreach ($drafts as $entry) {
+            if ($entry->lines->isEmpty()) {
+                $errors[] = "{$entry->code}: Không có dòng bút toán.";
+                continue;
+            }
+            if (! $entry->isBalanced()) {
+                $errors[] = "{$entry->code}: Bút toán không cân (Nợ ≠ Có).";
+                continue;
+            }
             try {
                 $this->accounting->markPosted($entry);
                 $approved++;
@@ -291,6 +395,9 @@ class JournalEntryController extends Controller
         $message = "Đã duyệt {$approved} bút toán.";
         if ($errors) {
             $message .= ' Lỗi: ' . implode('; ', array_slice($errors, 0, 3));
+            if (count($errors) > 3) {
+                $message .= ' ... và ' . (count($errors) - 3) . ' lỗi khác.';
+            }
         }
 
         return back()->with('success', $message);

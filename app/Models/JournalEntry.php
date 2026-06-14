@@ -25,6 +25,7 @@ class JournalEntry extends Model
         'status', 'is_auto', 'reversed_by_id', 'created_by', 'posted_at', 'notes',
         'source_type', 'fiscal_period', 'exclude_from_period_movement',
         'voided_at', 'voided_by', 'void_reason', 'period_close_batch_id',
+        'edited_by_user', 'edit_reason', 'original_lines',
     ];
 
     protected $casts = [
@@ -33,6 +34,8 @@ class JournalEntry extends Model
         'voided_at'                    => 'datetime',
         'is_auto'                      => 'boolean',
         'exclude_from_period_movement' => 'boolean',
+        'edited_by_user'               => 'boolean',
+        'original_lines'               => 'array',
     ];
 
     public function lines(): HasMany
