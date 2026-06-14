@@ -306,6 +306,7 @@ Route::middleware('auth')->group(function () {
         Route::resource('cash-vouchers', CashVoucherController::class);
         Route::post('cash-vouchers/{cashVoucher}/confirm', [CashVoucherController::class, 'confirm'])->name('cash-vouchers.confirm');
         Route::post('cash-vouchers/{cashVoucher}/cancel',  [CashVoucherController::class, 'cancel'])->name('cash-vouchers.cancel');
+        Route::post('cash-vouchers/{cashVoucher}/unpost',  [CashVoucherController::class, 'unpost'])->name('cash-vouchers.unpost');
 
         // Tiền lương (Payroll)
         Route::resource('payrolls', PayrollController::class)->except(['edit', 'update']);

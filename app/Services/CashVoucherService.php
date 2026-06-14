@@ -2,10 +2,15 @@
 
 namespace App\Services;
 
+use App\Enums\CashVoucherBusinessType;
 use App\Enums\CashVoucherStatus;
 use App\Enums\CashVoucherType;
+use App\Models\AccountCode;
 use App\Models\CashVoucher;
+use App\Models\CashVoucherLine;
+use App\Models\JournalEntry;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -13,22 +18,93 @@ class CashVoucherService
 {
     public function __construct(private AccountingService $accounting) {}
 
+    // ─── Public actions ───────────────────────────────────────────────────────
+
+    /**
+     * Ghi sổ: validate bút toán → post JE ngay (isAuto=false) → confirmed.
+     */
     public function confirm(CashVoucher $voucher): void
     {
         if ($voucher->status !== CashVoucherStatus::Draft) {
-            throw new RuntimeException('Chỉ có thể xác nhận phiếu ở trạng thái nháp.');
+            throw new RuntimeException('Chỉ có thể ghi sổ phiếu ở trạng thái nháp.');
         }
-
-        if ($voucher->amount <= 0) {
+        if ((float) $voucher->amount <= 0) {
             throw new RuntimeException('Số tiền phải lớn hơn 0.');
         }
 
-        $voucher->update(['status' => CashVoucherStatus::Confirmed]);
+        // Chống double-post
+        $alreadyPosted = JournalEntry::where('reference_type', 'cash_voucher')
+            ->where('reference_id', $voucher->id)
+            ->where('status', 'posted')
+            ->exists();
+        if ($alreadyPosted) {
+            throw new RuntimeException('Phiếu đã được ghi sổ trước đó.');
+        }
 
-        // Hạch toán phiếu thu/chi
-        $this->postVoucherJournal($voucher);
+        // Nếu chưa có dòng bút toán, tự sinh mặc định
+        $lines = $voucher->journalLines;
+        if ($lines->isEmpty()) {
+            $defaultLines = $this->generateDefaultLines($voucher);
+            if (empty($defaultLines)) {
+                throw new RuntimeException('Phiếu chưa có bút toán. Chọn nghiệp vụ hoặc thêm bút toán thủ công.');
+            }
+            foreach ($defaultLines as $i => $data) {
+                CashVoucherLine::create(array_merge($data, [
+                    'cash_voucher_id' => $voucher->id,
+                    'sort_order'      => $i,
+                ]));
+            }
+            $lines = $voucher->journalLines()->orderBy('sort_order')->get();
+        }
+
+        $this->validateJournalLines($lines);
+
+        $date    = Carbon::parse($voucher->voucher_date);
+        $jeLines = $this->buildJeLines($voucher, $lines);
+
+        DB::transaction(function () use ($voucher, $date, $jeLines) {
+            $this->accounting->post(
+                description:          "{$voucher->type->label()} {$voucher->code}",
+                date:                 $date,
+                lines:                $jeLines,
+                referenceType:        'cash_voucher',
+                referenceId:          $voucher->id,
+                isAuto:               false,
+                journalSourceType:    'cash_voucher',
+            );
+            $voucher->update(['status' => CashVoucherStatus::Confirmed]);
+        });
     }
 
+    /**
+     * Thu hồi ghi sổ: đảo/xóa JE → status về draft.
+     * Kỳ hiện tại phải còn mở (kiểm tra bên trong reverse()).
+     */
+    public function unpost(CashVoucher $voucher): void
+    {
+        if ($voucher->status !== CashVoucherStatus::Confirmed) {
+            throw new RuntimeException('Chỉ có thể thu hồi phiếu đã ghi sổ.');
+        }
+
+        DB::transaction(function () use ($voucher) {
+            $this->accounting->reverseOrDelete(
+                'cash_voucher',
+                $voucher->id,
+                "Thu hồi {$voucher->type->label()} {$voucher->code}"
+            );
+            $voucher->update(['status' => CashVoucherStatus::Draft]);
+        });
+
+        activity()
+            ->causedBy(auth()->user())
+            ->performedOn($voucher)
+            ->withProperties(['reason' => 'Thu hồi ghi sổ'])
+            ->log('unpost');
+    }
+
+    /**
+     * Hủy phiếu (vẫn giữ behavior cũ): đảo/xóa JE → cancelled.
+     */
     public function cancel(CashVoucher $voucher): void
     {
         if ($voucher->status === CashVoucherStatus::Cancelled) {
@@ -36,111 +112,175 @@ class CashVoucherService
         }
 
         DB::transaction(function () use ($voucher) {
-            $this->accounting->reverseOrDelete('cash_voucher', $voucher->id, "Hủy {$voucher->type->label()} {$voucher->code}");
+            $this->accounting->reverseOrDelete(
+                'cash_voucher',
+                $voucher->id,
+                "Hủy {$voucher->type->label()} {$voucher->code}"
+            );
             $voucher->update(['status' => CashVoucherStatus::Cancelled]);
         });
     }
 
-    // ─── Private helpers ─────────────────────────────────────────────────────
-
-    private function postVoucherJournal(CashVoucher $voucher): void
+    /**
+     * Sinh dòng bút toán mặc định từ business_type + thông tin phiếu.
+     * Trả về array dùng để insert vào cash_voucher_lines.
+     */
+    public function generateDefaultLines(CashVoucher $voucher): array
     {
-        $amount  = (float) $voucher->amount;
-        $account = $this->resolveFundAccount($voucher);
-        $date    = Carbon::parse($voucher->voucher_date);
-        [$partnerType, $partnerId] = $this->resolvePartnerInfo($voucher);
-
-        if ($voucher->type === CashVoucherType::Receipt) {
-            // Phiếu thu: Dr 111/112 / Cr 131 hoặc 511
-            $counterAccount = $this->resolveCounterAccount($voucher, 'receipt');
-            $lines = [
-                ['account' => $account, 'debit' => (int) $amount, 'credit' => 0,
-                 'description' => "Thu: {$voucher->description}"],
-                ['account' => $counterAccount, 'debit' => 0, 'credit' => (int) $amount,
-                 'description' => "Thu: {$voucher->description}",
-                 'partner_type' => $partnerType, 'partner_id' => $partnerId],
-            ];
-        } else {
-            // Phiếu chi: Dr 642/641/141/... / Cr 111/112
-            $counterAccount = $this->resolveCounterAccount($voucher, 'payment');
-            $lines = [
-                ['account' => $counterAccount, 'debit' => (int) $amount, 'credit' => 0,
-                 'description' => "Chi: {$voucher->description}",
-                 'partner_type' => $partnerType, 'partner_id' => $partnerId],
-                ['account' => $account, 'debit' => 0, 'credit' => (int) $amount,
-                 'description' => "Chi: {$voucher->description}"],
-            ];
+        if (! $voucher->business_type) {
+            return [];
         }
 
-        $this->accounting->tryPost(
-            "{$voucher->type->label()} {$voucher->code}",
-            $date, $lines, 'cash_voucher', $voucher->id, 'confirm'
-        );
+        $bt          = CashVoucherBusinessType::from($voucher->business_type);
+        $fundAccount = $this->resolveFundAccount($voucher);
+        $amount      = (float) $voucher->amount;
+        $desc        = $voucher->description ?? '';
+        $counter     = $this->resolveCounterAccountForType($voucher, $bt);
+
+        [$partnerType, $partnerId] = $this->resolvePartnerForType($voucher, $bt);
+
+        // Phiếu thu: Dr fund / Cr counter
+        if ($bt->voucherType() === 'receipt') {
+            return [[
+                'debit_account'  => $fundAccount,
+                'credit_account' => $counter,
+                'amount'         => $amount,
+                'description'    => "{$bt->label()}: {$desc}",
+                'partner_type'   => $partnerType,
+                'partner_id'     => $partnerId,
+            ]];
+        }
+
+        // Phiếu chi: Dr counter / Cr fund
+        return [[
+            'debit_account'  => $counter,
+            'credit_account' => $fundAccount,
+            'amount'         => $amount,
+            'description'    => "{$bt->label()}: {$desc}",
+            'partner_type'   => $partnerType,
+            'partner_id'     => $partnerId,
+        ]];
     }
 
-    /** Tài khoản quỹ/ngân hàng của phiếu (1111/1121 tùy loại Fund) */
+    // ─── Private helpers ─────────────────────────────────────────────────────
+
+    private function validateJournalLines(Collection $lines): void
+    {
+        if ($lines->isEmpty()) {
+            throw new RuntimeException('Phiếu chưa có dòng bút toán.');
+        }
+
+        $allCodes   = $lines->flatMap(fn ($l) => [$l->debit_account, $l->credit_account])->unique()->values()->toArray();
+        $accMap     = AccountCode::whereIn('code', $allCodes)->get()->keyBy('code');
+
+        foreach ($lines as $line) {
+            if ((float) $line->amount <= 0) {
+                throw new RuntimeException("Số tiền bút toán phải lớn hơn 0 (dòng {$line->debit_account}/{$line->credit_account}).");
+            }
+
+            $this->assertDetailAccount($line->debit_account,  $accMap, 'Nợ');
+            $this->assertDetailAccount($line->credit_account, $accMap, 'Có');
+
+            // Tài khoản AR/AP/141/3388 bắt buộc có đối tượng
+            $needsPartner = $this->accountRequiresPartner($line->debit_account)
+                         || $this->accountRequiresPartner($line->credit_account);
+            if ($needsPartner && ! $line->partner_id) {
+                $requiredTk = $this->accountRequiresPartner($line->debit_account) ? $line->debit_account : $line->credit_account;
+                throw new RuntimeException("TK {$requiredTk} bắt buộc có đối tượng công nợ.");
+            }
+        }
+    }
+
+    private function assertDetailAccount(string $code, \Illuminate\Support\Collection $accMap, string $side): void
+    {
+        $acc = $accMap->get($code);
+        if (! $acc) {
+            throw new RuntimeException("Tài khoản '{$code}' (bên {$side}) không tồn tại trong hệ thống.");
+        }
+        if (! $acc->is_detail) {
+            throw new RuntimeException("TK {$code} (bên {$side}) là tài khoản tổng hợp. Vui lòng dùng tài khoản chi tiết.");
+        }
+    }
+
+    private function accountRequiresPartner(string $code): bool
+    {
+        return str_starts_with($code, '131')
+            || str_starts_with($code, '331')
+            || $code === '141'
+            || $code === '3388';
+    }
+
+    /**
+     * Chuyển cash_voucher_lines → mảng lines cho AccountingService::post().
+     * Partner được gắn vào bên cần partner (Dr hoặc Có), fund account không có partner.
+     */
+    private function buildJeLines(CashVoucher $voucher, Collection $lines): array
+    {
+        $jeLines = [];
+        foreach ($lines as $line) {
+            $debitNeedsPartner  = $this->accountRequiresPartner($line->debit_account);
+            $creditNeedsPartner = $this->accountRequiresPartner($line->credit_account);
+
+            $jeLines[] = [
+                'account'      => $line->debit_account,
+                'debit'        => (int) $line->amount,
+                'credit'       => 0,
+                'description'  => $line->description ?? $voucher->description,
+                'partner_type' => $debitNeedsPartner ? $line->partner_type : null,
+                'partner_id'   => $debitNeedsPartner ? $line->partner_id   : null,
+            ];
+            $jeLines[] = [
+                'account'      => $line->credit_account,
+                'debit'        => 0,
+                'credit'       => (int) $line->amount,
+                'description'  => $line->description ?? $voucher->description,
+                'partner_type' => $creditNeedsPartner ? $line->partner_type : null,
+                'partner_id'   => $creditNeedsPartner ? $line->partner_id   : null,
+            ];
+        }
+        return $jeLines;
+    }
+
     private function resolveFundAccount(CashVoucher $voucher): string
     {
         $voucher->loadMissing('fund');
-        if ($voucher->fund && $voucher->fund->type === 'bank') {
-            return '1121'; // Tiền gửi VND — chi tiết của 112
-        }
-        return '1111'; // Tiền mặt VND — chi tiết của 111
+        return ($voucher->fund && $voucher->fund->type === 'bank') ? '1121' : '1111';
     }
 
-    /** Tài khoản đối ứng theo loại đối tác */
-    private function resolveCounterAccount(CashVoucher $voucher, string $direction): string
+    private function resolveCounterAccountForType(CashVoucher $voucher, CashVoucherBusinessType $bt): string
     {
-        switch ($voucher->partner_type) {
-            case 'customer':
-                if ($voucher->customer_id) {
-                    $voucher->loadMissing('customer');
-                    return $voucher->customer->getReceivableAccount();
-                }
-                return '1311';
-
-            case 'supplier':
-                if ($voucher->supplier_id) {
-                    $voucher->loadMissing('supplier');
-                    return $voucher->supplier->getPayableAccount();
-                }
-                return '3311';
-
-            case 'employee':
-                return '141'; // Tạm ứng nhân viên
-
-            default:
-                // Legacy: thu từ KH qua HD bán hàng
-                if ($direction === 'receipt' && $voucher->reference_type === 'invoice') {
-                    $invoice = \App\Models\Invoice::find($voucher->reference_id);
-                    if ($invoice?->customer_id) {
-                        $invoice->loadMissing('customer');
-                        return $invoice->customer->getReceivableAccount();
-                    }
-                    return '1311';
-                }
-                // Legacy: supplier_id trực tiếp
-                if ($voucher->supplier_id) {
-                    $voucher->loadMissing('supplier');
-                    return $voucher->supplier->getPayableAccount();
-                }
-                if ($voucher->reference_type === 'purchase_invoice') {
-                    return '3311';
-                }
-                return $direction === 'receipt' ? '1311' : '6422';
-        }
-    }
-
-    /** Thông tin đối tác để gắn vào dòng bút toán AR/AP/141 */
-    private function resolvePartnerInfo(CashVoucher $voucher): array
-    {
-        return match ($voucher->partner_type) {
-            'customer' => ['customer', $voucher->customer_id],
-            'supplier' => ['supplier', $voucher->supplier_id],
-            'employee' => ['employee', $voucher->employee_id],
-            default    => $voucher->supplier_id
-                ? ['supplier', $voucher->supplier_id]
-                : [null, null],
+        return match ($bt) {
+            CashVoucherBusinessType::PaySupplier => $this->getSupplierPayable($voucher),
+            CashVoucherBusinessType::CollectCustomer => $this->getCustomerReceivable($voucher),
+            default => $bt->defaultCounterAccount(),
         };
+    }
+
+    private function resolvePartnerForType(CashVoucher $voucher, CashVoucherBusinessType $bt): array
+    {
+        return match ($bt->defaultPartnerType()) {
+            'employee' => ['employee', $voucher->employee_id],
+            'supplier' => ['supplier', $voucher->supplier_id],
+            'customer' => ['customer', $voucher->customer_id],
+            default    => [null, null],
+        };
+    }
+
+    private function getSupplierPayable(CashVoucher $voucher): string
+    {
+        if ($voucher->supplier_id) {
+            $voucher->loadMissing('supplier');
+            return $voucher->supplier->getPayableAccount();
+        }
+        return '3311';
+    }
+
+    private function getCustomerReceivable(CashVoucher $voucher): string
+    {
+        if ($voucher->customer_id) {
+            $voucher->loadMissing('customer');
+            return $voucher->customer->getReceivableAccount();
+        }
+        return '1311';
     }
 }

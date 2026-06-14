@@ -13,15 +13,17 @@ class CashVoucher extends Model
         'code', 'type', 'status', 'fund_id', 'amount', 'voucher_date',
         'counterparty', 'supplier_id', 'partner_type', 'customer_id', 'employee_id',
         'description', 'reference_type', 'reference_id', 'created_by',
+        'business_type', 'journal_mode', 'edited_by_user', 'edit_reason',
     ];
 
     protected function casts(): array
     {
         return [
-            'type'         => CashVoucherType::class,
-            'status'       => CashVoucherStatus::class,
-            'amount'       => 'decimal:2',
-            'voucher_date' => 'date',
+            'type'            => CashVoucherType::class,
+            'status'          => CashVoucherStatus::class,
+            'amount'          => 'decimal:2',
+            'voucher_date'    => 'date',
+            'edited_by_user'  => 'boolean',
         ];
     }
 
@@ -48,6 +50,11 @@ class CashVoucher extends Model
     public function employee(): BelongsTo
     {
         return $this->belongsTo(\App\Models\Employee::class);
+    }
+
+    public function journalLines(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(CashVoucherLine::class)->orderBy('sort_order');
     }
 
     public function reference(): \Illuminate\Database\Eloquent\Relations\MorphTo
