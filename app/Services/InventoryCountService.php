@@ -97,7 +97,7 @@ class InventoryCountService
                     'product_id'   => $item->product_id,
                     'warehouse_id' => $count->warehouse_id,
                     'type'         => 'adjustment',
-                    'quantity'     => $difference,
+                    'quantity'     => (int) $difference,
                     'source_type'  => InventoryCount::class,
                     'source_id'    => $count->id,
                     'created_by'   => auth()->id(),

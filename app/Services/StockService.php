@@ -106,7 +106,7 @@ class StockService
                     'product_id'  => $item->product_id,
                     'warehouse_id' => $entry->warehouse_id,
                     'type'        => 'in',
-                    'quantity'    => $item->quantity,
+                    'quantity'    => (int) $item->quantity,
                     'source_type' => StockEntry::class,
                     'source_id'   => $entry->id,
                     'created_by'  => auth()->id(),
@@ -190,7 +190,7 @@ class StockService
                     'product_id'  => $item->product_id,
                     'warehouse_id' => $entry->warehouse_id,
                     'type'        => 'out',
-                    'quantity'    => -$item->quantity,
+                    'quantity'    => -(int) $item->quantity,
                     'source_type' => StockEntry::class,
                     'source_id'   => $entry->id,
                     'created_by'  => auth()->id(),
@@ -240,7 +240,7 @@ class StockService
                     'product_id'  => $item->product_id,
                     'warehouse_id' => $entry->warehouse_id,
                     'type'        => 'out',
-                    'quantity'    => -$item->quantity,
+                    'quantity'    => -(int) $item->quantity,
                     'source_type' => StockEntry::class,
                     'source_id'   => $entry->id,
                     'created_by'  => auth()->id(),
@@ -266,7 +266,7 @@ class StockService
             $exit->load('items.product', 'items.serials');
 
             foreach ($exit->items as $item) {
-                $qty = (float) $item->quantity;
+                $qty = (int) $item->quantity;
 
                 if ($this->isProjectScopedExit($exit)) {
                     // ── Project-scoped: FIFO từ project_inventory_lots ──────────────────
@@ -466,7 +466,7 @@ class StockService
                     'product_id'   => $item->product_id,
                     'warehouse_id' => $exit->warehouse_id,
                     'type'         => 'in',
-                    'quantity'     => $item->quantity,
+                    'quantity'     => (int) $item->quantity,
                     'source_type'  => StockExit::class,
                     'source_id'    => $exit->id,
                     'created_by'   => auth()->id(),
