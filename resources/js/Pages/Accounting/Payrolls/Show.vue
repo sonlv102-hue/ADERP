@@ -137,7 +137,7 @@
       <!-- Full Payroll Table -->
       <div class="bg-white rounded-xl shadow-sm overflow-hidden" id="payroll-table-container">
         <div class="overflow-x-auto">
-          <table class="w-full text-xs whitespace-nowrap border-collapse" style="min-width: 1800px">
+          <table class="w-full text-xs whitespace-nowrap border-collapse" style="min-width: 1950px">
             <thead>
               <!-- Row 1: column group headers -->
               <tr class="bg-primary-700 text-white text-center">
@@ -158,6 +158,7 @@
                 <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[80px]">TN tính<br/>thuế</th>
                 <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[70px]">Thuế<br/>TNCN</th>
                 <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[70px]">Tạm<br/>ứng</th>
+                <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[80px]">Điều<br/>chỉnh</th>
                 <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[90px] font-bold">Thực lĩnh</th>
                 <th rowspan="2" v-if="payroll.status !== 'draft'" class="border border-primary-600 px-2 py-2 w-16">TT</th>
                 <th rowspan="2" v-if="payroll.status === 'draft'" class="border border-primary-600 px-2 py-2 w-10"></th>
@@ -211,6 +212,10 @@
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'taxable_for_pit')) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'pit')) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'advance')) }}</td>
+                  <td class="border border-gray-200 px-2 py-1.5 text-right font-mono"
+                      :class="sum(group, 'adjustment_amount') > 0 ? 'text-green-700' : sum(group, 'adjustment_amount') < 0 ? 'text-red-600' : ''">
+                    {{ sum(group, 'adjustment_amount') !== 0 ? fv(sum(group, 'adjustment_amount')) : '' }}
+                  </td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-bold font-mono text-primary-700">{{ fv(sum(group, 'thuc_linh')) }}</td>
                   <td v-if="payroll.status !== 'draft'" class="border border-gray-200"></td>
                   <td v-if="payroll.status === 'draft'" class="border border-gray-200"></td>
@@ -251,6 +256,13 @@
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(item.taxable_for_pit) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono text-red-600">{{ fv(item.pit) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono text-gray-500">{{ item.advance ? fv(item.advance) : '' }}</td>
+                  <td class="border border-gray-200 px-2 py-1.5 text-right font-mono"
+                      :class="(item.adjustment_amount || 0) > 0 ? 'text-green-700 font-semibold' : (item.adjustment_amount || 0) < 0 ? 'text-red-600 font-semibold' : ''">
+                    <template v-if="item.adjustment_amount && item.adjustment_amount != 0">
+                      {{ fv(item.adjustment_amount) }}
+                      <p v-if="item.adjusted_by" class="text-[9px] text-gray-400 font-normal leading-tight">{{ item.adjusted_by }}</p>
+                    </template>
+                  </td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-bold font-mono text-primary-700">{{ fv(item.thuc_linh) }}</td>
                   <!-- Status + action -->
                   <td v-if="payroll.status !== 'draft'" class="border border-gray-200 px-2 py-1.5 text-center">
@@ -306,6 +318,10 @@
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('taxable_for_pit')) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono text-red-600">{{ fv(payroll.total_pit) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('advance')) }}</td>
+                <td class="border border-gray-300 px-2 py-2 text-right font-mono font-bold"
+                    :class="sumItems('adjustment_amount') > 0 ? 'text-green-700' : sumItems('adjustment_amount') < 0 ? 'text-red-600' : ''">
+                  {{ sumItems('adjustment_amount') !== 0 ? fv(sumItems('adjustment_amount')) : '' }}
+                </td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono text-lg font-bold text-primary-700">{{ fv(sumItems('thuc_linh')) }}</td>
                 <td class="border border-gray-300" colspan="1"></td>
               </tr>
@@ -520,6 +536,43 @@
             <button type="button" @click="showEditModal = false" class="btn-secondary">Huỷ</button>
           </div>
         </form>
+
+        <!-- Adjustment section — separate submit -->
+        <div class="border-t px-5 pb-5 pt-4 space-y-3">
+          <p class="text-xs font-bold text-gray-700">Số điều chỉnh (cộng / trừ ngoài công thức)</p>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="form-label text-xs">Số điều chỉnh (đ)</label>
+              <input type="number" v-model.number="adjForm.adjustment_amount" step="any"
+                class="form-input text-right font-mono text-sm"
+                :class="adjForm.adjustment_amount > 0 ? 'border-green-400' : adjForm.adjustment_amount < 0 ? 'border-red-400' : ''" />
+              <p class="text-[10px] text-gray-400 mt-0.5">Dương = cộng thêm · Âm = trừ bớt</p>
+            </div>
+            <div class="flex items-center gap-2 pt-5">
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" v-model="adjForm.adjustment_taxable" class="sr-only peer" />
+                <div class="w-9 h-5 bg-gray-300 rounded-full peer peer-checked:bg-amber-500 transition-colors"></div>
+                <div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4"></div>
+              </label>
+              <span class="text-xs text-gray-700">Tính vào thuế TNCN</span>
+            </div>
+          </div>
+          <div>
+            <label class="form-label text-xs">Lý do điều chỉnh <span v-if="adjForm.adjustment_amount != 0" class="text-red-500">*</span></label>
+            <textarea v-model="adjForm.adjustment_reason" rows="2"
+              class="form-input text-sm resize-none"
+              placeholder="Ví dụ: Phụ cấp đặc thù tháng 6, hỗ trợ đám cưới..."></textarea>
+          </div>
+          <div v-if="activeItem.adjusted_by" class="text-[10px] text-gray-400">
+            Điều chỉnh lần cuối: <span class="font-semibold">{{ activeItem.adjusted_by }}</span>
+            lúc {{ activeItem.adjusted_at }}
+          </div>
+          <button type="button" :disabled="adjForm.processing"
+            @click="submitAdj"
+            class="w-full border border-amber-400 bg-amber-50 text-amber-800 hover:bg-amber-100 px-3 py-2 rounded-lg text-xs font-semibold transition-colors">
+            Lưu điều chỉnh
+          </button>
+        </div>
       </div>
     </div>
 
@@ -759,8 +812,18 @@ function calcBhxhFromBase(insBase) {
   };
 }
 
+// Adjustment form (separate from main edit form)
+const adjForm = useForm({
+  adjustment_amount:  0,
+  adjustment_reason:  '',
+  adjustment_taxable: true,
+});
+
 function openEditModal(item) {
   activeItem.value = item;
+  adjForm.adjustment_amount  = item.adjustment_amount ?? 0;
+  adjForm.adjustment_reason  = item.adjustment_reason ?? '';
+  adjForm.adjustment_taxable = item.adjustment_taxable ?? true;
   editForm.base_salary              = item.base_salary;
   editForm.allowance_responsibility = item.allowance_responsibility;
   editForm.allowance_lunch          = item.allowance_lunch;
@@ -798,6 +861,13 @@ watch(() => editForm.insurance_subject, (newVal) => {
 function submitEdit() {
   editForm.put(
     route('accounting.payrolls.items.update', { payroll: props.payroll.id, item: activeItem.value.id }),
+    { onSuccess: () => { showEditModal.value = false; } }
+  );
+}
+
+function submitAdj() {
+  adjForm.patch(
+    route('accounting.payrolls.items.adjustment', { payroll: props.payroll.id, item: activeItem.value.id }),
     { onSuccess: () => { showEditModal.value = false; } }
   );
 }

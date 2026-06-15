@@ -17,9 +17,13 @@
 | Phase C | 900030–900031 | Inventory counts (InventoryCount, InventoryCountItem) |
 | Phase D (2026-06-03) | 900032–900044 | Attendance, payroll lock, project WIP/links, VAT per line, FK+indexes |
 | Phase D extras | 300004–300005 | Employee/payroll allowance breakdown (2026-06-03, reuse G4 date prefix) |
-| Phase E (2026-06-05) | 100001–100005 | Bank transaction enhancements, supplier/internal bank accounts (date 2026_06_05, distinct từ G2) |
-| **Next (900xxx)** | **900045** | Tiếp tục sau 2026_06_04_900044 |
-| **Next (bank/E series)** | **100006** | Tiếp tục sau 2026_06_05_100005 nếu cùng chủ đề |
+| Phase E (2026-06-05) | 100001–100006 | Bank transaction enhancements, supplier/internal bank accounts (date 2026_06_05, distinct từ G2) |
+| Phase F (2026-06-07) | 900045–900065 | Accounting audit: COGS snapshot, revenue mapping, PIT config, AR/AP cleanup, Journal index |
+| Phase G (2026-06-13) | 900066–900078 | Project FIFO lots, StockEntry/Exit lot columns, JournalEntry void workflow |
+| Phase H (2026-06-14) | 900079–900084 | Period close batches, JE edit/unpost, AccountingSettings |
+| **Phase I (2026-06-15)** | **900085–900087** | Fund Transfer (LCQ-), Balance Sheet tabs (TK chưa map), Payroll Adjustment |
+| **Next (900xxx)** | **900088** | Tiếp tục sau 2026_06_15_900087 |
+| **Next (bank/E series)** | **100007** | Tiếp tục sau 2026_06_05_100006 nếu cùng chủ đề |
 
 ## Services & FSM
 | Service | Models | Key transitions |
@@ -41,8 +45,10 @@
 | PayrollService | Payroll, PayrollItem, Employee | confirm() → tính lương theo attendance; payEmployee() cá nhân |
 | PitCalculatorService | (utility) | Tính PIT theo biểu thuế lũy tiến VN |
 | CashVoucherService | CashVoucher, Fund | confirm() → cập nhật số dư quỹ + bút toán |
-| AccountingService | JournalEntry, JournalEntryLine | post() + markPosted() + reverseOrDelete() + reverse() |
+| AccountingService | JournalEntry, JournalEntryLine | post() + markPosted() + reverseOrDelete() + reverse() + createDraft() + updateLines() + unpost() + restoreOriginalLines() |
+| AccountingSettings | (helper, no model) | get(key, default) — request-level cache; clearCache() sau update |
 | BankReconciliationService | BankTransaction, JournalEntry | reconcile() + unreconcile() |
+| PeriodCloseService | AccountingPeriod, PeriodCloseBatch, JournalEntry | close(period) idempotent; getPeriodBalances(); kết chuyển Dr/Cr 911 ↔ 4212 |
 
 ## Completed Modules
 - **G1:** Auth, Users, Admin CRUD
@@ -71,4 +77,27 @@
   - SupplierBankAccounts — tài khoản ngân hàng NCC (nhiều tài khoản, chọn primary)
   - InternalBankAccounts — tài khoản nội bộ công ty để phân loại chuyển khoản nội bộ
   - InternalTransferReport — báo cáo và cập nhật trạng thái chuyển khoản nội bộ
+- **Phase F (2026-06-07):**
+  - COGS snapshot per order_item (unit_cogs_source), revenue_account_code per order_item
+  - KPCĐ employer (TK 3382), PIT config dynamic (pit_configs, employee_dependents)
+  - AR/AP ledger unification (ArApLedgerService), per-customer/supplier TK (receivable/payable_account_code)
+  - Accounting audit: validateLines() từ chối TK tổng hợp, audit-parent-accounts command
+  - B01a-DNN Balance Sheet (FinancialPositionReportService), TrialBalance tách opening
+  - Reclassification JEs (payable_reclassification), JE source_type + fiscal_period
+- **Phase G (2026-06-13):**
+  - Project FIFO Lots: project_inventory_lots + stock_exit_item_lot_allocations
+  - StockService: confirmEntry() tạo lot, confirmExit() FIFO allocate, cancelExit() restore
+  - JournalEntry Void: voided_at/voided_by/void_reason; FSM posted→reversed→voided
+  - PeriodCloseService: kết chuyển tháng idempotent, accounting:period-close command
+  - StockExit cancel guard: block nếu invoice đang sent/overdue
+- **Phase H (2026-06-14):**
+  - JournalEntry Edit/Unpost: edited_by_user, edit_reason, original_lines (jsonb); createDraft(), updateLines(), unpost(), restoreOriginalLines()
+  - AccountingSettings: bảng accounting_settings (31 keys) — TK cấu hình được cho tất cả auto-posting services
+  - Product: item_type + revenue_account_code + inventory_account UI trên Form/Show
+  - ProductCategory: revenue_account_code UI trên Form
+- **Phase I (2026-06-15):**
+  - Fund Transfer (LCQ-): bảng fund_transfers, FundTransferStatus enum, FundTransferService (post/reverse/cancel), resolveFundAccount() ưu tiên fund.account_code rồi fallback AccountingSettings
+  - Fund: account_code column (FK tuỳ chọn vào chi tiết TK 1121/1111); balance() tính thêm transfers_in/out; Funds/Form + Index updated
+  - Balance Sheet: thêm 3 tabs — "Bảng cân đối", "TK chưa map" (badge count), "Kiểm tra cân đối"; unmappedAccounts passed từ controller
+  - Payroll Adjustment: payroll_items.adjustment_amount/reason/taxable/adjusted_by/adjusted_at; payrolls.total_adjustment; PayrollService.updateAdjustment(); thuc_linh = net_salary + adjustment_amount - advance; JE Dr bao gồm adjustment khi taxable=true; Payrolls/Show.vue: cột "Điều chỉnh" + adjForm trong edit modal
 - **Extras:** In-app TabBar (useTabs.js), Delivery tracking (order_items.delivered_quantity), Serial tracking in entries/exits, Backup module (BackupController), Opening Balance Excel import

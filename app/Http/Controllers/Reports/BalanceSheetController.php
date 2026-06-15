@@ -27,16 +27,17 @@ class BalanceSheetController extends Controller
         $data = $this->reportSvc->build($asOf);
 
         return Inertia::render('Reports/BalanceSheet/Index', [
-            'balanceSheet'  => $data['rows'],
-            'summary'       => $data['summary'],
-            'warnings'      => $data['warnings'],
-            'trialBalance'  => $data['trial_balance'],
-            'reportMeta'    => [
+            'balanceSheet'     => $data['rows'],
+            'summary'          => $data['summary'],
+            'warnings'         => $data['warnings'],
+            'trialBalance'     => $data['trial_balance'],
+            'unmappedAccounts' => $data['unmapped_accounts'],
+            'reportMeta'       => [
                 'report_code' => $data['report_code'],
                 'report_name' => $data['report_name'],
                 'circular'    => $data['circular'],
             ],
-            'filters'       => ['as_of' => $asOf],
+            'filters'          => ['as_of' => $asOf],
         ]);
     }
 

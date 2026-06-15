@@ -22,6 +22,7 @@ class PayrollItem extends Model
         'attendance_sheet_id', 'actual_working_days', 'paid_leave_days',
         'unpaid_leave_days', 'overtime_days', 'attendance_note',
         'status', 'paid_at', 'cash_voucher_id', 'salary_journal_entry_id',
+        'adjustment_amount', 'adjustment_reason', 'adjustment_taxable', 'adjusted_by', 'adjusted_at',
     ];
 
     protected function casts(): array
@@ -60,6 +61,9 @@ class PayrollItem extends Model
             'overtime_days'            => 'integer',
             'paid_at'                  => 'datetime',
             'cash_voucher_id'          => 'integer',
+            'adjustment_amount'        => 'decimal:2',
+            'adjustment_taxable'       => 'boolean',
+            'adjusted_at'              => 'datetime',
         ];
     }
 
@@ -86,5 +90,10 @@ class PayrollItem extends Model
     public function salaryJournalEntry(): BelongsTo
     {
         return $this->belongsTo(JournalEntry::class, 'salary_journal_entry_id');
+    }
+
+    public function adjustedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'adjusted_by');
     }
 }

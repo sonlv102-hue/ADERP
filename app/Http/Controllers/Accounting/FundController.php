@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Accounting;
 
 use App\Http\Controllers\Controller;
+use App\Models\AccountCode;
 use App\Models\Fund;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -35,6 +36,7 @@ class FundController extends Controller
         return Inertia::render('Accounting/Funds/Form', [
             'fund'     => null,
             'nextCode' => Fund::generateCode(),
+            'accounts' => $this->detailAccounts(),
         ]);
     }
 
@@ -44,6 +46,7 @@ class FundController extends Controller
             'code'            => 'required|string|max:20|unique:funds,code',
             'name'            => 'required|string|max:255',
             'type'            => 'required|in:cash,bank',
+            'account_code'    => 'nullable|string|exists:account_codes,code',
             'bank_name'       => 'nullable|string|max:255',
             'bank_account_no' => 'nullable|string|max:50',
             'opening_balance' => 'nullable|numeric|min:0',
@@ -64,12 +67,14 @@ class FundController extends Controller
                 'code'            => $fund->code,
                 'name'            => $fund->name,
                 'type'            => $fund->type,
+                'account_code'    => $fund->account_code,
                 'bank_name'       => $fund->bank_name,
                 'bank_account_no' => $fund->bank_account_no,
                 'opening_balance' => (float) $fund->opening_balance,
                 'is_active'       => $fund->is_active,
                 'notes'           => $fund->notes,
             ],
+            'accounts' => $this->detailAccounts(),
         ]);
     }
 
@@ -78,6 +83,7 @@ class FundController extends Controller
         $data = $request->validate([
             'name'            => 'required|string|max:255',
             'type'            => 'required|in:cash,bank',
+            'account_code'    => 'nullable|string|exists:account_codes,code',
             'bank_name'       => 'nullable|string|max:255',
             'bank_account_no' => 'nullable|string|max:50',
             'opening_balance' => 'nullable|numeric|min:0',
@@ -89,6 +95,16 @@ class FundController extends Controller
 
         return redirect()->route('accounting.funds.index')
             ->with('success', 'Quỹ đã được cập nhật.');
+    }
+
+    private function detailAccounts(): array
+    {
+        return AccountCode::where('is_detail', true)
+            ->whereIn('type', ['asset', 'liability'])
+            ->orderBy('code')
+            ->get(['code', 'name'])
+            ->map(fn ($a) => ['code' => $a->code, 'name' => $a->name])
+            ->toArray();
     }
 
     public function destroy(Fund $fund): RedirectResponse

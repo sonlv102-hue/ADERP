@@ -51,6 +51,20 @@
             </div>
           </template>
 
+          <!-- TK kế toán chi tiết cho quỹ này -->
+          <div class="sm:col-span-2">
+            <label class="block text-sm font-medium text-gray-700 mb-1">Tài khoản kế toán</label>
+            <select v-model="form.account_code"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none">
+              <option :value="null">-- Dùng mặc định hệ thống (1111 / 1121) --</option>
+              <option v-for="a in accounts" :key="a.code" :value="a.code">{{ a.code }} — {{ a.name }}</option>
+            </select>
+            <p class="mt-1 text-xs text-gray-400">
+              Cấu hình TK chi tiết để sinh bút toán đúng khi luân chuyển quỹ
+              (VD: 1111 — TM VND, 1121 — TGNH Vietcombank).
+            </p>
+          </div>
+
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Số dư đầu kỳ</label>
             <input v-model.number="form.opening_balance" type="number" min="0" step="any"
@@ -89,12 +103,17 @@
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 
-const props = defineProps({ fund: Object, nextCode: String });
+const props = defineProps({
+  fund:     Object,
+  nextCode: String,
+  accounts: { type: Array, default: () => [] },
+});
 
 const form = useForm({
   code:            props.fund?.code         ?? props.nextCode,
   name:            props.fund?.name         ?? '',
   type:            props.fund?.type         ?? 'cash',
+  account_code:    props.fund?.account_code ?? null,
   bank_name:       props.fund?.bank_name    ?? '',
   bank_account_no: props.fund?.bank_account_no ?? '',
   opening_balance: props.fund?.opening_balance ?? 0,

@@ -71,6 +71,9 @@ Agents:
 - Accounting auto-posting phải tránh double-posting bằng cách kiểm tra journal entry liên quan trước khi post.
 - Dòng kế toán có thể cần `project_id`; không bỏ mất chiều dự án khi sửa nghiệp vụ dự án/TK 154.
 - **AR/AP**: Mọi màn công nợ phải thu/trả phải dùng `ArApLedgerService` — không tự query invoice/purchase_invoice riêng. Opening balance không phải doanh thu/chi phí. Xem `docs/AR_AP_LOGIC.md`.
+- **Tài khoản kế toán**: Không hardcode TK trong services. Dùng `AccountingSettings::get('key', 'fallback')` cho TK hệ thống; `product->revenue_account_code`, `customer->getReceivableAccount()`, `supplier->getPayableAccount()` cho TK per-entity. Xem `.claude/rules/project-state.md` mục "TK hệ thống".
+- **JournalEntry FSM**: draft → posted → reversed → voided (terminal); draft → (hard delete). Bút toán auto đã posted không sửa trực tiếp — dùng `AccountingService::unpost()` trước, hoặc reverse. Bút toán đã voided không thể restore.
+- **JournalEntry void rule**: JE nháp → hard delete; JE posted → void; JE reversed → void cả cặp trong 1 transaction; kỳ khóa → block.
 
 ---
 

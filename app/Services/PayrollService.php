@@ -165,7 +165,8 @@ class PayrollService
              SUM(trade_union_fee) as union_fee,
              SUM(pit) as pit,
              SUM(deductions) as deductions,
-             SUM(net_salary) as net'
+             SUM(net_salary) as net,
+             SUM(COALESCE(adjustment_amount, 0)) as adj'
         )->first();
 
         $payroll->update([
@@ -178,8 +179,57 @@ class PayrollService
             'total_trade_union_fee'    => $t->union_fee    ?? 0,
             'total_pit'                => $t->pit          ?? 0,
             'total_deductions'         => $t->deductions   ?? 0,
-            'total_net_salary'         => $t->net          ?? 0,
+            'total_net_salary'         => ($t->net ?? 0) + ($t->adj ?? 0),
+            'total_adjustment'         => $t->adj          ?? 0,
         ]);
+    }
+
+    /**
+     * Cập nhật số điều chỉnh cho một dòng lương.
+     * Chỉ cho phép khi bảng lương chưa khóa và chưa xác nhận/thanh toán.
+     */
+    public function updateAdjustment(
+        PayrollItem $item,
+        float $amount,
+        ?string $reason,
+        bool $taxable = true
+    ): void {
+        $payroll = $item->payroll;
+
+        if ($payroll->is_locked) {
+            throw new RuntimeException('Bảng lương đã bị khóa, không thể sửa số điều chỉnh.');
+        }
+        if ($payroll->status->value !== 'draft') {
+            throw new RuntimeException(
+                'Bảng lương đã xác nhận hoặc đã thanh toán. '
+                . 'Cần hủy xác nhận trước, hoặc lập bảng điều chỉnh riêng.'
+            );
+        }
+        if ($amount != 0 && empty($reason)) {
+            throw new RuntimeException('Phải nhập lý do khi số điều chỉnh khác 0.');
+        }
+
+        $oldAmount = (float) $item->adjustment_amount;
+        $item->update([
+            'adjustment_amount'   => $amount,
+            'adjustment_reason'   => $reason,
+            'adjustment_taxable'  => $taxable,
+            'adjusted_by'         => auth()->id(),
+            'adjusted_at'         => now(),
+        ]);
+
+        activity()
+            ->causedBy(auth()->user())
+            ->performedOn($item)
+            ->withProperties([
+                'old_amount' => $oldAmount,
+                'new_amount' => $amount,
+                'reason'     => $reason,
+                'taxable'    => $taxable,
+            ])
+            ->log('adjustment_updated');
+
+        $this->recalculateTotals($payroll);
     }
 
     /** Rebuild a single PayrollItem from Employee */
@@ -471,6 +521,7 @@ class PayrollService
             return;
         }
 
+        // total_net_salary đã bao gồm adjustment_amount (sau recalculateTotals)
         $net = round((float)$payroll->total_net_salary);
         $pit = round((float)$payroll->total_pit);
 
@@ -491,7 +542,7 @@ class PayrollService
         $includeUnionFee = $payroll->union_fee_include === true
             || ($payroll->union_fee_include === null && $this->isUnionFeeEnabled());
 
-        // Tổng chi phí Dr phân theo phòng ban
+        // Tổng chi phí Dr phân theo phòng ban — bao gồm số điều chỉnh
         $deptTotals = $payroll->items()
             ->join('employees', 'payroll_items.employee_id', '=', 'employees.id')
             ->selectRaw(
@@ -501,7 +552,7 @@ class PayrollService
                      + payroll_items.bhyt_employer
                      + payroll_items.bhtn_employer'
                 . ($includeUnionFee ? ' + payroll_items.trade_union_fee' : '')
-                . ') as total_cost'
+                . ' + COALESCE(payroll_items.adjustment_amount, 0)) as total_cost'
             )
             ->groupBy('employees.department')
             ->get();

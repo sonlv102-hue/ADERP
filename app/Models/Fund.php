@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Fund extends Model
 {
     protected $fillable = [
-        'code', 'name', 'type', 'bank_name', 'bank_account_no',
+        'code', 'name', 'type', 'account_code', 'bank_name', 'bank_account_no',
         'opening_balance', 'is_active', 'notes',
     ];
 
@@ -35,6 +35,16 @@ class Fund extends Model
         return $this->hasMany(PurchaseInvoicePayment::class);
     }
 
+    public function fundTransfersOut(): HasMany
+    {
+        return $this->hasMany(FundTransfer::class, 'from_fund_id');
+    }
+
+    public function fundTransfersIn(): HasMany
+    {
+        return $this->hasMany(FundTransfer::class, 'to_fund_id');
+    }
+
     public function balance(): float
     {
         $receipts = $this->cashVouchers()
@@ -50,7 +60,13 @@ class Fund extends Model
         $arReceived = $this->payments()->sum('amount');
         $apPaid     = $this->purchaseInvoicePayments()->sum('amount');
 
-        return (float) $this->opening_balance + $receipts - $payments + $arReceived - $apPaid;
+        $transfersIn  = $this->fundTransfersIn()->where('status', 'posted')->sum('amount');
+        $transfersOut = $this->fundTransfersOut()->where('status', 'posted')->sum('amount');
+
+        return (float) $this->opening_balance
+            + $receipts - $payments
+            + $arReceived - $apPaid
+            + $transfersIn - $transfersOut;
     }
 
     public static function generateCode(): string

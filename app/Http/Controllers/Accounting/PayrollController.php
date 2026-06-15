@@ -73,7 +73,7 @@ class PayrollController extends Controller
     {
         $payroll->load('creator', 'locker', 'unionFeeConfirmedBy');
 
-        $items = $payroll->items()->with('employee', 'user', 'salaryJournalEntry')
+        $items = $payroll->items()->with('employee', 'user', 'salaryJournalEntry', 'adjustedBy')
             ->orderBy('id')
             ->get()
             ->map(fn (PayrollItem $item) => $this->itemDTO($item));
@@ -277,7 +277,12 @@ class PayrollController extends Controller
             'standard_days'            => (int)   ($item->standard_days ?? 26),
             'advance'                  => (float) ($item->advance       ?? 0),
             'insurance_subject'        => (bool)  ($item->insurance_subject ?? true),
-            'thuc_linh'                => max(0, (float) $item->net_salary - (float) ($item->advance ?? 0)),
+            'adjustment_amount'        => (float) ($item->adjustment_amount ?? 0),
+            'adjustment_reason'        => $item->adjustment_reason,
+            'adjustment_taxable'       => (bool)  ($item->adjustment_taxable ?? true),
+            'adjusted_by'              => $item->adjustedBy?->name ?? null,
+            'adjusted_at'              => $item->adjusted_at?->format('d/m/Y H:i'),
+            'thuc_linh'                => max(0, (float) $item->net_salary + (float) ($item->adjustment_amount ?? 0) - (float) ($item->advance ?? 0)),
             'status'                   => $item->status->value,
             'status_label'             => $item->status->label(),
             'status_color'             => $item->status->color(),
@@ -355,6 +360,31 @@ class PayrollController extends Controller
             return back()->with('success', "Đã hủy xác nhận bảng lương {$payroll->code}. Bảng lương trở về trạng thái nháp.");
         } catch (\Throwable $e) {
             \Log::error('unconfirm payroll failed', ['payroll' => $payroll->id, 'msg' => $e->getMessage(), 'trace' => $e->getTraceAsString()]);
+            return back()->with('error', $e->getMessage());
+        }
+    }
+
+    public function updateAdjustment(Request $request, Payroll $payroll, PayrollItem $item): RedirectResponse
+    {
+        if ($item->payroll_id !== $payroll->id) {
+            return back()->with('error', 'Dòng lương không thuộc bảng lương này.');
+        }
+
+        $data = $request->validate([
+            'adjustment_amount'  => 'required|numeric',
+            'adjustment_reason'  => 'nullable|string|max:500',
+            'adjustment_taxable' => 'boolean',
+        ]);
+
+        try {
+            $this->service->updateAdjustment(
+                $item,
+                (float) $data['adjustment_amount'],
+                $data['adjustment_reason'] ?? null,
+                (bool) ($data['adjustment_taxable'] ?? true),
+            );
+            return back()->with('success', 'Đã cập nhật số điều chỉnh lương.');
+        } catch (RuntimeException $e) {
             return back()->with('error', $e->getMessage());
         }
     }

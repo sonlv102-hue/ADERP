@@ -3,10 +3,16 @@
     <div class="max-w-5xl space-y-5">
       <div class="flex items-center justify-between">
         <h1 class="text-2xl font-bold text-gray-900">Quản lý quỹ</h1>
-        <Link :href="route('accounting.funds.create')"
-          class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-          + Thêm quỹ
-        </Link>
+        <div class="flex gap-2">
+          <Link :href="route('accounting.fund-transfers.index')"
+            class="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium">
+            Luân chuyển quỹ
+          </Link>
+          <Link :href="route('accounting.funds.create')"
+            class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            + Thêm quỹ
+          </Link>
+        </div>
       </div>
 
       <div v-if="$page.props.flash?.success" class="bg-green-50 border border-green-200 text-green-800 rounded-xl px-4 py-3 text-sm">

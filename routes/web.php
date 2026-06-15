@@ -41,6 +41,7 @@ use App\Http\Controllers\Accounting\AccountingPeriodController;
 use App\Http\Controllers\Accounting\PeriodCloseBatchController;
 use App\Http\Controllers\Accounting\CashVoucherController;
 use App\Http\Controllers\Accounting\FundController;
+use App\Http\Controllers\Accounting\FundTransferController;
 use App\Http\Controllers\Accounting\InvoiceController;
 use App\Http\Controllers\Accounting\JournalEntryController;
 use App\Http\Controllers\Accounting\ArApOpeningBalanceController;
@@ -309,6 +310,12 @@ Route::middleware('auth')->group(function () {
         Route::post('cash-vouchers/{cashVoucher}/cancel',  [CashVoucherController::class, 'cancel'])->name('cash-vouchers.cancel');
         Route::post('cash-vouchers/{cashVoucher}/unpost',  [CashVoucherController::class, 'unpost'])->name('cash-vouchers.unpost');
 
+        // Luân chuyển quỹ
+        Route::resource('fund-transfers', FundTransferController::class)->only(['index', 'create', 'store', 'show']);
+        Route::post('fund-transfers/{fundTransfer}/post',    [FundTransferController::class, 'post'])->name('fund-transfers.post');
+        Route::post('fund-transfers/{fundTransfer}/reverse', [FundTransferController::class, 'reverse'])->name('fund-transfers.reverse');
+        Route::post('fund-transfers/{fundTransfer}/cancel',  [FundTransferController::class, 'cancel'])->name('fund-transfers.cancel');
+
         // Tiền lương (Payroll)
         Route::resource('payrolls', PayrollController::class)->except(['edit', 'update']);
         Route::put('payrolls/{payroll}/items/{item}', [PayrollController::class, 'updateItem'])->name('payrolls.items.update');
@@ -319,6 +326,7 @@ Route::middleware('auth')->group(function () {
         Route::post('payrolls/{payroll}/items/{item}/pay', [PayrollController::class, 'payEmployee'])->name('payrolls.items.pay');
         Route::post('payrolls/{payroll}/lock', [PayrollController::class, 'lock'])->name('payrolls.lock')->middleware('can:accounting.manage');
         Route::post('payrolls/{payroll}/unlock', [PayrollController::class, 'unlock'])->name('payrolls.unlock')->middleware('can:accounting.manage');
+        Route::patch('payrolls/{payroll}/items/{item}/adjustment', [PayrollController::class, 'updateAdjustment'])->name('payrolls.items.adjustment');
 
         // Kê khai thuế (Taxes)
         Route::get('taxes', [TaxController::class, 'index'])->name('taxes.index');
