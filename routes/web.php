@@ -92,6 +92,7 @@ use App\Http\Controllers\Admin\AttendanceController;
 use App\Http\Controllers\Admin\ShareholderController;
 use App\Http\Controllers\Accounting\PersonalLoanController;
 use App\Http\Controllers\Accounting\PersonalExpenseController;
+use App\Http\Controllers\Accounting\JournalAuditController;
 use App\Http\Controllers\AttachmentController;
 use Illuminate\Support\Facades\Route;
 
@@ -428,6 +429,9 @@ Route::middleware('auth')->group(function () {
         // Cài đặt tài khoản kế toán
         Route::get('settings', [AccountingSettingsController::class, 'index'])->name('settings.index');
         Route::put('settings', [AccountingSettingsController::class, 'update'])->name('settings.update')->middleware('can:accounting.manage');
+
+        // Rà soát bút toán kế toán
+        Route::get('journal-audit', [JournalAuditController::class, 'index'])->name('journal-audit.index');
 
         // Tài sản cố định
         Route::prefix('fixed-assets')->name('fixed-assets.')->group(function () {

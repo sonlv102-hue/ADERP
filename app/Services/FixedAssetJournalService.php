@@ -8,6 +8,7 @@ use App\Models\FixedAssetDisposal;
 use App\Models\FixedAssetRepair;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
+use App\Services\AccountingSettings;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -88,7 +89,7 @@ class FixedAssetJournalService
     public function buildDepreciationLine(FixedAsset $asset, float $amount): array
     {
         return [
-            'account'        => $asset->depreciation_expense_account_code ?? '6421',
+            'account'        => $asset->depreciation_expense_account_code ?? AccountingSettings::get('depreciation_expense_account', '6421'),
             'debit'          => $amount,
             'credit'         => 0,
             'description'    => "Khấu hao {$asset->code} - {$asset->name}",
@@ -118,7 +119,7 @@ class FixedAssetJournalService
         $totalByDepAccount     = [];
 
         foreach ($items as ['asset' => $asset, 'amount' => $amount]) {
-            $expCode = $asset->depreciation_expense_account_code ?? '6421';
+            $expCode = $asset->depreciation_expense_account_code ?? AccountingSettings::get('depreciation_expense_account', '6421');
             $depCode = $asset->getDepreciationAccountCode();
 
             $lines[] = $this->buildDepreciationLine($asset, $amount);

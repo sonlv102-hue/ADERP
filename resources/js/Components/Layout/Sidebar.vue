@@ -110,6 +110,7 @@
           <NavItem v-if="can('accounting.manage')" :href="route('accounting.account-codes.index')"       icon="view-list" sub>Hệ thống tài khoản</NavItem>
           <NavItem v-if="can('accounting.manage')" :href="route('accounting.accounting-periods.index')"  icon="calendar"  sub>Kỳ kế toán</NavItem>
           <NavItem v-if="can('accounting.manage')" :href="route('accounting.period-close.index')"         icon="check-circle" sub>Kết chuyển cuối kỳ</NavItem>
+          <NavItem v-if="can('accounting.manage')" :href="route('accounting.journal-audit.index')"        icon="search-circle" sub>Rà soát bút toán</NavItem>
         </NavGroup>
 
         <NavGroup v-if="can('documents.view')"

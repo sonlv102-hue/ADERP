@@ -136,7 +136,7 @@ class InvoiceService
             }
         }
         if ($creditTax > 0) {
-            $lines[] = ['account' => '33311', 'debit' => 0, 'credit' => $creditTax,
+            $lines[] = ['account' => AccountingSettings::get('vat_output_account', '33311'), 'debit' => 0, 'credit' => $creditTax,
                         'description' => "Thuế GTGT đầu ra - {$invoice->code}"];
         }
 
