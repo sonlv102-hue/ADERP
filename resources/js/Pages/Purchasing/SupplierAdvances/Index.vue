@@ -106,7 +106,7 @@
 <script setup>
 import { ref } from 'vue'
 import { router, Link } from '@inertiajs/vue3'
-import AppLayout from '@/Layouts/AppLayout.vue'
+import AppLayout from '@/Components/Layout/AppLayout.vue'
 import Pagination from '@/Components/Pagination.vue'
 
 const props = defineProps({
