@@ -37,10 +37,11 @@ return [
             'item_code'    => '110',
             'item_name'    => 'I. Tiền và các khoản tương đương tiền',
             'parent_code'  => null,
-            'accounts'     => ['111', '1121', '1122', '1128', '113'],
+            'accounts'     => ['111', '1111', '1112', '1113', '1121', '1122', '1128', '113'],
             'balance_side' => 'debit',
             'negative'     => false,
             'note'         => 'TK 112 là TK cha — chỉ lấy chi tiết 1121/1122/1128. '
+                             . 'TK 111x là chi tiết của TK 111 (Tiền VN/Ngoại tệ/Vàng). '
                              . 'TK 1281/1288 kỳ hạn ≤3 tháng → tạm xếp vào mã 120.',
         ],
 
@@ -288,10 +289,10 @@ return [
             'item_code'    => '316',
             'item_name'    => '6. Vay và nợ thuê tài chính',
             'parent_code'  => '300',
-            'accounts'     => ['341'],
+            'accounts'     => ['341', '3411', '3412'],
             'balance_side' => 'credit',
             'negative'     => false,
-            'note'         => null,
+            'note'         => 'TK 3411 Vay dài hạn, TK 3412 Nợ thuê tài chính.',
         ],
         [
             'item_code'    => '317',
@@ -399,10 +400,10 @@ return [
             'item_code'    => '417',
             'item_name'    => '7. LNST chưa phân phối',
             'parent_code'  => '400',
-            'accounts'     => ['421', '4212'],
+            'accounts'     => ['421', '4211', '4212'],
             'balance_side' => 'credit',
             'negative'     => false,
-            'note'         => 'Bắt buộc lấy TK 421; không tính từ DT-CP. Cho phép âm (lỗ lũy kế).',
+            'note'         => 'Bắt buộc lấy TK 421. TK 4211 = LNST năm trước, TK 4212 = LNST năm nay. Cho phép âm (lỗ lũy kế).',
         ],
         [
             'item_code'    => '400',

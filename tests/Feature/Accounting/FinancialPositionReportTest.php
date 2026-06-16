@@ -431,6 +431,87 @@ class FinancialPositionReportTest extends TestCase
         );
     }
 
+    // ─── Test prefix inheritance cho tài khoản lưỡng tính ─────────────────
+
+    /**
+     * TC15: TK con kế thừa prefix từ TK cha có balance_side = debit_detail.
+     *
+     * Items 131 (debit_detail) và 312 (credit_detail) đều chứa ['131', '1311', '1312', '1318'].
+     * TK 13111 (con của 1311) và TK 13112 (con của 1312) không có trong config —
+     * chúng phải được prefix-inherit vào CẢ HAI items.
+     *
+     * Mong muốn: item 131 = 5M (Dr 13111), item 312 = 3M (Cr 13112) — không lấy net.
+     */
+    public function test_prefix_inherited_child_of_debit_detail_parent_is_split_correctly(): void
+    {
+        $this->seedAccount('5111',  'revenue', 'credit');
+        $this->seedAccount('1121',  'asset',   'debit',  '112');
+        $this->seedAccount('131',   'asset',   'debit');
+        $this->seedAccount('1311',  'asset',   'debit',  '131');
+        $this->seedAccount('1312',  'asset',   'debit',  '131');
+        $this->seedAccount('13111', 'asset',   'debit',  '1311');
+        $this->seedAccount('13112', 'asset',   'debit',  '1312');
+
+        // 13111: dư Nợ 5M (phải thu KH A)
+        $this->postEntry('2026-06-01', [['13111', 5_000_000, 0], ['5111', 0, 5_000_000]]);
+        // 13112: dư Có 3M (KH B trả tiền trước)
+        $this->postEntry('2026-06-02', [['1121', 3_000_000, 0], ['13112', 0, 3_000_000]]);
+
+        $report = $this->build();
+        $row131 = $this->findRow($report, '131');
+        $row312 = $this->findRow($report, '312');
+
+        $this->assertNotNull($row131, 'Mã 131 phải xuất hiện');
+        $this->assertNotNull($row312, 'Mã 312 phải xuất hiện');
+
+        $this->assertEquals(5_000_000, $row131['amount'],
+            'Mã 131 debit_detail: lấy dư Nợ 13111, loại 13112 dư Có (không net)');
+        $this->assertEquals(3_000_000, $row312['amount'],
+            'Mã 312 credit_detail: lấy dư Có 13112, loại 13111 dư Nợ (không net)');
+
+        // Phát hiện net sai: 5M - 3M = 2M
+        $this->assertNotEquals(2_000_000, $row131['amount'],
+            'Mã 131 không được lấy net balance');
+    }
+
+    /**
+     * TC16: TK con kế thừa prefix từ TK cha có balance_side = credit_detail.
+     *
+     * Items 311 (credit_detail) và 132 (debit_detail) đều chứa ['331', '3311', '3312', '3318'].
+     * TK 33111 (con của 3311) và TK 33121 (con của 3312) không có trong config.
+     *
+     * Mong muốn: item 311 = 8M (Cr 33111), item 132 = 4M (Dr 33121) — không net.
+     */
+    public function test_prefix_inherited_child_of_credit_detail_parent_is_split_correctly(): void
+    {
+        $this->seedAccount('1121',  'asset',     'debit',  '112');
+        $this->seedAccount('411',   'equity',    'credit');
+        $this->seedAccount('1561',  'asset',     'debit');
+        $this->seedAccount('331',   'liability', 'credit');
+        $this->seedAccount('3311',  'liability', 'credit', '331');
+        $this->seedAccount('3312',  'liability', 'credit', '331');
+        $this->seedAccount('33111', 'liability', 'credit', '3311');
+        $this->seedAccount('33121', 'liability', 'credit', '3312');
+
+        $this->postEntry('2026-01-01', [['1121', 100_000_000, 0], ['411', 0, 100_000_000]]);
+        // 33111: dư Có 8M (còn nợ NCC A)
+        $this->postEntry('2026-06-01', [['1561', 8_000_000, 0], ['33111', 0, 8_000_000]]);
+        // 33121: dư Nợ 4M (đã trả trước NCC B)
+        $this->postEntry('2026-06-02', [['33121', 4_000_000, 0], ['1121', 0, 4_000_000]]);
+
+        $report = $this->build();
+        $row311 = $this->findRow($report, '311');
+        $row132 = $this->findRow($report, '132');
+
+        $this->assertNotNull($row311, 'Mã 311 phải xuất hiện');
+        $this->assertNotNull($row132, 'Mã 132 phải xuất hiện');
+
+        $this->assertEquals(8_000_000, $row311['amount'],
+            'Mã 311 credit_detail: lấy dư Có 33111, loại 33121 dư Nợ (không net)');
+        $this->assertEquals(4_000_000, $row132['amount'],
+            'Mã 132 debit_detail: lấy dư Nợ 33121, loại 33111 dư Có (không net)');
+    }
+
     // ─── Test KPCĐ/BHXH đúng nhóm Mã 315 ──────────────────────────────────
 
     /**

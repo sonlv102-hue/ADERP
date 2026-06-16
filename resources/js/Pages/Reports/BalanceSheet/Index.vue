@@ -221,12 +221,19 @@
 
       <!-- Tab: TK chưa map -->
       <div v-show="activeTab === 'unmapped'" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div class="px-5 py-4 border-b border-gray-200 bg-orange-50">
-          <h2 class="font-semibold text-orange-800">Tài khoản có số dư nhưng chưa map vào B01a-DNN</h2>
-          <p class="text-xs text-orange-600 mt-0.5">
-            Những TK này có số dư thực tế nhưng không được phản ánh trong báo cáo.
-            Kiểm tra file <code>config/accounting_reports_tt133.php</code> để bổ sung mapping.
-          </p>
+        <div class="px-5 py-4 border-b border-gray-200 bg-orange-50 flex items-start justify-between gap-3">
+          <div>
+            <h2 class="font-semibold text-orange-800">Tài khoản có số dư nhưng chưa map vào B01a-DNN</h2>
+            <p class="text-xs text-orange-600 mt-0.5">
+              Nhấn "Map ngay" để chỉ định chỉ tiêu báo cáo. Hệ thống hỗ trợ kế thừa prefix:
+              nếu TK cha đã map thì TK con tự động kế thừa.
+            </p>
+          </div>
+        </div>
+        <div v-if="!canManageAccounting && unmappedAccounts?.length"
+          class="mx-5 mt-3 mb-1 rounded-lg border border-gray-200 bg-gray-50 px-4 py-2.5 text-xs text-gray-500">
+          Bạn không có quyền chỉnh mapping báo cáo. Liên hệ kế toán trưởng (vai trò có quyền
+          <code class="font-mono">accounting.manage</code>) để map các tài khoản này.
         </div>
         <div v-if="!unmappedAccounts?.length" class="px-5 py-8 text-center text-green-600 text-sm">
           <svg class="w-8 h-8 mx-auto mb-2 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -240,7 +247,8 @@
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã TK</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Tên tài khoản</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">Số dư</th>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">Ghi chú</th>
+              <th v-if="canManageAccounting"
+                class="px-5 py-3 font-semibold text-gray-600 text-center w-28">Thao tác</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
@@ -250,18 +258,26 @@
               <td class="px-5 py-3 text-right" :class="acc.balance < 0 ? 'text-red-600 font-semibold' : 'text-gray-900 font-medium'">
                 {{ fmt(acc.balance) }}
               </td>
-              <td class="px-5 py-3 text-xs text-orange-600">
-                Chưa map vào chỉ tiêu báo cáo
+              <td v-if="canManageAccounting" class="px-5 py-3 text-center">
+                <button @click="openMapModal(acc)"
+                  class="inline-flex items-center gap-1 text-xs bg-orange-100 hover:bg-orange-200 text-orange-800 px-3 py-1.5 rounded-lg font-medium transition-colors">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                  Map ngay
+                </button>
               </td>
             </tr>
           </tbody>
           <tfoot class="border-t-2 border-gray-300 bg-orange-50">
             <tr>
-              <td colspan="2" class="px-5 py-3 font-semibold text-gray-700">Tổng giá trị chưa map</td>
+              <td :colspan="canManageAccounting ? 2 : 3"
+                class="px-5 py-3 font-semibold text-gray-700">Tổng giá trị chưa map</td>
               <td class="px-5 py-3 text-right font-bold text-orange-700">
                 {{ fmt(unmappedTotal) }}
               </td>
-              <td></td>
+              <td v-if="canManageAccounting"></td>
             </tr>
           </tfoot>
         </table>
@@ -278,11 +294,7 @@
               <tr class="hover:bg-gray-50">
                 <td class="px-5 py-3 text-gray-600">Tổng tài sản (Mã 200)</td>
                 <td class="px-5 py-3 text-right font-semibold text-gray-900">{{ fmt(summary.total_assets) }}</td>
-                <td class="px-5 py-3 w-8">
-                  <svg class="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </td>
+                <td class="px-5 py-3 w-8"></td>
               </tr>
               <tr class="hover:bg-gray-50">
                 <td class="px-5 py-3 text-gray-600">Nợ phải trả (Mã 300)</td>
@@ -351,11 +363,67 @@
           <p class="font-semibold">⚠ {{ unmappedAccounts.length }} tài khoản chưa được map vào báo cáo</p>
           <p class="mt-1 text-orange-600">
             Tổng giá trị chưa phản ánh: <strong>{{ fmt(unmappedTotal) }}</strong>
-            — Xem tab "TK chưa map" để biết chi tiết.
+            — Nhấn tab "TK chưa map" rồi dùng nút "Map ngay" để xử lý từng tài khoản.
           </p>
         </div>
       </div>
     </div>
+
+    <!-- Modal Map ngay -->
+    <Modal :show="showMapModal" max-width="md" @close="showMapModal = false">
+      <template #title>Map tài khoản vào chỉ tiêu B01a-DNN</template>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Tài khoản</label>
+          <div class="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2">
+            <span class="font-mono font-semibold text-orange-700">{{ mapForm.account_code }}</span>
+            <span class="text-gray-500 text-sm">—</span>
+            <span class="text-gray-700 text-sm">{{ mapForm.account_name }}</span>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Chỉ tiêu B01a-DNN <span class="text-red-500">*</span></label>
+          <select v-model="mapForm.item_code"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <option value="">-- Chọn chỉ tiêu --</option>
+            <optgroup label="PHẦN I — TÀI SẢN">
+              <option v-for="item in assetItems" :key="item.item_code" :value="item.item_code">
+                {{ item.item_code }} — {{ item.item_name }}
+              </option>
+            </optgroup>
+            <optgroup label="PHẦN II — NGUỒN VỐN">
+              <option v-for="item in equityItems" :key="item.item_code" :value="item.item_code">
+                {{ item.item_code }} — {{ item.item_name }}
+              </option>
+            </optgroup>
+          </select>
+          <p class="mt-1 text-xs text-gray-500">
+            TK sẽ được tính vào chỉ tiêu này trong báo cáo. Sau khi lưu, trang sẽ tính lại tự động.
+          </p>
+        </div>
+
+        <div v-if="mapError" class="bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-sm text-red-700">
+          {{ mapError }}
+        </div>
+      </div>
+
+      <template #footer>
+        <button @click="showMapModal = false"
+          class="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">
+          Hủy
+        </button>
+        <button @click="submitMapping" :disabled="!mapForm.item_code || mapSaving"
+          class="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-60 flex items-center gap-2">
+          <svg v-if="mapSaving" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          Lưu mapping
+        </button>
+      </template>
+    </Modal>
   </AppLayout>
 </template>
 
@@ -363,17 +431,20 @@
 import { ref, computed } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
+import Modal from '@/Components/Shared/Modal.vue';
 import { useCurrency } from '@/composables/useCurrency';
 import { useInertiaLoading } from '@/composables/useInertiaLoading';
 
 const props = defineProps({
-  balanceSheet:     Array,
-  summary:          Object,
-  warnings:         Array,
-  trialBalance:     Object,
-  unmappedAccounts: { type: Array, default: () => [] },
-  reportMeta:       Object,
-  filters:          Object,
+  balanceSheet:        Array,
+  summary:             Object,
+  warnings:            Array,
+  trialBalance:        Object,
+  unmappedAccounts:    { type: Array,    default: () => [] },
+  reportMeta:          Object,
+  reportItems:         { type: Array,    default: () => [] },
+  canManageAccounting: { type: Boolean,  default: false },
+  filters:             Object,
 });
 
 const { formatVnd: fmt } = useCurrency();
@@ -395,7 +466,45 @@ const unmappedTotal = computed(() =>
   (props.unmappedAccounts ?? []).reduce((sum, a) => sum + Math.abs(a.balance), 0)
 );
 
+const assetItems  = computed(() => (props.reportItems ?? []).filter(i => i.section === 'asset'));
+const equityItems = computed(() => (props.reportItems ?? []).filter(i => i.section === 'equity'));
+
 const exportUrl = computed(() => route('reports.balance_sheet.export') + '?as_of=' + asOf.value);
+
+// Map ngay modal
+const showMapModal = ref(false);
+const mapSaving    = ref(false);
+const mapError     = ref('');
+const mapForm      = ref({ account_code: '', account_name: '', item_code: '' });
+
+function openMapModal(acc) {
+  mapForm.value  = { account_code: acc.code, account_name: acc.name, item_code: '' };
+  mapError.value = '';
+  showMapModal.value = true;
+}
+
+function submitMapping() {
+  if (!mapForm.value.item_code) return;
+  mapSaving.value = true;
+  mapError.value  = '';
+
+  router.post(
+    route('reports.balance_sheet.map_account'),
+    { account_code: mapForm.value.account_code, item_code: mapForm.value.item_code },
+    {
+      preserveScroll: true,
+      onSuccess: () => {
+        showMapModal.value = false;
+        // Reload để tính lại báo cáo với mapping mới
+        router.get(route('reports.balance_sheet'), { as_of: asOf.value }, { replace: true });
+      },
+      onError: (errors) => {
+        mapError.value = Object.values(errors).flat().join(' ');
+      },
+      onFinish: () => { mapSaving.value = false; },
+    }
+  );
+}
 
 function applyFilters() {
   router.get(route('reports.balance_sheet'), { as_of: asOf.value }, { preserveState: true, replace: true });

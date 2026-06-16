@@ -235,4 +235,56 @@ class BalanceSheetTest extends TestCase
         $this->assertEquals($tb['total_debit'], $tb['total_credit']);
         $this->assertEquals(100_000_000.0, $tb['total_debit'], '', 0.01);
     }
+
+    // ─── Permission tests ────────────────────────────────────────────────────
+
+    /**
+     * TC10: User chỉ có reports.view — POST map-account phải trả 403.
+     */
+    public function test_map_account_requires_accounting_manage_permission(): void
+    {
+        // Đảm bảo permission tồn tại nhưng không grant cho user
+        Permission::firstOrCreate(['name' => 'accounting.manage', 'guard_name' => 'web']);
+
+        $response = $this->post(route('reports.balance_sheet.map_account'), [
+            'account_code' => '1121',
+            'item_code'    => '110',
+        ]);
+
+        $response->assertForbidden();
+    }
+
+    /**
+     * TC11: canManageAccounting = false khi user chỉ có reports.view.
+     */
+    public function test_controller_passes_can_manage_false_without_accounting_manage(): void
+    {
+        Permission::firstOrCreate(['name' => 'accounting.manage', 'guard_name' => 'web']);
+        // User trong setUp chỉ có reports.view, không có accounting.manage
+
+        $response = $this->get(route('reports.balance_sheet', ['as_of' => '2026-06-30']));
+
+        $response->assertStatus(200);
+        $response->assertInertia(fn ($page) => $page
+            ->component('Reports/BalanceSheet/Index')
+            ->where('canManageAccounting', false)
+        );
+    }
+
+    /**
+     * TC12: canManageAccounting = true khi user có accounting.manage.
+     */
+    public function test_controller_passes_can_manage_true_with_accounting_manage(): void
+    {
+        Permission::firstOrCreate(['name' => 'accounting.manage', 'guard_name' => 'web']);
+        $this->user->givePermissionTo('accounting.manage');
+
+        $response = $this->get(route('reports.balance_sheet', ['as_of' => '2026-06-30']));
+
+        $response->assertStatus(200);
+        $response->assertInertia(fn ($page) => $page
+            ->component('Reports/BalanceSheet/Index')
+            ->where('canManageAccounting', true)
+        );
+    }
 }
