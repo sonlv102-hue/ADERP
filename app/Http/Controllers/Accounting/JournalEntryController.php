@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\AccountCode;
 use App\Models\AccountingPeriod;
 use App\Models\JournalEntry;
+use App\Models\JournalEntryLine;
+use App\Models\ProjectWipEntry;
 use App\Services\AccountingService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -279,15 +281,54 @@ class JournalEntryController extends Controller
     {
         $this->authorize('accounting.manage');
 
-        if ($journalEntry->status !== 'draft') {
-            return back()->with('error', 'Chỉ có thể xóa bút toán ở trạng thái Nháp. Dùng "Hủy bút toán" với bút toán đã hạch toán.');
+        if ($journalEntry->status === 'draft') {
+            $journalEntry->lines()->delete();
+            $journalEntry->delete();
+
+            return redirect()->route('accounting.journal-entries.index')
+                ->with('success', "Đã xóa bút toán {$journalEntry->code}.");
         }
 
-        $journalEntry->lines()->delete();
-        $journalEntry->delete();
+        if ($journalEntry->status === 'voided') {
+            if (! auth()->user()->hasRole('admin')) {
+                return back()->with('error', 'Chỉ admin mới có thể xóa bút toán đã hủy.');
+            }
 
-        return redirect()->route('accounting.journal-entries.index')
-            ->with('success', "Đã xóa bút toán {$journalEntry->code}.");
+            $codes = [];
+
+            DB::transaction(function () use ($journalEntry, &$codes) {
+                // Tìm cặp (nếu có): original có reversed_by_id → reversal; reversal không có
+                $pair = $journalEntry->reversed_by_id
+                    ? JournalEntry::find($journalEntry->reversed_by_id)
+                    : JournalEntry::where('reversed_by_id', $journalEntry->id)->first();
+
+                $ids = collect([$journalEntry->id]);
+                $codes = [$journalEntry->code];
+
+                if ($pair) {
+                    $ids->push($pair->id);
+                    $codes[] = $pair->code;
+                }
+
+                // Xử lý FK không có nullOnDelete
+                ProjectWipEntry::whereIn('journal_entry_id', $ids)->update(['journal_entry_id' => null]);
+
+                // Bỏ self-reference trước khi xóa
+                JournalEntry::whereIn('reversed_by_id', $ids)->update(['reversed_by_id' => null]);
+
+                // Lines cascade, nhưng xóa tường minh cho chắc
+                JournalEntryLine::whereIn('journal_entry_id', $ids)->delete();
+
+                JournalEntry::whereIn('id', $ids)->delete();
+            });
+
+            $label = implode(' + ', $codes);
+
+            return redirect()->route('accounting.journal-entries.index')
+                ->with('success', "Đã xóa bút toán đã hủy: {$label}.");
+        }
+
+        return back()->with('error', 'Chỉ có thể xóa bút toán ở trạng thái Nháp hoặc Đã hủy (admin).');
     }
 
     /**

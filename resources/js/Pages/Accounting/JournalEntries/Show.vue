@@ -58,6 +58,13 @@
             Xóa
           </button>
 
+          <!-- Xóa đã hủy: chỉ admin -->
+          <button v-if="entry.status === 'voided' && hasRole('admin')"
+            @click="showDeleteVoidedModal = true"
+            class="text-sm px-3 py-1.5 border border-red-300 text-red-600 rounded-lg hover:bg-red-50">
+            Xóa vĩnh viễn
+          </button>
+
           <!-- Thu hồi hạch toán: posted + period not locked -->
           <button v-if="entry.status === 'posted' && !entry.period_locked && can('accounting.manage')"
             @click="showUnpostModal = true"
@@ -237,6 +244,24 @@
       </div>
     </div>
 
+    <!-- Modal: Xóa bút toán đã hủy (admin only) -->
+    <div v-if="showDeleteVoidedModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-sm">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="font-semibold text-gray-900">Xóa vĩnh viễn {{ entry.code }}</h3>
+        </div>
+        <div class="p-6 space-y-3 text-sm text-gray-700">
+          <p>Bút toán đã hủy sẽ bị xóa vĩnh viễn khỏi hệ thống.</p>
+          <p class="text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">Nếu bút toán thuộc một cặp đảo ngược, cả hai sẽ bị xóa cùng lúc.</p>
+          <p class="text-red-600 bg-red-50 px-3 py-2 rounded-lg font-medium">Không thể hoàn tác sau khi xóa.</p>
+        </div>
+        <div class="flex justify-end gap-3 px-6 pb-6">
+          <button @click="showDeleteVoidedModal = false" class="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700">Hủy</button>
+          <button @click="submitDeleteVoided" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700">Xóa vĩnh viễn</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal: Thu hồi hạch toán -->
     <div v-if="showUnpostModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div class="bg-white rounded-xl shadow-xl w-full max-w-sm">
@@ -365,7 +390,7 @@ import { usePermission } from '@/composables/usePermission';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({ entry: Object });
-const { hasPermission: can } = usePermission();
+const { hasPermission: can, hasRole } = usePermission();
 const { formatVnd } = useCurrency();
 
 // Edit description modal
@@ -425,6 +450,13 @@ function submitReverse() {
 const showDeleteDraftModal = ref(false);
 
 function submitDeleteDraft() {
+  router.delete(route('accounting.journal-entries.destroy', props.entry.id));
+}
+
+// Delete voided modal (admin only)
+const showDeleteVoidedModal = ref(false);
+
+function submitDeleteVoided() {
   router.delete(route('accounting.journal-entries.destroy', props.entry.id));
 }
 
