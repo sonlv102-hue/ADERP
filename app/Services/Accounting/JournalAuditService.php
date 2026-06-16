@@ -45,7 +45,6 @@ class JournalAuditService
         // Hóa đơn bán (sent/overdue/paid) không có JE
         $q = DB::table('invoices as i')
             ->whereIn('i.status', ['sent', 'overdue', 'paid'])
-            ->whereNull('i.deleted_at')
             ->whereNotExists(fn($s) =>
                 $s->from('journal_entries as je')
                   ->whereColumn('je.reference_id', 'i.id')
@@ -73,7 +72,6 @@ class JournalAuditService
 
         $q = DB::table('purchase_invoices as pi')
             ->whereIn('pi.status', ['valid', 'partial_paid', 'paid'])
-            ->whereNull('pi.deleted_at')
             ->where(fn($q2) =>
                 $q2->whereNotIn('pi.invoice_type', $inventoryBacked)
                    ->orWhereNull('pi.invoice_type')
@@ -112,7 +110,8 @@ class JournalAuditService
                   ->where('je.status', 'posted')
                   ->whereRaw("je.description NOT LIKE 'Đảo:%'")
             )
-            ->select('se.id', 'se.code', 'se.entry_date as doc_date', 'se.total_amount as total');
+            ->select('se.id', 'se.code', 'se.entry_date as doc_date',
+                DB::raw('(SELECT COALESCE(SUM(sei.quantity * sei.unit_price), 0) FROM stock_entry_items sei WHERE sei.stock_entry_id = se.id) as total'));
 
         if ($from) $q->where('se.entry_date', '>=', $from);
         if ($to)   $q->where('se.entry_date', '<=', $to);
@@ -223,6 +222,11 @@ class JournalAuditService
 
     private function checkDuplicateJournals(?string $from, ?string $to): array
     {
+        $isPostgres = DB::connection()->getDriverName() === 'pgsql';
+        $aggFn = $isPostgres
+            ? "STRING_AGG(je.code, ', ' ORDER BY je.id)"
+            : "GROUP_CONCAT(je.code, ', ')";
+
         $q = DB::table('journal_entries as je')
             ->where('je.status', 'posted')
             ->whereRaw("je.description NOT LIKE 'Đảo:%'")
@@ -232,7 +236,7 @@ class JournalAuditService
                 'je.reference_type',
                 'je.reference_id',
                 DB::raw('COUNT(je.id) as je_count'),
-                DB::raw("STRING_AGG(je.code, ', ' ORDER BY je.id) as je_codes"),
+                DB::raw("{$aggFn} as je_codes"),
                 DB::raw('MAX(je.entry_date) as last_date')
             )
             ->groupBy('je.reference_type', 'je.reference_id')
@@ -256,13 +260,15 @@ class JournalAuditService
     {
         $findings = [];
         $cases = [
-            ['table' => 'invoices',          'type' => 'invoice',          'date_col' => 'issue_date',   'status_col' => 'status', 'cancelled' => 'cancelled'],
-            ['table' => 'purchase_invoices', 'type' => 'purchase_invoice', 'date_col' => 'invoice_date', 'status_col' => 'status', 'cancelled' => 'cancelled'],
-            ['table' => 'stock_entries',     'type' => 'stock_entry',      'date_col' => 'entry_date',   'status_col' => 'status', 'cancelled' => 'cancelled'],
-            ['table' => 'stock_exits',       'type' => 'stock_exit',       'date_col' => 'exit_date',    'status_col' => 'status', 'cancelled' => 'cancelled'],
+            ['table' => 'invoices',          'type' => 'invoice',          'date_col' => 'issue_date',   'status_col' => 'status', 'cancelled' => 'cancelled', 'total_col' => 'total'],
+            ['table' => 'purchase_invoices', 'type' => 'purchase_invoice', 'date_col' => 'invoice_date', 'status_col' => 'status', 'cancelled' => 'cancelled', 'total_col' => 'total'],
+            ['table' => 'stock_entries',     'type' => 'stock_entry',      'date_col' => 'entry_date',   'status_col' => 'status', 'cancelled' => 'cancelled', 'total_col' => null],
+            ['table' => 'stock_exits',       'type' => 'stock_exit',       'date_col' => 'exit_date',    'status_col' => 'status', 'cancelled' => 'cancelled', 'total_col' => null],
         ];
 
         foreach ($cases as $case) {
+            $totalExpr = $case['total_col'] ? "doc.{$case['total_col']}" : '0';
+
             $q = DB::table("{$case['table']} as doc")
                 ->where("doc.{$case['status_col']}", $case['cancelled'])
                 ->whereExists(fn($s) =>
@@ -272,12 +278,10 @@ class JournalAuditService
                       ->where('je.status', 'posted')
                       ->whereRaw("je.description NOT LIKE 'Đảo:%'")
                 )
-                ->select('doc.id', 'doc.code', DB::raw("doc.{$case['date_col']} as doc_date"),
-                         DB::raw('COALESCE(doc.total, doc.total_amount, 0) as total'));
+                ->select('doc.id', 'doc.code',
+                    DB::raw("doc.{$case['date_col']} as doc_date"),
+                    DB::raw("{$totalExpr} as total"));
 
-            if (in_array($case['table'], ['invoices', 'purchase_invoices'])) {
-                $q->whereNull('doc.deleted_at');
-            }
             if ($from) $q->where("doc.{$case['date_col']}", '>=', $from);
             if ($to)   $q->where("doc.{$case['date_col']}", '<=', $to);
 
@@ -308,7 +312,6 @@ class JournalAuditService
         $q = DB::table('invoices as i')
             ->whereIn('i.status', ['sent', 'overdue', 'paid'])
             ->whereNotNull('i.order_id')
-            ->whereNull('i.deleted_at')
             ->whereExists(fn($s) =>
                 // order có ít nhất 1 product dạng hàng hóa
                 $s->from('order_items as oi')
