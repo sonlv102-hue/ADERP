@@ -107,7 +107,7 @@
 import { ref } from 'vue'
 import { router, Link } from '@inertiajs/vue3'
 import AppLayout from '@/Components/Layout/AppLayout.vue'
-import Pagination from '@/Components/Pagination.vue'
+import Pagination from '@/Components/Shared/Pagination.vue'
 
 const props = defineProps({
   advances:      Object,
