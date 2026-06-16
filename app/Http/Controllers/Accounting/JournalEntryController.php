@@ -282,8 +282,11 @@ class JournalEntryController extends Controller
         $this->authorize('accounting.manage');
 
         if ($journalEntry->status === 'draft') {
-            $journalEntry->lines()->delete();
-            $journalEntry->delete();
+            DB::transaction(function () use ($journalEntry) {
+                ProjectWipEntry::where('journal_entry_id', $journalEntry->id)->update(['journal_entry_id' => null]);
+                $journalEntry->lines()->delete();
+                $journalEntry->delete();
+            });
 
             return redirect()->route('accounting.journal-entries.index')
                 ->with('success', "Đã xóa bút toán {$journalEntry->code}.");
