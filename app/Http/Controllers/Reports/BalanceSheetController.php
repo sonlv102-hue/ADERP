@@ -26,7 +26,8 @@ class BalanceSheetController extends Controller
     public function index(Request $request): Response
     {
         $asOf = $request->input('as_of', now()->toDateString());
-        $data = $this->reportSvc->build($asOf);
+        $mode = $request->input('mode', 'management');
+        $data = $this->reportSvc->build($asOf, $mode);
 
         return Inertia::render('Reports/BalanceSheet/Index', [
             'balanceSheet'     => $data['rows'],
@@ -39,16 +40,21 @@ class BalanceSheetController extends Controller
                 'report_name' => $data['report_name'],
                 'circular'    => $data['circular'],
             ],
-            'reportItems'         => $this->getReportItems(),
-            'canManageAccounting' => auth()->user()->can('accounting.manage'),
-            'filters'             => ['as_of' => $asOf],
+            'reportItems'           => $this->getReportItems(),
+            'canManageAccounting'   => auth()->user()->can('accounting.manage'),
+            'filters'               => ['as_of' => $asOf, 'mode' => $mode],
+            'reportMode'            => $data['report_mode'],
+            'provisionalPnl'        => $data['provisional_pnl'],
+            'unclosedIncomeExpense' => $data['unclosed_income_expense'],
+            'glBreakdown'           => $data['gl_breakdown'],
         ]);
     }
 
     public function export(Request $request): BinaryFileResponse
     {
         $asOf = $request->input('as_of', now()->toDateString());
-        $data = $this->reportSvc->build($asOf);
+        $mode = $request->input('mode', 'management');
+        $data = $this->reportSvc->build($asOf, $mode);
 
         return Excel::download(
             new BalanceSheetExport($data),

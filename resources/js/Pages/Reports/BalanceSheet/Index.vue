@@ -22,8 +22,26 @@
         </div>
       </div>
 
-      <!-- Filter -->
+      <!-- Filter + Mode toggle -->
       <div class="flex gap-3 items-center flex-wrap">
+        <!-- Mode toggle -->
+        <div class="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+          <button @click="setMode('management')"
+            class="px-3 py-1.5 text-xs font-medium rounded-md transition-all"
+            :class="mode === 'management'
+              ? 'bg-white shadow text-primary-700'
+              : 'text-gray-600 hover:text-gray-800'">
+            Quản trị
+          </button>
+          <button @click="setMode('official')"
+            class="px-3 py-1.5 text-xs font-medium rounded-md transition-all"
+            :class="mode === 'official'
+              ? 'bg-white shadow text-primary-700'
+              : 'text-gray-600 hover:text-gray-800'">
+            BCTC chính thức
+          </button>
+        </div>
+
         <div class="flex items-center gap-2">
           <label class="text-sm text-gray-600 font-medium">Tại ngày:</label>
           <input v-model="asOf" type="date"
@@ -37,6 +55,39 @@
           </svg>
           Tính lại
         </button>
+      </div>
+
+      <!-- Management mode info banner -->
+      <div v-if="reportMode === 'management' && provisionalPnl !== null"
+        class="bg-blue-50 border border-blue-300 rounded-lg px-4 py-3 flex items-start gap-2">
+        <svg class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <div>
+          <p class="text-sm font-semibold text-blue-800">Chế độ quản trị — lãi/lỗ tạm tính</p>
+          <p class="text-xs text-blue-700 mt-0.5">
+            TK doanh thu/chi phí chưa kết chuyển ({{ unclosedIncomeExpense.join(', ') }}).
+            Lãi/lỗ tạm tính <strong>{{ fmt(provisionalPnl) }}</strong> đã được cộng vào mã 417 để B01a cân.
+            Đây không phải BCTC chính thức — cần chạy kết chuyển cuối kỳ trước khi phát hành.
+          </p>
+        </div>
+      </div>
+
+      <!-- Official mode warning when unclosed accounts exist -->
+      <div v-if="reportMode === 'official' && unclosedIncomeExpense?.length"
+        class="bg-amber-50 border border-amber-300 rounded-lg px-4 py-3 flex items-start gap-2">
+        <svg class="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        </svg>
+        <div>
+          <p class="text-sm font-semibold text-amber-800">Chưa thể phát hành BCTC chính thức</p>
+          <p class="text-xs text-amber-700 mt-0.5">
+            Các TK {{ unclosedIncomeExpense.join(', ') }} còn số dư chưa kết chuyển sang TK 911.
+            Vui lòng chạy kết chuyển cuối kỳ (Kế toán → Kết chuyển kỳ) hoặc chuyển sang chế độ Quản trị để xem báo cáo ước tính.
+          </p>
+        </div>
       </div>
 
       <!-- Warnings -->
@@ -367,6 +418,124 @@
           </p>
         </div>
       </div>
+      <!-- Tab: Đối soát GL -->
+      <div v-show="activeTab === 'gl'" class="space-y-4">
+        <div class="flex items-center justify-between">
+          <p class="text-xs text-gray-500">
+            Nhấn vào dòng chỉ tiêu để xem danh sách tài khoản GL đóng góp vào chỉ tiêu đó.
+          </p>
+          <div class="flex gap-2">
+            <button @click="expandAllGl"
+              class="text-xs text-primary-600 hover:text-primary-800 underline">Mở tất cả</button>
+            <button @click="collapseAllGl"
+              class="text-xs text-gray-500 hover:text-gray-700 underline">Thu tất cả</button>
+          </div>
+        </div>
+
+        <!-- PHẦN I — TÀI SẢN -->
+        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div class="bg-blue-50 border-b border-gray-200 px-5 py-3">
+            <h2 class="font-semibold text-blue-800">PHẦN I — TÀI SẢN</h2>
+          </div>
+          <table class="w-full text-sm">
+            <thead class="border-b border-gray-100 bg-gray-50 text-xs text-gray-500">
+              <tr>
+                <th class="w-6 px-2 py-2"></th>
+                <th class="w-14 text-center px-3 py-2 font-medium">Mã</th>
+                <th class="text-left px-3 py-2 font-medium">Chỉ tiêu / Tài khoản</th>
+                <th class="text-right px-3 py-2 font-medium">Số dư</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="item in glAssets" :key="item.item_code">
+                <tr class="border-b border-gray-100 cursor-pointer select-none hover:bg-blue-50"
+                    @click="toggleGl(item.item_code)">
+                  <td class="px-2 py-2.5 text-center text-gray-400">
+                    <svg class="w-3.5 h-3.5 inline transition-transform duration-150"
+                         :class="expandedGl[item.item_code] ? 'rotate-90' : ''"
+                         fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </td>
+                  <td class="px-3 py-2.5 text-center font-mono text-xs font-semibold text-blue-700">
+                    {{ item.item_code }}
+                  </td>
+                  <td class="px-3 py-2.5 font-medium text-gray-800">{{ item.item_name }}</td>
+                  <td class="px-3 py-2.5 text-right font-semibold"
+                      :class="item.total < 0 ? 'text-red-600' : 'text-gray-900'">
+                    {{ item.total !== 0 ? fmt(item.total) : '—' }}
+                  </td>
+                </tr>
+                <template v-if="expandedGl[item.item_code]">
+                  <tr v-for="acc in item.accounts" :key="acc.code"
+                      class="border-b border-gray-50"
+                      :class="Math.abs(acc.balance) < 1 ? 'bg-gray-50 opacity-50' : 'bg-blue-50/30'">
+                    <td class="px-2 py-1.5"></td>
+                    <td class="px-3 py-1.5 text-center font-mono text-xs text-gray-500">{{ acc.code }}</td>
+                    <td class="pl-8 pr-3 py-1.5 text-xs text-gray-600">{{ acc.name }}</td>
+                    <td class="px-3 py-1.5 text-right font-mono text-xs"
+                        :class="Math.abs(acc.balance) >= 1 ? 'text-gray-900 font-semibold' : 'text-gray-400'">
+                      {{ Math.abs(acc.balance) >= 1 ? fmt(acc.balance) : '—' }}
+                    </td>
+                  </tr>
+                </template>
+              </template>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- PHẦN II — NGUỒN VỐN -->
+        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div class="bg-green-50 border-b border-gray-200 px-5 py-3">
+            <h2 class="font-semibold text-green-800">PHẦN II — NGUỒN VỐN</h2>
+          </div>
+          <table class="w-full text-sm">
+            <thead class="border-b border-gray-100 bg-gray-50 text-xs text-gray-500">
+              <tr>
+                <th class="w-6 px-2 py-2"></th>
+                <th class="w-14 text-center px-3 py-2 font-medium">Mã</th>
+                <th class="text-left px-3 py-2 font-medium">Chỉ tiêu / Tài khoản</th>
+                <th class="text-right px-3 py-2 font-medium">Số dư</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template v-for="item in glSources" :key="item.item_code">
+                <tr class="border-b border-gray-100 cursor-pointer select-none hover:bg-green-50"
+                    @click="toggleGl(item.item_code)">
+                  <td class="px-2 py-2.5 text-center text-gray-400">
+                    <svg class="w-3.5 h-3.5 inline transition-transform duration-150"
+                         :class="expandedGl[item.item_code] ? 'rotate-90' : ''"
+                         fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                    </svg>
+                  </td>
+                  <td class="px-3 py-2.5 text-center font-mono text-xs font-semibold text-green-700">
+                    {{ item.item_code }}
+                  </td>
+                  <td class="px-3 py-2.5 font-medium text-gray-800">{{ item.item_name }}</td>
+                  <td class="px-3 py-2.5 text-right font-semibold"
+                      :class="item.total < 0 ? 'text-red-600' : 'text-gray-900'">
+                    {{ item.total !== 0 ? fmt(item.total) : '—' }}
+                  </td>
+                </tr>
+                <template v-if="expandedGl[item.item_code]">
+                  <tr v-for="acc in item.accounts" :key="acc.code"
+                      class="border-b border-gray-50"
+                      :class="Math.abs(acc.balance) < 1 ? 'bg-gray-50 opacity-50' : 'bg-green-50/30'">
+                    <td class="px-2 py-1.5"></td>
+                    <td class="px-3 py-1.5 text-center font-mono text-xs text-gray-500">{{ acc.code }}</td>
+                    <td class="pl-8 pr-3 py-1.5 text-xs text-gray-600">{{ acc.name }}</td>
+                    <td class="px-3 py-1.5 text-right font-mono text-xs"
+                        :class="Math.abs(acc.balance) >= 1 ? 'text-gray-900 font-semibold' : 'text-gray-400'">
+                      {{ Math.abs(acc.balance) >= 1 ? fmt(acc.balance) : '—' }}
+                    </td>
+                  </tr>
+                </template>
+              </template>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- Modal Map ngay -->
@@ -428,7 +597,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, reactive } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import Modal from '@/Components/Shared/Modal.vue';
@@ -436,28 +605,48 @@ import { useCurrency } from '@/composables/useCurrency';
 import { useInertiaLoading } from '@/composables/useInertiaLoading';
 
 const props = defineProps({
-  balanceSheet:        Array,
-  summary:             Object,
-  warnings:            Array,
-  trialBalance:        Object,
-  unmappedAccounts:    { type: Array,    default: () => [] },
-  reportMeta:          Object,
-  reportItems:         { type: Array,    default: () => [] },
-  canManageAccounting: { type: Boolean,  default: false },
-  filters:             Object,
+  balanceSheet:           Array,
+  summary:                Object,
+  warnings:               Array,
+  trialBalance:           Object,
+  unmappedAccounts:       { type: Array,   default: () => [] },
+  reportMeta:             Object,
+  reportItems:            { type: Array,   default: () => [] },
+  canManageAccounting:    { type: Boolean, default: false },
+  filters:                Object,
+  reportMode:             { type: String,  default: 'management' },
+  provisionalPnl:         { type: Number,  default: null },
+  unclosedIncomeExpense:  { type: Array,   default: () => [] },
+  glBreakdown:            { type: Array,   default: () => [] },
 });
 
 const { formatVnd: fmt } = useCurrency();
 const { isLoading }       = useInertiaLoading();
 
 const asOf       = ref(props.filters?.as_of ?? new Date().toISOString().slice(0, 10));
+const mode       = ref(props.filters?.mode ?? 'management');
 const activeTab  = ref('report');
 
 const tabs = computed(() => [
   { id: 'report',   label: 'Bảng cân đối kế toán' },
   { id: 'unmapped', label: 'TK chưa map' },
   { id: 'check',    label: 'Kiểm tra cân đối' },
+  { id: 'gl',       label: 'Đối soát GL' },
 ]);
+
+// Đối soát GL — accordion state
+const expandedGl = reactive({});
+function toggleGl(code) {
+  expandedGl[code] = !expandedGl[code];
+}
+function expandAllGl() {
+  props.glBreakdown.forEach(i => { expandedGl[i.item_code] = true; });
+}
+function collapseAllGl() {
+  props.glBreakdown.forEach(i => { expandedGl[i.item_code] = false; });
+}
+const glAssets  = computed(() => (props.glBreakdown ?? []).filter(i => i.section === 'asset'));
+const glSources = computed(() => (props.glBreakdown ?? []).filter(i => i.section === 'source'));
 
 const assetRows  = computed(() => (props.balanceSheet ?? []).filter(r => r.section === 'asset'));
 const sourceRows = computed(() => (props.balanceSheet ?? []).filter(r => r.section === 'source'));
@@ -469,7 +658,9 @@ const unmappedTotal = computed(() =>
 const assetItems  = computed(() => (props.reportItems ?? []).filter(i => i.section === 'asset'));
 const equityItems = computed(() => (props.reportItems ?? []).filter(i => i.section === 'equity'));
 
-const exportUrl = computed(() => route('reports.balance_sheet.export') + '?as_of=' + asOf.value);
+const exportUrl = computed(() =>
+  route('reports.balance_sheet.export') + '?as_of=' + asOf.value + '&mode=' + mode.value
+);
 
 // Map ngay modal
 const showMapModal = ref(false);
@@ -507,6 +698,19 @@ function submitMapping() {
 }
 
 function applyFilters() {
-  router.get(route('reports.balance_sheet'), { as_of: asOf.value }, { preserveState: true, replace: true });
+  router.get(
+    route('reports.balance_sheet'),
+    { as_of: asOf.value, mode: mode.value },
+    { preserveState: true, replace: true }
+  );
+}
+
+function setMode(newMode) {
+  mode.value = newMode;
+  router.get(
+    route('reports.balance_sheet'),
+    { as_of: asOf.value, mode: newMode },
+    { preserveState: true, replace: true }
+  );
 }
 </script>

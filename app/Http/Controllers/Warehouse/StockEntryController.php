@@ -20,6 +20,8 @@ use App\Enums\StockEntryStatus;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseContract;
 use App\Models\PurchaseOrder;
+use App\Models\ProjectInventoryLot;
+use App\Models\StockExitItemLotAllocation;
 use App\Models\StockMovement;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -582,6 +584,13 @@ class StockEntryController extends Controller
             StockMovement::where('source_type', StockEntry::class)
                 ->where('source_id', $stockEntry->id)
                 ->delete();
+
+            // Xóa project inventory lots (và allocations voided đi kèm) — FK RESTRICT trên stock_entries
+            $lotIds = ProjectInventoryLot::where('stock_entry_id', $stockEntry->id)->pluck('id');
+            if ($lotIds->isNotEmpty()) {
+                StockExitItemLotAllocation::whereIn('project_inventory_lot_id', $lotIds)->delete();
+                ProjectInventoryLot::whereIn('id', $lotIds)->delete();
+            }
 
             // Xóa entry — stock_entry_items cascade tự xóa theo
             $stockEntry->delete();

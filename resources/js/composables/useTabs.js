@@ -17,6 +17,7 @@ const URL_TITLES = {
   '/warehouse/stock-entries':        'Nhập kho',
   '/warehouse/stock-exits':          'Xuất kho',
   '/warehouse/stock-transfers':      'Chuyển kho',
+  '/warehouse/project-inventory':    'Tồn kho dự án',
   '/warehouse/suppliers':            'Nhà CC',
   '/catalog/product-categories':     'Danh mục SP',
   '/catalog/products':               'Sản phẩm',

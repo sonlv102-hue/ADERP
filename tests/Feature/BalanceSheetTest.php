@@ -190,13 +190,13 @@ class BalanceSheetTest extends TestCase
     }
 
     /**
-     * TC7: TK 511 chưa kết chuyển → cảnh báo xuất hiện.
+     * TC7: TK 511 chưa kết chuyển → cảnh báo xuất hiện ở chế độ chính thức.
      */
     public function test_warning_emitted_when_511_not_closed(): void
     {
         $this->postEntry('2026-06-01', [['1121', 20_000_000, 0], ['511', 0, 20_000_000]]);
 
-        $data = $this->build();
+        $data = $this->svc->build('2026-06-30', 'official');
 
         $this->assertNotEmpty($data['warnings']);
         $this->assertTrue(

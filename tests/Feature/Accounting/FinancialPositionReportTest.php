@@ -392,7 +392,7 @@ class FinancialPositionReportTest extends TestCase
     // ─── Test cảnh báo TK 421 chưa kết chuyển ──────────────────────────────
 
     /**
-     * TC12: Doanh thu/chi phí còn số dư cuối kỳ → cảnh báo chưa kết chuyển.
+     * TC12: Chế độ chính thức — doanh thu/chi phí còn số dư → cảnh báo chưa kết chuyển.
      */
     public function test_warning_when_income_expense_not_closed(): void
     {
@@ -401,13 +401,38 @@ class FinancialPositionReportTest extends TestCase
 
         $this->postEntry('2026-06-01', [['1121', 10_000_000, 0], ['5111', 0, 10_000_000]]);
 
-        $report = $this->build();
+        $report = $this->svc->build('2026-06-30', 'official');
 
-        $this->assertNotEmpty($report['warnings'], 'Phải có cảnh báo');
+        $this->assertNotEmpty($report['warnings'], 'Phải có cảnh báo ở chế độ chính thức');
         $hasUnclosedWarning = collect($report['warnings'])->contains(
             fn($w) => str_contains($w, 'chưa kết chuyển')
         );
         $this->assertTrue($hasUnclosedWarning, 'Phải cảnh báo TK 5111 chưa kết chuyển');
+    }
+
+    /**
+     * TC12b: Chế độ quản trị — doanh thu/chi phí chưa kết chuyển → lãi/lỗ tạm tính, B01a vẫn cân.
+     */
+    public function test_management_mode_provisional_pnl_balances_report(): void
+    {
+        $this->seedAccount('1121', 'asset',   'debit',  '112');
+        $this->seedAccount('411',  'equity',  'credit');
+        $this->seedAccount('6421', 'expense', 'debit');
+
+        // Vốn góp 100M
+        $this->postEntry('2026-01-01', [['1121', 100_000_000, 0], ['411', 0, 100_000_000]]);
+        // Chi phí 30M chưa kết chuyển
+        $this->postEntry('2026-06-01', [['6421', 30_000_000, 0], ['1121', 0, 30_000_000]]);
+
+        $report = $this->svc->build('2026-06-30', 'management');
+
+        // B01a phải cân
+        $this->assertTrue($report['summary']['balanced'], 'Quản trị mode phải cân dù chưa kết chuyển');
+        // provisionalPnL phải âm (lỗ 30M)
+        $this->assertNotNull($report['provisional_pnl']);
+        $this->assertEqualsWithDelta(-30_000_000, $report['provisional_pnl'], 1.0);
+        // unclosedIncomeExpense phải có 6421
+        $this->assertContains('6421', $report['unclosed_income_expense']);
     }
 
     // ─── Test Trial Balance ─────────────────────────────────────────────────

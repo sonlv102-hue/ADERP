@@ -78,6 +78,7 @@
           <NavItem :href="route('warehouse.stock-exits.index')" icon="arrow-circle-right" sub>Xuất kho</NavItem>
           <NavItem :href="route('reports.inventory')" icon="cube" sub>Tồn kho</NavItem>
           <NavItem :href="route('warehouse.inventory-counts.index')" icon="clipboard-list" sub>Kiểm kê kho</NavItem>
+          <NavItem :href="route('warehouse.project-inventory.index')" icon="collection" sub>Tồn kho dự án</NavItem>
           <NavItem v-if="can('warehouse.manage')" :href="route('warehouse.opening-balance.index')" icon="database" sub>Tồn đầu kỳ</NavItem>
           <NavItem :href="route('reports.stock_card')" icon="table" sub>Thẻ kho</NavItem>
         </NavGroup>

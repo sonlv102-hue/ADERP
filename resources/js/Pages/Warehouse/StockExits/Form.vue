@@ -159,7 +159,7 @@
                       <div class="mt-1 flex flex-wrap gap-1">
                         <span v-for="l in lot.lots" :key="l.id"
                           class="rounded-md border border-emerald-200 bg-white px-1.5 py-0.5 text-xs text-gray-600">
-                          {{ l.entry_code }}: {{ l.available }}
+                          {{ l.stock_entry_code }}: {{ l.available_qty }}
                         </span>
                       </div>
                     </div>
@@ -483,7 +483,7 @@ const fetchAvailableLots = async () => {
   }
   lotsLoading.value = true;
   try {
-    const url = route('stock-exits.available-lots') + `?project_id=${form.project_id}&warehouse_id=${form.warehouse_id}`;
+    const url = route('warehouse.stock-exits.available-lots') + `?project_id=${form.project_id}&warehouse_id=${form.warehouse_id}`;
     const res = await fetch(url, { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
     const data = await res.json();
     availableLots.value = data.lots ?? [];

@@ -183,6 +183,16 @@ class StockService
             }
         }
 
+        // Guard: project inventory lots không còn allocation active (issued_qty > 0 nghĩa là exit chưa hủy)
+        $hasActiveLots = ProjectInventoryLot::where('stock_entry_id', $entry->id)
+            ->where('issued_qty', '>', 0)
+            ->exists();
+        if ($hasActiveLots) {
+            throw new RuntimeException(
+                'Không thể hủy: hàng hóa từ phiếu nhập này đã được phân bổ cho phiếu xuất dự án. Vui lòng hủy phiếu xuất trước.'
+            );
+        }
+
         DB::transaction(function () use ($entry) {
             // Tạo movement âm để đảo ngược tồn kho (giữ audit trail)
             foreach ($entry->items as $item) {
@@ -204,6 +214,9 @@ class StockService
                     $serial->transition(SerialStatus::Cancelled);
                 }
             }
+
+            // Đánh dấu project inventory lots là cancelled
+            ProjectInventoryLot::where('stock_entry_id', $entry->id)->update(['status' => 'cancelled']);
 
             $this->accounting->reverseOrDelete('stock_entry', $entry->id, "Hủy phiếu nhập kho {$entry->code}");
             $entry->update(['status' => StockEntryStatus::Cancelled]);

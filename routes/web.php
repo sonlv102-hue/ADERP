@@ -20,6 +20,7 @@ use App\Http\Controllers\Warehouse\StockExitController;
 use App\Http\Controllers\Warehouse\StockTransferController;
 use App\Http\Controllers\Warehouse\InventoryCountController;
 use App\Http\Controllers\Warehouse\InventoryOpeningBalanceController;
+use App\Http\Controllers\Warehouse\ProjectInventoryController;
 use App\Http\Controllers\Sales\QuotationController;
 use App\Http\Controllers\Sales\OrderController;
 use App\Http\Controllers\Reports\ProfitController;
@@ -195,6 +196,7 @@ Route::middleware('auth')->group(function () {
         Route::post('stock-exits/{stockExit}/cancel', [StockExitController::class, 'cancel'])->name('stock-exits.cancel');
         Route::get('stock-exits/{stockExit}/pdf', [StockExitController::class, 'pdf'])->name('stock-exits.pdf');
         Route::get('stock-exits-available-lots', [StockExitController::class, 'availableLots'])->name('stock-exits.available-lots');
+        Route::get('project-inventory', [ProjectInventoryController::class, 'index'])->name('project-inventory.index');
 
         Route::resource('stock-transfers', StockTransferController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
         Route::post('stock-transfers/{stockTransfer}/confirm', [StockTransferController::class, 'confirm'])->name('stock-transfers.confirm');

@@ -499,4 +499,120 @@ class ProjectInventoryTest extends TestCase
         $this->assertEquals(300000, (float) $exitItem->total_cost);
         $this->assertEquals(100000, (float) $exitItem->source_cost);
     }
+
+    /** @test */
+    public function available_lots_api_returns_lots_key_not_bare_array(): void
+    {
+        [$po, $poItem] = $this->makePo(10);
+        $entry = $this->makeEntryDraft($po, $poItem, 4, '2026-06-01');
+        $this->svc->confirmEntry($entry);
+
+        $response = $this->withoutMiddleware()->getJson(route('warehouse.stock-exits.available-lots', [
+            'project_id'   => $this->project->id,
+            'warehouse_id' => $this->warehouse->id,
+        ]));
+
+        $response->assertOk();
+        // Must be wrapped in { lots: [...] } so Vue can read data.lots
+        $response->assertJsonStructure(['lots']);
+        $data = $response->json();
+        $this->assertIsArray($data['lots']);
+        $this->assertNotEmpty($data['lots']);
+        $this->assertEquals(4, $data['lots'][0]['available_qty']);
+    }
+
+    /** @test */
+    public function available_lots_api_isolates_by_project(): void
+    {
+        // Lot for project A
+        [$po, $poItem] = $this->makePo(10);
+        $entry = $this->makeEntryDraft($po, $poItem, 5, '2026-06-01');
+        $this->svc->confirmEntry($entry);
+
+        // Query with a different project — must return empty lots
+        $otherCustomer = \App\Models\Customer::create(['code' => 'KH-OTH', 'name' => 'Other Customer']);
+        $otherProject  = Project::create([
+            'code'        => 'DA-OTH',
+            'name'        => 'Other',
+            'status'      => 'in_progress',
+            'customer_id' => $otherCustomer->id,
+            'created_by'  => $this->user->id,
+        ]);
+
+        $response = $this->withoutMiddleware()->getJson(route('warehouse.stock-exits.available-lots', [
+            'project_id'   => $otherProject->id,
+            'warehouse_id' => $this->warehouse->id,
+        ]));
+
+        $response->assertOk();
+        $this->assertEmpty($response->json('lots'));
+    }
+
+    /** @test */
+    public function available_lots_api_respects_remaining_qty_after_partial_issue(): void
+    {
+        [$po, $poItem] = $this->makePo(10);
+        $entry = $this->makeEntryDraft($po, $poItem, 4, '2026-06-01');
+        $this->svc->confirmEntry($entry);
+
+        // Exit 2 of 4
+        $exit = $this->makeExitDraft(2, 'project_cost');
+        $this->svc->confirmExit($exit);
+
+        $response = $this->withoutMiddleware()->getJson(route('warehouse.stock-exits.available-lots', [
+            'project_id'   => $this->project->id,
+            'warehouse_id' => $this->warehouse->id,
+        ]));
+
+        $response->assertOk();
+        $this->assertEquals(2, $response->json('lots.0.available_qty'));
+    }
+
+    /** @test */
+    public function backfill_command_creates_missing_lots_without_changing_quantities(): void
+    {
+        [$po, $poItem] = $this->makePo(10);
+        $entry = $this->makeEntryDraft($po, $poItem, 6, '2026-06-01');
+
+        // Manually confirm WITHOUT going through confirmEntry to simulate pre-Phase G data
+        $entry->update(['status' => 'confirmed']);
+        // Verify no lot exists
+        $this->assertEquals(0, ProjectInventoryLot::where('stock_entry_id', $entry->id)->count());
+
+        $this->artisan('project-lots:backfill')
+            ->assertExitCode(0);
+
+        $lot = ProjectInventoryLot::where('stock_entry_id', $entry->id)->first();
+        $this->assertNotNull($lot);
+        $this->assertEquals(6, (float) $lot->received_qty);
+        $this->assertEquals(0, (float) $lot->issued_qty);
+        $this->assertEquals($this->project->id, $lot->project_id);
+        $this->assertEquals('active', $lot->status);
+    }
+
+    /** @test */
+    public function backfill_command_dry_run_does_not_write(): void
+    {
+        [$po, $poItem] = $this->makePo(10);
+        $entry = $this->makeEntryDraft($po, $poItem, 3, '2026-06-01');
+        $entry->update(['status' => 'confirmed']);
+
+        $this->artisan('project-lots:backfill --dry-run')
+            ->assertExitCode(0);
+
+        $this->assertEquals(0, ProjectInventoryLot::where('stock_entry_id', $entry->id)->count());
+    }
+
+    /** @test */
+    public function backfill_command_skips_entries_already_having_lots(): void
+    {
+        [$po, $poItem] = $this->makePo(10);
+        $entry = $this->makeEntryDraft($po, $poItem, 5, '2026-06-01');
+        $this->svc->confirmEntry($entry); // creates lot normally
+
+        $this->artisan('project-lots:backfill')->assertExitCode(0);
+
+        // Should still be exactly 1 lot, not duplicated
+        $this->assertEquals(1, ProjectInventoryLot::where('stock_entry_id', $entry->id)->count());
+    }
 }

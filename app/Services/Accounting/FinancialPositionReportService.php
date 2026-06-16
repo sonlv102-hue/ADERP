@@ -22,7 +22,7 @@ class FinancialPositionReportService
 
     // ─────────────────────────────────────────────────────────────────────────
 
-    public function build(string $asOf): array
+    public function build(string $asOf, string $mode = 'management'): array
     {
         $cfg      = config('accounting_reports_tt133');
         $balances = $this->balanceSvc->getAllBalancesAsOf($asOf);
@@ -52,19 +52,19 @@ class FinancialPositionReportService
             );
         }
 
-        // 3. Kiểm tra TK 421 — cảnh báo nếu chưa kết chuyển
+        // 3. Kiểm tra TK 421 — cảnh báo nếu chưa kết chuyển (chỉ ở chế độ chính thức)
         $retained = $balances['421'] ?? $balances['4212'] ?? $balances['4211'] ?? null;
-        if ($retained === null) {
+        if ($retained === null && $mode === 'official') {
             $warnings[] = 'TK 421 chưa có số dư — có thể chưa kết chuyển kết quả kinh doanh. '
                          . 'Mã 417 (LNST chưa phân phối) sẽ = 0.';
         }
 
         // Kiểm tra doanh thu/chi phí chưa kết chuyển
         $unclosed = $this->detectUnclosedIncomeExpense($balances);
-        if (!empty($unclosed)) {
+        if (!empty($unclosed) && $mode === 'official') {
             $warnings[] = 'Các TK doanh thu/chi phí còn số dư (chưa kết chuyển sang 911): '
                          . implode(', ', $unclosed)
-                         . '. Mã 417 có thể chưa phản ánh đúng lợi nhuận kỳ này.';
+                         . '. Cần kết chuyển trước khi phát hành BCTC chính thức.';
         }
 
         // 4. Xây dựng danh sách items hiệu quả (merge DB mappings + prefix inheritance)
@@ -96,6 +96,24 @@ class FinancialPositionReportService
                 $item['formula'] ?? '',
                 $computed
             );
+        }
+
+        // 5b. Management mode: lãi/lỗ tạm tính khi chưa kết chuyển
+        $provisionalPnL = null;
+        if ($mode === 'management' && !empty($unclosed)) {
+            $pnl = $this->computeProvisionalPnL($balances);
+            if (abs($pnl) > 1) {
+                $provisionalPnL  = $pnl;
+                $computed['417'] = ($computed['417'] ?? 0.0) + $pnl;
+                // Re-evaluate formula items so totals (400, 500, ...) reflect the adjustment
+                foreach ($allItems as $item) {
+                    if ($item['balance_side'] === 'formula') {
+                        $computed[$item['item_code']] = $this->evaluateFormula(
+                            $item['formula'] ?? '', $computed
+                        );
+                    }
+                }
+            }
         }
 
         // 6. Kiểm tra TK 353 dư Nợ
@@ -145,16 +163,23 @@ class FinancialPositionReportService
             );
         }
 
+        // 9. GL breakdown (drill-down cho tab Đối soát GL)
+        $glBreakdown = $this->buildGlBreakdown($effectiveItems, $computed, $balances);
+
         return [
-            'unmapped_accounts' => $unmapped,
-            'rows'              => array_merge($assetRows, $sourceRows),
-            'summary'           => $summary,
-            'warnings'          => $warnings,
-            'trial_balance'     => $trialBalance,
-            'as_of'             => $asOf,
-            'report_code'       => $cfg['report_code'],
-            'report_name'       => $cfg['report_name'],
-            'circular'          => $cfg['circular'],
+            'unmapped_accounts'       => $unmapped,
+            'rows'                    => array_merge($assetRows, $sourceRows),
+            'summary'                 => $summary,
+            'warnings'                => $warnings,
+            'trial_balance'           => $trialBalance,
+            'as_of'                   => $asOf,
+            'report_code'             => $cfg['report_code'],
+            'report_name'             => $cfg['report_name'],
+            'circular'                => $cfg['circular'],
+            'report_mode'             => $mode,
+            'provisional_pnl'         => $provisionalPnL,
+            'unclosed_income_expense' => $unclosed,
+            'gl_breakdown'            => $glBreakdown,
         ];
     }
 
@@ -345,8 +370,8 @@ class FinancialPositionReportService
                 continue;
             }
             foreach ($prefixes as $prefix) {
-                if (str_starts_with((string) $code, $prefix) && $code !== '911') {
-                    $unclosed[] = $code;
+                if (str_starts_with((string) $code, $prefix) && (string) $code !== '911') {
+                    $unclosed[] = (string) $code;
                     break;
                 }
             }
@@ -410,6 +435,80 @@ class FinancialPositionReportService
         }
 
         return $unmapped;
+    }
+
+    /**
+     * Tính lãi/lỗ tạm tính từ TK doanh thu/chi phí chưa kết chuyển.
+     * Dương = lãi, âm = lỗ.
+     */
+    private function computeProvisionalPnL(array $balances): float
+    {
+        $revenue  = 0.0;
+        $expenses = 0.0;
+
+        foreach ($balances as $code => $net) {
+            $prefix = substr((string)$code, 0, 1);
+            if (in_array($prefix, ['5', '7'])) {
+                $revenue += $net;  // credit-normal: net > 0 = doanh thu
+            } elseif (in_array($prefix, ['6', '8'])) {
+                $expenses += $net; // debit-normal: net > 0 = chi phí
+            }
+        }
+
+        return $revenue - $expenses;
+    }
+
+    /**
+     * Drill-down từ B01a item → danh sách TK GL với số dư, để hiển thị tab Đối soát GL.
+     * Mỗi item chứa: item_code, item_name, section, total (computed), accounts[].
+     */
+    private function buildGlBreakdown(array $effectiveItems, array $computed, array $balances): array
+    {
+        $allCodes = [];
+        foreach (['assets', 'equity'] as $section) {
+            foreach ($effectiveItems[$section] as $item) {
+                if ($item['balance_side'] === 'formula') continue;
+                foreach ($item['accounts'] ?? [] as $code) {
+                    $allCodes[] = (string) $code;
+                }
+            }
+        }
+
+        $nameMap = [];
+        if (!empty($allCodes)) {
+            $nameMap = DB::table('account_codes')
+                ->whereIn('code', array_unique($allCodes))
+                ->pluck('name', 'code')
+                ->all();
+        }
+
+        $result = [];
+        $sectionMap = ['assets' => 'asset', 'equity' => 'source'];
+
+        foreach ($sectionMap as $key => $sectionLabel) {
+            foreach ($effectiveItems[$key] as $item) {
+                if ($item['balance_side'] === 'formula') continue;
+                $accounts = [];
+                foreach ($item['accounts'] ?? [] as $code) {
+                    $code = (string) $code;
+                    $accounts[] = [
+                        'code'    => $code,
+                        'name'    => $nameMap[$code] ?? '—',
+                        'balance' => $balances[$code] ?? 0.0,
+                    ];
+                }
+                $result[] = [
+                    'item_code'    => $item['item_code'],
+                    'item_name'    => $item['item_name'],
+                    'section'      => $sectionLabel,
+                    'balance_side' => $item['balance_side'],
+                    'total'        => $computed[$item['item_code']] ?? 0.0,
+                    'accounts'     => $accounts,
+                ];
+            }
+        }
+
+        return $result;
     }
 
     /**

@@ -143,7 +143,7 @@ class StockExitController extends Controller
             ];
         })->values();
 
-        return response()->json($grouped);
+        return response()->json(['lots' => $grouped]);
     }
 
     private function issuePurposesForDropdown(): array
