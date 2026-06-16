@@ -350,6 +350,8 @@ Route::middleware('auth')->group(function () {
         Route::post('payrolls/{payroll}/lock', [PayrollController::class, 'lock'])->name('payrolls.lock')->middleware('can:accounting.manage');
         Route::post('payrolls/{payroll}/unlock', [PayrollController::class, 'unlock'])->name('payrolls.unlock')->middleware('can:accounting.manage');
         Route::patch('payrolls/{payroll}/items/{item}/adjustment', [PayrollController::class, 'updateAdjustment'])->name('payrolls.items.adjustment');
+        Route::get('payrolls/{payroll}/export-excel', [PayrollController::class, 'exportExcel'])->name('payrolls.export-excel');
+        Route::get('payrolls/{payroll}/export-pdf',   [PayrollController::class, 'exportPdf'])->name('payrolls.export-pdf');
 
         // Kê khai thuế (Taxes)
         Route::get('taxes', [TaxController::class, 'index'])->name('taxes.index');

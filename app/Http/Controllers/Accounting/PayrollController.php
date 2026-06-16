@@ -2,17 +2,22 @@
 
 namespace App\Http\Controllers\Accounting;
 
+use App\Exports\PayrollExport;
 use App\Http\Controllers\Controller;
-use App\Models\BankAccount;
+use App\Models\Fund;
 use App\Models\Payroll;
 use App\Models\PayrollItem;
 use App\Services\PayrollService;
 use App\Services\PitCalculatorService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class PayrollController extends Controller
 {
@@ -25,7 +30,14 @@ class PayrollController extends Controller
     {
         $query = Payroll::with('creator')->orderByDesc('period');
 
-        $payrolls = $query->paginate(20)->through(fn (Payroll $p) => [
+        if ($request->filled('period')) {
+            $query->where('period', 'like', $request->input('period') . '%');
+        }
+        if ($request->filled('status')) {
+            $query->where('status', $request->input('status'));
+        }
+
+        $payrolls = $query->paginate(20)->withQueryString()->through(fn (Payroll $p) => [
             'id'                => $p->id,
             'code'              => $p->code,
             'period'            => $p->period,
@@ -43,6 +55,7 @@ class PayrollController extends Controller
 
         return Inertia::render('Accounting/Payrolls/Index', [
             'payrolls' => $payrolls,
+            'filters'  => $request->only('period', 'status'),
         ]);
     }
 
@@ -78,10 +91,13 @@ class PayrollController extends Controller
             ->get()
             ->map(fn (PayrollItem $item) => $this->itemDTO($item));
 
-        $bankAccounts = BankAccount::orderBy('bank_name')
-            ->get(['id', 'bank_name', 'account_number', 'account_code', 'name']);
+        $canManage = auth()->user()->can('accounting.manage');
+
+        $funds = Fund::where('is_active', true)->orderBy('type')->orderBy('name')
+            ->get(['id', 'name', 'type', 'account_code']);
 
         return Inertia::render('Accounting/Payrolls/Show', [
+            'can_manage' => $canManage,
             'payroll' => [
                 'id'                        => $payroll->id,
                 'code'                      => $payroll->code,
@@ -98,6 +114,7 @@ class PayrollController extends Controller
                 'total_pit'                 => (float) $payroll->total_pit,
                 'total_deductions'          => (float) $payroll->total_deductions,
                 'total_net_salary'          => (float) $payroll->total_net_salary,
+                'total_adjustment'          => (float) ($payroll->total_adjustment ?? 0),
                 'creator'                   => $payroll->creator?->name,
                 'notes'                     => $payroll->notes,
                 'created_at'                => $payroll->created_at->format('d/m/Y H:i'),
@@ -109,8 +126,8 @@ class PayrollController extends Controller
                 'union_fee_confirmed_by'    => $payroll->unionFeeConfirmedBy?->name,
                 'union_fee_confirmed_at'    => $payroll->union_fee_confirmed_at?->format('d/m/Y H:i'),
             ],
-            'items'        => $items,
-            'bankAccounts' => $bankAccounts,
+            'items' => $items,
+            'funds' => $funds,
         ]);
     }
 
@@ -244,13 +261,15 @@ class PayrollController extends Controller
                 + ((int) $item->dependents_count * \App\Services\PitCalculatorService::DEPENDENT_DEDUCTION);
         }
 
+        $emp = $item->employee;
         return [
             'id'                       => $item->id,
-            'employee_name'            => $item->employee?->name ?? $item->user?->name,
-            'employee_code'            => $item->employee?->code,
-            'department'               => $item->employee?->department,
-            'position'                 => $item->employee?->position ?? $item->user?->roles?->first()?->name ?? 'Nhân viên',
-            'pit_tax_code'             => $item->employee?->pit_tax_code ?? $item->user?->pit_tax_code,
+            'employee_name'            => $emp?->name ?? $item->user?->name,
+            'employee_code'            => $emp?->code,
+            'department'               => $emp?->department,
+            'position'                 => $emp?->position ?? $item->user?->roles?->first()?->name ?? 'Nhân viên',
+            'employment_type'          => $emp?->employment_type?->label() ?? '',
+            'pit_tax_code'             => $emp?->pit_tax_code ?? $item->user?->pit_tax_code,
             'base_salary'              => (float) $item->base_salary,
             'allowance'                => (float) $item->allowance,
             'allowance_responsibility' => (float) ($item->allowance_responsibility ?? 0),
@@ -273,9 +292,13 @@ class PayrollController extends Controller
             'taxable_for_pit'          => max(0, round($gross - $insEmp - $personalDed)),
             'deductions'               => (float) $item->deductions,
             'net_salary'               => (float) $item->net_salary,
-            'working_days'             => (int)   ($item->working_days  ?? 26),
-            'standard_days'            => (int)   ($item->standard_days ?? 26),
-            'advance'                  => (float) ($item->advance       ?? 0),
+            'working_days'             => (int)   ($item->working_days       ?? 26),
+            'standard_days'            => (int)   ($item->standard_days     ?? 26),
+            'actual_working_days'      => (float) ($item->actual_working_days ?? 0),
+            'paid_leave_days'          => (float) ($item->paid_leave_days     ?? 0),
+            'unpaid_leave_days'        => (float) ($item->unpaid_leave_days   ?? 0),
+            'overtime_days'            => (float) ($item->overtime_days       ?? 0),
+            'advance'                  => (float) ($item->advance             ?? 0),
             'insurance_subject'        => (bool)  ($item->insurance_subject ?? true),
             'adjustment_amount'        => (float) ($item->adjustment_amount ?? 0),
             'adjustment_reason'        => $item->adjustment_reason,
@@ -427,15 +450,51 @@ class PayrollController extends Controller
     public function payEmployee(Request $request, Payroll $payroll, PayrollItem $item): RedirectResponse
     {
         $data = $request->validate([
-            'bank_account_id' => 'required|exists:bank_accounts,id',
+            'fund_id' => 'required|exists:funds,id',
         ]);
+
         try {
-            $this->service->payEmployeeSalary($item, $data['bank_account_id']);
+            $fund = Fund::findOrFail($data['fund_id']);
+            if (! $fund->is_active) {
+                throw new RuntimeException("Quỹ '{$fund->name}' không còn hoạt động.");
+            }
+            $this->service->payEmployeeSalary($item, $fund);
             $employeeName = $item->employee?->name ?? $item->user?->name ?? 'nhân viên';
             return back()->with('success', "Đã thanh toán lương cho {$employeeName}.");
         } catch (RuntimeException $e) {
             return back()->with('error', $e->getMessage());
         }
+    }
+
+    public function exportExcel(Payroll $payroll): BinaryFileResponse
+    {
+        $this->authorize('accounting.view');
+        $payroll->load('creator');
+        $items = $payroll->items()->with('employee', 'user', 'salaryJournalEntry', 'adjustedBy')
+            ->orderBy('id')->get()
+            ->map(fn (PayrollItem $item) => $this->itemDTO($item));
+
+        $filename = 'Bang-luong-' . str_replace('-', '', $payroll->period) . '.xlsx';
+        return Excel::download(new PayrollExport($payroll, $items), $filename);
+    }
+
+    public function exportPdf(Payroll $payroll): HttpResponse
+    {
+        $this->authorize('accounting.view');
+        $payroll->load('creator');
+        $items = $payroll->items()->with('employee', 'user', 'salaryJournalEntry', 'adjustedBy')
+            ->orderBy('id')->get()
+            ->map(fn (PayrollItem $item) => $this->itemDTO($item));
+
+        $company = \App\Models\Setting::getGroup('company');
+        $pdf = Pdf::loadView('pdf.payroll', [
+            'payroll' => $payroll,
+            'items'   => $items,
+            'company' => $company,
+        ])->setPaper('a4', 'landscape');
+
+        $filename = 'Bang-luong-' . str_replace('-', '', $payroll->period) . '.pdf';
+        return $pdf->download($filename);
     }
 
     public function destroy(Payroll $payroll): RedirectResponse

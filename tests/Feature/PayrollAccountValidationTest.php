@@ -7,8 +7,9 @@ use App\Models\AccountCode;
 use App\Models\AccountingPeriod;
 use App\Models\AttendanceRecord;
 use App\Models\AttendanceSheet;
-use App\Models\BankAccount;
+use App\Models\CashVoucher;
 use App\Models\Employee;
+use App\Models\Fund;
 use App\Models\JournalEntry;
 use App\Models\Payroll;
 use App\Models\User;
@@ -99,63 +100,58 @@ class PayrollAccountValidationTest extends TestCase
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // PA1: bank account không có account_code → fail với thông báo rõ ràng
+    // PA1: quỹ không có account_code → fallback TK 1111 không tồn tại → fail rõ ràng
     // ─────────────────────────────────────────────────────────────────────────
 
-    public function test_PA1_payEmployee_fails_when_bank_account_has_no_account_code(): void
+    public function test_PA1_payEmployee_fails_when_fund_has_no_account_code(): void
     {
         [$payroll, $item] = $this->createConfirmedPayroll('2026-05');
         $this->assertEquals(PayrollStatus::Confirmed->value, $payroll->status->value,
             'Payroll phải confirmed trước khi test payEmployee');
 
-        // account_code='' (chuỗi rỗng) mô phỏng bank account chưa cấu hình TK kế toán
-        $bank = BankAccount::create([
-            'name'           => 'Bank không có TK kế toán',
-            'bank_name'      => 'Test Bank',
-            'account_number' => '000000001',
-            'account_code'   => '',
-            'is_active'      => true,
+        // Quỹ không có account_code → resolveFundAccount fallback về 1111 → 1111 chưa seed → lỗi "không tồn tại"
+        $fund = Fund::create([
+            'code'         => 'QUY-TEST1',
+            'name'         => 'Quỹ chưa cấu hình TK',
+            'type'         => 'cash',
+            'account_code' => '',
+            'is_active'    => true,
         ]);
 
         $response = $this->post(
             route('accounting.payrolls.items.pay', [$payroll->id, $item->id]),
-            ['bank_account_id' => $bank->id]
+            ['fund_id' => $fund->id]
         );
 
         // Phải trả lỗi — không phải 500 hay 200 silent success
         $response->assertRedirect();
         $response->assertSessionHas('error');
-        $this->assertStringContainsString(
-            'chưa cấu hình tài khoản kế toán',
-            session('error'),
-            'Thông báo lỗi phải đề cập đến thiếu cấu hình tài khoản kế toán'
-        );
 
         // PayrollItem không được chuyển sang Paid
         $item->refresh();
-        $this->assertNotEquals('paid', $item->status->value, 'Item không được paid khi bank account không hợp lệ');
+        $this->assertNotEquals('paid', $item->status->value, 'Item không được paid khi quỹ không hợp lệ');
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // PA2: bank account dùng TK tổng hợp (112, is_detail=false) → fail rõ ràng
+    // PA2: quỹ dùng TK tổng hợp (112, is_detail=false) → fail "tổng hợp"
     // ─────────────────────────────────────────────────────────────────────────
 
-    public function test_PA2_payEmployee_fails_when_bank_account_uses_parent_account(): void
+    public function test_PA2_payEmployee_fails_when_fund_uses_parent_account(): void
     {
         [$payroll, $item] = $this->createConfirmedPayroll('2026-05');
 
         // '112' seeded by migration as is_detail=false (parent)
-        $bank = BankAccount::create([
-            'name'           => 'Bank dùng TK cha',
-            'bank_name'      => 'Test Bank',
-            'account_number' => '000000002',
-            'account_code'   => '112',
-            'is_active'      => true,
+        $fund = Fund::create([
+            'code'         => 'QUY-TEST2',
+            'name'         => 'Quỹ dùng TK cha',
+            'type'         => 'bank',
+            'account_code' => '112',
+            'is_active'    => true,
         ]);
 
         $response = $this->post(
             route('accounting.payrolls.items.pay', [$payroll->id, $item->id]),
-            ['bank_account_id' => $bank->id]
+            ['fund_id' => $fund->id]
         );
 
         $response->assertRedirect();
@@ -171,24 +167,24 @@ class PayrollAccountValidationTest extends TestCase
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // PA3: bank account dùng TK chi tiết (1121) → payEmployeeSalary tạo JE thành công
+    // PA3: quỹ ngân hàng dùng TK chi tiết (1121) → thành công, tạo phiếu chi + JE
     // ─────────────────────────────────────────────────────────────────────────
 
-    public function test_PA3_payEmployee_succeeds_with_leaf_account(): void
+    public function test_PA3_payEmployee_succeeds_with_bank_fund(): void
     {
         [$payroll, $item] = $this->createConfirmedPayroll('2026-05');
 
-        $bank = BankAccount::create([
-            'name'           => 'Bank hợp lệ',
-            'bank_name'      => 'Test Bank',
-            'account_number' => '000000003',
-            'account_code'   => '1121',
-            'is_active'      => true,
+        $fund = Fund::create([
+            'code'         => 'QUY-TEST3',
+            'name'         => 'Tài khoản ngân hàng kiểm thử',
+            'type'         => 'bank',
+            'account_code' => '1121',
+            'is_active'    => true,
         ]);
 
         $response = $this->post(
             route('accounting.payrolls.items.pay', [$payroll->id, $item->id]),
-            ['bank_account_id' => $bank->id]
+            ['fund_id' => $fund->id]
         );
 
         $response->assertRedirect();
@@ -197,7 +193,9 @@ class PayrollAccountValidationTest extends TestCase
         $item->refresh();
         $this->assertEquals('paid', $item->status->value, 'Item phải được đánh dấu Paid');
         $this->assertNotNull($item->salary_journal_entry_id, 'salary_journal_entry_id không được null');
+        $this->assertNotNull($item->cash_voucher_id, 'cash_voucher_id không được null');
         $this->assertNotNull(JournalEntry::find($item->salary_journal_entry_id), 'JE phải tồn tại');
+        $this->assertNotNull(CashVoucher::find($item->cash_voucher_id), 'Phiếu chi phải tồn tại');
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -274,17 +272,18 @@ class PayrollAccountValidationTest extends TestCase
     {
         [$payroll, $item] = $this->createConfirmedPayroll('2026-05');
 
-        $bank = BankAccount::create([
-            'name'           => 'Bank empty code',
-            'bank_name'      => 'Test Bank',
-            'account_number' => '000000006',
-            'account_code'   => '',
-            'is_active'      => true,
+        // Quỹ không có account_code → fallback TK 1111 chưa seed → lỗi rõ ràng
+        $fund = Fund::create([
+            'code'         => 'QUY-TEST6',
+            'name'         => 'Quỹ không có TK',
+            'type'         => 'cash',
+            'account_code' => '',
+            'is_active'    => true,
         ]);
 
         $response = $this->post(
             route('accounting.payrolls.items.pay', [$payroll->id, $item->id]),
-            ['bank_account_id' => $bank->id]
+            ['fund_id' => $fund->id]
         );
 
         // Không được trả 500 (exception không bị handle)
@@ -297,6 +296,64 @@ class PayrollAccountValidationTest extends TestCase
         // PayrollItem vẫn unpaid
         $item->refresh();
         $this->assertNotEquals('paid', $item->status->value);
-        $this->assertNull($item->salary_journal_entry_id);
+        $this->assertNull($item->cash_voucher_id);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PA7: chi lương bằng quỹ tiền mặt → Nợ 3341/Có 1111, phiếu chi tạo ra, số dư quỹ giảm
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function test_PA7_cash_fund_payment_reduces_fund_balance_and_creates_cash_voucher(): void
+    {
+        // Seed TK 1111 (tiền mặt chi tiết)
+        AccountCode::firstOrCreate(['code' => '1111'], [
+            'name'           => 'Tiền mặt VND',
+            'type'           => 'asset',
+            'normal_balance' => 'debit',
+            'parent_code'    => '111',
+            'level'          => 4,
+            'is_detail'      => true,
+            'is_active'      => true,
+        ]);
+
+        $fund = Fund::create([
+            'code'            => 'QUY-TEST7',
+            'name'            => 'Quỹ tiền mặt kiểm thử',
+            'type'            => 'cash',
+            'account_code'    => '1111',
+            'opening_balance' => 50_000_000,
+            'is_active'       => true,
+        ]);
+
+        [$payroll, $item] = $this->createConfirmedPayroll('2026-05');
+        $net = (float) $item->net_salary;
+
+        $balanceBefore = $fund->balance();
+
+        $response = $this->post(
+            route('accounting.payrolls.items.pay', [$payroll->id, $item->id]),
+            ['fund_id' => $fund->id]
+        );
+
+        $response->assertRedirect();
+        $response->assertSessionMissing('error');
+
+        $item->refresh();
+        $this->assertEquals('paid', $item->status->value);
+        $this->assertNotNull($item->cash_voucher_id);
+
+        // Phiếu chi phải được tạo với trạng thái confirmed
+        $voucher = CashVoucher::find($item->cash_voucher_id);
+        $this->assertNotNull($voucher, 'Phiếu chi phải tồn tại');
+        $this->assertEquals('payment', $voucher->type->value, 'Phải là phiếu chi');
+        $this->assertEquals('confirmed', $voucher->status->value, 'Phiếu chi phải confirmed');
+        $this->assertEquals($fund->id, $voucher->fund_id, 'Phiếu chi phải liên kết với quỹ đã chọn');
+        $this->assertEquals($net, (float) $voucher->amount, 'Số tiền phiếu chi phải bằng thực lĩnh');
+
+        // Số dư quỹ phải giảm đúng bằng số tiền đã chi
+        $fund->refresh();
+        $balanceAfter = $fund->balance();
+        $this->assertEqualsWithDelta($balanceBefore - $net, $balanceAfter, 1.0,
+            'Số dư quỹ phải giảm đúng bằng số tiền chi lương');
     }
 }

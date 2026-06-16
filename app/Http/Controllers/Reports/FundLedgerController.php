@@ -70,9 +70,21 @@ class FundLedgerController extends Controller
             ->where('fund_id', $fund->id)->where('payment_date', '<', $dateFrom)->sum('amount');
 
         $apPaid = DB::table('purchase_invoice_payments')
-            ->where('fund_id', $fund->id)->where('payment_date', '<', $dateFrom)->sum('amount');
+            ->where('fund_id', $fund->id)->where('status', '!=', 'voided')
+            ->where('payment_date', '<', $dateFrom)->sum('amount');
 
-        return (float) $fund->opening_balance + $receipts - $payments + $arReceived - $apPaid;
+        $transfersIn = DB::table('fund_transfers')
+            ->where('to_fund_id', $fund->id)->where('status', 'posted')
+            ->where('transfer_date', '<', $dateFrom)->sum('amount');
+
+        $transfersOut = DB::table('fund_transfers')
+            ->where('from_fund_id', $fund->id)->where('status', 'posted')
+            ->where('transfer_date', '<', $dateFrom)->sum('amount');
+
+        return (float) $fund->opening_balance
+            + $receipts - $payments
+            + $arReceived - $apPaid
+            + $transfersIn - $transfersOut;
     }
 
     private function buildLedger(Fund $fund, string $from, string $to): array
@@ -143,11 +155,12 @@ class FundLedgerController extends Controller
             ];
         }
 
-        // Thanh toán NCC (purchase_invoice_payments gắn quỹ này)
+        // Thanh toán NCC (purchase_invoice_payments gắn quỹ này, không tính voided)
         $apPayments = DB::table('purchase_invoice_payments')
             ->join('purchase_invoices', 'purchase_invoices.id', '=', 'purchase_invoice_payments.purchase_invoice_id')
             ->join('suppliers', 'suppliers.id', '=', 'purchase_invoices.supplier_id')
             ->where('purchase_invoice_payments.fund_id', $fund->id)
+            ->where('purchase_invoice_payments.status', '!=', 'voided')
             ->whereBetween('purchase_invoice_payments.payment_date', [$from, $to])
             ->orderBy('purchase_invoice_payments.payment_date')->orderBy('purchase_invoice_payments.id')
             ->select('purchase_invoice_payments.payment_date as date', 'purchase_invoices.code as ref',
@@ -167,7 +180,51 @@ class FundLedgerController extends Controller
             ];
         }
 
-        usort($entries, fn ($a, $b) => strcmp($a['date'], $b['date']));
+        // Luân chuyển quỹ vào
+        $transfersIn = DB::table('fund_transfers')
+            ->where('to_fund_id', $fund->id)->where('status', 'posted')
+            ->whereBetween('transfer_date', [$from, $to])
+            ->orderBy('transfer_date')->orderBy('id')
+            ->select(DB::raw("transfer_date as date"), 'code as ref',
+                     DB::raw("'Luân chuyển quỹ vào' as description"),
+                     DB::raw("'' as counterparty"), 'amount')
+            ->get();
+
+        foreach ($transfersIn as $t) {
+            $entries[] = [
+                'date'        => $t->date,
+                'ref'         => $t->ref,
+                'description' => $t->description,
+                'counterparty'=> '',
+                'debit'       => (float) $t->amount,
+                'credit'      => 0.0,
+                'balance'     => 0.0,
+            ];
+        }
+
+        // Luân chuyển quỹ ra
+        $transfersOut = DB::table('fund_transfers')
+            ->where('from_fund_id', $fund->id)->where('status', 'posted')
+            ->whereBetween('transfer_date', [$from, $to])
+            ->orderBy('transfer_date')->orderBy('id')
+            ->select(DB::raw("transfer_date as date"), 'code as ref',
+                     DB::raw("'Luân chuyển quỹ ra' as description"),
+                     DB::raw("'' as counterparty"), 'amount')
+            ->get();
+
+        foreach ($transfersOut as $t) {
+            $entries[] = [
+                'date'        => $t->date,
+                'ref'         => $t->ref,
+                'description' => $t->description,
+                'counterparty'=> '',
+                'debit'       => 0.0,
+                'credit'      => (float) $t->amount,
+                'balance'     => 0.0,
+            ];
+        }
+
+        usort($entries, fn ($a, $b) => strcmp($a['date'] . $a['ref'], $b['date'] . $b['ref']));
 
         return $entries;
     }

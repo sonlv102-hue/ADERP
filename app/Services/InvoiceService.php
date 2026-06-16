@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\InvoiceStatus;
+use App\Models\Fund;
 use App\Models\Invoice;
 use App\Models\JournalEntry;
 use App\Models\Payment;
@@ -149,10 +150,7 @@ class InvoiceService
         $amount = (float) $payment->amount;
         if ($amount <= 0) return;
 
-        $method = $payment->method instanceof \App\Enums\PaymentMethod
-            ? $payment->method->value
-            : ($payment->method ?? 'cash');
-        $cashAccount = $this->resolvePaymentAccount($method);
+        $cashAccount = $this->resolvePaymentAccount($payment);
 
         $invoice->loadMissing('customer');
         $receivableAccount = $invoice->customer->getReceivableAccount();
@@ -240,11 +238,18 @@ class InvoiceService
                             'description' => "Doanh thu - {$invoice->code}"]];
     }
 
-    private function resolvePaymentAccount(string $method): string
+    private function resolvePaymentAccount(Payment $payment): string
     {
+        if ($payment->fund_id) {
+            $fund = Fund::find($payment->fund_id);
+            if ($fund?->account_code) return $fund->account_code;
+        }
+        $method = $payment->method instanceof \App\Enums\PaymentMethod
+            ? $payment->method->value
+            : ($payment->method ?? 'cash');
         return match($method) {
             'bank_transfer', 'bank' => AccountingSettings::get('bank_account', '1121'),
-            default => AccountingSettings::get('cash_account', '1111'),
+            default                 => AccountingSettings::get('cash_account', '1111'),
         };
     }
 

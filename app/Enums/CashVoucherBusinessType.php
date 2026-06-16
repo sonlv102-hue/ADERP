@@ -2,6 +2,8 @@
 
 namespace App\Enums;
 
+use App\Services\AccountingSettings;
+
 enum CashVoucherBusinessType: string
 {
     case AdvancePayment             = 'advance_payment';             // Chi tạm ứng → Dr 141
@@ -13,6 +15,7 @@ enum CashVoucherBusinessType: string
     case ExpensePayment             = 'expense_payment';             // Chi phí bằng tiền
     case EquityContribution         = 'equity_contribution';         // Nhận góp vốn → Cr 4111
     case CollectPersonalReceivable  = 'collect_personal_receivable'; // Thu hồi phải thu cá nhân → Cr 1388
+    case SalaryPayment              = 'salary_payment';              // Chi lương → Dr 3341
 
     public function label(): string
     {
@@ -26,6 +29,7 @@ enum CashVoucherBusinessType: string
             self::ExpensePayment            => 'Chi phí bằng tiền',
             self::EquityContribution        => 'Nhận góp vốn chủ sở hữu',
             self::CollectPersonalReceivable => 'Thu hồi phải thu cá nhân',
+            self::SalaryPayment             => 'Thanh toán lương',
         };
     }
 
@@ -33,7 +37,8 @@ enum CashVoucherBusinessType: string
     public function voucherType(): string
     {
         return match ($this) {
-            self::AdvancePayment, self::PayOffset, self::PaySupplier, self::ExpensePayment => 'payment',
+            self::AdvancePayment, self::PayOffset, self::PaySupplier,
+            self::ExpensePayment, self::SalaryPayment                                     => 'payment',
             self::AdvanceReturn, self::CollectOffset, self::CollectCustomer,
             self::EquityContribution, self::CollectPersonalReceivable                     => 'receipt',
         };
@@ -59,6 +64,7 @@ enum CashVoucherBusinessType: string
             self::ExpensePayment                         => '6422',
             self::EquityContribution                     => '4111',
             self::CollectPersonalReceivable              => '1388',
+            self::SalaryPayment                          => AccountingSettings::get('salary_payable_account', '3341'),
         };
     }
 
@@ -67,7 +73,8 @@ enum CashVoucherBusinessType: string
     {
         return match ($this) {
             self::AdvancePayment, self::AdvanceReturn,
-            self::CollectPersonalReceivable              => 'employee',
+            self::CollectPersonalReceivable,
+            self::SalaryPayment                          => 'employee',
             self::PaySupplier                            => 'supplier',
             self::CollectCustomer                        => 'customer',
             self::EquityContribution                     => 'shareholder',

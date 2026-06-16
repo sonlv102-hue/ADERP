@@ -6,8 +6,8 @@ use App\Enums\PayrollStatus;
 use App\Enums\PayrollItemStatus;
 use App\Models\AttendanceRecord;
 use App\Models\AttendanceSheet;
-use App\Models\BankAccount;
 use App\Models\Employee;
+use App\Models\Fund;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\Payroll;
@@ -46,13 +46,13 @@ class PayrollTest extends TestCase
             'parent_code' => '112', 'level' => 4, 'is_detail' => true, 'is_active' => true,
         ]);
 
-        // Create a bank account for salary payment
-        $this->bankAccount = BankAccount::create([
-            'name' => 'Tài khoản kiểm thử',
-            'bank_name' => 'Test Bank',
-            'account_number' => '123456789',
+        // Tạo quỹ ngân hàng để chi lương
+        $this->fund = Fund::create([
+            'code'         => 'QUY-001',
+            'name'         => 'Tài khoản kiểm thử',
+            'type'         => 'bank',
             'account_code' => '1121',
-            'is_active' => true,
+            'is_active'    => true,
         ]);
 
         // Create an active employee to populate payroll items
@@ -182,7 +182,7 @@ class PayrollTest extends TestCase
 
         // 3. Pay employee
         $payResponse = $this->post(route('accounting.payrolls.items.pay', [$payroll->id, $item->id]), [
-            'bank_account_id' => $this->bankAccount->id,
+            'fund_id' => $this->fund->id,
         ]);
         $payResponse->assertRedirect();
 

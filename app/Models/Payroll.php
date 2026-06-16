@@ -14,7 +14,7 @@ class Payroll extends Model
         'total_base_salary', 'total_allowance', 'total_bonus',
         'total_gross', 'total_insurance_employee', 'total_insurance_employer',
         'total_trade_union_fee',
-        'total_pit', 'total_deductions', 'total_net_salary',
+        'total_pit', 'total_deductions', 'total_net_salary', 'total_adjustment',
         'created_by', 'notes',
         'is_locked', 'locked_by', 'locked_at',
         'union_fee_include', 'union_fee_confirmed_by', 'union_fee_confirmed_at',
@@ -36,6 +36,7 @@ class Payroll extends Model
             'total_pit'                => 'decimal:0',
             'total_deductions'         => 'decimal:0',
             'total_net_salary'         => 'decimal:0',
+            'total_adjustment'         => 'decimal:0',
             'union_fee_include'        => 'boolean',
             'union_fee_confirmed_at'   => 'datetime',
         ];

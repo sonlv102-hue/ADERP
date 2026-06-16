@@ -44,6 +44,21 @@
             In bảng lương
           </button>
 
+          <a :href="route('accounting.payrolls.export-excel', payroll.id)"
+            class="no-print flex items-center gap-1.5 px-3 py-1.5 border border-green-300 rounded-lg text-sm text-green-700 hover:bg-green-50">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
+            </svg>
+            Xuất Excel
+          </a>
+          <a :href="route('accounting.payrolls.export-pdf', payroll.id)"
+            class="no-print flex items-center gap-1.5 px-3 py-1.5 border border-red-300 rounded-lg text-sm text-red-700 hover:bg-red-50">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+            </svg>
+            Xuất PDF
+          </a>
+
           <!-- Sync from employees (draft + not locked) -->
           <button v-if="payroll.status === 'draft' && !payroll.is_locked" @click="syncFromEmployees"
             class="flex items-center gap-1.5 px-3 py-1.5 border border-gray-400 text-gray-700 rounded-lg text-sm hover:bg-gray-50">
@@ -150,17 +165,19 @@
       <!-- Full Payroll Table -->
       <div class="bg-white rounded-xl shadow-sm overflow-hidden" id="payroll-table-container">
         <div class="overflow-x-auto">
-          <table class="w-full text-xs whitespace-nowrap border-collapse" style="min-width: 1950px">
+          <table class="w-full text-xs whitespace-nowrap border-collapse" style="min-width: 2400px">
             <thead>
               <!-- Row 1: column group headers -->
               <tr class="bg-primary-700 text-white text-center">
                 <th rowspan="2" class="border border-primary-600 px-2 py-2 w-8">STT</th>
                 <th rowspan="2" class="border border-primary-600 px-3 py-2 text-left min-w-[140px]">Họ và tên</th>
                 <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[90px]">Chức vụ</th>
+                <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[80px]">Bộ phận</th>
+                <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[80px]">Loại HĐ</th>
                 <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[90px]">Lương<br/>Chính</th>
                 <th colspan="6" class="border border-primary-600 px-2 py-1">Phụ cấp</th>
                 <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[90px]">Tổng<br/>Thu Nhập</th>
-                <th rowspan="2" class="border border-primary-600 px-2 py-2 w-14">Ngày<br/>công</th>
+                <th colspan="5" class="border border-primary-600 px-2 py-1 bg-emerald-700">Chuyên cần</th>
                 <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[90px]">Tổng Lương<br/>Thực Tế</th>
                 <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[80px]">Lương<br/>đóng BH</th>
                 <th colspan="4" class="border border-primary-600 px-2 py-1">BHXH tính vào CP DN</th>
@@ -187,6 +204,12 @@
                 <th class="border border-primary-500 px-1 py-1">BHYT<br/>3%</th>
                 <th class="border border-primary-500 px-1 py-1">BHTN<br/>1%</th>
                 <th class="border border-primary-500 px-1 py-1 font-bold">Cộng<br/>21.5%</th>
+                <!-- Chuyên cần sub-cols -->
+                <th class="border border-emerald-600 px-1 py-1 bg-emerald-700">C.chuẩn</th>
+                <th class="border border-emerald-600 px-1 py-1 bg-emerald-700">C.TT</th>
+                <th class="border border-emerald-600 px-1 py-1 bg-emerald-700">C.hưởng</th>
+                <th class="border border-emerald-600 px-1 py-1 bg-emerald-700">Nghỉ phép</th>
+                <th class="border border-emerald-600 px-1 py-1 bg-emerald-700">Nghỉ KL</th>
                 <th class="border border-primary-500 px-1 py-1">BHXH<br/>8%</th>
                 <th class="border border-primary-500 px-1 py-1">BHYT<br/>1.5%</th>
                 <th class="border border-primary-500 px-1 py-1">BHTN<br/>1%</th>
@@ -197,7 +220,7 @@
               <template v-for="(group, deptName) in groupedItems" :key="deptName">
                 <!-- Department row -->
                 <tr class="bg-yellow-50">
-                  <td class="border border-gray-200 px-2 py-1.5 font-bold text-gray-800 text-xs" colspan="3">
+                  <td class="border border-gray-200 px-2 py-1.5 font-bold text-gray-800 text-xs" colspan="5">
                     {{ deptName || 'Chưa phân phòng ban' }}
                   </td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-bold font-mono">{{ fv(sum(group, 'base_salary')) }}</td>
@@ -208,7 +231,12 @@
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'allowance_transport')) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'allowance_performance')) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-bold font-mono">{{ fv(sum(group, 'gross_salary')) }}</td>
+                  <!-- Chuyên cần -->
+                  <td class="border border-gray-200 px-2 py-1.5 text-center font-mono">{{ sumInt(group, 'standard_days') }}</td>
+                  <td class="border border-gray-200 px-2 py-1.5 text-center font-mono">{{ sumInt(group, 'actual_working_days') }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-center font-mono">{{ sumInt(group, 'working_days') }}</td>
+                  <td class="border border-gray-200 px-2 py-1.5 text-center font-mono">{{ sumInt(group, 'paid_leave_days') }}</td>
+                  <td class="border border-gray-200 px-2 py-1.5 text-center font-mono">{{ sumInt(group, 'unpaid_leave_days') }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-bold font-mono">{{ fv(sum(group, 'gross_salary')) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'insurance_base')) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'bhxh_employer')) }}</td>
@@ -244,6 +272,8 @@
                     <p class="text-gray-400 text-[10px]">{{ item.employee_code }}</p>
                   </td>
                   <td class="border border-gray-200 px-2 py-1.5 text-center text-gray-600">{{ item.position }}</td>
+                  <td class="border border-gray-200 px-2 py-1.5 text-center text-gray-600 text-[10px]">{{ item.department || '—' }}</td>
+                  <td class="border border-gray-200 px-2 py-1.5 text-center text-gray-600 text-[10px]">{{ item.employment_type || '—' }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono font-semibold">{{ fv(item.base_salary) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ item.allowance             ? fv(item.allowance)             : '' }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ item.allowance_responsibility ? fv(item.allowance_responsibility) : '' }}</td>
@@ -252,7 +282,12 @@
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ item.allowance_transport    ? fv(item.allowance_transport)    : '' }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ item.allowance_performance  ? fv(item.allowance_performance)  : '' }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono font-semibold">{{ fv(item.gross_salary) }}</td>
-                  <td class="border border-gray-200 px-2 py-1.5 text-center font-mono">{{ item.working_days }}</td>
+                  <!-- Chuyên cần -->
+                  <td class="border border-gray-200 px-2 py-1.5 text-center font-mono">{{ item.standard_days }}</td>
+                  <td class="border border-gray-200 px-2 py-1.5 text-center font-mono">{{ item.actual_working_days || 0 }}</td>
+                  <td class="border border-gray-200 px-2 py-1.5 text-center font-mono font-semibold">{{ item.working_days }}</td>
+                  <td class="border border-gray-200 px-2 py-1.5 text-center font-mono text-blue-600">{{ item.paid_leave_days || 0 }}</td>
+                  <td class="border border-gray-200 px-2 py-1.5 text-center font-mono text-red-500">{{ item.unpaid_leave_days || 0 }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono font-semibold">{{ fv(item.gross_salary) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ item.insurance_subject ? fv(item.insurance_base) : '—' }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ item.insurance_subject ? fv(item.bhxh_employer) : '—' }}</td>
@@ -305,7 +340,7 @@
             <!-- Grand total -->
             <tfoot>
               <tr class="bg-primary-50 font-bold border-t-2 border-primary-300">
-                <td colspan="3" class="border border-gray-300 px-3 py-2 text-sm font-bold text-gray-800">Tổng cộng</td>
+                <td colspan="5" class="border border-gray-300 px-3 py-2 text-sm font-bold text-gray-800">Tổng cộng</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono text-sm">{{ fv(payroll.total_base_salary) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('allowance')) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('allowance_responsibility')) }}</td>
@@ -314,7 +349,12 @@
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('allowance_transport')) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('allowance_performance')) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono text-sm font-bold">{{ fv(payroll.total_gross) }}</td>
+                <!-- Chuyên cần totals -->
+                <td class="border border-gray-300 px-2 py-2 text-center font-mono">{{ sumItems('standard_days') }}</td>
+                <td class="border border-gray-300 px-2 py-2 text-center font-mono">{{ sumItems('actual_working_days') }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-center font-mono">{{ sumItems('working_days') }}</td>
+                <td class="border border-gray-300 px-2 py-2 text-center font-mono">{{ sumItems('paid_leave_days') }}</td>
+                <td class="border border-gray-300 px-2 py-2 text-center font-mono">{{ sumItems('unpaid_leave_days') }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono text-sm font-bold">{{ fv(payroll.total_gross) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('insurance_base')) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('bhxh_employer')) }}</td>
@@ -618,12 +658,19 @@
             </p>
           </div>
           <div>
-            <label class="form-label">Tài khoản ngân hàng chi lương</label>
-            <select v-model="payForm.bank_account_id" required class="form-input">
-              <option value="" disabled>-- Chọn tài khoản NH --</option>
-              <option v-for="ba in bankAccounts" :key="ba.id" :value="ba.id">
-                {{ ba.bank_name }} — {{ ba.account_number }} ({{ ba.name }})
-              </option>
+            <label class="form-label">Quỹ/Tài khoản chi tiền</label>
+            <select v-model="payForm.fund_id" class="form-input" required>
+              <option value="" disabled>-- Chọn quỹ hoặc tài khoản ngân hàng --</option>
+              <optgroup v-if="cashFunds.length" label="Tiền mặt">
+                <option v-for="f in cashFunds" :key="f.id" :value="f.id">
+                  {{ f.name }}{{ f.account_code ? ` (${f.account_code})` : '' }}
+                </option>
+              </optgroup>
+              <optgroup v-if="bankFunds.length" label="Ngân hàng">
+                <option v-for="f in bankFunds" :key="f.id" :value="f.id">
+                  {{ f.name }}{{ f.account_code ? ` (${f.account_code})` : '' }}
+                </option>
+              </optgroup>
             </select>
           </div>
           <div class="flex gap-3">
@@ -643,7 +690,7 @@ import { Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { usePermission } from '@/composables/usePermission';
 
-const props = defineProps({ payroll: Object, items: Array, bankAccounts: Array });
+const props = defineProps({ payroll: Object, items: Array, funds: Array, can_manage: Boolean });
 
 const { hasPermission: can } = usePermission();
 const page = usePage();
@@ -900,11 +947,13 @@ function submitAdj() {
 
 // Pay modal
 const showPayModal = ref(false);
-const payForm = useForm({ bank_account_id: '' });
+const payForm = useForm({ fund_id: '' });
+const cashFunds = computed(() => props.funds.filter(f => f.type === 'cash'));
+const bankFunds = computed(() => props.funds.filter(f => f.type === 'bank'));
 
 function openPayModal(item) {
   activeItem.value = item;
-  payForm.bank_account_id = '';
+  payForm.fund_id = '';
   showPayModal.value = true;
 }
 

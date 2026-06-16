@@ -29,13 +29,6 @@
         <NavItem :href="route('dashboard')" icon="home">Dashboard</NavItem>
         <NavItem :href="route('notifications.index')" icon="bell">Thông báo</NavItem>
 
-        <!-- CRM -->
-        <NavGroup v-if="can('customers.view') || can('leads.view')"
-          label="CRM" icon="users" prefix="/crm">
-          <NavItem v-if="can('customers.view')" :href="route('crm.customers.index')" icon="users" sub>Khách hàng</NavItem>
-          <NavItem v-if="can('leads.view')" :href="route('crm.leads.index')" icon="user-add" sub>Khách hàng tiềm năng</NavItem>
-        </NavGroup>
-
         <!-- Danh mục -->
         <NavGroup v-if="can('products.view')"
           label="Danh mục" icon="collection" prefix="/catalog">

@@ -3,17 +3,20 @@
 namespace App\Services;
 
 use App\Enums\AttendanceSheetStatus;
+use App\Enums\CashVoucherBusinessType;
+use App\Enums\CashVoucherStatus;
+use App\Enums\CashVoucherType;
 use App\Enums\PayrollItemStatus;
 use App\Enums\PayrollStatus;
 use App\Models\AttendanceRecord;
 use App\Models\AttendanceSheet;
-use App\Models\BankAccount;
+use App\Models\CashVoucher;
 use App\Models\Employee;
+use App\Models\Fund;
+use App\Models\JournalEntry;
 use App\Models\Payroll;
 use App\Models\PayrollItem;
-use App\Models\AccountCode;
 use App\Models\AccountingPostingJob;
-use App\Models\JournalEntry;
 use App\Models\Setting;
 use App\Services\AccountingSettings;
 use Illuminate\Support\Facades\DB;
@@ -24,7 +27,8 @@ class PayrollService
 {
     public function __construct(
         private PitCalculatorService $pit,
-        private AccountingService   $accounting,
+        private AccountingService    $accounting,
+        private CashVoucherService   $cashVoucher,
     ) {}
 
     public function createPayroll(string $period, ?string $notes = null): Payroll
@@ -107,7 +111,7 @@ class PayrollService
         });
     }
 
-    public function payEmployeeSalary(PayrollItem $item, int $bankAccountId): void
+    public function payEmployeeSalary(PayrollItem $item, Fund $fund): void
     {
         if ($item->status === PayrollItemStatus::Paid) {
             throw new RuntimeException('Dòng lương này đã thanh toán.');
@@ -118,34 +122,40 @@ class PayrollService
             throw new RuntimeException('Chỉ thanh toán khi bảng lương đã xác nhận.');
         }
 
-        $bankAccount = BankAccount::findOrFail($bankAccountId);
-
-        // Validate: bank account phải có account_code hợp lệ là tài khoản chi tiết (is_detail=true)
-        $this->validateBankAccountCode($bankAccount);
-
-        $bankTk = $bankAccount->account_code;
-
-        DB::transaction(function () use ($item, $payroll, $bankAccount, $bankTk) {
+        DB::transaction(function () use ($item, $payroll, $fund) {
             $employeeName = $item->employee?->name ?? 'Nhân viên';
-            $net = round((float)$item->net_salary);
+            $net          = round((float) $item->net_salary);
 
-            // Bút toán chi lương: Nợ 334 / Có TK ngân hàng (chuyển khoản)
-            $je = $this->accounting->post(
-                description: "Chi lương {$employeeName} tháng {$payroll->period} — CK {$bankAccount->account_number}",
-                date: now(),
-                lines: [
-                    ['account' => AccountingSettings::get('salary_payable_account', '3341'),  'debit' => $net, 'credit' => 0,   'description' => "Lương {$employeeName} tháng {$payroll->period}"],
-                    ['account' => $bankTk, 'debit' => 0,   'credit' => $net, 'description' => "CK lương {$bankAccount->bank_name} - {$bankAccount->account_number}"],
-                ],
-                referenceType: PayrollItem::class,
-                referenceId: $item->id,
-                isAuto: false,
-            );
+            // Tạo phiếu chi liên kết với dòng lương
+            $voucher = CashVoucher::create([
+                'code'           => CashVoucher::generateCode(CashVoucherType::Payment),
+                'type'           => CashVoucherType::Payment,
+                'status'         => CashVoucherStatus::Draft,
+                'fund_id'        => $fund->id,
+                'amount'         => $net,
+                'voucher_date'   => now()->toDateString(),
+                'description'    => "Thanh toán lương tháng {$payroll->period} — {$employeeName}",
+                'business_type'  => CashVoucherBusinessType::SalaryPayment->value,
+                'partner_type'   => 'employee',
+                'employee_id'    => $item->employee_id,
+                'reference_type' => PayrollItem::class,
+                'reference_id'   => $item->id,
+                'created_by'     => auth()->id(),
+            ]);
+
+            // Ghi sổ: sinh bút toán Dr 3341 / Có fund.account_code, cập nhật số dư quỹ
+            $this->cashVoucher->confirm($voucher);
+
+            $je = JournalEntry::where('reference_type', 'cash_voucher')
+                ->where('reference_id', $voucher->id)
+                ->where('status', 'posted')
+                ->first();
 
             $item->update([
                 'status'                  => PayrollItemStatus::Paid,
                 'paid_at'                 => now(),
-                'salary_journal_entry_id' => $je->id,
+                'cash_voucher_id'         => $voucher->id,
+                'salary_journal_entry_id' => $je?->id,
             ]);
 
             $allPaid = $payroll->items()->where('status', '!=', PayrollItemStatus::Paid->value)->count() === 0;

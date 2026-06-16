@@ -58,7 +58,7 @@ class Fund extends Model
             ->sum('amount');
 
         $arReceived = $this->payments()->sum('amount');
-        $apPaid     = $this->purchaseInvoicePayments()->sum('amount');
+        $apPaid     = $this->purchaseInvoicePayments()->where('status', '!=', 'voided')->sum('amount');
 
         $transfersIn  = $this->fundTransfersIn()->where('status', 'posted')->sum('amount');
         $transfersOut = $this->fundTransfersOut()->where('status', 'posted')->sum('amount');

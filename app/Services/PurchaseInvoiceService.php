@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Enums\PurchaseInvoiceStatus;
 use App\Enums\PurchaseInvoiceType;
 use App\Enums\StockEntryStatus;
+use App\Models\Fund;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoicePayment;
 use App\Models\PurchaseOrderItem;
@@ -381,10 +382,7 @@ class PurchaseInvoiceService
         $amount = (float) $payment->amount;
         if ($amount <= 0) return;
 
-        $cashAccount    = match($payment->method) {
-            'bank_transfer', 'bank' => AccountingSettings::get('bank_account', '1121'),
-            default                 => AccountingSettings::get('cash_account', '1111'),
-        };
+        $cashAccount    = $this->resolvePaymentAccount($payment);
         $invoice->loadMissing('supplier');
         $payableAccount = $invoice->supplier->getPayableAccount();
 
@@ -421,5 +419,17 @@ class PurchaseInvoiceService
             'paid_amount' => $paid,
             'status'      => $status,
         ]);
+    }
+
+    private function resolvePaymentAccount(PurchaseInvoicePayment $payment): string
+    {
+        if ($payment->fund_id) {
+            $fund = Fund::find($payment->fund_id);
+            if ($fund?->account_code) return $fund->account_code;
+        }
+        return match($payment->method) {
+            'bank_transfer', 'bank' => AccountingSettings::get('bank_account', '1121'),
+            default                 => AccountingSettings::get('cash_account', '1111'),
+        };
     }
 }

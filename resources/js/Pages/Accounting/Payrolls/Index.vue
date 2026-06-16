@@ -19,6 +19,32 @@
         {{ $page.props.flash.error }}
       </div>
 
+      <!-- Filters -->
+      <div class="bg-white rounded-xl border border-gray-200 px-4 py-3 flex flex-wrap items-end gap-3">
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Tháng/Năm (YYYY-MM)</label>
+          <input v-model="filterPeriod" type="month" @change="applyFilters"
+            class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500" />
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-gray-600 mb-1">Trạng thái</label>
+          <select v-model="filterStatus" @change="applyFilters"
+            class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:ring-1 focus:ring-primary-500 focus:border-primary-500">
+            <option value="">Tất cả</option>
+            <option value="draft">Nháp</option>
+            <option value="confirmed">Đã xác nhận</option>
+            <option value="paid">Đã chi</option>
+          </select>
+        </div>
+        <button v-if="filterPeriod || filterStatus" @click="clearFilters"
+          class="text-xs text-gray-500 hover:text-gray-700 border border-gray-200 px-3 py-1.5 rounded-lg hover:bg-gray-50">
+          Xóa bộ lọc
+        </button>
+        <span v-if="filterPeriod || filterStatus" class="text-xs text-gray-400">
+          {{ payrolls.total }} kết quả
+        </span>
+      </div>
+
       <!-- Payroll tables list -->
       <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
         <div class="overflow-x-auto">
@@ -95,15 +121,33 @@
 </template>
 
 <script setup>
+import { ref } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({
-  payrolls: Object
+  payrolls: Object,
+  filters:  Object,
 });
 
 const { formatVnd } = useCurrency();
+
+const filterPeriod = ref(props.filters?.period ?? '');
+const filterStatus = ref(props.filters?.status ?? '');
+
+function applyFilters() {
+  const params = {};
+  if (filterPeriod.value) params.period = filterPeriod.value;
+  if (filterStatus.value) params.status = filterStatus.value;
+  router.get(route('accounting.payrolls.index'), params, { preserveState: true, replace: true });
+}
+
+function clearFilters() {
+  filterPeriod.value = '';
+  filterStatus.value = '';
+  router.get(route('accounting.payrolls.index'), {}, { preserveState: false });
+}
 
 const deletePayroll = (id) => {
   if (confirm('Bạn có chắc chắn muốn xóa bảng lương nháp này không?')) {
