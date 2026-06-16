@@ -90,12 +90,19 @@
           <NavItem :href="route('accounting.ap-payments.index')"         icon="inbox"          sub>Trả NCC (TK 331)</NavItem>
           <NavItem :href="route('accounting.funds.index')"               icon="library"        sub>Quản lý quỹ</NavItem>
           <NavItem :href="route('accounting.cash-vouchers.index')"       icon="cash"           sub>Phiếu thu / chi</NavItem>
+          <NavItem :href="route('accounting.fund-transfers.index')"      icon="arrows-expand"  sub>Luân chuyển quỹ</NavItem>
+          <NavItem :href="route('accounting.personal-loans.index')"      icon="user-group"     sub>Vay cá nhân (3411)</NavItem>
+          <NavItem :href="route('accounting.personal-expenses.index')"   icon="receipt-tax"    sub>Chi hộ cá nhân (3388)</NavItem>
           <NavItem :href="route('accounting.payrolls.index')"            icon="clipboard-list" sub>Bảng lương</NavItem>
           <NavItem :href="route('accounting.taxes.index')"               icon="receipt-tax"    sub>Kê khai thuế</NavItem>
           <NavItem v-if="can('accounting.manage')" :href="route('accounting.opening-balance.index')"          icon="database"       sub>Số dư đầu kỳ (TK)</NavItem>
           <NavItem v-if="can('accounting.manage')" :href="route('accounting.ar-ap-opening-balance.index')" icon="users"          sub>Công nợ đầu kỳ</NavItem>
           <NavItem :href="route('accounting.journal-entries.index')"     icon="pencil-alt"     sub>Phiếu kế toán</NavItem>
           <NavItem :href="route('accounting.prepaid-expenses.index')"    icon="clock"          sub>Chi phí trả trước</NavItem>
+          <NavItem :href="route('accounting.fixed-assets.index')"            icon="cube"           sub>Tài sản cố định</NavItem>
+          <NavItem :href="route('accounting.fixed-assets.depreciation.run-page')" icon="refresh" sub>Tính khấu hao</NavItem>
+          <NavItem :href="route('accounting.fixed-assets.reports.ledger')"   icon="document-text"  sub>Sổ TSCĐ</NavItem>
+          <NavItem :href="route('accounting.fixed-assets.reports.reconciliation')" icon="check-circle" sub>Đối chiếu 211/214</NavItem>
           <NavItem :href="route('accounting.bank-accounts.index')"             icon="library"    sub>Tài khoản ngân hàng</NavItem>
           <NavItem v-if="can('accounting.manage')" :href="route('accounting.internal-bank-accounts.index')" icon="office-building" sub>TK nội bộ</NavItem>
           <NavItem :href="route('accounting.internal-transfers.index')" icon="arrows-expand" sub>CK nội bộ</NavItem>
@@ -136,12 +143,12 @@
         <!-- Admin -->
         <div v-if="isAdmin" class="mt-3 pt-3 border-t border-slate-800">
           <p class="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Quản trị</p>
+          <NavItem :href="route('admin.shareholders.index')" icon="briefcase">Cổ đông / Thành viên</NavItem>
           <NavItem :href="route('admin.employees.index')" icon="identification">Cán bộ CNV</NavItem>
           <NavItem :href="route('admin.attendance.index')" icon="calendar">Bảng chấm công</NavItem>
           <NavItem :href="route('admin.users.index')" icon="users">Người dùng</NavItem>
           <NavItem :href="route('admin.roles.index')" icon="shield-check">Phân quyền</NavItem>
           <NavItem :href="route('admin.settings.index')" icon="cog">Cài đặt công ty</NavItem>
-          <NavItem :href="route('admin.fixed-assets.index')" icon="cube">Tài sản cố định</NavItem>
           <NavItem :href="route('admin.activity-logs.index')" icon="clipboard-list">Nhật ký hoạt động</NavItem>
           <NavItem :href="route('admin.backups.index')" icon="server">Sao lưu dữ liệu</NavItem>
         </div>

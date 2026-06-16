@@ -3,9 +3,11 @@
 namespace App\Services;
 
 use App\Enums\PurchaseInvoiceStatus;
+use App\Enums\PurchaseInvoiceType;
 use App\Enums\StockEntryStatus;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoicePayment;
+use App\Models\PurchaseOrderItem;
 use App\Models\StockEntry;
 use App\Services\AccountingSettings;
 use Carbon\Carbon;
@@ -155,53 +157,113 @@ class PurchaseInvoiceService
     // ─── Private helpers ────────────────────────────────────────────────────
 
     /**
-     * Post JE cho hóa đơn dịch vụ (không có StockEntry đi kèm).
+     * Post JE khi hóa đơn được duyệt hợp lệ.
      *
-     * Hàng hóa: AP đã được ghi khi confirmEntry() → Dr 1561/1331 / Cr 331.
-     * Dịch vụ:  AP chưa được ghi → cần post tại đây: Dr expense / Dr 1331 / Cr 331.
+     * Nếu có invoice_type rõ ràng: routing theo loại (hàng hóa/dịch vụ/dự án/TSCĐ/v.v.)
+     * Nếu invoice_type = null (hóa đơn cũ): dùng isGoodsPurchase() logic làm fallback.
      *
-     * Idempotent: tryPost dùng AccountingPostingJob để tránh double-post.
+     * Hàng hóa/NVL/CCDC: JE post bởi StockService khi NK xác nhận — không post ở đây.
+     * TSCĐ: JE post bởi FixedAssetService khi ghi nhận TSCĐ — không post ở đây.
+     * Dịch vụ/chi phí/dự án: Post Dr [debit] + Dr 1331 / Cr 3311 tại đây.
      */
     private function postInvoiceEntryIfNeeded(PurchaseInvoice $invoice): void
     {
-        // Nếu PO đã có StockEntry confirmed → hàng hóa → JE đã được post bởi StockService
-        if ($this->isGoodsPurchase($invoice)) {
+        $type = $invoice->invoice_type;
+
+        if ($type !== null) {
+            // Explicit invoice_type: inventory và fixed_asset không tạo JE ở đây
+            if ($type->isInventoryBacked() || $type->isFixedAssetBacked()) {
+                return;
+            }
+
+            $subtotal = (float) $invoice->subtotal;
+            $tax      = (float) $invoice->tax_amount;
+
+            if ($subtotal <= 0 && $tax <= 0) return;
+
+            $invoice->loadMissing('supplier');
+            $payableAccount = $invoice->supplier->getPayableAccount();
+
+            $debitAccount = $invoice->expense_account_code ?? $type->defaultDebitAccount();
+            $vatAccount   = $type->vatInputAccount();
+
+            $lines = [];
+
+            if ($subtotal > 0) {
+                $lines[] = [
+                    'account'     => $debitAccount,
+                    'debit'       => (int) round($subtotal),
+                    'credit'      => 0,
+                    'description' => "{$type->label()} - {$invoice->code}",
+                ];
+            }
+
+            if ($tax > 0) {
+                $lines[] = [
+                    'account'     => $vatAccount,
+                    'debit'       => (int) round($tax),
+                    'credit'      => 0,
+                    'description' => "Thuế GTGT đầu vào ({$vatAccount}) - {$invoice->code}",
+                ];
+            }
+
+            $totalCredit = array_sum(array_column($lines, 'debit'));
+            if ($totalCredit <= 0) return;
+
+            $lines[] = [
+                'account'      => $payableAccount,
+                'debit'        => 0,
+                'credit'       => $totalCredit,
+                'description'  => "Phải trả NCC - {$invoice->code}",
+                'partner_type' => 'supplier',
+                'partner_id'   => $invoice->supplier_id,
+            ];
+
+            $this->accounting->tryPost(
+                "{$type->label()} {$invoice->code}",
+                Carbon::parse($invoice->invoice_date ?? now()),
+                $lines,
+                'purchase_invoice',
+                $invoice->id,
+                'ap'
+            );
+
             return;
         }
 
-        $subtotal = (float) $invoice->subtotal;
-        $tax      = (float) $invoice->tax_amount;
-        $total    = (float) $invoice->total;
+        // Legacy fallback (invoice_type = null): dùng getServicePortion()
+        $serviceInfo = $this->getServicePortion($invoice);
 
-        if ($total <= 0) return;
-
-        $expenseAccount = $invoice->expense_account_code
-            ?? AccountingSettings::get('admin_expense_account', '6422');
+        if ($serviceInfo['subtotal'] <= 0 && $serviceInfo['tax'] <= 0) {
+            return;
+        }
 
         $invoice->loadMissing('supplier');
         $payableAccount = $invoice->supplier->getPayableAccount();
 
+        $expenseAccount = $invoice->expense_account_code
+            ?? AccountingSettings::get('admin_expense_account', '6422');
+
         $lines = [];
 
-        if ($subtotal > 0) {
+        if ($serviceInfo['subtotal'] > 0) {
             $lines[] = [
                 'account'     => $expenseAccount,
-                'debit'       => (int) round($subtotal),
+                'debit'       => (int) round($serviceInfo['subtotal']),
                 'credit'      => 0,
-                'description' => "Chi phí ({$expenseAccount}) - {$invoice->code}",
+                'description' => "Chi phí dịch vụ ({$expenseAccount}) - {$invoice->code}",
             ];
         }
 
-        if ($tax > 0) {
+        if ($serviceInfo['tax'] > 0) {
             $lines[] = [
                 'account'     => AccountingSettings::get('vat_input_account', '1331'),
-                'debit'       => (int) round($tax),
+                'debit'       => (int) round($serviceInfo['tax']),
                 'credit'      => 0,
                 'description' => "Thuế GTGT đầu vào - {$invoice->code}",
             ];
         }
 
-        // Cr 331 = tổng Nợ đã round — đảm bảo bút toán cân bằng
         $totalCredit = array_sum(array_column($lines, 'debit'));
         if ($totalCredit <= 0) return;
 
@@ -209,16 +271,14 @@ class PurchaseInvoiceService
             'account'      => $payableAccount,
             'debit'        => 0,
             'credit'       => $totalCredit,
-            'description'  => "Phải trả NCC - {$invoice->code}",
+            'description'  => "Phải trả NCC (dịch vụ) - {$invoice->code}",
             'partner_type' => 'supplier',
             'partner_id'   => $invoice->supplier_id,
         ];
 
-        $entryDate = $invoice->invoice_date ?? now();
-
         $this->accounting->tryPost(
             "Hóa đơn dịch vụ {$invoice->code}",
-            Carbon::parse($entryDate),
+            Carbon::parse($invoice->invoice_date ?? now()),
             $lines,
             'purchase_invoice',
             $invoice->id,
@@ -227,19 +287,93 @@ class PurchaseInvoiceService
     }
 
     /**
-     * Kiểm tra PO đi kèm đã có StockEntry confirmed không.
-     * Nếu có → mua hàng hóa, JE đã được StockService xử lý.
-     * Nếu không → mua dịch vụ, cần post JE ở đây.
+     * Kiểm tra đây là hóa đơn mua hàng hóa (inventory-backed) hay dịch vụ.
+     *
+     * Nếu invoice_type rõ ràng: trả về isInventoryBacked() trực tiếp.
+     * Nếu không có invoice_type (hóa đơn cũ): dùng legacy logic.
+     *   - Check 1: PO có items hàng hóa (product_id not null, line_type không phải service/fixed_asset)
+     *   - Check 2: PO đã có StockEntry confirmed → hàng đã nhận, JE đã post bởi StockService
      */
-    private function isGoodsPurchase(PurchaseInvoice $invoice): bool
+    public function isGoodsPurchase(PurchaseInvoice $invoice): bool
     {
-        if (!$invoice->purchase_order_id) {
-            return false;
+        // Explicit invoice_type overrides legacy detection
+        if ($invoice->invoice_type !== null) {
+            return $invoice->invoice_type->isInventoryBacked();
         }
 
+        if (!$invoice->purchase_order_id) return false;
+
+        // Check 1: PO items với line_type hàng hóa/NVL/CCDC
+        if (PurchaseOrderItem::where('purchase_order_id', $invoice->purchase_order_id)
+            ->whereNotNull('product_id')
+            ->whereNotIn('line_type', ['service', 'fixed_asset'])
+            ->exists()) {
+            return true;
+        }
+
+        // Check 2: đã có NK confirmed (goods received, AP already posted by StockService)
         return StockEntry::where('purchase_order_id', $invoice->purchase_order_id)
             ->where('status', StockEntryStatus::Confirmed)
             ->exists();
+    }
+
+    /**
+     * Tính phần dịch vụ/chi phí của hóa đơn.
+     * - Nếu isGoodsPurchase() → không có phần dịch vụ (StockService xử lý toàn bộ)
+     * - Nếu PO có mixed items (goods + service) → tỷ lệ theo giá trị service items
+     * - Nếu không có PO hoặc PO chỉ có service items → toàn bộ là dịch vụ
+     */
+    private function getServicePortion(PurchaseInvoice $invoice): array
+    {
+        // Nếu toàn bộ là hàng hóa (checked bởi isGoodsPurchase) → không có phần dịch vụ
+        if ($this->isGoodsPurchase($invoice)) {
+            return ['subtotal' => 0, 'tax' => 0];
+        }
+
+        if (!$invoice->purchase_order_id) {
+            // Không có PO → toàn bộ là dịch vụ
+            return [
+                'subtotal' => (float) $invoice->subtotal,
+                'tax'      => (float) $invoice->tax_amount,
+            ];
+        }
+
+        $allItems     = PurchaseOrderItem::where('purchase_order_id', $invoice->purchase_order_id)->get();
+        $serviceItems = $allItems->whereIn('line_type', ['service']);
+
+        if ($allItems->isEmpty()) {
+            // PO không có items → treat as service (e.g., service PO without product lines)
+            return [
+                'subtotal' => (float) $invoice->subtotal,
+                'tax'      => (float) $invoice->tax_amount,
+            ];
+        }
+
+        if ($serviceItems->isEmpty()) {
+            // Không có service item nào → toàn bộ là hàng hóa (không qua check 1 vì line_type mặc định goods)
+            return ['subtotal' => 0, 'tax' => 0];
+        }
+
+        if ($allItems->count() === $serviceItems->count()) {
+            // Tất cả items đều là service
+            return [
+                'subtotal' => (float) $invoice->subtotal,
+                'tax'      => (float) $invoice->tax_amount,
+            ];
+        }
+
+        // Mixed: tính tỷ lệ theo unit_price * quantity
+        $totalValue   = $allItems->sum(fn ($i) => (float) $i->unit_price * (float) $i->quantity);
+        $serviceValue = $serviceItems->sum(fn ($i) => (float) $i->unit_price * (float) $i->quantity);
+
+        if ($totalValue <= 0) return ['subtotal' => 0, 'tax' => 0];
+
+        $ratio = $serviceValue / $totalValue;
+
+        return [
+            'subtotal' => (float) $invoice->subtotal * $ratio,
+            'tax'      => (float) $invoice->tax_amount * $ratio,
+        ];
     }
 
     private function postPaymentEntry(PurchaseInvoicePayment $payment, PurchaseInvoice $invoice): void
@@ -270,14 +404,17 @@ class PurchaseInvoiceService
 
     private function recalculatePaid(PurchaseInvoice $invoice): void
     {
-        $paid = (float) $invoice->payments()->active()->sum('amount');
-        $total = (float) $invoice->total;
+        $invoice->refresh();
+        $paid      = (float) $invoice->payments()->active()->sum('amount');
+        $total     = (float) $invoice->total;
+        $allocated = (float) $invoice->advance_allocated_amount;
+        $totalPaid = $paid + $allocated;
 
         $status = match(true) {
             $invoice->status === PurchaseInvoiceStatus::Cancelled => $invoice->status,
-            $paid <= 0                                             => PurchaseInvoiceStatus::Valid,
-            $paid >= $total                                        => PurchaseInvoiceStatus::Paid,
-            default                                                => PurchaseInvoiceStatus::PartialPaid,
+            $totalPaid <= 0                                         => PurchaseInvoiceStatus::Valid,
+            $totalPaid >= $total                                    => PurchaseInvoiceStatus::Paid,
+            default                                                 => PurchaseInvoiceStatus::PartialPaid,
         };
 
         $invoice->update([

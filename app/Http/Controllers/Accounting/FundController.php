@@ -7,6 +7,7 @@ use App\Models\AccountCode;
 use App\Models\Fund;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -46,7 +47,7 @@ class FundController extends Controller
             'code'            => 'required|string|max:20|unique:funds,code',
             'name'            => 'required|string|max:255',
             'type'            => 'required|in:cash,bank',
-            'account_code'    => 'nullable|string|exists:account_codes,code',
+            'account_code'    => ['nullable', 'string', Rule::exists('account_codes', 'code')->where('is_detail', true)],
             'bank_name'       => 'nullable|string|max:255',
             'bank_account_no' => 'nullable|string|max:50',
             'opening_balance' => 'nullable|numeric|min:0',
@@ -83,7 +84,7 @@ class FundController extends Controller
         $data = $request->validate([
             'name'            => 'required|string|max:255',
             'type'            => 'required|in:cash,bank',
-            'account_code'    => 'nullable|string|exists:account_codes,code',
+            'account_code'    => ['nullable', 'string', Rule::exists('account_codes', 'code')->where('is_detail', true)],
             'bank_name'       => 'nullable|string|max:255',
             'bank_account_no' => 'nullable|string|max:50',
             'opening_balance' => 'nullable|numeric|min:0',

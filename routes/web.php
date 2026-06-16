@@ -67,8 +67,16 @@ use App\Http\Controllers\Accounting\InternalBankAccountController;
 use App\Http\Controllers\Accounting\InternalTransferReportController;
 use App\Http\Controllers\Accounting\AccountingPostingJobController;
 use App\Http\Controllers\Accounting\AccountingSettingsController;
+use App\Http\Controllers\Accounting\FixedAssetCategoryController;
+use App\Http\Controllers\Accounting\FixedAssetController as AccountingFixedAssetController;
+use App\Http\Controllers\Accounting\FixedAssetDepreciationController;
+use App\Http\Controllers\Accounting\FixedAssetRepairController;
+use App\Http\Controllers\Accounting\FixedAssetDisposalController;
+use App\Http\Controllers\Accounting\FixedAssetReportController as AccountingFixedAssetReportController;
 use App\Http\Controllers\Purchasing\PurchaseContractPaymentScheduleController;
 use App\Http\Controllers\Purchasing\PurchaseReturnController;
+use App\Http\Controllers\Purchasing\SupplierAdvanceController;
+use App\Http\Controllers\Purchasing\SupplierAdvanceAllocationController;
 use App\Http\Controllers\Documents\DocumentController;
 use App\Http\Controllers\Documents\DocumentTypeController;
 use App\Http\Controllers\Reports\BalanceSheetController;
@@ -78,10 +86,12 @@ use App\Http\Controllers\Reports\AccountLedgerController;
 use App\Http\Controllers\Reports\ExpenseDetailController;
 use App\Http\Controllers\Reports\FixedAssetReportController;
 use App\Http\Controllers\Reports\DocumentChecklistController;
-use App\Http\Controllers\Admin\FixedAssetController;
 use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\AttendanceController;
+use App\Http\Controllers\Admin\ShareholderController;
+use App\Http\Controllers\Accounting\PersonalLoanController;
+use App\Http\Controllers\Accounting\PersonalExpenseController;
 use App\Http\Controllers\AttachmentController;
 use Illuminate\Support\Facades\Route;
 
@@ -108,8 +118,6 @@ Route::middleware('auth')->group(function () {
         Route::delete('settings/logo', [SettingsController::class, 'deleteLogo'])->name('settings.logo.delete');
         Route::get('roles', [RoleController::class, 'index'])->name('roles.index');
         Route::put('roles/{role}', [RoleController::class, 'update'])->name('roles.update');
-        Route::resource('fixed-assets', FixedAssetController::class);
-        Route::post('fixed-assets/depreciate', [FixedAssetController::class, 'depreciate'])->name('fixed-assets.depreciate');
         Route::get('activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
         Route::resource('employees', EmployeeController::class);
 
@@ -126,6 +134,9 @@ Route::middleware('auth')->group(function () {
         Route::post('backups', [BackupController::class, 'store'])->name('backups.store');
         Route::get('backups/{name}/download', [BackupController::class, 'download'])->name('backups.download');
         Route::delete('backups/{name}', [BackupController::class, 'destroy'])->name('backups.destroy');
+
+        // Thành viên / Cổ đông
+        Route::resource('shareholders', ShareholderController::class)->except(['show']);
     });
 
     // Catalog - danh mục sản phẩm và dịch vụ
@@ -316,6 +327,17 @@ Route::middleware('auth')->group(function () {
         Route::post('fund-transfers/{fundTransfer}/reverse', [FundTransferController::class, 'reverse'])->name('fund-transfers.reverse');
         Route::post('fund-transfers/{fundTransfer}/cancel',  [FundTransferController::class, 'cancel'])->name('fund-transfers.cancel');
 
+        // Vay cá nhân (3411)
+        Route::resource('personal-loans', PersonalLoanController::class)->only(['index', 'create', 'store', 'show']);
+        Route::post('personal-loans/{personalLoan}/post',   [PersonalLoanController::class, 'post'])->name('personal-loans.post');
+        Route::post('personal-loans/{personalLoan}/repay',  [PersonalLoanController::class, 'repay'])->name('personal-loans.repay');
+        Route::post('personal-loans/{personalLoan}/cancel', [PersonalLoanController::class, 'cancel'])->name('personal-loans.cancel');
+
+        // Chi hộ cá nhân (3388)
+        Route::resource('personal-expenses', PersonalExpenseController::class)->only(['index', 'create', 'store', 'show']);
+        Route::post('personal-expenses/{personalExpense}/post',      [PersonalExpenseController::class, 'post'])->name('personal-expenses.post');
+        Route::post('personal-expenses/{personalExpense}/reimburse', [PersonalExpenseController::class, 'reimburse'])->name('personal-expenses.reimburse');
+
         // Tiền lương (Payroll)
         Route::resource('payrolls', PayrollController::class)->except(['edit', 'update']);
         Route::put('payrolls/{payroll}/items/{item}', [PayrollController::class, 'updateItem'])->name('payrolls.items.update');
@@ -406,6 +428,48 @@ Route::middleware('auth')->group(function () {
         // Cài đặt tài khoản kế toán
         Route::get('settings', [AccountingSettingsController::class, 'index'])->name('settings.index');
         Route::put('settings', [AccountingSettingsController::class, 'update'])->name('settings.update')->middleware('can:accounting.manage');
+
+        // Tài sản cố định
+        Route::prefix('fixed-assets')->name('fixed-assets.')->group(function () {
+            // Nhóm TSCĐ
+            Route::get('categories', [FixedAssetCategoryController::class, 'index'])->name('categories.index');
+            Route::post('categories', [FixedAssetCategoryController::class, 'store'])->name('categories.store')->middleware('can:accounting.manage');
+            Route::put('categories/{fixedAssetCategory}', [FixedAssetCategoryController::class, 'update'])->name('categories.update')->middleware('can:accounting.manage');
+            Route::delete('categories/{fixedAssetCategory}', [FixedAssetCategoryController::class, 'destroy'])->name('categories.destroy')->middleware('can:accounting.manage');
+
+            // Khấu hao
+            Route::get('depreciation/run', [FixedAssetDepreciationController::class, 'runPage'])->name('depreciation.run-page');
+            Route::get('depreciation/preview', [FixedAssetDepreciationController::class, 'preview'])->name('depreciation.preview');
+            Route::post('depreciation/run', [FixedAssetDepreciationController::class, 'run'])->name('depreciation.run')->middleware('can:accounting.manage');
+            Route::post('depreciation/post-journal', [FixedAssetDepreciationController::class, 'postJournal'])->name('depreciation.post-journal')->middleware('can:accounting.manage');
+            Route::post('depreciation/{depreciation}/reverse', [FixedAssetDepreciationController::class, 'reverse'])->name('depreciation.reverse')->middleware('can:accounting.manage');
+
+            // Báo cáo
+            Route::get('reports/ledger', [AccountingFixedAssetReportController::class, 'ledger'])->name('reports.ledger');
+            Route::get('reports/schedule', [AccountingFixedAssetReportController::class, 'schedule'])->name('reports.schedule');
+            Route::get('reports/movement', [AccountingFixedAssetReportController::class, 'movement'])->name('reports.movement');
+            Route::get('reports/reconciliation', [AccountingFixedAssetReportController::class, 'reconciliation'])->name('reports.reconciliation');
+            Route::get('reports/compliance', [AccountingFixedAssetReportController::class, 'compliance'])->name('reports.compliance');
+
+            // CRUD tài sản (resource đặt sau các route cụ thể)
+            Route::resource('/', AccountingFixedAssetController::class)->parameters(['' => 'fixedAsset']);
+
+            // Hành động trên tài sản
+            Route::post('{fixedAsset}/place-in-service', [AccountingFixedAssetController::class, 'placeInService'])->name('place-in-service')->middleware('can:accounting.manage');
+            Route::post('{fixedAsset}/transfer', [AccountingFixedAssetController::class, 'transfer'])->name('transfer')->middleware('can:accounting.manage');
+            Route::post('{fixedAsset}/suspend', [AccountingFixedAssetController::class, 'suspend'])->name('suspend')->middleware('can:accounting.manage');
+            Route::post('{fixedAsset}/resume', [AccountingFixedAssetController::class, 'resume'])->name('resume')->middleware('can:accounting.manage');
+
+            // Sửa chữa
+            Route::get('{fixedAsset}/repairs/create', [FixedAssetRepairController::class, 'create'])->name('repairs.create');
+            Route::post('{fixedAsset}/repairs', [FixedAssetRepairController::class, 'store'])->name('repairs.store')->middleware('can:accounting.manage');
+            Route::delete('{fixedAsset}/repairs/{repair}', [FixedAssetRepairController::class, 'destroy'])->name('repairs.destroy')->middleware('can:accounting.manage');
+
+            // Thanh lý
+            Route::get('{fixedAsset}/disposals/create', [FixedAssetDisposalController::class, 'create'])->name('disposals.create');
+            Route::post('{fixedAsset}/disposals', [FixedAssetDisposalController::class, 'store'])->name('disposals.store')->middleware('can:accounting.manage');
+            Route::delete('{fixedAsset}/disposals/{disposal}', [FixedAssetDisposalController::class, 'destroy'])->name('disposals.destroy')->middleware('can:accounting.manage');
+        });
     });
 
     // Support - ticket kỹ thuật và bảo hành
@@ -436,6 +500,12 @@ Route::middleware('auth')->group(function () {
         Route::delete('purchase-invoices/{purchaseInvoice}/payments/{payment}', [PurchaseInvoicePaymentController::class, 'destroy'])->name('purchase-invoices.payments.destroy');
         Route::post('purchase-invoices/{purchaseInvoice}/attachment', [PurchaseInvoiceController::class, 'uploadAttachment'])->name('purchase-invoices.attachment.upload');
         Route::delete('purchase-invoices/{purchaseInvoice}/attachment', [PurchaseInvoiceController::class, 'deleteAttachment'])->name('purchase-invoices.attachment.delete');
+        Route::patch('purchase-invoices/{purchaseInvoice}/items/{item}/line-type', [PurchaseInvoiceController::class, 'updateItemLineType'])->name('purchase-invoices.items.line-type')->middleware('can:purchasing.approve');
+        Route::post('purchase-invoices/{purchaseInvoice}/advance-allocations', [SupplierAdvanceAllocationController::class, 'store'])->name('purchase-invoices.advance-allocations.store');
+        Route::delete('advance-allocations/{allocation}', [SupplierAdvanceAllocationController::class, 'destroy'])->name('advance-allocations.destroy');
+
+        Route::resource('supplier-advances', SupplierAdvanceController::class);
+        Route::post('supplier-advances/{supplierAdvance}/cancel', [SupplierAdvanceController::class, 'cancel'])->name('supplier-advances.cancel');
 
         Route::resource('purchase-contracts', PurchaseContractController::class);
         Route::post('purchase-contracts/{purchaseContract}/activate',  [PurchaseContractController::class, 'activate'])->name('purchase-contracts.activate');

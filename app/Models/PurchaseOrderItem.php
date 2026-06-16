@@ -10,7 +10,7 @@ class PurchaseOrderItem extends Model
 {
     protected $fillable = [
         'purchase_order_id', 'project_id',
-        'product_id', 'quantity', 'received_quantity', 'unit_price', 'vat_rate',
+        'product_id', 'line_type', 'quantity', 'received_quantity', 'unit_price', 'vat_rate',
     ];
 
     protected function casts(): array

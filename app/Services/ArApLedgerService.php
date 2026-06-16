@@ -217,6 +217,7 @@ class ArApLedgerService
                 'purchase_invoices.due_date',
                 'purchase_invoices.total',
                 'purchase_invoices.paid_amount as paid',
+                'purchase_invoices.advance_allocated_amount',
                 'purchase_invoices.status',
             ])
             ->orderByDesc('purchase_invoices.id')
@@ -224,7 +225,7 @@ class ArApLedgerService
 
         return $rows->map(function ($r) {
             $total       = (float) $r->total;
-            $paid        = (float) $r->paid;
+            $paid        = (float) $r->paid + (float) ($r->advance_allocated_amount ?? 0);
             $remaining   = max(0.0, $total - $paid);
             $daysOverdue = $this->computeDaysOverdue($r->due_date, $remaining);
             $bucket      = $this->getBucket($daysOverdue, $remaining);

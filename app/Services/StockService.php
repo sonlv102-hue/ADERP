@@ -559,6 +559,19 @@ class StockService
 
     private function postEntryInventoryAccount(StockEntryItem $item): string
     {
+        // Ưu tiên line_type từ PO item nếu có
+        if ($item->purchase_order_item_id) {
+            $lineType = \App\Models\PurchaseOrderItem::where('id', $item->purchase_order_item_id)
+                ->value('line_type');
+            $mapped = match($lineType) {
+                'material'    => '1521',
+                'tool'        => '1531',
+                'fixed_asset' => AccountingSettings::get('fixed_asset_account', '2111'),
+                default       => null, // goods → dùng product.inventory_account bên dưới
+            };
+            if ($mapped !== null) return $mapped;
+        }
+
         $product = $item->product ?? Product::find($item->product_id);
         return $product?->inventory_account
             ?? AccountingSettings::get('default_inventory_account', '1561');

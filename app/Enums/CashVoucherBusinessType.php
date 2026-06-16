@@ -4,24 +4,28 @@ namespace App\Enums;
 
 enum CashVoucherBusinessType: string
 {
-    case AdvancePayment  = 'advance_payment';    // Chi tạm ứng
-    case AdvanceReturn   = 'advance_return';     // Thu hoàn ứng
-    case CollectOffset   = 'collect_offset';     // Thu tiền đối ứng cá nhân
-    case PayOffset       = 'pay_offset';         // Chi hoàn trả đối ứng
-    case PaySupplier     = 'pay_supplier';       // Chi trả nhà cung cấp
-    case CollectCustomer = 'collect_customer';   // Thu tiền khách hàng
-    case ExpensePayment  = 'expense_payment';    // Chi phí bằng tiền
+    case AdvancePayment             = 'advance_payment';             // Chi tạm ứng → Dr 141
+    case AdvanceReturn              = 'advance_return';              // Thu hoàn ứng → Cr 141
+    case CollectOffset              = 'collect_offset';              // Thu tiền chi hộ (hoàn 3388 về CT)
+    case PayOffset                  = 'pay_offset';                  // Chi hoàn tiền chi hộ cho cá nhân (Dr 3388)
+    case PaySupplier                = 'pay_supplier';                // Chi trả nhà cung cấp
+    case CollectCustomer            = 'collect_customer';            // Thu tiền khách hàng
+    case ExpensePayment             = 'expense_payment';             // Chi phí bằng tiền
+    case EquityContribution         = 'equity_contribution';         // Nhận góp vốn → Cr 4111
+    case CollectPersonalReceivable  = 'collect_personal_receivable'; // Thu hồi phải thu cá nhân → Cr 1388
 
     public function label(): string
     {
         return match ($this) {
-            self::AdvancePayment  => 'Chi tạm ứng',
-            self::AdvanceReturn   => 'Thu hoàn ứng',
-            self::CollectOffset   => 'Thu tiền đối ứng cá nhân',
-            self::PayOffset       => 'Chi hoàn trả đối ứng',
-            self::PaySupplier     => 'Chi trả nhà cung cấp',
-            self::CollectCustomer => 'Thu tiền khách hàng',
-            self::ExpensePayment  => 'Chi phí bằng tiền',
+            self::AdvancePayment            => 'Chi tạm ứng',
+            self::AdvanceReturn             => 'Thu hoàn ứng',
+            self::CollectOffset             => 'Thu tiền chi hộ (hoàn 3388)',
+            self::PayOffset                 => 'Hoàn tiền chi hộ cho cá nhân',
+            self::PaySupplier               => 'Chi trả nhà cung cấp',
+            self::CollectCustomer           => 'Thu tiền khách hàng',
+            self::ExpensePayment            => 'Chi phí bằng tiền',
+            self::EquityContribution        => 'Nhận góp vốn chủ sở hữu',
+            self::CollectPersonalReceivable => 'Thu hồi phải thu cá nhân',
         };
     }
 
@@ -30,7 +34,8 @@ enum CashVoucherBusinessType: string
     {
         return match ($this) {
             self::AdvancePayment, self::PayOffset, self::PaySupplier, self::ExpensePayment => 'payment',
-            self::AdvanceReturn, self::CollectOffset, self::CollectCustomer               => 'receipt',
+            self::AdvanceReturn, self::CollectOffset, self::CollectCustomer,
+            self::EquityContribution, self::CollectPersonalReceivable                     => 'receipt',
         };
     }
 
@@ -52,6 +57,8 @@ enum CashVoucherBusinessType: string
             self::PaySupplier                            => '3311',
             self::CollectCustomer                        => '1311',
             self::ExpensePayment                         => '6422',
+            self::EquityContribution                     => '4111',
+            self::CollectPersonalReceivable              => '1388',
         };
     }
 
@@ -59,10 +66,12 @@ enum CashVoucherBusinessType: string
     public function defaultPartnerType(): ?string
     {
         return match ($this) {
-            self::AdvancePayment, self::AdvanceReturn  => 'employee',
-            self::PaySupplier                          => 'supplier',
-            self::CollectCustomer                      => 'customer',
-            default                                    => null,
+            self::AdvancePayment, self::AdvanceReturn,
+            self::CollectPersonalReceivable              => 'employee',
+            self::PaySupplier                            => 'supplier',
+            self::CollectCustomer                        => 'customer',
+            self::EquityContribution                     => 'shareholder',
+            default                                      => null,
         };
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\PurchaseInvoiceStatus;
+use App\Enums\PurchaseInvoiceType;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -13,8 +14,8 @@ class PurchaseInvoice extends Model
     protected $fillable = [
         'code', 'purchase_order_id', 'supplier_id',
         'invoice_number', 'invoice_date', 'supplier_tax_code',
-        'subtotal', 'tax_amount', 'total', 'paid_amount',
-        'due_date', 'status', 'notes', 'expense_account_code', 'created_by',
+        'subtotal', 'tax_amount', 'total', 'paid_amount', 'advance_allocated_amount',
+        'due_date', 'status', 'notes', 'expense_account_code', 'invoice_type', 'created_by',
         'file_path', 'file_name',
     ];
 
@@ -22,12 +23,14 @@ class PurchaseInvoice extends Model
     {
         return [
             'status'       => PurchaseInvoiceStatus::class,
+            'invoice_type' => PurchaseInvoiceType::class,
             'invoice_date' => 'date',
             'due_date'     => 'date',
             'subtotal'     => 'decimal:2',
             'tax_amount'   => 'decimal:2',
             'total'        => 'decimal:2',
-            'paid_amount'  => 'decimal:2',
+            'paid_amount'              => 'decimal:2',
+            'advance_allocated_amount' => 'decimal:2',
         ];
     }
 
@@ -70,12 +73,22 @@ class PurchaseInvoice extends Model
 
     public function amountDue(): float
     {
-        return max(0.0, (float) $this->total - $this->amountPaid());
+        return max(0.0, (float) $this->total - $this->amountPaid() - (float) $this->advance_allocated_amount);
     }
 
     public function getRemainingAttribute(): float
     {
         return $this->amountDue();
+    }
+
+    public function advanceAllocations(): HasMany
+    {
+        return $this->hasMany(SupplierAdvanceAllocation::class);
+    }
+
+    public function activeAdvanceAllocations(): HasMany
+    {
+        return $this->hasMany(SupplierAdvanceAllocation::class)->where('status', 'active');
     }
 
     public function attachments(): MorphMany

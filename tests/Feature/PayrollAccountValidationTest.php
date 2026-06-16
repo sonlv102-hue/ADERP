@@ -43,7 +43,7 @@ class PayrollAccountValidationTest extends TestCase
         $this->user->givePermissionTo('accounting.view');
         $this->actingAs($this->user);
 
-        // Migration 2026_06_06_900045 đã seed: '334','6422','3383','3384','3385','3382' là is_detail=true
+        // Migration 900045 seed TK cha; migration 900104 thêm TK chi tiết: 3341, 33831, 33832, 33841, 33842, 33821
         // Seed '1121' (leaf) cho test PA3/PA5
         AccountCode::firstOrCreate(['code' => '1121'], [
             'name' => 'Tiền gửi VND', 'type' => 'asset', 'normal_balance' => 'debit',

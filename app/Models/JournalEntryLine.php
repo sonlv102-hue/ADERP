@@ -10,7 +10,7 @@ class JournalEntryLine extends Model
     protected $fillable = [
         'journal_entry_id', 'account_code', 'description',
         'debit', 'credit', 'sort_order', 'project_id',
-        'partner_type', 'partner_id',
+        'partner_type', 'partner_id', 'fixed_asset_id',
     ];
 
     protected $casts = [
@@ -31,5 +31,10 @@ class JournalEntryLine extends Model
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function fixedAsset(): BelongsTo
+    {
+        return $this->belongsTo(FixedAsset::class);
     }
 }

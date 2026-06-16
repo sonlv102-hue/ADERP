@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -28,7 +29,10 @@ class BankAccountController extends Controller
 
     public function create(): Response
     {
-        return Inertia::render('Accounting/BankAccounts/Form', ['account' => null]);
+        return Inertia::render('Accounting/BankAccounts/Form', [
+            'account'  => null,
+            'accounts' => $this->detailAccounts(),
+        ]);
     }
 
     public function store(Request $request): RedirectResponse
@@ -37,7 +41,7 @@ class BankAccountController extends Controller
             'name'            => 'required|string|max:100',
             'bank_name'       => 'required|string|max:100',
             'account_number'  => 'required|string|max:50',
-            'account_code'    => 'required|string|max:10',
+            'account_code'    => ['required', 'string', Rule::exists('account_codes', 'code')->where('is_detail', true)],
             'opening_balance' => 'nullable|numeric',
             'notes'           => 'nullable|string',
         ]);
@@ -55,6 +59,7 @@ class BankAccountController extends Controller
     public function edit(BankAccount $bankAccount): Response
     {
         return Inertia::render('Accounting/BankAccounts/Form', [
+            'accounts' => $this->detailAccounts(),
             'account' => [
                 'id'              => $bankAccount->id,
                 'name'            => $bankAccount->name,
@@ -74,7 +79,7 @@ class BankAccountController extends Controller
             'name'            => 'required|string|max:100',
             'bank_name'       => 'required|string|max:100',
             'account_number'  => 'required|string|max:50',
-            'account_code'    => 'required|string|max:10',
+            'account_code'    => ['required', 'string', Rule::exists('account_codes', 'code')->where('is_detail', true)],
             'opening_balance' => 'nullable|numeric',
             'is_active'       => 'boolean',
             'notes'           => 'nullable|string',
@@ -83,5 +88,16 @@ class BankAccountController extends Controller
         $bankAccount->update($data);
 
         return redirect()->route('accounting.bank-accounts.index')->with('success', 'Đã cập nhật.');
+    }
+
+    private function detailAccounts(): array
+    {
+        return \App\Models\AccountCode::where('is_detail', true)
+            ->whereIn('type', ['asset'])
+            ->where('code', 'like', '11%')
+            ->orderBy('code')
+            ->get(['code', 'name'])
+            ->map(fn ($a) => ['code' => $a->code, 'name' => $a->name])
+            ->toArray();
     }
 }

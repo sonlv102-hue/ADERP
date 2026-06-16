@@ -28,12 +28,12 @@
           </div>
 
           <div>
-            <label class="form-label">TK kế toán <span class="text-red-500">*</span></label>
-            <select v-model="form.account_code" class="form-input">
-              <option value="1121">1121 - Tiền gửi NH (VND)</option>
-              <option value="1122">1122 - Tiền gửi NH (Ngoại tệ)</option>
-              <option value="1123">1123 - Tiền gửi NH (Vàng tiền tệ)</option>
+            <label class="form-label">TK kế toán cấp cuối <span class="text-red-500">*</span></label>
+            <select v-model="form.account_code" class="form-input" :class="{ 'border-red-500': form.errors.account_code }">
+              <option value="">-- Chọn TK kế toán --</option>
+              <option v-for="a in accounts" :key="a.code" :value="a.code">{{ a.code }} - {{ a.name }}</option>
             </select>
+            <p v-if="form.errors.account_code" class="form-error">{{ form.errors.account_code }}</p>
           </div>
 
           <div>
@@ -67,7 +67,7 @@
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { Link, useForm } from '@inertiajs/vue3';
 
-const props = defineProps({ account: Object });
+const props = defineProps({ account: Object, accounts: Array });
 
 const form = useForm({
   name:            props.account?.name            ?? '',

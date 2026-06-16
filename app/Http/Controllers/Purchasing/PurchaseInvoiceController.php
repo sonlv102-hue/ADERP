@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Purchasing;
 
 use App\Enums\PurchaseInvoiceStatus;
+use App\Enums\PurchaseInvoiceType;
 use App\Http\Controllers\Controller;
 use App\Models\AccountCode;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderItem;
 use App\Models\Supplier;
 use App\Services\PurchaseInvoiceService;
+use App\Services\SupplierAdvanceService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +21,10 @@ use Inertia\Response;
 
 class PurchaseInvoiceController extends Controller
 {
-    public function __construct(private PurchaseInvoiceService $service) {}
+    public function __construct(
+        private PurchaseInvoiceService $service,
+        private SupplierAdvanceService $advanceService,
+    ) {}
 
     public function index(): Response
     {
@@ -90,10 +96,12 @@ class PurchaseInvoiceController extends Controller
                         $i->quantity * $i->unit_price
                         - $i->quantity * $i->unit_price / (1 + (($i->product?->vat_percent ?? 0) / 100))
                     ),
+                    'default_invoice_type' => $this->detectInvoiceType($po->items),
                 ]),
             'suppliers'        => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'name', 'tax_code']),
             'selectedOrderId'  => $request->input('purchase_order_id'),
             'expenseAccounts'  => $this->expenseAccountList(),
+            'invoiceTypes'     => $this->invoiceTypeList(),
         ]);
     }
 
@@ -112,6 +120,7 @@ class PurchaseInvoiceController extends Controller
             'due_date'             => ['nullable', 'date'],
             'notes'                => ['nullable', 'string'],
             'expense_account_code' => ['nullable', 'string', 'max:20'],
+            'invoice_type'         => ['nullable', 'string', 'in:' . implode(',', array_column(PurchaseInvoiceType::cases(), 'value'))],
         ]);
 
         $invoice = PurchaseInvoice::create([
@@ -127,17 +136,30 @@ class PurchaseInvoiceController extends Controller
 
     public function show(PurchaseInvoice $purchaseInvoice): Response
     {
-        $purchaseInvoice->load(['supplier', 'purchaseOrder.items.product', 'creator', 'payments.creator', 'attachments.creator']);
+        $purchaseInvoice->load([
+            'supplier', 'purchaseOrder.items.product', 'creator',
+            'payments.creator', 'attachments.creator',
+            'activeAdvanceAllocations.advance', 'activeAdvanceAllocations.creator',
+        ]);
 
         $pj = \App\Models\AccountingPostingJob::where('source_type', 'purchase_invoice')
             ->where('source_id', $purchaseInvoice->id)
             ->where('posting_type', 'ap')
             ->first();
 
-        $isServicePurchase = $purchaseInvoice->purchase_order_id
-            && !\App\Models\StockEntry::where('purchase_order_id', $purchaseInvoice->purchase_order_id)
-                ->where('status', \App\Enums\StockEntryStatus::Confirmed)
-                ->exists();
+        // Phân loại: goods nếu PO có items hàng hóa/NVL/CCDC (không phải service/fixed_asset)
+        $isGoodsPurchase = $this->service->isGoodsPurchase($purchaseInvoice);
+
+        // PO items để hiển thị loại dòng hàng
+        $poItems = $purchaseInvoice->purchaseOrder?->items->map(fn ($item) => [
+            'id'         => $item->id,
+            'product'    => $item->product?->name ?? '—',
+            'product_id' => $item->product_id,
+            'quantity'   => $item->quantity,
+            'unit_price' => (float) $item->unit_price,
+            'vat_rate'   => (float) $item->vat_rate,
+            'line_type'  => $item->line_type ?? 'goods',
+        ]) ?? collect();
 
         return Inertia::render('Purchasing/PurchaseInvoices/Show', [
             'invoice' => [
@@ -152,14 +174,17 @@ class PurchaseInvoiceController extends Controller
                 'status_color'      => $purchaseInvoice->status->color(),
                 'supplier'          => $purchaseInvoice->supplier->name,
                 'purchase_order_id' => $purchaseInvoice->purchase_order_id,
-                'purchase_order'    => $purchaseInvoice->purchaseOrder->code,
+                'purchase_order'    => $purchaseInvoice->purchaseOrder?->code,
                 'subtotal'          => $purchaseInvoice->subtotal,
                 'tax_amount'        => $purchaseInvoice->tax_amount,
                 'total'             => $purchaseInvoice->total,
-                'paid_amount'       => $purchaseInvoice->paid_amount,
-                'remaining'         => $purchaseInvoice->remaining,
+                'paid_amount'              => $purchaseInvoice->paid_amount,
+                'advance_allocated_amount' => $purchaseInvoice->advance_allocated_amount,
+                'remaining'                => $purchaseInvoice->remaining,
                 'notes'                => $purchaseInvoice->notes,
                 'expense_account_code' => $purchaseInvoice->expense_account_code,
+                'invoice_type'         => $purchaseInvoice->invoice_type?->value,
+                'invoice_type_label'   => $purchaseInvoice->invoice_type?->label(),
                 'attachments' => $purchaseInvoice->attachments->map(fn ($a) => [
                     'id'        => $a->id,
                     'file_name' => $a->file_name,
@@ -187,7 +212,18 @@ class PurchaseInvoiceController extends Controller
                     'voided_at'   => $p->voided_at?->format('d/m/Y H:i'),
                 ]),
                 'transitions'         => $this->allowedTransitions($purchaseInvoice->status),
-                'is_service_purchase' => $isServicePurchase,
+                'is_goods_purchase'   => $isGoodsPurchase,
+                // Giữ is_service_purchase cho backwards-compat (= !isGoods khi có PO)
+                'is_service_purchase' => !$isGoodsPurchase && $purchaseInvoice->purchase_order_id !== null,
+                'po_items'             => $poItems,
+                'advance_allocations'  => $purchaseInvoice->activeAdvanceAllocations->map(fn ($a) => [
+                    'id'               => $a->id,
+                    'allocation_date'  => $a->allocation_date->format('d/m/Y'),
+                    'allocated_amount' => (float) $a->allocated_amount,
+                    'reason'           => $a->reason,
+                    'creator'          => $a->creator->name,
+                    'advance_ref'      => $a->advance->reference_no ?? ('ADV-' . $a->opening_advance_id),
+                ]),
                 'posting_job'         => $pj ? [
                     'status'        => $pj->status->value,
                     'status_label'  => $pj->status->label(),
@@ -195,26 +231,56 @@ class PurchaseInvoiceController extends Controller
                     'job_id'        => $pj->id,
                 ] : null,
             ],
+            'available_advances' => $this->advanceService
+                ->getAvailable($purchaseInvoice->supplier_id)
+                ->map(fn ($adv) => [
+                    'id'               => $adv->id,
+                    'reference_no'     => $adv->reference_no,
+                    'opening_date'     => $adv->opening_date->format('d/m/Y'),
+                    'amount'           => (float) $adv->amount,
+                    'remaining_amount' => (float) $adv->remaining_amount,
+                    'fiscal_year'      => $adv->fiscal_year,
+                    'status'           => $adv->status,
+                    'status_label'     => $adv->statusLabel(),
+                ]),
         ]);
+    }
+
+    public function updateItemLineType(Request $request, PurchaseInvoice $purchaseInvoice, \App\Models\PurchaseOrderItem $item): \Illuminate\Http\JsonResponse
+    {
+        // Verify item belongs to this invoice's PO
+        if ($item->purchase_order_id !== $purchaseInvoice->purchase_order_id) {
+            abort(403, 'Item không thuộc đơn mua hàng của hóa đơn này.');
+        }
+
+        $data = $request->validate([
+            'line_type' => ['required', 'in:goods,material,tool,service,fixed_asset'],
+        ]);
+
+        $item->update(['line_type' => $data['line_type']]);
+
+        return response()->json(['ok' => true, 'line_type' => $item->line_type]);
     }
 
     public function edit(PurchaseInvoice $purchaseInvoice): Response
     {
         return Inertia::render('Purchasing/PurchaseInvoices/Form', [
             'invoice'        => $purchaseInvoice,
-            'purchaseOrders' => PurchaseOrder::with('supplier')
+            'purchaseOrders' => PurchaseOrder::with(['supplier', 'items'])
                 ->where(fn ($q) => $q->whereIn('status', ['sent', 'received'])
                     ->orWhere('id', $purchaseInvoice->purchase_order_id))
                 ->orderByDesc('id')
                 ->get()
                 ->map(fn ($po) => [
-                    'id'          => $po->id,
-                    'code'        => $po->code,
-                    'supplier_id' => $po->supplier_id,
-                    'supplier'    => $po->supplier->name,
+                    'id'                   => $po->id,
+                    'code'                 => $po->code,
+                    'supplier_id'          => $po->supplier_id,
+                    'supplier'             => $po->supplier->name,
+                    'default_invoice_type' => $this->detectInvoiceType($po->items),
                 ]),
             'suppliers'       => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'name', 'tax_code']),
             'expenseAccounts' => $this->expenseAccountList(),
+            'invoiceTypes'    => $this->invoiceTypeList(),
         ]);
     }
 
@@ -230,6 +296,7 @@ class PurchaseInvoiceController extends Controller
             'due_date'             => ['nullable', 'date'],
             'notes'                => ['nullable', 'string'],
             'expense_account_code' => ['nullable', 'string', 'max:20'],
+            'invoice_type'         => ['nullable', 'string', 'in:' . implode(',', array_column(PurchaseInvoiceType::cases(), 'value'))],
         ]);
 
         $purchaseInvoice->update($data);
@@ -329,8 +396,9 @@ class PurchaseInvoiceController extends Controller
         return AccountCode::where('is_detail', true)
             ->where('is_active', true)
             ->where(fn ($q) => $q
-                ->where('code', 'like', '642%')
-                ->orWhere('code', 'like', '154%')
+                ->where('code', 'like', '154%')
+                ->orWhere('code', 'like', '641%')
+                ->orWhere('code', 'like', '642%')
                 ->orWhere('code', 'like', '632%')
                 ->orWhere('code', 'like', '811%')
             )
@@ -338,6 +406,25 @@ class PurchaseInvoiceController extends Controller
             ->get(['code', 'name'])
             ->map(fn ($a) => ['code' => $a->code, 'name' => "{$a->code} — {$a->name}"])
             ->toArray();
+    }
+
+    private function invoiceTypeList(): array
+    {
+        return array_map(
+            fn ($t) => ['value' => $t->value, 'label' => $t->label()],
+            PurchaseInvoiceType::cases()
+        );
+    }
+
+    private function detectInvoiceType(\Illuminate\Support\Collection $items): ?string
+    {
+        if ($items->isEmpty()) return null;
+
+        $lineTypes = $items->pluck('line_type')->unique()->values();
+
+        if ($lineTypes->count() !== 1) return null; // mixed → let user choose
+
+        return PurchaseInvoiceType::fromLineType($lineTypes->first())?->value;
     }
 
     private function allowedTransitions(PurchaseInvoiceStatus $status): array

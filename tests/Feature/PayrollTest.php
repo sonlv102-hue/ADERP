@@ -191,11 +191,11 @@ class PayrollTest extends TestCase
         $this->assertNotNull($item->paid_at);
         $this->assertNotNull($item->salary_journal_entry_id);
 
-        // 4. Verify journal entry Dr 334 / Cr 112 was created
+        // 4. Verify journal entry Dr 3341 / Cr bank was created
         $je = JournalEntry::find($item->salary_journal_entry_id);
         $this->assertNotNull($je);
         $drLine = JournalEntryLine::where('journal_entry_id', $je->id)
-            ->where('account_code', '334')->where('debit', '>', 0)->first();
+            ->where('account_code', '3341')->where('debit', '>', 0)->first();
         $this->assertNotNull($drLine);
         $this->assertEquals((int) $item->net_salary, (int) $drLine->debit);
 
@@ -360,7 +360,7 @@ class PayrollTest extends TestCase
             'trade_union_fee phải > 0 khi bật KPCĐ');
     }
 
-    /** AC5: Khi confirm payroll, journal entry phải có Cr 3382 */
+    /** AC5: Khi confirm payroll, journal entry phải có Cr 33821 (KPCĐ NSDLĐ) */
     public function test_journal_entry_has_credit_3382_when_union_fee_enabled(): void
     {
         Setting::set('payroll.union_fee_enabled', '1', 'payroll');
@@ -387,11 +387,11 @@ class PayrollTest extends TestCase
         $this->assertNotNull($je, 'Journal entry phải được tạo khi confirm payroll');
 
         $cr3382 = JournalEntryLine::where('journal_entry_id', $je->id)
-            ->where('account_code', '3382')
+            ->where('account_code', '33821')
             ->where('credit', '>', 0)
             ->first();
 
-        $this->assertNotNull($cr3382, 'Phải có dòng Có TK 3382 trong journal entry payroll');
+        $this->assertNotNull($cr3382, 'Phải có dòng Có TK 33821 (KPCĐ NSDLĐ) trong journal entry payroll');
         $this->assertEquals((int)$payroll->total_trade_union_fee, (int)$cr3382->credit);
     }
 
@@ -417,9 +417,9 @@ class PayrollTest extends TestCase
 
         if ($je) {
             $cr3382 = JournalEntryLine::where('journal_entry_id', $je->id)
-                ->where('account_code', '3382')
+                ->whereIn('account_code', ['3382','33821','33822'])
                 ->exists();
-            $this->assertFalse($cr3382, 'Không được có Cr 3382 khi KPCĐ disabled');
+            $this->assertFalse($cr3382, 'Không được có Cr KPCĐ khi KPCĐ disabled');
         }
     }
 

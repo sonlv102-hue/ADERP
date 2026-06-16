@@ -2,142 +2,230 @@
 
 namespace App\Services;
 
+use App\Enums\FixedAssetStatus;
 use App\Models\FixedAsset;
 use App\Models\FixedAssetDepreciation;
+use App\Models\FixedAssetDisposal;
+use App\Models\FixedAssetMovement;
+use App\Models\FixedAssetRepair;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class FixedAssetService
 {
-    /**
-     * Run monthly depreciation for all active assets for the given period (YYYY-MM).
-     * Skips assets already depreciated in that period.
-     *
-     * Returns array ['processed' => int, 'skipped' => int, 'errors' => string[]]
-     */
-    public function runMonthlyDepreciation(string $period): array
+    public function __construct(
+        protected FixedAssetJournalService $journalService,
+        protected FixedAssetDepreciationService $depreciationService,
+    ) {}
+
+    // -------------------------------------------------------
+    // Tạo TSCĐ mới
+    // -------------------------------------------------------
+
+    public function create(array $data, bool $createJournal = false): FixedAsset
     {
-        $processed = 0;
-        $skipped   = 0;
-        $errors    = [];
+        return DB::transaction(function () use ($data, $createJournal) {
+            $data['code'] = $data['code'] ?? FixedAsset::generateCode();
 
-        $assets = FixedAsset::whereNull('deleted_at')
-            ->where('status', 'active')
-            ->where('useful_life_months', '>', 0)
-            ->where('acquisition_cost', '>', 0)
-            ->get();
-
-        foreach ($assets as $asset) {
-            // Skip if already processed for this period
-            $exists = FixedAssetDepreciation::where('fixed_asset_id', $asset->id)
-                ->where('period', $period)
-                ->exists();
-
-            if ($exists) {
-                $skipped++;
-                continue;
+            // Backfill depreciable_amount from acquisition_cost if not set
+            if (empty($data['depreciable_amount'])) {
+                $data['depreciable_amount'] = $data['acquisition_cost'] ?? 0;
+            }
+            if (empty($data['total_amount'])) {
+                $data['total_amount'] = ($data['acquisition_cost'] ?? 0) + ($data['vat_amount'] ?? 0);
             }
 
-            // Skip if acquisition date is after the period end
-            $periodEnd = \Carbon\Carbon::parse($period . '-01')->endOfMonth()->format('Y-m-d');
-            if ($asset->acquisition_date && $asset->acquisition_date->format('Y-m-d') > $periodEnd) {
-                $skipped++;
-                continue;
+            $data['status']     = $data['status'] ?? FixedAssetStatus::PendingUse->value;
+            $data['created_by'] = auth()->id();
+
+            $asset = FixedAsset::create($data);
+
+            if ($createJournal) {
+                $this->journalService->createAcquisitionJournal($asset, isDraft: true);
             }
 
-            try {
-                DB::transaction(function () use ($asset, $period, &$processed) {
-                    $monthly = round($asset->acquisition_cost / $asset->useful_life_months, 2);
-
-                    // Current accumulated from depreciation records
-                    $accBefore = (float) FixedAssetDepreciation::where('fixed_asset_id', $asset->id)->sum('amount');
-
-                    $remaining = $asset->acquisition_cost - $accBefore;
-                    if ($remaining <= 0) {
-                        // Fully depreciated — update status and skip
-                        $asset->update(['status' => 'fully_depreciated', 'last_depreciation_period' => $period]);
-                        return;
-                    }
-
-                    $depAmount = min($monthly, $remaining);
-                    $accAfter  = $accBefore + $depAmount;
-                    $nbvAfter  = max(0, $asset->acquisition_cost - $accAfter);
-
-                    FixedAssetDepreciation::create([
-                        'fixed_asset_id'       => $asset->id,
-                        'period'               => $period,
-                        'amount'               => $depAmount,
-                        'accumulated_before'   => $accBefore,
-                        'net_book_value_after' => $nbvAfter,
-                    ]);
-
-                    // Keep accumulated_depreciation in sync for balance sheet backward compat
-                    $newStatus = $nbvAfter <= 0 ? 'fully_depreciated' : 'active';
-                    $asset->update([
-                        'accumulated_depreciation' => $accAfter,
-                        'last_depreciation_period'  => $period,
-                        'status'                    => $newStatus,
-                    ]);
-
-                    $processed++;
-                });
-            } catch (\Throwable $e) {
-                $errors[] = "Asset {$asset->code}: " . $e->getMessage();
-            }
-        }
-
-        return compact('processed', 'skipped', 'errors');
+            return $asset;
+        });
     }
 
-    /**
-     * Get depreciation schedule for a single asset (past records + future projection).
-     */
+    // -------------------------------------------------------
+    // Đưa vào sử dụng
+    // -------------------------------------------------------
+
+    public function placeInService(FixedAsset $asset, string $date, ?string $department = null): void
+    {
+        DB::transaction(function () use ($asset, $date, $department) {
+            $updateData = [
+                'placed_in_service_date'  => $date,
+                'depreciation_start_date' => $date,
+                'status'                  => FixedAssetStatus::Active->value,
+            ];
+
+            if ($department) $updateData['department'] = $department;
+
+            // Compute depreciation_end_date
+            if ($asset->useful_life_months > 0) {
+                $updateData['depreciation_end_date'] = Carbon::parse($date)
+                    ->addMonths($asset->useful_life_months - 1)
+                    ->endOfMonth()
+                    ->format('Y-m-d');
+            }
+
+            $asset->update($updateData);
+
+            FixedAssetMovement::create([
+                'fixed_asset_id' => $asset->id,
+                'movement_type'  => 'placed_in_service',
+                'movement_date'  => $date,
+                'notes'          => 'Đưa vào sử dụng',
+                'created_by'     => auth()->id(),
+            ]);
+        });
+    }
+
+    // -------------------------------------------------------
+    // Điều chuyển bộ phận (không sinh bút toán)
+    // -------------------------------------------------------
+
+    public function transfer(FixedAsset $asset, array $data): FixedAssetMovement
+    {
+        return DB::transaction(function () use ($asset, $data) {
+            $movement = FixedAssetMovement::create([
+                'fixed_asset_id'            => $asset->id,
+                'movement_type'             => 'department_transfer',
+                'movement_date'             => $data['effective_date'],
+                'from_department'           => $asset->department,
+                'to_department'             => $data['to_department'],
+                'from_expense_account_code' => $asset->depreciation_expense_account_code,
+                'to_expense_account_code'   => $data['to_expense_account_code'] ?? null,
+                'effective_from'            => $data['effective_date'],
+                'notes'                     => $data['notes'] ?? null,
+                'created_by'                => auth()->id(),
+            ]);
+
+            $updateData = ['department' => $data['to_department']];
+            if (! empty($data['to_expense_account_code'])) {
+                $updateData['depreciation_expense_account_code'] = $data['to_expense_account_code'];
+            }
+
+            $asset->update($updateData);
+
+            return $movement;
+        });
+    }
+
+    // -------------------------------------------------------
+    // Tạm dừng / tiếp tục khấu hao
+    // -------------------------------------------------------
+
+    public function suspend(FixedAsset $asset, string $date, string $reason): void
+    {
+        $asset->update(['status' => FixedAssetStatus::Suspended->value]);
+
+        FixedAssetMovement::create([
+            'fixed_asset_id' => $asset->id,
+            'movement_type'  => 'suspended',
+            'movement_date'  => $date,
+            'notes'          => $reason,
+            'created_by'     => auth()->id(),
+        ]);
+    }
+
+    public function resume(FixedAsset $asset, string $date): void
+    {
+        $asset->update(['status' => FixedAssetStatus::Active->value]);
+
+        FixedAssetMovement::create([
+            'fixed_asset_id' => $asset->id,
+            'movement_type'  => 'resumed',
+            'movement_date'  => $date,
+            'notes'          => 'Tiếp tục khấu hao',
+            'created_by'     => auth()->id(),
+        ]);
+    }
+
+    // -------------------------------------------------------
+    // Sửa chữa / nâng cấp
+    // -------------------------------------------------------
+
+    public function createRepair(FixedAsset $asset, array $data, bool $createJournal = true): FixedAssetRepair
+    {
+        return DB::transaction(function () use ($asset, $data, $createJournal) {
+            $repair = FixedAssetRepair::create([
+                ...$data,
+                'fixed_asset_id' => $asset->id,
+                'status'         => 'draft',
+                'created_by'     => auth()->id(),
+            ]);
+
+            if ($createJournal) {
+                $je = $this->journalService->createRepairJournal($repair, isDraft: true);
+                $repair->update(['journal_entry_id' => $je->id, 'status' => 'draft']);
+            }
+
+            // Nếu nâng cấp tăng nguyên giá, cập nhật acquisition_cost
+            if ($repair->accounting_treatment === 'increase_original_cost') {
+                $asset->increment('acquisition_cost', (float) $repair->amount);
+                $asset->increment('depreciable_amount', (float) $repair->amount);
+                $asset->update(['total_amount' => (float) $asset->total_amount + (float) $repair->amount]);
+            }
+
+            return $repair;
+        });
+    }
+
+    // -------------------------------------------------------
+    // Thanh lý / nhượng bán
+    // -------------------------------------------------------
+
+    public function dispose(FixedAsset $asset, array $data, bool $createJournal = true): FixedAssetDisposal
+    {
+        return DB::transaction(function () use ($asset, $data, $createJournal) {
+            $nbv    = max(0, (float) $asset->acquisition_cost - (float) $asset->accumulated_depreciation);
+            $accDep = (float) $asset->accumulated_depreciation;
+
+            $gainLoss = (float) ($data['selling_price'] ?? 0)
+                - (float) ($data['disposal_cost'] ?? 0)
+                - $nbv;
+
+            $disposal = FixedAssetDisposal::create([
+                ...$data,
+                'fixed_asset_id'                    => $asset->id,
+                'original_cost_snapshot'            => $asset->acquisition_cost,
+                'accumulated_depreciation_snapshot' => $accDep,
+                'net_book_value_snapshot'           => $nbv,
+                'gain_loss'                         => $gainLoss,
+                'status'                            => 'draft',
+                'created_by'                        => auth()->id(),
+            ]);
+
+            if ($createJournal) {
+                $jeIds = $this->journalService->createDisposalJournals($disposal, isDraft: true);
+                $disposal->update(['journal_entry_ids' => $jeIds]);
+            }
+
+            $asset->update(['status' => FixedAssetStatus::Disposed->value]);
+
+            return $disposal;
+        });
+    }
+
+    // -------------------------------------------------------
+    // Backward compat: batch depreciation (gọi service mới)
+    // -------------------------------------------------------
+
+    public function runMonthlyDepreciation(string $period): array
+    {
+        $result = $this->depreciationService->runPeriod($period, createJournal: true, isDraft: true);
+        return [
+            'processed' => $result['processed'],
+            'skipped'   => $result['skipped'],
+            'errors'    => $result['errors'],
+        ];
+    }
+
     public function getSchedule(FixedAsset $asset): array
     {
-        $records = FixedAssetDepreciation::where('fixed_asset_id', $asset->id)
-            ->orderBy('period')
-            ->get();
-
-        $schedule = $records->map(fn ($r) => [
-            'period'               => $r->period,
-            'amount'               => $r->amount,
-            'accumulated_before'   => $r->accumulated_before,
-            'accumulated_after'    => $r->accumulated_before + $r->amount,
-            'net_book_value_after' => $r->net_book_value_after,
-            'posted'               => true,
-        ])->toArray();
-
-        // Project remaining periods
-        $monthly     = $asset->monthly_depreciation;
-        $totalPosted = (float) $records->sum('amount');
-        $remaining   = $asset->acquisition_cost - $totalPosted;
-
-        if ($remaining > 0 && $monthly > 0) {
-            $lastPeriod = $records->last()?->period
-                ?? $asset->acquisition_date?->format('Y-m');
-
-            if ($lastPeriod) {
-                $cur = \Carbon\Carbon::createFromFormat('Y-m', $lastPeriod)->addMonth();
-                $acc = $totalPosted;
-
-                while ($remaining > 0) {
-                    $dep        = min($monthly, $remaining);
-                    $acc       += $dep;
-                    $remaining -= $dep;
-
-                    $schedule[] = [
-                        'period'               => $cur->format('Y-m'),
-                        'amount'               => $dep,
-                        'accumulated_before'   => $acc - $dep,
-                        'accumulated_after'    => $acc,
-                        'net_book_value_after' => max(0, $asset->acquisition_cost - $acc),
-                        'posted'               => false,
-                    ];
-
-                    $cur->addMonth();
-                }
-            }
-        }
-
-        return $schedule;
+        return $this->depreciationService->getFullSchedule($asset);
     }
 }

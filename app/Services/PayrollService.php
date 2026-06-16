@@ -134,7 +134,7 @@ class PayrollService
                 description: "Chi lương {$employeeName} tháng {$payroll->period} — CK {$bankAccount->account_number}",
                 date: now(),
                 lines: [
-                    ['account' => AccountingSettings::get('salary_payable_account', '334'),   'debit' => $net, 'credit' => 0,   'description' => "Lương {$employeeName} tháng {$payroll->period}"],
+                    ['account' => AccountingSettings::get('salary_payable_account', '3341'),  'debit' => $net, 'credit' => 0,   'description' => "Lương {$employeeName} tháng {$payroll->period}"],
                     ['account' => $bankTk, 'debit' => 0,   'credit' => $net, 'description' => "CK lương {$bankAccount->bank_name} - {$bankAccount->account_number}"],
                 ],
                 referenceType: PayrollItem::class,
@@ -525,16 +525,20 @@ class PayrollService
         $net = round((float)$payroll->total_net_salary);
         $pit = round((float)$payroll->total_pit);
 
-        // Tổng BHXH/BHYT/BHTN (cả NLĐ + NSDLĐ gộp vào Cr 338x)
+        // Tách BHXH/BHYT thành phần NSDLĐ (Cr Dr chi phí) và NLĐ (Cr Dr 3341)
         $sums = $payroll->items()->selectRaw(
-            'SUM(bhxh_employee + bhxh_employer) as bhxh,
-             SUM(bhyt_employee + bhyt_employer) as bhyt,
+            'SUM(bhxh_employer) as bhxh_empl,
+             SUM(bhxh_employee) as bhxh_emp,
+             SUM(bhyt_employer) as bhyt_empl,
+             SUM(bhyt_employee) as bhyt_emp,
              SUM(bhtn_employee + bhtn_employer) as bhtn'
         )->first();
 
-        $bhxh = round((float)$sums->bhxh);
-        $bhyt = round((float)$sums->bhyt);
-        $bhtn = round((float)$sums->bhtn);
+        $bhxhEmpl = round((float)$sums->bhxh_empl);
+        $bhxhEmp  = round((float)$sums->bhxh_emp);
+        $bhytEmpl = round((float)$sums->bhyt_empl);
+        $bhytEmp  = round((float)$sums->bhyt_emp);
+        $bhtn     = round((float)$sums->bhtn);
 
         // KPCĐ: ghi nhận khi (1) kế toán xác nhận rõ (union_fee_include=true)
         // hoặc (2) chưa đặt (null) và cài đặt toàn hệ thống bật union_fee_enabled.
@@ -574,29 +578,35 @@ class PayrollService
             ];
         }
 
-        // Cr: phải trả người lao động (lương thực nhận)
-        $lines[] = ['account' => AccountingSettings::get('salary_payable_account', '334'),  'debit' => 0, 'credit' => $net,  'description' => "Lương thực nhận NLĐ tháng {$payroll->period}", 'sort_order' => $sortOrder++];
+        // Cr: phải trả người lao động (lương thực nhận = gross - tất cả khấu trừ)
+        $lines[] = ['account' => AccountingSettings::get('salary_payable_account', '3341'),  'debit' => 0, 'credit' => $net,  'description' => "Lương thực nhận NLĐ tháng {$payroll->period}", 'sort_order' => $sortOrder++];
         // Cr: thuế TNCN
         if ($pit > 0) {
             $lines[] = ['account' => AccountingSettings::get('pit_payable_account', '3335'), 'debit' => 0, 'credit' => $pit, 'description' => "Thuế TNCN tháng {$payroll->period}", 'sort_order' => $sortOrder++];
         }
-        // Cr: BHXH phải nộp — NLĐ + NSDLĐ
-        if ($bhxh > 0) {
-            $lines[] = ['account' => AccountingSettings::get('bhxh_payable_account', '3383'), 'debit' => 0, 'credit' => $bhxh, 'description' => "BHXH phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
+        // Cr: BHXH phải nộp — tách NSDLĐ (33831) và NLĐ (33832)
+        if ($bhxhEmpl > 0) {
+            $lines[] = ['account' => AccountingSettings::get('bhxh_payable_account', '33831'),          'debit' => 0, 'credit' => $bhxhEmpl, 'description' => "BHXH NSDLĐ tháng {$payroll->period}", 'sort_order' => $sortOrder++];
         }
-        // Cr: BHYT phải nộp
-        if ($bhyt > 0) {
-            $lines[] = ['account' => AccountingSettings::get('bhyt_payable_account', '3384'), 'debit' => 0, 'credit' => $bhyt, 'description' => "BHYT phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
+        if ($bhxhEmp > 0) {
+            $lines[] = ['account' => AccountingSettings::get('bhxh_employee_account', '33832'),         'debit' => 0, 'credit' => $bhxhEmp,  'description' => "BHXH NLĐ tháng {$payroll->period}", 'sort_order' => $sortOrder++];
         }
-        // Cr: BHTN phải nộp
+        // Cr: BHYT phải nộp — tách NSDLĐ (33841) và NLĐ (33842)
+        if ($bhytEmpl > 0) {
+            $lines[] = ['account' => AccountingSettings::get('bhyt_payable_account', '33841'),          'debit' => 0, 'credit' => $bhytEmpl, 'description' => "BHYT NSDLĐ tháng {$payroll->period}", 'sort_order' => $sortOrder++];
+        }
+        if ($bhytEmp > 0) {
+            $lines[] = ['account' => AccountingSettings::get('bhyt_employee_account', '33842'),         'debit' => 0, 'credit' => $bhytEmp,  'description' => "BHYT NLĐ tháng {$payroll->period}", 'sort_order' => $sortOrder++];
+        }
+        // Cr: BHTN phải nộp (NLĐ + NSDLĐ gộp — 3385 là TK chi tiết)
         if ($bhtn > 0) {
-            $lines[] = ['account' => AccountingSettings::get('bhtn_payable_account', '3385'), 'debit' => 0, 'credit' => $bhtn, 'description' => "BHTN phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
+            $lines[] = ['account' => AccountingSettings::get('bhtn_payable_account', '3385'),           'debit' => 0, 'credit' => $bhtn, 'description' => "BHTN phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
         }
-        // Cr: KPCĐ phải nộp — ghi nhận khi $includeUnionFee (phải nhất quán với Dr total_cost)
+        // Cr: KPCĐ phải nộp (NSDLĐ chịu — 33821)
         if ($includeUnionFee) {
             $unionFee = round((float)$payroll->total_trade_union_fee);
             if ($unionFee > 0) {
-                $lines[] = ['account' => AccountingSettings::get('union_fee_payable_account', '3382'), 'debit' => 0, 'credit' => $unionFee, 'description' => "KPCĐ phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
+                $lines[] = ['account' => AccountingSettings::get('union_fee_payable_account', '33821'), 'debit' => 0, 'credit' => $unionFee, 'description' => "KPCĐ phải nộp tháng {$payroll->period}", 'sort_order' => $sortOrder++];
             }
         }
 

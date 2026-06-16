@@ -44,7 +44,23 @@
             </select>
             <p v-if="form.errors.supplier_id" class="text-red-500 text-xs mt-1">{{ form.errors.supplier_id }}</p>
           </div>
+        </div>
 
+        <!-- Loại hóa đơn đầu vào -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Loại hóa đơn đầu vào</label>
+          <select v-model="form.invoice_type" @change="onTypeChange"
+            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <option value="">-- Chọn loại (để trống = tự động theo PO) --</option>
+            <option v-for="t in invoiceTypes" :key="t.value" :value="t.value">{{ t.label }}</option>
+          </select>
+          <p v-if="form.errors.invoice_type" class="text-red-500 text-xs mt-1">{{ form.errors.invoice_type }}</p>
+          <p v-if="journalPreview" class="mt-1.5 text-xs text-indigo-700 bg-indigo-50 rounded px-2 py-1.5">
+            Bút toán: {{ journalPreview }}
+          </p>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
           <!-- Số hóa đơn NCC -->
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Số hóa đơn NCC</label>
@@ -95,15 +111,12 @@
           </div>
         </div>
 
-        <!-- TK chi phí (mua dịch vụ) -->
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">
-            TK chi phí
-            <span class="text-gray-400 font-normal text-xs ml-1">(chỉ áp dụng khi mua dịch vụ, không nhập kho)</span>
-          </label>
+        <!-- TK chi phí: ẩn khi hàng hóa/TSCĐ/chi phí trả trước (kế toán xử lý bởi service khác) -->
+        <div v-if="showExpenseAccount">
+          <label class="block text-sm font-medium text-gray-700 mb-1">{{ expenseAccountLabel }}</label>
           <select v-model="form.expense_account_code"
             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-            <option value="">-- Tự động theo loại (mặc định 6422) --</option>
+            <option value="">-- {{ expenseAccountPlaceholder }} --</option>
             <option v-for="acc in expenseAccounts" :key="acc.code" :value="acc.code">{{ acc.name }}</option>
           </select>
         </div>
@@ -131,6 +144,7 @@
 </template>
 
 <script setup>
+import { computed } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 
@@ -140,6 +154,7 @@ const props = defineProps({
   purchaseOrders:  Array,
   suppliers:       Array,
   expenseAccounts: Array,
+  invoiceTypes:    Array,
   selectedOrderId: [Number, String],
 });
 
@@ -158,6 +173,50 @@ const form = useForm({
   due_date:             props.invoice?.due_date          ?? '',
   notes:                props.invoice?.notes             ?? '',
   expense_account_code: props.invoice?.expense_account_code ?? '',
+  invoice_type:         props.invoice?.invoice_type      ?? '',
+});
+
+// Loại không tạo JE từ invoice (xử lý bởi StockService hoặc FixedAssetService)
+const NO_EXPENSE_ACCOUNT_TYPES = ['resale_goods', 'raw_material', 'tools_equipment', 'fixed_asset', 'prepaid_expense'];
+
+const showExpenseAccount = computed(() => {
+  if (!form.invoice_type) return true; // legacy: hiển thị để không mất dữ liệu cũ
+  return !NO_EXPENSE_ACCOUNT_TYPES.includes(form.invoice_type);
+});
+
+const expenseAccountLabel = computed(() => {
+  switch (form.invoice_type) {
+    case 'project_construction': return 'TK tập hợp chi phí dự án';
+    case 'selling_expense':      return 'TK chi phí bán hàng';
+    case 'management_expense':   return 'TK chi phí quản lý';
+    case 'external_service':     return 'TK chi phí dịch vụ';
+    default:                     return 'TK chi phí';
+  }
+});
+
+const expenseAccountPlaceholder = computed(() => {
+  switch (form.invoice_type) {
+    case 'project_construction': return 'Mặc định 154';
+    case 'selling_expense':      return 'Mặc định 6421';
+    case 'management_expense':   return 'Mặc định 6422';
+    case 'external_service':     return 'Chọn TK chi phí dịch vụ';
+    default:                     return 'Tự động theo loại (mặc định 6422)';
+  }
+});
+
+const journalPreview = computed(() => {
+  switch (form.invoice_type) {
+    case 'resale_goods':         return 'Nợ 1561 + Nợ 1331 / Có 3311 — tạo khi xác nhận phiếu nhập kho';
+    case 'raw_material':         return 'Nợ 1521 + Nợ 1331 / Có 3311 — tạo khi xác nhận phiếu nhập kho';
+    case 'tools_equipment':      return 'Nợ 1531 + Nợ 1331 / Có 3311 — tạo khi xác nhận phiếu nhập kho';
+    case 'project_construction': return 'Nợ 154 + Nợ 1331 / Có 3311 — tạo khi hóa đơn hợp lệ';
+    case 'external_service':     return `Nợ ${form.expense_account_code || '6422'} + Nợ 1331 / Có 3311`;
+    case 'selling_expense':      return 'Nợ 6421 + Nợ 1331 / Có 3311';
+    case 'management_expense':   return 'Nợ 6422 + Nợ 1331 / Có 3311';
+    case 'fixed_asset':          return 'Nợ 2111/2113 + Nợ 1332 / Có 3311 — tạo khi ghi nhận TSCĐ';
+    case 'prepaid_expense':      return 'Nợ 242 + Nợ 1331 / Có 3311 — tạo khi hóa đơn hợp lệ';
+    default:                     return '';
+  }
 });
 
 function onOrderChange() {
@@ -172,6 +231,18 @@ function onOrderChange() {
   form.subtotal   = po.subtotal   ?? 0;
   form.tax_amount = po.tax_amount ?? 0;
   form.total      = (po.subtotal ?? 0) + (po.tax_amount ?? 0);
+
+  // Auto-detect loại hóa đơn từ PO nếu chưa chọn
+  if (!form.invoice_type && po.default_invoice_type) {
+    form.invoice_type = po.default_invoice_type;
+  }
+}
+
+function onTypeChange() {
+  // Khi đổi sang loại không dùng TK chi phí, clear để không gửi giá trị sai lên server
+  if (!showExpenseAccount.value) {
+    form.expense_account_code = '';
+  }
 }
 
 function updateTotal() {

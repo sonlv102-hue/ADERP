@@ -208,7 +208,9 @@ class CashVoucherService
         return str_starts_with($code, '131')
             || str_starts_with($code, '331')
             || $code === '141'
-            || $code === '3388';
+            || $code === '3388'
+            || $code === '3411'
+            || $code === '1388';
     }
 
     /**
@@ -245,7 +247,14 @@ class CashVoucherService
     private function resolveFundAccount(CashVoucher $voucher): string
     {
         $voucher->loadMissing('fund');
-        return ($voucher->fund && $voucher->fund->type === 'bank')
+        $fund = $voucher->fund;
+
+        // Ưu tiên account_code được cấu hình trên quỹ (nhất quán với FundTransferService)
+        if ($fund && ! empty($fund->account_code)) {
+            return $fund->account_code;
+        }
+
+        return ($fund && $fund->type === 'bank')
             ? AccountingSettings::get('bank_account', '1121')
             : AccountingSettings::get('cash_account', '1111');
     }
@@ -261,11 +270,13 @@ class CashVoucherService
 
     private function resolvePartnerForType(CashVoucher $voucher, CashVoucherBusinessType $bt): array
     {
-        return match ($bt->defaultPartnerType()) {
-            'employee' => ['employee', $voucher->employee_id],
-            'supplier' => ['supplier', $voucher->supplier_id],
-            'customer' => ['customer', $voucher->customer_id],
-            default    => [null, null],
+        $type = $voucher->partner_type ?? $bt->defaultPartnerType();
+        return match ($type) {
+            'employee'    => ['employee',    $voucher->employee_id],
+            'supplier'    => ['supplier',    $voucher->supplier_id],
+            'customer'    => ['customer',    $voucher->customer_id],
+            'shareholder' => ['shareholder', $voucher->shareholder_id],
+            default       => [null, null],
         };
     }
 

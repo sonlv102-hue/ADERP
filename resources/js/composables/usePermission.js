@@ -15,5 +15,5 @@ export function usePermission() {
         return roles.some(r => hasRole(r));
     };
 
-    return { hasPermission, hasRole, hasAnyRole };
+    return { hasPermission, can: hasPermission, hasRole, hasAnyRole };
 }
