@@ -29,8 +29,9 @@ class CashFlowController extends Controller
                 'payments.payment_date as date',
                 DB::raw("'in' as type"),
                 'invoices.code as ref_code',
-                DB::raw("CONCAT('Thu HĐ ', invoices.code, ' - ', customers.name) as description"),
+                DB::raw("'Thu HĐ ' || invoices.code || ' - ' || customers.name as description"),
                 'payments.method',
+                DB::raw("'' as fund_name"),
                 'payments.amount',
                 DB::raw('0 as outflow'),
             ])
@@ -46,8 +47,9 @@ class CashFlowController extends Controller
                 'purchase_invoice_payments.payment_date as date',
                 DB::raw("'out' as type"),
                 'purchase_invoices.code as ref_code',
-                DB::raw("CONCAT('Trả HĐ ', purchase_invoices.code, ' - ', suppliers.name) as description"),
+                DB::raw("'Trả HĐ ' || purchase_invoices.code || ' - ' || suppliers.name as description"),
                 'purchase_invoice_payments.method',
+                DB::raw("'' as fund_name"),
                 'purchase_invoice_payments.amount',
                 DB::raw('0 as outflow'),
             ])
@@ -55,36 +57,60 @@ class CashFlowController extends Controller
             ->when($method, fn ($q) => $q->where('purchase_invoice_payments.method', $method));
 
         // Phiếu thu (CashVoucher type=receipt, status=confirmed)
+        // method lấy từ funds.type: bank → bank_transfer, còn lại → cash
         $voucherIn = DB::table('cash_vouchers')
+            ->leftJoin('funds', 'funds.id', '=', 'cash_vouchers.fund_id')
             ->select([
-                'id',
-                'voucher_date as date',
+                'cash_vouchers.id',
+                'cash_vouchers.voucher_date as date',
                 DB::raw("'in' as type"),
-                'code as ref_code',
-                DB::raw("CONCAT('[PT] ', COALESCE(description, code)) as description"),
-                DB::raw("'cash' as method"),
-                'amount',
+                'cash_vouchers.code as ref_code',
+                DB::raw("'[PT] ' || COALESCE(cash_vouchers.description, cash_vouchers.code) as description"),
+                DB::raw("CASE WHEN funds.type = 'bank' THEN 'bank_transfer' ELSE 'cash' END as method"),
+                DB::raw("COALESCE(funds.name, '') as fund_name"),
+                'cash_vouchers.amount',
                 DB::raw('0 as outflow'),
             ])
-            ->where('type', 'receipt')
-            ->where('status', 'confirmed')
-            ->whereBetween('voucher_date', [$dateFrom, $dateTo]);
+            ->where('cash_vouchers.type', 'receipt')
+            ->where('cash_vouchers.status', 'confirmed')
+            ->whereBetween('cash_vouchers.voucher_date', [$dateFrom, $dateTo])
+            ->when($method, function ($q) use ($method) {
+                if ($method === 'bank_transfer') {
+                    $q->where('funds.type', 'bank');
+                } elseif ($method === 'cash') {
+                    $q->where(fn ($q2) => $q2->where('funds.type', 'cash')->orWhereNull('funds.id'));
+                } else {
+                    $q->whereRaw('1 = 0');
+                }
+            });
 
         // Phiếu chi (CashVoucher type=payment, status=confirmed)
+        // method lấy từ funds.type: bank → bank_transfer, còn lại → cash
         $voucherOut = DB::table('cash_vouchers')
+            ->leftJoin('funds', 'funds.id', '=', 'cash_vouchers.fund_id')
             ->select([
-                'id',
-                'voucher_date as date',
+                'cash_vouchers.id',
+                'cash_vouchers.voucher_date as date',
                 DB::raw("'out' as type"),
-                'code as ref_code',
-                DB::raw("CONCAT('[PC] ', COALESCE(description, code)) as description"),
-                DB::raw("'cash' as method"),
-                'amount',
+                'cash_vouchers.code as ref_code',
+                DB::raw("'[PC] ' || COALESCE(cash_vouchers.description, cash_vouchers.code) as description"),
+                DB::raw("CASE WHEN funds.type = 'bank' THEN 'bank_transfer' ELSE 'cash' END as method"),
+                DB::raw("COALESCE(funds.name, '') as fund_name"),
+                'cash_vouchers.amount',
                 DB::raw('0 as outflow'),
             ])
-            ->where('type', 'payment')
-            ->where('status', 'confirmed')
-            ->whereBetween('voucher_date', [$dateFrom, $dateTo]);
+            ->where('cash_vouchers.type', 'payment')
+            ->where('cash_vouchers.status', 'confirmed')
+            ->whereBetween('cash_vouchers.voucher_date', [$dateFrom, $dateTo])
+            ->when($method, function ($q) use ($method) {
+                if ($method === 'bank_transfer') {
+                    $q->where('funds.type', 'bank');
+                } elseif ($method === 'cash') {
+                    $q->where(fn ($q2) => $q2->where('funds.type', 'cash')->orWhereNull('funds.id'));
+                } else {
+                    $q->whereRaw('1 = 0');
+                }
+            });
 
         // UNION và lọc theo type
         $allRows = collect();

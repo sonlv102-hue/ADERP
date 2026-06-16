@@ -93,7 +93,7 @@
               <td class="px-4 py-3 text-gray-800">{{ row.description }}</td>
               <td class="px-4 py-3">
                 <span class="px-2 py-0.5 rounded text-xs" :class="methodClass(row.method)">
-                  {{ methodLabel(row.method) }}
+                  {{ methodLabel(row) }}
                 </span>
               </td>
               <td class="px-4 py-3 text-right font-medium text-green-700">
@@ -172,8 +172,9 @@ function fmtDate(d) {
   return new Date(d).toLocaleDateString('vi-VN');
 }
 
-function methodLabel(m) {
-  return { cash: 'Tiền mặt', bank_transfer: 'Chuyển khoản', other: 'Khác' }[m] ?? m;
+function methodLabel(row) {
+  const base = { cash: 'Tiền mặt', bank_transfer: 'Chuyển khoản', other: 'Khác' }[row.method] ?? row.method;
+  return row.fund_name ? `${base} — ${row.fund_name}` : base;
 }
 
 function methodClass(m) {

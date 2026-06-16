@@ -26,7 +26,7 @@ class CashFlowExport implements FromCollection, WithHeadings, WithMapping, WithS
         $inflow = DB::table('payments')
             ->join('invoices', 'invoices.id', '=', 'payments.invoice_id')
             ->join('customers', 'customers.id', '=', 'invoices.customer_id')
-            ->selectRaw("payments.payment_date as date, 'in' as type, invoices.code as ref_code, CONCAT('Thu HĐ ', invoices.code, ' - ', customers.name) as description, payments.method, payments.amount")
+            ->selectRaw("payments.payment_date as date, 'in' as type, invoices.code as ref_code, 'Thu HĐ ' || invoices.code || ' - ' || customers.name as description, payments.method, '' as fund_name, payments.amount")
             ->whereBetween('payments.payment_date', [$dateFrom, $dateTo])
             ->when($method, fn ($q) => $q->where('payments.method', $method))
             ->get()->map(fn ($r) => (array) $r);
@@ -34,14 +34,52 @@ class CashFlowExport implements FromCollection, WithHeadings, WithMapping, WithS
         $outflow = DB::table('purchase_invoice_payments')
             ->join('purchase_invoices', 'purchase_invoices.id', '=', 'purchase_invoice_payments.purchase_invoice_id')
             ->join('suppliers', 'suppliers.id', '=', 'purchase_invoices.supplier_id')
-            ->selectRaw("purchase_invoice_payments.payment_date as date, 'out' as type, purchase_invoices.code as ref_code, CONCAT('Trả HĐ ', purchase_invoices.code, ' - ', suppliers.name) as description, purchase_invoice_payments.method, purchase_invoice_payments.amount")
+            ->selectRaw("purchase_invoice_payments.payment_date as date, 'out' as type, purchase_invoices.code as ref_code, 'Trả HĐ ' || purchase_invoices.code || ' - ' || suppliers.name as description, purchase_invoice_payments.method, '' as fund_name, purchase_invoice_payments.amount")
             ->whereBetween('purchase_invoice_payments.payment_date', [$dateFrom, $dateTo])
             ->when($method, fn ($q) => $q->where('purchase_invoice_payments.method', $method))
             ->get()->map(fn ($r) => (array) $r);
 
+        $voucherIn = DB::table('cash_vouchers')
+            ->leftJoin('funds', 'funds.id', '=', 'cash_vouchers.fund_id')
+            ->selectRaw("cash_vouchers.voucher_date as date, 'in' as type, cash_vouchers.code as ref_code, '[PT] ' || COALESCE(cash_vouchers.description, cash_vouchers.code) as description, CASE WHEN funds.type = 'bank' THEN 'bank_transfer' ELSE 'cash' END as method, COALESCE(funds.name, '') as fund_name, cash_vouchers.amount")
+            ->where('cash_vouchers.type', 'receipt')
+            ->where('cash_vouchers.status', 'confirmed')
+            ->whereBetween('cash_vouchers.voucher_date', [$dateFrom, $dateTo])
+            ->when($method, function ($q) use ($method) {
+                if ($method === 'bank_transfer') {
+                    $q->where('funds.type', 'bank');
+                } elseif ($method === 'cash') {
+                    $q->where(fn ($q2) => $q2->where('funds.type', 'cash')->orWhereNull('funds.id'));
+                } else {
+                    $q->whereRaw('1 = 0');
+                }
+            })
+            ->get()->map(fn ($r) => (array) $r);
+
+        $voucherOut = DB::table('cash_vouchers')
+            ->leftJoin('funds', 'funds.id', '=', 'cash_vouchers.fund_id')
+            ->selectRaw("cash_vouchers.voucher_date as date, 'out' as type, cash_vouchers.code as ref_code, '[PC] ' || COALESCE(cash_vouchers.description, cash_vouchers.code) as description, CASE WHEN funds.type = 'bank' THEN 'bank_transfer' ELSE 'cash' END as method, COALESCE(funds.name, '') as fund_name, cash_vouchers.amount")
+            ->where('cash_vouchers.type', 'payment')
+            ->where('cash_vouchers.status', 'confirmed')
+            ->whereBetween('cash_vouchers.voucher_date', [$dateFrom, $dateTo])
+            ->when($method, function ($q) use ($method) {
+                if ($method === 'bank_transfer') {
+                    $q->where('funds.type', 'bank');
+                } elseif ($method === 'cash') {
+                    $q->where(fn ($q2) => $q2->where('funds.type', 'cash')->orWhereNull('funds.id'));
+                } else {
+                    $q->whereRaw('1 = 0');
+                }
+            })
+            ->get()->map(fn ($r) => (array) $r);
+
         $all = collect();
-        if ($type !== 'out') $all = $all->merge($inflow);
-        if ($type !== 'in')  $all = $all->merge($outflow);
+        if ($type !== 'out') {
+            $all = $all->merge($inflow)->merge($voucherIn);
+        }
+        if ($type !== 'in') {
+            $all = $all->merge($outflow)->merge($voucherOut);
+        }
 
         $balance = 0;
         return $all->sortBy('date')->values()->map(function ($row) use (&$balance) {
@@ -59,11 +97,16 @@ class CashFlowExport implements FromCollection, WithHeadings, WithMapping, WithS
     public function map($row): array
     {
         $row = (array) $row;
+        $methodLabels = ['cash' => 'Tiền mặt', 'bank_transfer' => 'Chuyển khoản', 'other' => 'Khác'];
+        $methodLabel  = $methodLabels[$row['method']] ?? $row['method'];
+        if (!empty($row['fund_name'])) {
+            $methodLabel .= ' — ' . $row['fund_name'];
+        }
         return [
             $row['date'],
             $row['type'] === 'in' ? 'Thu' : 'Chi',
             $row['description'],
-            $row['method'],
+            $methodLabel,
             $row['type'] === 'in'  ? $row['amount'] : 0,
             $row['type'] === 'out' ? $row['amount'] : 0,
             $row['balance'],
