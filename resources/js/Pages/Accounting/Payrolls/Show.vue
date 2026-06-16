@@ -2,8 +2,21 @@
   <AppLayout>
     <div class="max-w-full space-y-4">
 
+      <!-- Print-only document header -->
+      <div class="print-only mb-3">
+        <div class="text-center mb-2">
+          <p class="text-sm font-bold uppercase tracking-wide">{{ $page.props.company?.company_name }}</p>
+          <p v-if="$page.props.company?.company_address" class="text-xs text-gray-600">{{ $page.props.company?.company_address }}</p>
+          <p v-if="$page.props.company?.company_tax_code" class="text-xs text-gray-600">MST: {{ $page.props.company?.company_tax_code }}</p>
+        </div>
+        <div class="text-center border-b-2 border-gray-800 pb-2 mb-2">
+          <h2 class="text-base font-bold uppercase">Bảng tính - Thanh toán tiền lương</h2>
+          <p class="text-sm">Tháng {{ formatPeriod(payroll.period) }} &nbsp;·&nbsp; {{ payroll.code }}</p>
+        </div>
+      </div>
+
       <!-- Header -->
-      <div class="flex items-center justify-between flex-wrap gap-3">
+      <div class="no-print flex items-center justify-between flex-wrap gap-3">
         <div class="flex items-center gap-3">
           <Link :href="route('accounting.payrolls.index')" class="text-gray-400 hover:text-gray-600 text-sm">
             &larr; Danh sách bảng lương
@@ -78,11 +91,11 @@
       </div>
 
       <!-- Flash -->
-      <div v-if="$page.props.flash?.success" class="bg-green-50 border border-green-200 text-green-800 rounded-xl px-4 py-3 text-sm">{{ $page.props.flash.success }}</div>
-      <div v-if="$page.props.flash?.error"   class="bg-red-50   border border-red-200   text-red-800   rounded-xl px-4 py-3 text-sm">{{ $page.props.flash.error }}</div>
+      <div v-if="$page.props.flash?.success" class="no-print bg-green-50 border border-green-200 text-green-800 rounded-xl px-4 py-3 text-sm">{{ $page.props.flash.success }}</div>
+      <div v-if="$page.props.flash?.error"   class="no-print bg-red-50   border border-red-200   text-red-800   rounded-xl px-4 py-3 text-sm">{{ $page.props.flash.error }}</div>
 
       <!-- Summary cards -->
-      <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+      <div class="no-print grid grid-cols-2 md:grid-cols-5 gap-3">
         <div class="bg-white rounded-xl shadow-sm p-3">
           <p class="text-xs text-gray-500 mb-1">Tổng lương CB</p>
           <p class="text-sm font-bold text-gray-800 font-mono">{{ fv(payroll.total_base_salary) }}</p>
@@ -106,7 +119,7 @@
       </div>
 
       <!-- Union fee confirmation panel -->
-      <div v-if="payroll.total_trade_union_fee > 0" class="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between flex-wrap gap-3">
+      <div v-if="payroll.total_trade_union_fee > 0" class="no-print bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center justify-between flex-wrap gap-3">
         <div>
           <p class="text-xs font-semibold text-amber-800 mb-0.5">Kinh phí công đoàn (KPCĐ) doanh nghiệp phải nộp</p>
           <p class="text-xs text-amber-700">
@@ -301,7 +314,7 @@
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('allowance_transport')) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('allowance_performance')) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono text-sm font-bold">{{ fv(payroll.total_gross) }}</td>
-                <td class="border border-gray-300 px-2 py-2 text-center font-mono">{{ items.length * 26 }}</td>
+                <td class="border border-gray-300 px-2 py-2 text-center font-mono">{{ sumItems('working_days') }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono text-sm font-bold">{{ fv(payroll.total_gross) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('insurance_base')) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('bhxh_employer')) }}</td>
@@ -328,6 +341,19 @@
             </tfoot>
           </table>
         </div>
+      </div>
+
+      <!-- Print-only KPCĐ info -->
+      <div v-if="payroll.total_trade_union_fee > 0" class="print-only mt-1 text-xs">
+        KPCĐ doanh nghiệp: <strong>{{ fv(payroll.total_trade_union_fee) }} đ</strong>
+        <span v-if="payroll.union_fee_include === true"> · Ghi nhận vào chi phí</span>
+        <span v-else-if="payroll.union_fee_include === false"> · Không ghi nhận</span>
+      </div>
+
+      <!-- Notes -->
+      <div v-if="payroll.notes" class="bg-white rounded-xl shadow-sm p-4">
+        <p class="text-xs font-semibold text-gray-600 mb-0.5">Ghi chú</p>
+        <p class="text-sm text-gray-700">{{ payroll.notes }}</p>
       </div>
 
       <!-- Signature row -->
@@ -891,11 +917,25 @@ function submitPay() {
 </script>
 
 <style>
+.print-only { display: none; }
+
+@page { size: A4 landscape; margin: 8mm; }
+
 @media print {
-  /* Hide nav, sidebar, buttons, modals when printing */
-  nav, aside, .no-print, button, a { display: none !important; }
+  nav, aside, .no-print, button { display: none !important; }
+  .print-only { display: block !important; }
   #payroll-table-container { overflow: visible !important; }
-  table { font-size: 8px !important; }
+  #payroll-table-container table {
+    font-size: 9px !important;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+  #payroll-table-container td,
+  #payroll-table-container th {
+    white-space: normal !important;
+    word-break: break-word;
+  }
   body { padding: 0; margin: 0; }
+  tr { page-break-inside: avoid; }
 }
 </style>
