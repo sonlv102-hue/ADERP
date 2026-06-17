@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\PaymentMethod;
+use App\Models\CashVoucher;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Spatie\Activitylog\LogOptions;
@@ -20,7 +21,7 @@ class Payment extends Model
             ->dontSubmitEmptyLogs();
     }
     protected $fillable = [
-        'invoice_id', 'fund_id', 'amount', 'payment_date', 'method', 'reference', 'notes', 'created_by',
+        'invoice_id', 'fund_id', 'cash_voucher_id', 'amount', 'payment_date', 'method', 'reference', 'notes', 'created_by',
     ];
 
     protected function casts(): array
@@ -35,6 +36,11 @@ class Payment extends Model
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(Invoice::class);
+    }
+
+    public function cashVoucher(): BelongsTo
+    {
+        return $this->belongsTo(CashVoucher::class);
     }
 
     public function creator(): BelongsTo

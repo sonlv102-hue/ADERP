@@ -2,13 +2,14 @@
 
 namespace App\Models;
 
+use App\Models\CashVoucher;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class PurchaseInvoicePayment extends Model
 {
     protected $fillable = [
-        'purchase_invoice_id', 'fund_id', 'amount', 'payment_date',
+        'purchase_invoice_id', 'fund_id', 'cash_voucher_id', 'amount', 'payment_date',
         'method', 'reference', 'notes', 'created_by',
         'status', 'void_reason', 'voided_by', 'voided_at',
     ];
@@ -45,5 +46,10 @@ class PurchaseInvoicePayment extends Model
     public function voidedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'voided_by');
+    }
+
+    public function cashVoucher(): BelongsTo
+    {
+        return $this->belongsTo(CashVoucher::class);
     }
 }

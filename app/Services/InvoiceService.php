@@ -2,7 +2,11 @@
 
 namespace App\Services;
 
+use App\Enums\CashVoucherBusinessType;
+use App\Enums\CashVoucherStatus;
+use App\Enums\CashVoucherType;
 use App\Enums\InvoiceStatus;
+use App\Models\CashVoucher;
 use App\Models\Fund;
 use App\Models\Invoice;
 use App\Models\JournalEntry;
@@ -13,7 +17,10 @@ use Illuminate\Support\Facades\DB;
 
 class InvoiceService
 {
-    public function __construct(private AccountingService $accounting) {}
+    public function __construct(
+        private AccountingService $accounting,
+        private CashVoucherService $cashVoucherService,
+    ) {}
 
     public function cancel(Invoice $invoice): void
     {
@@ -75,8 +82,9 @@ class InvoiceService
                 $invoice->update(['status' => InvoiceStatus::Paid]);
             }
 
-            // Hạch toán thanh toán: Dr 111/112 / Cr 131
-            $this->postPaymentEntry($payment, $invoice);
+            // Tạo Phiếu THU (PT-) + hạch toán Dr quỹ / Cr 131
+            $voucher = $this->createAndConfirmReceiptVoucher($payment, $invoice);
+            $payment->update(['cash_voucher_id' => $voucher->id]);
 
             return $payment;
         });
@@ -87,7 +95,15 @@ class InvoiceService
     public function removePayment(Invoice $invoice, Payment $payment): void
     {
         DB::transaction(function () use ($invoice, $payment) {
-            $this->accounting->reverseOrDelete('payment', $payment->id, "Thu tiền {$invoice->code}");
+            if ($payment->cash_voucher_id) {
+                $voucher = CashVoucher::find($payment->cash_voucher_id);
+                if ($voucher) {
+                    $this->cashVoucherService->cancel($voucher);
+                }
+            } else {
+                // Fallback: thanh toán cũ chưa có Phiếu THU
+                $this->accounting->reverseOrDelete('payment', $payment->id, "Thu tiền {$invoice->code}");
+            }
             $payment->delete();
 
             // Nếu hóa đơn đang là Paid, hoàn về Sent/Overdue
@@ -98,6 +114,28 @@ class InvoiceService
                 $invoice->update(['status' => $newStatus]);
             }
         });
+    }
+
+    private function createAndConfirmReceiptVoucher(Payment $payment, Invoice $invoice): CashVoucher
+    {
+        $invoice->loadMissing('customer');
+        $voucher = CashVoucher::create([
+            'code'           => CashVoucher::generateCode(CashVoucherType::Receipt),
+            'type'           => CashVoucherType::Receipt,
+            'status'         => CashVoucherStatus::Draft,
+            'fund_id'        => $payment->fund_id,
+            'customer_id'    => $invoice->customer_id,
+            'partner_type'   => 'customer',
+            'amount'         => $payment->amount,
+            'voucher_date'   => $payment->payment_date,
+            'description'    => "Thu tiền {$invoice->code}",
+            'business_type'  => CashVoucherBusinessType::CollectCustomer->value,
+            'reference_type' => 'invoice',
+            'reference_id'   => $invoice->id,
+            'created_by'     => auth()->id(),
+        ]);
+        $this->cashVoucherService->confirm($voucher);
+        return $voucher;
     }
 
     // ─── Private helpers ────────────────────────────────────────────────────
@@ -143,30 +181,6 @@ class InvoiceService
 
         $this->accounting->tryPost("Ghi nhận doanh thu {$invoice->code}", Carbon::parse($invoice->issue_date),
             $lines, 'invoice', $invoice->id, 'revenue');
-    }
-
-    private function postPaymentEntry(Payment $payment, Invoice $invoice): void
-    {
-        $amount = (float) $payment->amount;
-        if ($amount <= 0) return;
-
-        $cashAccount = $this->resolvePaymentAccount($payment);
-
-        $invoice->loadMissing('customer');
-        $receivableAccount = $invoice->customer->getReceivableAccount();
-
-        $this->accounting->tryPost(
-            "Thu tiền {$invoice->code}",
-            Carbon::parse($payment->payment_date),
-            [
-                ['account' => $cashAccount, 'debit' => $amount, 'credit' => 0,
-                 'description' => "Thu tiền - {$invoice->code}"],
-                ['account' => $receivableAccount, 'debit' => 0, 'credit' => $amount,
-                 'description'  => "Xóa công nợ KH - {$invoice->code}",
-                 'partner_type' => 'customer', 'partner_id' => $invoice->customer_id],
-            ],
-            'payment', $payment->id, 'collection'
-        );
     }
 
     // Phân tách creditSubtotal theo tỷ lệ revenue_account_code từ order_items.
@@ -238,19 +252,5 @@ class InvoiceService
                             'description' => "Doanh thu - {$invoice->code}"]];
     }
 
-    private function resolvePaymentAccount(Payment $payment): string
-    {
-        if ($payment->fund_id) {
-            $fund = Fund::find($payment->fund_id);
-            if ($fund?->account_code) return $fund->account_code;
-        }
-        $method = $payment->method instanceof \App\Enums\PaymentMethod
-            ? $payment->method->value
-            : ($payment->method ?? 'cash');
-        return match($method) {
-            'bank_transfer', 'bank' => AccountingSettings::get('bank_account', '1121'),
-            default                 => AccountingSettings::get('cash_account', '1111'),
-        };
-    }
-
 }
+

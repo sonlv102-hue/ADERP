@@ -2,9 +2,13 @@
 
 namespace App\Services;
 
+use App\Enums\CashVoucherBusinessType;
+use App\Enums\CashVoucherStatus;
+use App\Enums\CashVoucherType;
 use App\Enums\PurchaseInvoiceStatus;
 use App\Enums\PurchaseInvoiceType;
 use App\Enums\StockEntryStatus;
+use App\Models\CashVoucher;
 use App\Models\Fund;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoicePayment;
@@ -17,7 +21,10 @@ use Illuminate\Support\Facades\Log;
 
 class PurchaseInvoiceService
 {
-    public function __construct(private AccountingService $accounting) {}
+    public function __construct(
+        private AccountingService $accounting,
+        private CashVoucherService $cashVoucherService,
+    ) {}
 
     private const TRANSITIONS = [
         'pending'        => ['received', 'cancelled'],
@@ -66,12 +73,37 @@ class PurchaseInvoiceService
             ]);
 
             $this->recalculatePaid($invoice);
-            $this->postPaymentEntry($payment, $invoice);
+
+            // Tạo Phiếu CHI (PC-) + hạch toán Dr 331 / Cr quỹ
+            $voucher = $this->createAndConfirmPaymentVoucher($payment, $invoice);
+            $payment->update(['cash_voucher_id' => $voucher->id]);
 
             return $payment;
         });
 
         return $payment;
+    }
+
+    private function createAndConfirmPaymentVoucher(PurchaseInvoicePayment $payment, PurchaseInvoice $invoice): CashVoucher
+    {
+        $invoice->loadMissing('supplier');
+        $voucher = CashVoucher::create([
+            'code'           => CashVoucher::generateCode(CashVoucherType::Payment),
+            'type'           => CashVoucherType::Payment,
+            'status'         => CashVoucherStatus::Draft,
+            'fund_id'        => $payment->fund_id,
+            'supplier_id'    => $invoice->supplier_id,
+            'partner_type'   => 'supplier',
+            'amount'         => $payment->amount,
+            'voucher_date'   => $payment->payment_date,
+            'description'    => "Trả tiền NCC {$invoice->code}",
+            'business_type'  => CashVoucherBusinessType::PaySupplier->value,
+            'reference_type' => 'purchase_invoice',
+            'reference_id'   => $invoice->id,
+            'created_by'     => auth()->id(),
+        ]);
+        $this->cashVoucherService->confirm($voucher);
+        return $voucher;
     }
 
     public function removePayment(PurchaseInvoice $invoice, PurchaseInvoicePayment $payment): void
@@ -81,12 +113,20 @@ class PurchaseInvoiceService
         }
 
         DB::transaction(function () use ($invoice, $payment) {
-            $this->accounting->reverseOrDelete('purchase_invoice_payment', $payment->id, "Thu hồi thanh toán {$invoice->code}");
+            if ($payment->cash_voucher_id) {
+                $voucher = CashVoucher::find($payment->cash_voucher_id);
+                if ($voucher) {
+                    $this->cashVoucherService->cancel($voucher);
+                }
+            } else {
+                // Fallback: thanh toán cũ chưa có Phiếu CHI
+                $this->accounting->reverseOrDelete('purchase_invoice_payment', $payment->id, "Thu hồi thanh toán {$invoice->code}");
+            }
             $payment->update([
-                'status'     => 'voided',
-                'void_reason'=> 'Xóa từng khoản',
-                'voided_by'  => auth()->id(),
-                'voided_at'  => now(),
+                'status'      => 'voided',
+                'void_reason' => 'Xóa từng khoản',
+                'voided_by'   => auth()->id(),
+                'voided_at'   => now(),
             ]);
             $this->recalculatePaid($invoice);
         });
@@ -118,11 +158,18 @@ class PurchaseInvoiceService
             $userId = auth()->id();
 
             foreach ($activePayments as $payment) {
-                $this->accounting->reverseOrDelete(
-                    'purchase_invoice_payment',
-                    $payment->id,
-                    "Thu hồi thanh toán {$invoice->code}: {$reason}"
-                );
+                if ($payment->cash_voucher_id) {
+                    $voucher = CashVoucher::find($payment->cash_voucher_id);
+                    if ($voucher) {
+                        $this->cashVoucherService->cancel($voucher);
+                    }
+                } else {
+                    $this->accounting->reverseOrDelete(
+                        'purchase_invoice_payment',
+                        $payment->id,
+                        "Thu hồi thanh toán {$invoice->code}: {$reason}"
+                    );
+                }
                 $payment->update([
                     'status'      => 'voided',
                     'void_reason' => $reason,
@@ -377,29 +424,6 @@ class PurchaseInvoiceService
         ];
     }
 
-    private function postPaymentEntry(PurchaseInvoicePayment $payment, PurchaseInvoice $invoice): void
-    {
-        $amount = (float) $payment->amount;
-        if ($amount <= 0) return;
-
-        $cashAccount    = $this->resolvePaymentAccount($payment);
-        $invoice->loadMissing('supplier');
-        $payableAccount = $invoice->supplier->getPayableAccount();
-
-        $this->accounting->tryPost(
-            "Trả tiền NCC {$invoice->code}",
-            Carbon::parse($payment->payment_date),
-            [
-                ['account' => $payableAccount, 'debit' => (int) $amount, 'credit' => 0,
-                 'description'  => "Xóa công nợ NCC - {$invoice->code}",
-                 'partner_type' => 'supplier', 'partner_id' => $invoice->supplier_id],
-                ['account' => $cashAccount,    'debit' => 0, 'credit' => (int) $amount,
-                 'description' => "Trả tiền NCC - {$invoice->code}"],
-            ],
-            'purchase_invoice_payment', $payment->id, 'payment'
-        );
-    }
-
     private function recalculatePaid(PurchaseInvoice $invoice): void
     {
         $invoice->refresh();
@@ -421,15 +445,5 @@ class PurchaseInvoiceService
         ]);
     }
 
-    private function resolvePaymentAccount(PurchaseInvoicePayment $payment): string
-    {
-        if ($payment->fund_id) {
-            $fund = Fund::find($payment->fund_id);
-            if ($fund?->account_code) return $fund->account_code;
-        }
-        return match($payment->method) {
-            'bank_transfer', 'bank' => AccountingSettings::get('bank_account', '1121'),
-            default                 => AccountingSettings::get('cash_account', '1111'),
-        };
-    }
 }
+

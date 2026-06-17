@@ -2,13 +2,17 @@
 
 namespace App\Http\Controllers\Accounting;
 
+use App\Enums\CashVoucherBusinessType;
+use App\Enums\CashVoucherStatus;
+use App\Enums\CashVoucherType;
 use App\Http\Controllers\Controller;
 use App\Models\ArApOpeningBalance;
+use App\Models\CashVoucher;
 use App\Models\Customer;
 use App\Models\Fund;
 use App\Models\Supplier;
 use App\Services\AccountingService;
-use App\Services\AccountingSettings;
+use App\Services\CashVoucherService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -19,7 +23,10 @@ use Inertia\Response;
 
 class ArApOpeningBalanceController extends Controller
 {
-    public function __construct(private AccountingService $accounting) {}
+    public function __construct(
+        private AccountingService $accounting,
+        private CashVoucherService $cashVoucherService,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -213,48 +220,47 @@ class ArApOpeningBalanceController extends Controller
             $newRemaining = round((float) $arApOpeningBalance->remaining_amount - $amount, 2);
             $arApOpeningBalance->update(['remaining_amount' => $newRemaining]);
 
-            $cashAccount = $fund?->account_code
-                ?? ($data['method'] === 'bank_transfer'
-                    ? AccountingSettings::get('bank_account', '1121')
-                    : AccountingSettings::get('cash_account', '1111'));
             $docRef = $arApOpeningBalance->invoice_ref
                 ? "CN ĐK {$arApOpeningBalance->invoice_ref}"
                 : "CN ĐK #{$arApOpeningBalance->id}";
 
             if ($isAr) {
-                // AR: Thu tiền → Dr 1111/1121 / Cr 1311/1312/...
                 $arApOpeningBalance->loadMissing('customer');
-                $receivableAccount = $arApOpeningBalance->customer->getReceivableAccount();
-                $lines = [
-                    ['account' => $cashAccount, 'debit' => $amount, 'credit' => 0,
-                     'description' => "Thu tiền - {$docRef}"],
-                    ['account' => $receivableAccount, 'debit' => 0, 'credit' => $amount,
-                     'description'  => "Xóa CN ĐK KH - {$docRef}",
-                     'partner_type' => 'customer',
-                     'partner_id'   => $arApOpeningBalance->customer_id],
-                ];
-                $desc = "Thu công nợ đầu kỳ {$docRef}";
+                $voucher = CashVoucher::create([
+                    'code'           => CashVoucher::generateCode(CashVoucherType::Receipt),
+                    'type'           => CashVoucherType::Receipt,
+                    'status'         => CashVoucherStatus::Draft,
+                    'fund_id'        => $data['fund_id'],
+                    'customer_id'    => $arApOpeningBalance->customer_id,
+                    'partner_type'   => 'customer',
+                    'amount'         => $amount,
+                    'voucher_date'   => $data['payment_date'],
+                    'description'    => "Thu công nợ đầu kỳ {$docRef}",
+                    'business_type'  => CashVoucherBusinessType::CollectCustomer->value,
+                    'reference_type' => 'ar_ap_opening_balance',
+                    'reference_id'   => $arApOpeningBalance->id,
+                    'created_by'     => auth()->id(),
+                ]);
             } else {
-                // AP: Trả tiền NCC → Dr 3311/3312/... / Cr 1111/1121
                 $arApOpeningBalance->loadMissing('supplier');
-                $payableAccount = $arApOpeningBalance->supplier->getPayableAccount();
-                $lines = [
-                    ['account' => $payableAccount, 'debit' => $amount, 'credit' => 0,
-                     'description'  => "Xóa CN ĐK NCC - {$docRef}",
-                     'partner_type' => 'supplier',
-                     'partner_id'   => $arApOpeningBalance->supplier_id],
-                    ['account' => $cashAccount, 'debit' => 0, 'credit' => $amount,
-                     'description' => "Trả tiền - {$docRef}"],
-                ];
-                $desc = "Thanh toán công nợ đầu kỳ {$docRef}";
+                $voucher = CashVoucher::create([
+                    'code'           => CashVoucher::generateCode(CashVoucherType::Payment),
+                    'type'           => CashVoucherType::Payment,
+                    'status'         => CashVoucherStatus::Draft,
+                    'fund_id'        => $data['fund_id'],
+                    'supplier_id'    => $arApOpeningBalance->supplier_id,
+                    'partner_type'   => 'supplier',
+                    'amount'         => $amount,
+                    'voucher_date'   => $data['payment_date'],
+                    'description'    => "Thanh toán công nợ đầu kỳ {$docRef}",
+                    'business_type'  => CashVoucherBusinessType::PaySupplier->value,
+                    'reference_type' => 'ar_ap_opening_balance',
+                    'reference_id'   => $arApOpeningBalance->id,
+                    'created_by'     => auth()->id(),
+                ]);
             }
 
-            $this->accounting->tryPost(
-                $desc,
-                Carbon::parse($data['payment_date']),
-                $lines,
-                'ar_ap_opening_balance', $arApOpeningBalance->id, 'collection'
-            );
+            $this->cashVoucherService->confirm($voucher);
         });
 
         $msg = $isAr ? 'Đã ghi nhận thu tiền công nợ đầu kỳ.' : 'Đã ghi nhận thanh toán công nợ đầu kỳ.';
