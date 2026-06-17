@@ -9,7 +9,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class SupplierOpeningAdvance extends Model
 {
     protected $fillable = [
-        'supplier_id', 'fiscal_year', 'opening_date', 'account_code',
+        'supplier_id', 'advance_type', 'source_type', 'source_id',
+        'fiscal_year', 'opening_date', 'account_code',
         'amount', 'remaining_amount', 'currency', 'reference_no',
         'bank_transaction_ref', 'original_payment_date', 'original_payment_note',
         'status', 'notes', 'created_by',
@@ -53,6 +54,20 @@ class SupplierOpeningAdvance extends Model
     {
         return in_array($this->status, ['open', 'partially_applied'])
             && (float) $this->remaining_amount > 0;
+    }
+
+    public function isPrepayment(): bool
+    {
+        return $this->advance_type === 'prepayment';
+    }
+
+    public function typeLabel(): string
+    {
+        return match($this->advance_type) {
+            'prepayment'      => 'Trả trước trong kỳ',
+            'opening_balance' => 'Số dư đầu kỳ',
+            default           => $this->advance_type,
+        };
     }
 
     public function statusLabel(): string

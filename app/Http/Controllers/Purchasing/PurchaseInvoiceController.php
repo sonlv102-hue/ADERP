@@ -6,6 +6,7 @@ use App\Enums\PurchaseInvoiceStatus;
 use App\Enums\PurchaseInvoiceType;
 use App\Http\Controllers\Controller;
 use App\Models\AccountCode;
+use App\Models\Fund;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
@@ -240,9 +241,14 @@ class PurchaseInvoiceController extends Controller
                     'amount'           => (float) $adv->amount,
                     'remaining_amount' => (float) $adv->remaining_amount,
                     'fiscal_year'      => $adv->fiscal_year,
+                    'advance_type'     => $adv->advance_type,
+                    'type_label'       => $adv->typeLabel(),
                     'status'           => $adv->status,
                     'status_label'     => $adv->statusLabel(),
                 ]),
+            'funds' => Fund::where('is_active', true)
+                ->orderBy('name')
+                ->get(['id', 'name', 'type']),
         ]);
     }
 

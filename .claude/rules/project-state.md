@@ -48,12 +48,14 @@ Dự án đang ở giai đoạn **vận hành và cải tiến**, các module co
 | Fund Transfer (LCQ-) — luân chuyển giữa các quỹ + bút toán | Hoàn thành (2026-06-15) |
 | Balance Sheet tabs — TK chưa map + kiểm tra cân đối | Hoàn thành (2026-06-15) |
 | Payroll Adjustment — adjustment_amount per payroll_item | Hoàn thành (2026-06-15) |
+| Supplier Prepayment Offset (đối trừ trả trước NCC TK 331) | Hoàn thành (2026-06-17) |
+| AR/AP Cash Voucher integration (PT-/PC- cho payments + purchase_invoice_payments) | Hoàn thành (2026-06-17) |
 
 ## Migration sequence hiện tại
 
-- Last 900xxx: `2026_06_15_900087` (payroll adjustment columns) — Next: **900088**
+- Last 900xxx: `2026_06_17_900114` (extend supplier_opening_advances: advance_type, source_type, source_id) — Next: **900115**
 - Last Phase E / bank: `2026_06_05_100006` — Next (nếu cùng chủ đề bank): **100007**
-- Khi tạo migration mới không liên quan bank: dùng **900088** với date hiện tại
+- Khi tạo migration mới không liên quan bank: dùng **900115** với date hiện tại
 
 ## Known issues / risks
 

@@ -1,40 +1,30 @@
 <template>
-  <AppLayout title="Ứng trước NCC đầu kỳ">
+  <AppLayout title="Ứng trước / Trả trước NCC">
     <div class="max-w-7xl mx-auto px-4 py-6">
       <div class="flex items-center justify-between mb-6">
-        <h1 class="text-2xl font-bold text-gray-900">Ứng trước NCC đầu kỳ</h1>
-        <Link
-          :href="route('purchasing.supplier-advances.create')"
-          class="btn-primary"
-        >
-          + Thêm ứng trước
+        <h1 class="text-2xl font-bold text-gray-900">Ứng trước / Trả trước NCC</h1>
+        <Link :href="route('purchasing.supplier-advances.create')" class="btn-primary">
+          + Thêm
         </Link>
       </div>
 
       <!-- Filters -->
       <div class="bg-white rounded-lg shadow p-4 mb-4 flex flex-wrap gap-3">
-        <input
-          v-model="filters.search"
-          type="text"
-          placeholder="Tìm theo NCC hoặc mã tham chiếu..."
-          class="input flex-1 min-w-[200px]"
-          @input="debouncedSearch"
-        />
+        <input v-model="filters.search" type="text" placeholder="Tìm theo NCC hoặc mã tham chiếu..."
+          class="input flex-1 min-w-[200px]" @input="debouncedSearch" />
         <select v-model="filters.supplier_id" class="input w-48" @change="applyFilters">
           <option value="">Tất cả NCC</option>
           <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}</option>
+        </select>
+        <select v-model="filters.advance_type" class="input w-44" @change="applyFilters">
+          <option value="">Tất cả loại</option>
+          <option v-for="t in typeOptions" :key="t.value" :value="t.value">{{ t.label }}</option>
         </select>
         <select v-model="filters.status" class="input w-44" @change="applyFilters">
           <option value="">Tất cả trạng thái</option>
           <option v-for="s in statusOptions" :key="s.value" :value="s.value">{{ s.label }}</option>
         </select>
-        <input
-          v-model="filters.fiscal_year"
-          type="number"
-          placeholder="Năm..."
-          class="input w-28"
-          @change="applyFilters"
-        />
+        <input v-model="filters.fiscal_year" type="number" placeholder="Năm..." class="input w-28" @change="applyFilters" />
       </div>
 
       <!-- Table -->
@@ -43,9 +33,10 @@
           <thead class="bg-gray-50">
             <tr>
               <th class="th">Nhà cung cấp</th>
+              <th class="th">Loại</th>
               <th class="th text-center">Năm</th>
-              <th class="th">Ngày mở</th>
-              <th class="th text-right">Số ứng trước</th>
+              <th class="th">Ngày</th>
+              <th class="th text-right">Số tiền</th>
               <th class="th text-right">Đã đối trừ</th>
               <th class="th text-right">Còn lại</th>
               <th class="th">Tham chiếu</th>
@@ -55,40 +46,36 @@
           </thead>
           <tbody class="divide-y divide-gray-100">
             <tr v-if="advances.data.length === 0">
-              <td colspan="9" class="py-10 text-center text-gray-500 italic">
+              <td colspan="10" class="py-10 text-center text-gray-500 italic">
                 Chưa có khoản ứng trước nào.
               </td>
             </tr>
-            <tr
-              v-for="adv in advances.data"
-              :key="adv.id"
-              class="hover:bg-gray-50 cursor-pointer"
-              @click="goto(adv.id)"
-            >
-              <td class="td font-medium">{{ adv.supplier?.name }}</td>
-              <td class="td text-center">{{ adv.fiscal_year }}</td>
-              <td class="td">{{ formatDate(adv.opening_date) }}</td>
+            <tr v-for="adv in advances.data" :key="adv.id"
+              class="hover:bg-gray-50 cursor-pointer" @click="goto(adv.id)">
+              <td class="td font-medium">{{ adv.supplier }}</td>
+              <td class="td">
+                <span :class="adv.advance_type === 'prepayment' ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-600'"
+                  class="px-2 py-0.5 rounded text-xs font-medium">
+                  {{ adv.type_label }}
+                </span>
+              </td>
+              <td class="td text-center text-gray-500">{{ adv.fiscal_year || '—' }}</td>
+              <td class="td">{{ adv.opening_date }}</td>
               <td class="td text-right font-mono">{{ fmt(adv.amount) }}</td>
               <td class="td text-right font-mono text-orange-600">
                 {{ fmt(adv.amount - adv.remaining_amount) }}
               </td>
               <td class="td text-right font-mono font-semibold"
-                :class="adv.remaining_amount > 0 ? 'text-green-700' : 'text-gray-400'"
-              >
+                :class="adv.remaining_amount > 0 ? 'text-green-700' : 'text-gray-400'">
                 {{ fmt(adv.remaining_amount) }}
               </td>
               <td class="td text-sm text-gray-500">{{ adv.reference_no || '—' }}</td>
               <td class="td text-center">
-                <span :class="statusBadge(adv.status)" class="badge">
-                  {{ statusLabel(adv.status) }}
-                </span>
+                <span :class="statusBadge(adv.status)" class="badge">{{ adv.status_label }}</span>
               </td>
               <td class="td text-right">
-                <Link
-                  :href="route('purchasing.supplier-advances.show', adv.id)"
-                  class="text-indigo-600 hover:text-indigo-800 text-sm"
-                  @click.stop
-                >
+                <Link :href="route('purchasing.supplier-advances.show', adv.id)"
+                  class="text-indigo-600 hover:text-indigo-800 text-sm" @click.stop>
                   Chi tiết
                 </Link>
               </td>
@@ -114,6 +101,7 @@ const props = defineProps({
   filters:       Object,
   suppliers:     Array,
   statusOptions: Array,
+  typeOptions:   Array,
 })
 
 const filters = ref({ ...props.filters })
@@ -132,24 +120,8 @@ function goto(id) {
   router.visit(route('purchasing.supplier-advances.show', id))
 }
 
-function formatDate(d) {
-  if (!d) return '—'
-  const parts = d.split('-')
-  return parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : d
-}
-
 function fmt(val) {
   return Number(val || 0).toLocaleString('vi-VN')
-}
-
-function statusLabel(s) {
-  const map = {
-    open:              'Còn dư',
-    partially_applied: 'Đối trừ một phần',
-    fully_applied:     'Đã dùng hết',
-    cancelled:         'Đã hủy',
-  }
-  return map[s] || s
 }
 
 function statusBadge(s) {

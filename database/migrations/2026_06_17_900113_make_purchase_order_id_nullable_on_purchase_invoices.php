@@ -7,11 +7,15 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::statement('ALTER TABLE purchase_invoices ALTER COLUMN purchase_order_id DROP NOT NULL');
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('ALTER TABLE purchase_invoices ALTER COLUMN purchase_order_id DROP NOT NULL');
+        }
     }
 
     public function down(): void
     {
-        DB::statement('ALTER TABLE purchase_invoices ALTER COLUMN purchase_order_id SET NOT NULL');
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('ALTER TABLE purchase_invoices ALTER COLUMN purchase_order_id SET NOT NULL');
+        }
     }
 };

@@ -250,56 +250,125 @@
         </div>
 
         <!-- Form thêm thanh toán -->
-        <div v-if="showPayForm" class="px-5 py-4 border-b border-gray-100 bg-green-50">
-          <form @submit.prevent="submitPayment" class="grid grid-cols-2 sm:grid-cols-4 gap-3 items-start">
-            <div>
-              <label class="block text-xs font-medium text-gray-600 mb-1">Số tiền <span class="text-red-500">*</span></label>
-              <input v-model.number="payForm.amount" type="number" min="1" step="any" :max="invoice.remaining"
-                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-              <p class="text-xs text-green-700 font-medium mt-0.5">{{ formatVnd(payForm.amount || 0) }}</p>
-              <div class="flex gap-1 mt-1.5">
-                <button v-for="pct in [30, 50, 70, 100]" :key="pct" type="button"
-                  @click="payForm.amount = Math.round(invoice.remaining * pct / 100)"
-                  class="px-2 py-0.5 text-xs rounded border border-gray-300 text-gray-500 hover:bg-green-100 hover:border-green-400 hover:text-green-700 transition-colors">
-                  {{ pct }}%
-                </button>
+        <div v-if="showPayForm" class="px-5 py-4 border-b border-gray-100 bg-green-50 space-y-3">
+          <!-- Payment type selector -->
+          <div v-if="available_advances?.length > 0" class="flex gap-2">
+            <button v-for="pt in paymentTypes" :key="pt.value" type="button"
+              @click="paymentType = pt.value"
+              :class="paymentType === pt.value
+                ? 'bg-green-600 text-white border-green-600'
+                : 'bg-white text-gray-600 border-gray-300 hover:border-green-400'"
+              class="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors">
+              {{ pt.label }}
+            </button>
+          </div>
+
+          <!-- Advance selection (offset / combined) -->
+          <div v-if="paymentType !== 'cash' && available_advances?.length"
+            class="border border-amber-200 rounded-lg bg-amber-50 p-3 space-y-2">
+            <p class="text-xs font-semibold text-amber-800">Khoản ứng trước / trả trước có thể đối trừ</p>
+            <div v-for="adv in available_advances" :key="adv.id" class="flex items-center gap-3">
+              <input type="checkbox" :id="'adv-'+adv.id"
+                :checked="isAdvanceSelected(adv.id)"
+                @change="toggleAdvance(adv)"
+                class="rounded border-gray-300 text-amber-500 focus:ring-amber-400" />
+              <label :for="'adv-'+adv.id" class="flex-1 text-xs text-gray-700 cursor-pointer">
+                <span class="font-medium">{{ adv.reference_no || ('ADV-' + adv.id) }}</span>
+                <span class="ml-1 text-amber-600 bg-amber-100 px-1 rounded text-xs">{{ adv.type_label }}</span>
+                <span class="ml-1">— còn <strong>{{ formatVnd(adv.remaining_amount) }}</strong></span>
+              </label>
+              <input v-if="isAdvanceSelected(adv.id)"
+                type="number" min="1" :max="adv.remaining_amount" step="1"
+                :value="getAdvanceAmount(adv.id)"
+                @input="setAdvanceAmount(adv.id, +$event.target.value)"
+                class="w-32 border border-amber-300 rounded px-2 py-1 text-xs text-right focus:outline-none focus:ring-1 focus:ring-amber-400" />
+            </div>
+            <div class="flex items-center gap-3 pt-1">
+              <label class="text-xs font-medium text-gray-600">Ngày đối trừ <span class="text-red-500">*</span></label>
+              <input v-model="payForm.allocation_date" type="date"
+                class="border border-gray-300 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400" />
+              <span v-if="totalOffsetAmount > 0" class="text-xs font-semibold text-amber-800 ml-2">
+                Tổng đối trừ: {{ formatVnd(totalOffsetAmount) }}
+              </span>
+            </div>
+            <p class="text-xs text-blue-700 bg-blue-50 border border-blue-200 rounded px-2 py-1">
+              Đối trừ không tạo phiếu chi — không ghi Có 1111/1121 thêm lần nữa.
+            </p>
+          </div>
+
+          <!-- Cash fields (cash / combined) -->
+          <div v-if="paymentType !== 'offset'">
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 items-start">
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">
+                  {{ paymentType === 'combined' ? 'Số tiền chi thêm' : 'Số tiền' }} <span class="text-red-500">*</span>
+                </label>
+                <input v-model.number="payForm.amount" type="number" min="1" step="any"
+                  :max="invoice.remaining - totalOffsetAmount"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+                <p class="text-xs text-green-700 font-medium mt-0.5">{{ formatVnd(payForm.amount || 0) }}</p>
+                <div class="flex gap-1 mt-1.5">
+                  <button v-for="pct in [30, 50, 70, 100]" :key="pct" type="button"
+                    @click="payForm.amount = Math.round((invoice.remaining - totalOffsetAmount) * pct / 100)"
+                    class="px-2 py-0.5 text-xs rounded border border-gray-300 text-gray-500 hover:bg-green-100 hover:border-green-400 hover:text-green-700 transition-colors">
+                    {{ pct }}%
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Ngày TT <span class="text-red-500">*</span></label>
+                <input v-model="payForm.payment_date" type="date"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Hình thức</label>
+                <select v-model="payForm.method"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+                  <option value="bank_transfer">Chuyển khoản</option>
+                  <option value="cash">Tiền mặt</option>
+                  <option value="other">Khác</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Quỹ / TK <span class="text-red-500">*</span></label>
+                <select v-model="payForm.fund_id"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
+                  <option value="">-- Chọn quỹ --</option>
+                  <option v-for="f in funds" :key="f.id" :value="f.id">{{ f.name }}</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Mã GD / Số CT</label>
+                <input v-model="payForm.reference" type="text"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
+              </div>
+              <div class="col-span-2 sm:col-span-3">
+                <label class="block text-xs font-medium text-gray-600 mb-1">Ghi chú</label>
+                <input v-model="payForm.notes" type="text"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
               </div>
             </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-600 mb-1">Ngày TT <span class="text-red-500">*</span></label>
-              <input v-model="payForm.payment_date" type="date"
-                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-600 mb-1">Hình thức</label>
-              <select v-model="payForm.method"
-                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500">
-                <option value="bank_transfer">Chuyển khoản</option>
-                <option value="cash">Tiền mặt</option>
-                <option value="other">Khác</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-600 mb-1">Mã GD / Số CT</label>
-              <input v-model="payForm.reference" type="text"
-                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-            </div>
-            <div class="col-span-2 sm:col-span-3">
-              <label class="block text-xs font-medium text-gray-600 mb-1">Ghi chú</label>
-              <input v-model="payForm.notes" type="text"
-                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-green-500" />
-            </div>
-            <div class="flex items-end gap-2">
-              <button type="submit" :disabled="payForm.processing"
-                class="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50">
-                Lưu
-              </button>
-              <button type="button" @click="showPayForm = false"
-                class="bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-lg text-sm">
-                Hủy
-              </button>
-            </div>
-          </form>
+          </div>
+
+          <!-- Combined total summary -->
+          <div v-if="paymentType === 'combined' && totalOffsetAmount > 0"
+            class="flex gap-4 text-xs text-gray-700 bg-gray-100 rounded-lg px-3 py-2">
+            <span>Đối trừ: <strong class="text-amber-700">{{ formatVnd(totalOffsetAmount) }}</strong></span>
+            <span>Chi thêm: <strong class="text-green-700">{{ formatVnd(payForm.amount || 0) }}</strong></span>
+            <span>Tổng: <strong class="text-blue-700">{{ formatVnd(totalOffsetAmount + (payForm.amount || 0)) }}</strong></span>
+          </div>
+
+          <!-- Submit buttons -->
+          <div class="flex gap-2">
+            <button type="button" @click="submitPayment" :disabled="payForm.processing"
+              class="bg-green-600 hover:bg-green-700 text-white px-4 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50">
+              {{ payForm.processing ? 'Đang xử lý...' : (paymentType === 'offset' ? 'Đối trừ' : 'Lưu thanh toán') }}
+            </button>
+            <button type="button" @click="resetPayForm"
+              class="bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-lg text-sm">
+              Hủy
+            </button>
+          </div>
         </div>
 
         <!-- Danh sách thanh toán -->
@@ -365,7 +434,7 @@
               class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
               <option value="">-- Chọn khoản ứng trước --</option>
               <option v-for="adv in available_advances" :key="adv.id" :value="adv.id">
-                {{ adv.reference_no || ('ADV-' + adv.id) }} — còn {{ formatVnd(adv.remaining_amount) }} đ ({{ adv.fiscal_year }})
+                {{ adv.reference_no || ('ADV-' + adv.id) }} ({{ adv.type_label }}) — còn {{ formatVnd(adv.remaining_amount) }}
               </option>
             </select>
             <p v-if="selectedAdvance" class="text-xs text-amber-700 mt-0.5">
@@ -527,7 +596,7 @@ import FileAttachments from '@/Components/Shared/FileAttachments.vue';
 import { usePermission } from '@/composables/usePermission';
 import { useCurrency } from '@/composables/useCurrency';
 
-const props = defineProps({ invoice: Object, available_advances: Array });
+const props = defineProps({ invoice: Object, available_advances: Array, funds: Array });
 
 const { hasPermission } = usePermission();
 const { formatVnd } = useCurrency();
@@ -581,6 +650,44 @@ const advanceForm = ref({
   allocation_date:    new Date().toISOString().split('T')[0],
   reason:             '',
 });
+
+// Payment type for the unified payment form
+const paymentType = ref('cash');
+const paymentTypes = [
+  { value: 'cash',     label: 'Chi tiền mới' },
+  { value: 'offset',   label: 'Đối trừ ứng trước' },
+  { value: 'combined', label: 'Đối trừ + Chi thêm' },
+];
+
+// Selected advances for offset/combined: [{advance_id, amount}]
+const selectedAdvances = ref([]);
+
+const totalOffsetAmount = computed(() =>
+  selectedAdvances.value.reduce((sum, a) => sum + (a.amount || 0), 0)
+);
+
+function isAdvanceSelected(advId) {
+  return selectedAdvances.value.some(a => a.advance_id === advId);
+}
+
+function toggleAdvance(adv) {
+  const idx = selectedAdvances.value.findIndex(a => a.advance_id === adv.id);
+  if (idx >= 0) {
+    selectedAdvances.value.splice(idx, 1);
+  } else {
+    const maxAmt = Math.min(adv.remaining_amount, props.invoice.remaining - totalOffsetAmount.value);
+    selectedAdvances.value.push({ advance_id: adv.id, amount: Math.max(1, maxAmt) });
+  }
+}
+
+function getAdvanceAmount(advId) {
+  return selectedAdvances.value.find(a => a.advance_id === advId)?.amount ?? 0;
+}
+
+function setAdvanceAmount(advId, val) {
+  const item = selectedAdvances.value.find(a => a.advance_id === advId);
+  if (item) item.amount = val;
+}
 const reverseReason = ref('');
 const showReverseModal = ref(false);
 const reversingAllocationId = ref(null);
@@ -631,11 +738,15 @@ const maxAllocatable = computed(() => {
 });
 
 const payForm = useForm({
-  amount:       props.invoice.remaining ?? 0,
-  payment_date: new Date().toISOString().split('T')[0],
-  method:       'bank_transfer',
-  reference:    '',
-  notes:        '',
+  payment_type:     'cash',
+  amount:           props.invoice.remaining ?? 0,
+  payment_date:     new Date().toISOString().split('T')[0],
+  allocation_date:  new Date().toISOString().split('T')[0],
+  method:           'bank_transfer',
+  fund_id:          '',
+  reference:        '',
+  notes:            '',
+  advance_allocations: [],
 });
 
 function doDelete() {
@@ -652,12 +763,20 @@ function doTransition(status) {
 }
 
 function submitPayment() {
+  payForm.payment_type       = paymentType.value;
+  payForm.advance_allocations = selectedAdvances.value;
   payForm.post(route('purchasing.purchase-invoices.payments.store', props.invoice.id), {
     onSuccess: () => {
-      showPayForm.value = false;
-      payForm.reset();
+      resetPayForm();
     },
   });
+}
+
+function resetPayForm() {
+  showPayForm.value = false;
+  paymentType.value = 'cash';
+  selectedAdvances.value = [];
+  payForm.reset();
 }
 
 function deletePayment(paymentId) {

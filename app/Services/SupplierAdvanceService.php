@@ -16,8 +16,40 @@ class SupplierAdvanceService
     {
         $data['remaining_amount'] = $data['amount'];
         $data['status']           = 'open';
+        $data['advance_type']     = $data['advance_type'] ?? 'opening_balance';
         $data['created_by']       = auth()->id();
         return SupplierOpeningAdvance::create($data);
+    }
+
+    /**
+     * Tạo khoản trả trước trong kỳ (không phải số dư đầu kỳ).
+     * Khoản này có thể đối trừ vào hóa đơn sau.
+     */
+    public function createPrepayment(
+        int $supplierId,
+        float $amount,
+        string $date,
+        ?string $reference = null,
+        ?string $notes = null,
+        string $sourceType = 'manual',
+        ?int $sourceId = null
+    ): SupplierOpeningAdvance {
+        return SupplierOpeningAdvance::create([
+            'supplier_id'      => $supplierId,
+            'advance_type'     => 'prepayment',
+            'source_type'      => $sourceType,
+            'source_id'        => $sourceId,
+            'fiscal_year'      => \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql' ? null : (int) date('Y'),
+            'opening_date'     => $date,
+            'account_code'     => '3311',
+            'amount'           => $amount,
+            'remaining_amount' => $amount,
+            'currency'         => 'VND',
+            'reference_no'     => $reference,
+            'notes'            => $notes,
+            'status'           => 'open',
+            'created_by'       => auth()->id(),
+        ]);
     }
 
     public function update(SupplierOpeningAdvance $advance, array $data): void
