@@ -114,6 +114,20 @@ class StockTransferService
         DB::transaction(function () use ($transfer) {
             $fromWarehouseName = $transfer->fromWarehouse->name;
 
+            // Guard: kiểm tra tồn kho tại kho đích đủ để hoàn về kho nguồn
+            foreach ($transfer->items as $item) {
+                $destStock = StockMovement::where('product_id', $item->product_id)
+                    ->where('warehouse_id', $transfer->to_warehouse_id)
+                    ->lockForUpdate()
+                    ->sum('quantity');
+
+                if ($destStock < $item->quantity) {
+                    throw new RuntimeException(
+                        "Không thể hủy chuyển kho: sản phẩm [{$item->product->name}] tại kho đích chỉ còn {$destStock} đơn vị (đã xuất bớt). Hủy các phiếu xuất liên quan tại kho đích trước."
+                    );
+                }
+            }
+
             foreach ($transfer->items as $item) {
                 // Reversal: in back to source warehouse
                 StockMovement::create([

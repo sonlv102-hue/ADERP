@@ -196,15 +196,25 @@ class StockService
         DB::transaction(function () use ($entry) {
             // Tạo movement âm để đảo ngược tồn kho (giữ audit trail)
             foreach ($entry->items as $item) {
+                // Hoàn lại số lượng đã nhận trên đơn mua
+                if ($item->purchase_order_item_id) {
+                    $poItem = PurchaseOrderItem::lockForUpdate()->find($item->purchase_order_item_id);
+                    if ($poItem) {
+                        $newQty = max(0, (float)$poItem->received_quantity - (float)$item->quantity);
+                        $poItem->update(['received_quantity' => $newQty]);
+                    }
+                }
+
                 StockMovement::create([
-                    'product_id'  => $item->product_id,
+                    'product_id'   => $item->product_id,
                     'warehouse_id' => $entry->warehouse_id,
-                    'type'        => 'out',
-                    'quantity'    => -(int) $item->quantity,
-                    'source_type' => StockEntry::class,
-                    'source_id'   => $entry->id,
-                    'created_by'  => auth()->id(),
-                    'notes'       => "Hủy phiếu nhập kho {$entry->code}",
+                    'type'         => 'out',
+                    'quantity'     => -(int) $item->quantity,
+                    'source_type'  => StockEntry::class,
+                    'source_id'    => $entry->id,
+                    'created_by'   => auth()->id(),
+                    'notes'        => "Hủy phiếu nhập kho {$entry->code}",
+                    'project_id'   => $item->project_id,
                 ]);
             }
 
@@ -249,15 +259,25 @@ class StockService
 
             // Tạo movement âm để đảo ngược tồn kho tạm thời (sẽ được tạo lại khi confirm)
             foreach ($entry->items as $item) {
+                // Hoàn lại số lượng đã nhận trên đơn mua
+                if ($item->purchase_order_item_id) {
+                    $poItem = PurchaseOrderItem::lockForUpdate()->find($item->purchase_order_item_id);
+                    if ($poItem) {
+                        $newQty = max(0, (float)$poItem->received_quantity - (float)$item->quantity);
+                        $poItem->update(['received_quantity' => $newQty]);
+                    }
+                }
+
                 StockMovement::create([
-                    'product_id'  => $item->product_id,
+                    'product_id'   => $item->product_id,
                     'warehouse_id' => $entry->warehouse_id,
-                    'type'        => 'out',
-                    'quantity'    => -(int) $item->quantity,
-                    'source_type' => StockEntry::class,
-                    'source_id'   => $entry->id,
-                    'created_by'  => auth()->id(),
-                    'notes'       => "Thu hồi phiếu nhập kho {$entry->code} để chỉnh sửa",
+                    'type'         => 'out',
+                    'quantity'     => -(int) $item->quantity,
+                    'source_type'  => StockEntry::class,
+                    'source_id'    => $entry->id,
+                    'created_by'   => auth()->id(),
+                    'notes'        => "Thu hồi phiếu nhập kho {$entry->code} để chỉnh sửa",
+                    'project_id'   => $item->project_id,
                 ]);
             }
 
@@ -366,16 +386,27 @@ class StockService
                         );
                     }
 
+                    // Tính giá vốn excl VAT từ cost_price sản phẩm để lưu vào movement và item
+                    $vatRate   = (float)($item->product?->vat_percent ?? 10);
+                    $costIncl  = (float)($item->product?->cost_price ?? 0);
+                    $divisor   = $vatRate > 0 ? (1 + $vatRate / 100) : 1;
+                    $unitCost  = $costIncl / $divisor;
+                    $totalCost = $unitCost * (float)$qty;
+
+                    $item->update(['source_cost' => $unitCost, 'total_cost' => $totalCost]);
+
                     StockMovement::create([
-                        'product_id'  => $item->product_id,
+                        'product_id'   => $item->product_id,
                         'warehouse_id' => $exit->warehouse_id,
-                        'type'        => 'out',
-                        'quantity'    => -$qty,
-                        'source_type' => StockExit::class,
-                        'source_id'   => $exit->id,
-                        'created_by'  => auth()->id(),
-                        'notes'       => "Xuất kho từ phiếu {$exit->code}",
-                        'project_id'  => $exit->project_id,
+                        'type'         => 'out',
+                        'quantity'     => -$qty,
+                        'source_type'  => StockExit::class,
+                        'source_id'    => $exit->id,
+                        'created_by'   => auth()->id(),
+                        'notes'        => "Xuất kho từ phiếu {$exit->code}",
+                        'project_id'   => $exit->project_id,
+                        'unit_cost'    => $unitCost,
+                        'amount'       => -$totalCost,
                     ]);
                 }
 
@@ -498,7 +529,7 @@ class StockService
             }
 
             // Xóa WIP entries nếu có
-            \App\Models\ProjectWipEntry::where('source_type', 'stock_exit')
+            \App\Models\ProjectWipEntry::where('source_type', StockExit::class)
                 ->where('source_id', $exit->id)
                 ->delete();
 
