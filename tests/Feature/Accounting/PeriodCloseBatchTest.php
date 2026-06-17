@@ -131,7 +131,7 @@ class PeriodCloseBatchTest extends TestCase
         $this->assertTrue($result['hasCritical']);
         $criticals = array_filter($result['warnings'], fn ($w) => $w['type'] === 'critical');
         $codes = array_column(array_values($criticals), 'code');
-        $this->assertContains('batch_exists', $codes);
+        $this->assertContains('EXISTING_BATCH', $codes);
     }
 
     public function test_preview_warns_critical_if_period_locked(): void
@@ -143,7 +143,7 @@ class PeriodCloseBatchTest extends TestCase
         $this->assertTrue($result['hasCritical']);
         $criticals = array_filter($result['warnings'], fn ($w) => $w['type'] === 'critical');
         $codes = array_column(array_values($criticals), 'code');
-        $this->assertContains('period_locked', $codes);
+        $this->assertContains('PERIOD_LOCKED', $codes);
     }
 
     public function test_preview_warns_info_for_wip_balance(): void
@@ -157,7 +157,7 @@ class PeriodCloseBatchTest extends TestCase
 
         $infos = array_filter($result['warnings'], fn ($w) => $w['type'] === 'info');
         $codes = array_column(array_values($infos), 'code');
-        $this->assertContains('wip_balance', $codes);
+        $this->assertContains('WIP_BALANCE', $codes);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

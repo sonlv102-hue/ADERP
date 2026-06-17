@@ -26,12 +26,12 @@ class PeriodCloseBatchController extends Controller
         $periods = AccountingPeriod::orderByDesc('year')->orderByDesc('month')
             ->get()
             ->map(fn ($p) => [
-                'id'           => $p->id,
-                'label'        => $p->label(),
-                'fiscal_period'=> sprintf('%04d-%02d', $p->year, $p->month),
-                'status'       => $p->status,
-                'status_label' => $p->statusLabel(),
-                'status_color' => $p->statusColor(),
+                'id'            => $p->id,
+                'label'         => $p->label(),
+                'fiscal_period' => sprintf('%04d-%02d', $p->year, $p->month),
+                'status'        => $p->status,
+                'status_label'  => $p->statusLabel(),
+                'status_color'  => $p->statusColor(),
             ]);
 
         return Inertia::render('Accounting/PeriodClose/Index', [
@@ -40,7 +40,7 @@ class PeriodCloseBatchController extends Controller
         ]);
     }
 
-    /** Dry-run: trả về preview plan + warnings, không ghi DB */
+    /** Dry-run: trả về preview plan + checklist + warnings, không ghi DB */
     public function preview(Request $request): JsonResponse
     {
         $request->validate(['period' => ['required', 'regex:/^\d{4}-\d{2}$/']]);
@@ -48,13 +48,13 @@ class PeriodCloseBatchController extends Controller
         try {
             $result = $this->service->preview($request->period);
         } catch (\Throwable $e) {
-            return response()->json(['error' => $e->getMessage()], 422);
+            return $this->errorJson('SERVER_ERROR', $e->getMessage());
         }
 
         // entryDate là Carbon object — serialize trước khi trả JSON
         $result['entryDate'] = $result['entryDate']->format('Y-m-d');
 
-        return response()->json($result);
+        return response()->json(array_merge(['success' => true], $result));
     }
 
     /** Tạo batch kết chuyển */
@@ -103,6 +103,38 @@ class PeriodCloseBatchController extends Controller
             ->with('success', "Đã đảo batch kết chuyển {$batch->code}.");
     }
 
+    /** Xem trước kế hoạch chuyển lợi nhuận cuối năm (4212 → 4211) */
+    public function yearEndPreview(Request $request): JsonResponse
+    {
+        $request->validate(['year' => ['required', 'integer', 'min:2020', 'max:2099']]);
+
+        try {
+            $plan = $this->service->buildYearEndTransfer((int) $request->year);
+        } catch (\Throwable $e) {
+            return $this->errorJson('SERVER_ERROR', $e->getMessage());
+        }
+
+        return response()->json(array_merge(['success' => true], $plan));
+    }
+
+    /** Tạo batch chuyển lợi nhuận cuối năm (4212 → 4211) */
+    public function yearOpen(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'year'  => ['required', 'integer', 'min:2020', 'max:2099'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ]);
+
+        try {
+            $batch = $this->service->closeYearEnd((int) $data['year'], auth()->id(), $data['notes'] ?? null);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('period-close.show', $batch)
+            ->with('success', "Đã chuyển lợi nhuận năm {$data['year']}. Batch: {$batch->code}");
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // DTOs
     // ─────────────────────────────────────────────────────────────────────────
@@ -113,6 +145,7 @@ class PeriodCloseBatchController extends Controller
             'id'                  => $b->id,
             'code'                => $b->code,
             'fiscal_period'       => $b->fiscal_period,
+            'batch_type'          => $b->batch_type ?? 'monthly',
             'period_label'        => $b->accountingPeriod?->label() ?? $b->fiscal_period,
             'status'              => $b->status,
             'status_label'        => $b->statusLabel(),
@@ -133,15 +166,15 @@ class PeriodCloseBatchController extends Controller
     {
         $dto = $this->batchDto($b);
         $dto['journal_entries'] = $b->journalEntries->map(fn ($je) => [
-            'id'          => $je->id,
-            'code'        => $je->code,
-            'description' => $je->description,
-            'status'      => $je->status,
-            'status_label'=> $je->statusLabel(),
-            'status_color'=> $je->statusColor(),
-            'entry_date'  => $je->entry_date->format('d/m/Y'),
-            'total_debit' => (int) $je->lines->sum('debit'),
-            'lines'       => $je->lines->map(fn ($l) => [
+            'id'           => $je->id,
+            'code'         => $je->code,
+            'description'  => $je->description,
+            'status'       => $je->status,
+            'status_label' => $je->statusLabel(),
+            'status_color' => $je->statusColor(),
+            'entry_date'   => $je->entry_date->format('d/m/Y'),
+            'total_debit'  => (int) $je->lines->sum('debit'),
+            'lines'        => $je->lines->map(fn ($l) => [
                 'account_code' => $l->account_code,
                 'description'  => $l->description,
                 'debit'        => (int) $l->debit,
@@ -149,5 +182,14 @@ class PeriodCloseBatchController extends Controller
             ]),
         ]);
         return $dto;
+    }
+
+    private function errorJson(string $code, string $message, int $status = 422): JsonResponse
+    {
+        return response()->json([
+            'success'    => false,
+            'error_code' => $code,
+            'message'    => $message,
+        ], $status);
     }
 }

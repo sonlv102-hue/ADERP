@@ -22,18 +22,27 @@ class InventoryReportController extends Controller
         $categoryId  = $request->input('category_id');
 
         // Pre-aggregate stock_movements once (1 query) thay vì 3 correlated subqueries × N rows
-        $smAgg = DB::table('stock_movements')
-            ->when($warehouseId, fn ($q) => $q->where('warehouse_id', $warehouseId))
+        // Dùng entry_date/exit_date từ phiếu NK/XK; fallback DATE(created_at) cho các nguồn khác
+        $smAgg = DB::table('stock_movements as sm')
+            ->leftJoin('stock_entries as se', function ($join) {
+                $join->on('sm.source_id', '=', 'se.id')
+                     ->where('sm.source_type', '=', 'App\\Models\\StockEntry');
+            })
+            ->leftJoin('stock_exits as sx', function ($join) {
+                $join->on('sm.source_id', '=', 'sx.id')
+                     ->where('sm.source_type', '=', 'App\\Models\\StockExit');
+            })
+            ->when($warehouseId, fn ($q) => $q->where('sm.warehouse_id', $warehouseId))
             ->selectRaw(
-                "product_id,
-                 SUM(CASE WHEN DATE(created_at) < ? THEN quantity ELSE 0 END) as stock_begin,
-                 SUM(CASE WHEN DATE(created_at) BETWEEN ? AND ? AND quantity > 0 THEN quantity ELSE 0 END) as stock_in,
-                 SUM(CASE WHEN DATE(created_at) BETWEEN ? AND ? AND quantity < 0 THEN ABS(quantity) ELSE 0 END) as stock_out,
-                 MAX(CASE WHEN DATE(created_at) BETWEEN ? AND ? AND quantity > 0 THEN DATE(created_at) END) as last_in_date,
-                 MAX(CASE WHEN DATE(created_at) BETWEEN ? AND ? AND quantity < 0 THEN DATE(created_at) END) as last_out_date",
+                "sm.product_id,
+                 SUM(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) < ? THEN sm.quantity ELSE 0 END) as stock_begin,
+                 SUM(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) BETWEEN ? AND ? AND sm.quantity > 0 THEN sm.quantity ELSE 0 END) as stock_in,
+                 SUM(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) BETWEEN ? AND ? AND sm.quantity < 0 THEN ABS(sm.quantity) ELSE 0 END) as stock_out,
+                 MAX(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) BETWEEN ? AND ? AND sm.quantity > 0 THEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) END) as last_in_date,
+                 MAX(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) BETWEEN ? AND ? AND sm.quantity < 0 THEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) END) as last_out_date",
                 [$dateFrom, $dateFrom, $dateTo, $dateFrom, $dateTo, $dateFrom, $dateTo, $dateFrom, $dateTo]
             )
-            ->groupBy('product_id');
+            ->groupBy('sm.product_id');
 
         $query = DB::table('products')
             ->leftJoin('product_categories', 'product_categories.id', '=', 'products.category_id')
@@ -92,16 +101,24 @@ class InventoryReportController extends Controller
 
         // Summary từ TOÀN BỘ sản phẩm (không giới hạn trang hiện tại)
         // Dùng query mới độc lập để tránh binding conflict khi reuse $smAgg
-        $smAggSummary = DB::table('stock_movements')
-            ->when($warehouseId, fn ($q) => $q->where('warehouse_id', $warehouseId))
+        $smAggSummary = DB::table('stock_movements as sm')
+            ->leftJoin('stock_entries as se', function ($join) {
+                $join->on('sm.source_id', '=', 'se.id')
+                     ->where('sm.source_type', '=', 'App\\Models\\StockEntry');
+            })
+            ->leftJoin('stock_exits as sx', function ($join) {
+                $join->on('sm.source_id', '=', 'sx.id')
+                     ->where('sm.source_type', '=', 'App\\Models\\StockExit');
+            })
+            ->when($warehouseId, fn ($q) => $q->where('sm.warehouse_id', $warehouseId))
             ->selectRaw(
-                "product_id,
-                 SUM(CASE WHEN DATE(created_at) < ? THEN quantity ELSE 0 END) as stock_begin,
-                 SUM(CASE WHEN DATE(created_at) BETWEEN ? AND ? AND quantity > 0 THEN quantity ELSE 0 END) as stock_in,
-                 SUM(CASE WHEN DATE(created_at) BETWEEN ? AND ? AND quantity < 0 THEN ABS(quantity) ELSE 0 END) as stock_out",
+                "sm.product_id,
+                 SUM(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) < ? THEN sm.quantity ELSE 0 END) as stock_begin,
+                 SUM(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) BETWEEN ? AND ? AND sm.quantity > 0 THEN sm.quantity ELSE 0 END) as stock_in,
+                 SUM(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) BETWEEN ? AND ? AND sm.quantity < 0 THEN ABS(sm.quantity) ELSE 0 END) as stock_out",
                 [$dateFrom, $dateFrom, $dateTo, $dateFrom, $dateTo]
             )
-            ->groupBy('product_id');
+            ->groupBy('sm.product_id');
 
         $summaryAgg = DB::table('products')
             ->leftJoinSub($smAggSummary, 'sms', 'sms.product_id', '=', 'products.id')
@@ -166,33 +183,50 @@ class InventoryReportController extends Controller
         if ($productId) {
             $product = $products->firstWhere('id', (int) $productId);
 
-            // Tồn đầu kỳ (trước date_from)
-            $openingBalance = (float) DB::table('stock_movements')
-                ->where('product_id', $productId)
-                ->when($warehouseId, fn ($q) => $q->where('warehouse_id', $warehouseId))
-                ->where('created_at', '<', $dateFrom . ' 00:00:00')
-                ->sum('quantity');
+            // Tồn đầu kỳ (trước date_from) — dùng ngày phiếu NK/XK
+            $openingBalance = (float) DB::table('stock_movements as sm')
+                ->leftJoin('stock_entries as se', function ($join) {
+                    $join->on('sm.source_id', '=', 'se.id')
+                         ->where('sm.source_type', '=', 'App\\Models\\StockEntry');
+                })
+                ->leftJoin('stock_exits as sx', function ($join) {
+                    $join->on('sm.source_id', '=', 'sx.id')
+                         ->where('sm.source_type', '=', 'App\\Models\\StockExit');
+                })
+                ->where('sm.product_id', $productId)
+                ->when($warehouseId, fn ($q) => $q->where('sm.warehouse_id', $warehouseId))
+                ->where(DB::raw("COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at))"), '<', $dateFrom)
+                ->sum('sm.quantity');
 
             // Đơn giá bình quân đầu kỳ
             $openingValue = $openingBalance * (float) ($product->cost_price ?? 0);
 
-            // Các phát sinh trong kỳ
-            $movements = DB::table('stock_movements')
-                ->join('products', 'products.id', '=', 'stock_movements.product_id')
-                ->join('warehouses', 'warehouses.id', '=', 'stock_movements.warehouse_id')
-                ->where('stock_movements.product_id', $productId)
-                ->when($warehouseId, fn ($q) => $q->where('stock_movements.warehouse_id', $warehouseId))
-                ->whereBetween(DB::raw('DATE(stock_movements.created_at)'), [$dateFrom, $dateTo])
+            // Các phát sinh trong kỳ — dùng ngày phiếu NK/XK
+            $movements = DB::table('stock_movements as sm')
+                ->join('products', 'products.id', '=', 'sm.product_id')
+                ->join('warehouses', 'warehouses.id', '=', 'sm.warehouse_id')
+                ->leftJoin('stock_entries as se', function ($join) {
+                    $join->on('sm.source_id', '=', 'se.id')
+                         ->where('sm.source_type', '=', 'App\\Models\\StockEntry');
+                })
+                ->leftJoin('stock_exits as sx', function ($join) {
+                    $join->on('sm.source_id', '=', 'sx.id')
+                         ->where('sm.source_type', '=', 'App\\Models\\StockExit');
+                })
+                ->where('sm.product_id', $productId)
+                ->when($warehouseId, fn ($q) => $q->where('sm.warehouse_id', $warehouseId))
+                ->whereBetween(DB::raw("COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at))"), [$dateFrom, $dateTo])
                 ->select([
-                    'stock_movements.id',
-                    'stock_movements.created_at as date',
-                    'stock_movements.type as movement_type',
-                    'stock_movements.quantity',
-                    'stock_movements.source_type as reference_type',
-                    'stock_movements.source_id as reference_id',
+                    'sm.id',
+                    DB::raw("COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) as date"),
+                    'sm.type as movement_type',
+                    'sm.quantity',
+                    'sm.source_type as reference_type',
+                    'sm.source_id as reference_id',
                     'warehouses.name as warehouse_name',
                 ])
-                ->orderBy('stock_movements.created_at')
+                ->orderBy(DB::raw("COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at))"))
+                ->orderBy('sm.id')
                 ->get();
 
             $runningBalance = $openingBalance;

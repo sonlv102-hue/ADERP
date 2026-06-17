@@ -24,18 +24,21 @@ class InventoryReportExport implements FromCollection, WithHeadings, WithMapping
         $warehouseId = $this->filters['warehouse_id'] ?? null;
         $categoryId  = $this->filters['category_id'] ?? null;
 
-        $wh = $warehouseId ? " AND sm.warehouse_id = {$warehouseId}" : "";
+        $wh      = $warehouseId ? " AND sm.warehouse_id = {$warehouseId}" : "";
+        $joins   = "LEFT JOIN stock_entries se ON sm.source_id = se.id AND sm.source_type = 'App\Models\StockEntry'
+                    LEFT JOIN stock_exits sx ON sm.source_id = sx.id AND sm.source_type = 'App\Models\StockExit'";
+        $docDate = "COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at))";
 
         return DB::table('products')
             ->leftJoin('product_categories', 'product_categories.id', '=', 'products.category_id')
             ->select([
                 'products.code', 'products.name', 'products.unit', 'products.cost_price',
                 'product_categories.name as category',
-                DB::raw("COALESCE((SELECT SUM(sm.quantity) FROM stock_movements sm WHERE sm.product_id = products.id AND DATE(sm.created_at) < '{$dateFrom}'{$wh}), 0) as stock_begin"),
-                DB::raw("COALESCE((SELECT SUM(sm.quantity) FROM stock_movements sm WHERE sm.product_id = products.id AND sm.quantity > 0 AND DATE(sm.created_at) BETWEEN '{$dateFrom}' AND '{$dateTo}'{$wh}), 0) as stock_in"),
-                DB::raw("COALESCE((SELECT ABS(SUM(sm.quantity)) FROM stock_movements sm WHERE sm.product_id = products.id AND sm.quantity < 0 AND DATE(sm.created_at) BETWEEN '{$dateFrom}' AND '{$dateTo}'{$wh}), 0) as stock_out"),
-                DB::raw("(SELECT MAX(DATE(sm.created_at)) FROM stock_movements sm WHERE sm.product_id = products.id AND sm.quantity > 0 AND DATE(sm.created_at) BETWEEN '{$dateFrom}' AND '{$dateTo}'{$wh}) as last_in_date"),
-                DB::raw("(SELECT MAX(DATE(sm.created_at)) FROM stock_movements sm WHERE sm.product_id = products.id AND sm.quantity < 0 AND DATE(sm.created_at) BETWEEN '{$dateFrom}' AND '{$dateTo}'{$wh}) as last_out_date"),
+                DB::raw("COALESCE((SELECT SUM(sm.quantity) FROM stock_movements sm {$joins} WHERE sm.product_id = products.id AND {$docDate} < '{$dateFrom}'{$wh}), 0) as stock_begin"),
+                DB::raw("COALESCE((SELECT SUM(sm.quantity) FROM stock_movements sm {$joins} WHERE sm.product_id = products.id AND sm.quantity > 0 AND {$docDate} BETWEEN '{$dateFrom}' AND '{$dateTo}'{$wh}), 0) as stock_in"),
+                DB::raw("COALESCE((SELECT ABS(SUM(sm.quantity)) FROM stock_movements sm {$joins} WHERE sm.product_id = products.id AND sm.quantity < 0 AND {$docDate} BETWEEN '{$dateFrom}' AND '{$dateTo}'{$wh}), 0) as stock_out"),
+                DB::raw("(SELECT MAX({$docDate}) FROM stock_movements sm {$joins} WHERE sm.product_id = products.id AND sm.quantity > 0 AND {$docDate} BETWEEN '{$dateFrom}' AND '{$dateTo}'{$wh}) as last_in_date"),
+                DB::raw("(SELECT MAX({$docDate}) FROM stock_movements sm {$joins} WHERE sm.product_id = products.id AND sm.quantity < 0 AND {$docDate} BETWEEN '{$dateFrom}' AND '{$dateTo}'{$wh}) as last_out_date"),
             ])
             ->whereNull('products.deleted_at')
             ->when($search, fn ($q) => $q->where(fn ($q2) => $q2->where('products.code', 'ilike', "%{$search}%")->orWhere('products.name', 'ilike', "%{$search}%")))

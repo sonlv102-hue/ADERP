@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class PeriodCloseBatch extends Model
 {
     protected $fillable = [
-        'code', 'accounting_period_id', 'fiscal_period', 'status',
+        'code', 'accounting_period_id', 'fiscal_period', 'batch_type', 'status',
         'total_revenue', 'total_expense', 'profit_or_loss', 'journal_entry_count',
         'notes', 'created_by', 'posted_by', 'posted_at',
         'reversed_by', 'reversed_at', 'reverse_reason',

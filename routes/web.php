@@ -369,11 +369,13 @@ Route::middleware('auth')->group(function () {
 
         // Kết chuyển cuối kỳ
         Route::prefix('period-close')->name('period-close.')->middleware('can:accounting.manage')->group(function () {
-            Route::get('/',                                  [PeriodCloseBatchController::class, 'index'])  ->name('index');
-            Route::post('/preview',                          [PeriodCloseBatchController::class, 'preview'])->name('preview');
-            Route::post('/',                                 [PeriodCloseBatchController::class, 'store'])  ->name('store');
-            Route::get('/{batch}',                           [PeriodCloseBatchController::class, 'show'])   ->name('show');
-            Route::post('/{batch}/reverse',                  [PeriodCloseBatchController::class, 'reverse'])->name('reverse');
+            Route::get('/',                                  [PeriodCloseBatchController::class, 'index'])        ->name('index');
+            Route::post('/preview',                          [PeriodCloseBatchController::class, 'preview'])      ->name('preview');
+            Route::post('/',                                 [PeriodCloseBatchController::class, 'store'])        ->name('store');
+            Route::post('/year-end-preview',                 [PeriodCloseBatchController::class, 'yearEndPreview'])->name('year-end-preview');
+            Route::post('/year-open',                        [PeriodCloseBatchController::class, 'yearOpen'])     ->name('year-open');
+            Route::get('/{batch}',                           [PeriodCloseBatchController::class, 'show'])         ->name('show');
+            Route::post('/{batch}/reverse',                  [PeriodCloseBatchController::class, 'reverse'])      ->name('reverse');
         });
 
         // Kỳ kế toán (Accounting Periods)
