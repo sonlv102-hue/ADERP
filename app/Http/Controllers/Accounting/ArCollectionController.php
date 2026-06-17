@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Accounting;
 
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
+use App\Models\Fund;
 use App\Services\ArApLedgerService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -38,6 +39,8 @@ class ArCollectionController extends Controller
         return Inertia::render('Accounting/ArCollections/Index', [
             'items'     => $items,
             'customers' => Customer::orderBy('name')->get(['id', 'name', 'code']),
+            'funds'     => Fund::where('is_active', true)->orderBy('type')->orderBy('name')
+                ->get(['id', 'name', 'type', 'account_code']),
             'statuses'  => [
                 ['value' => 'sent',    'label' => 'Chưa thu'],
                 ['value' => 'overdue', 'label' => 'Quá hạn'],

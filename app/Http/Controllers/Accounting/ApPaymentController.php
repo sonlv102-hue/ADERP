@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Accounting;
 
 use App\Http\Controllers\Controller;
+use App\Models\Fund;
 use App\Models\Supplier;
 use App\Services\ArApLedgerService;
 use Illuminate\Http\Request;
@@ -38,6 +39,8 @@ class ApPaymentController extends Controller
         return Inertia::render('Accounting/ApPayments/Index', [
             'items'     => $items,
             'suppliers' => Supplier::orderBy('name')->get(['id', 'name', 'code']),
+            'funds'     => Fund::where('is_active', true)->orderBy('type')->orderBy('name')
+                ->get(['id', 'name', 'type', 'account_code']),
             'statuses'  => [
                 ['value' => 'valid',        'label' => 'Hợp lệ / Chưa TT'],
                 ['value' => 'partial_paid', 'label' => 'TT một phần'],

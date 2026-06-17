@@ -5,12 +5,15 @@ namespace App\Http\Controllers\Accounting;
 use App\Http\Controllers\Controller;
 use App\Models\ArApOpeningBalance;
 use App\Models\Customer;
+use App\Models\Fund;
 use App\Models\Supplier;
 use App\Services\AccountingService;
+use App\Services\AccountingSettings;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -192,19 +195,28 @@ class ArApOpeningBalanceController extends Controller
             'amount'       => ['required', 'numeric', 'min:0.01', 'max:' . $remaining],
             'payment_date' => ['required', 'date'],
             'method'       => ['required', 'string', 'in:cash,bank_transfer,other'],
+            'fund_id'      => ['required', Rule::exists('funds', 'id')->where('is_active', true)],
             'reference'    => ['nullable', 'string', 'max:100'],
             'notes'        => ['nullable', 'string'],
         ]);
 
-        DB::transaction(function () use ($arApOpeningBalance, $data, $isAr) {
+        $fund = Fund::find($data['fund_id']);
+        if ($data['method'] === 'cash' && $fund?->type !== 'cash') {
+            return back()->withErrors(['fund_id' => 'Hình thức Tiền mặt phải chọn quỹ tiền mặt.']);
+        }
+        if ($data['method'] === 'bank_transfer' && $fund?->type !== 'bank') {
+            return back()->withErrors(['fund_id' => 'Hình thức Chuyển khoản phải chọn tài khoản ngân hàng.']);
+        }
+
+        DB::transaction(function () use ($arApOpeningBalance, $data, $isAr, $fund) {
             $amount       = round((float) $data['amount'], 2);
             $newRemaining = round((float) $arApOpeningBalance->remaining_amount - $amount, 2);
             $arApOpeningBalance->update(['remaining_amount' => $newRemaining]);
 
-            $cashAccount = match($data['method']) {
-                'bank_transfer', 'bank' => '1121',
-                default => '1111',
-            };
+            $cashAccount = $fund?->account_code
+                ?? ($data['method'] === 'bank_transfer'
+                    ? AccountingSettings::get('bank_account', '1121')
+                    : AccountingSettings::get('cash_account', '1111'));
             $docRef = $arApOpeningBalance->invoice_ref
                 ? "CN ĐK {$arApOpeningBalance->invoice_ref}"
                 : "CN ĐK #{$arApOpeningBalance->id}";

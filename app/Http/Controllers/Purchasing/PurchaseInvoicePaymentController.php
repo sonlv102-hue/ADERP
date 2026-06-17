@@ -3,11 +3,13 @@
 namespace App\Http\Controllers\Purchasing;
 
 use App\Http\Controllers\Controller;
+use App\Models\Fund;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoicePayment;
 use App\Services\PurchaseInvoiceService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class PurchaseInvoicePaymentController extends Controller
 {
@@ -24,9 +26,18 @@ class PurchaseInvoicePaymentController extends Controller
             'amount'       => ['required', 'numeric', 'min:0.01', 'max:' . $amountDue],
             'payment_date' => ['required', 'date'],
             'method'       => ['required', 'in:cash,bank_transfer,other'],
+            'fund_id'      => ['required', Rule::exists('funds', 'id')->where('is_active', true)],
             'reference'    => ['nullable', 'string', 'max:100'],
             'notes'        => ['nullable', 'string'],
         ]);
+
+        $fund = Fund::find($data['fund_id']);
+        if ($data['method'] === 'cash' && $fund?->type !== 'cash') {
+            return back()->withErrors(['fund_id' => 'Hình thức Tiền mặt phải chọn quỹ tiền mặt.']);
+        }
+        if ($data['method'] === 'bank_transfer' && $fund?->type !== 'bank') {
+            return back()->withErrors(['fund_id' => 'Hình thức Chuyển khoản phải chọn tài khoản ngân hàng.']);
+        }
 
         try {
             $this->service->addPayment($purchaseInvoice, $data);

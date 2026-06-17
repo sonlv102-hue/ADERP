@@ -20,7 +20,7 @@ class Payment extends Model
             ->dontSubmitEmptyLogs();
     }
     protected $fillable = [
-        'invoice_id', 'amount', 'payment_date', 'method', 'reference', 'notes', 'created_by',
+        'invoice_id', 'fund_id', 'amount', 'payment_date', 'method', 'reference', 'notes', 'created_by',
     ];
 
     protected function casts(): array
