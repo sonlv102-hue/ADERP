@@ -115,10 +115,12 @@
           </div>
           <div>
             <p class="text-gray-500 mb-1">Đơn mua hàng</p>
-            <Link :href="route('purchasing.purchase-orders.show', invoice.purchase_order_id)"
+            <Link v-if="invoice.purchase_order_id"
+              :href="route('purchasing.purchase-orders.show', invoice.purchase_order_id)"
               class="font-mono text-primary-600 hover:underline font-medium">
               {{ invoice.purchase_order }}
             </Link>
+            <p v-else class="font-medium text-gray-900">—</p>
           </div>
           <div>
             <p class="text-gray-500 mb-1">Số HĐ NCC</p>
