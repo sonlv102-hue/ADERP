@@ -129,6 +129,20 @@ class FundTransferController extends Controller
         }
     }
 
+    public function destroy(FundTransfer $fundTransfer): RedirectResponse
+    {
+        $allowed = [FundTransferStatus::Cancelled, FundTransferStatus::Reversed];
+        if (!in_array($fundTransfer->status, $allowed)) {
+            return back()->with('error', 'Chỉ có thể xóa phiếu đã hủy hoặc đã đảo bút toán.');
+        }
+
+        $no = $fundTransfer->transfer_no;
+        $fundTransfer->delete();
+
+        return redirect()->route('accounting.fund-transfers.index')
+            ->with('success', "Phiếu {$no} đã được xóa.");
+    }
+
     // ─── Private ───────────────────────────────────────────────────────────────
 
     private function activeFunds(): array

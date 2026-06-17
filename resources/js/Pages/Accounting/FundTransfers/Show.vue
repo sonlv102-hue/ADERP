@@ -38,6 +38,13 @@
             class="border border-red-300 text-red-600 hover:bg-red-50 px-4 py-2 rounded-lg text-sm">
             Hủy phiếu
           </button>
+
+          <!-- Xóa (đã hủy hoặc đã đảo) -->
+          <button v-if="transfer.status === 'cancelled' || transfer.status === 'reversed'"
+            @click="deleteTransfer"
+            class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg text-sm">
+            Xóa phiếu
+          </button>
         </div>
       </div>
 
@@ -167,5 +174,10 @@ function doReverse() {
     { reason: reverseReason.value },
     { preserveScroll: true, onSuccess: () => { showReverseModal.value = false; } }
   );
+}
+
+function deleteTransfer() {
+  if (!confirm(`Xóa phiếu ${props.transfer.transfer_no}? Thao tác này không thể hoàn tác.`)) return;
+  router.delete(route('accounting.fund-transfers.destroy', props.transfer.id));
 }
 </script>

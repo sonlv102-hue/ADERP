@@ -325,7 +325,7 @@ Route::middleware('auth')->group(function () {
         Route::post('cash-vouchers/{cashVoucher}/unpost',  [CashVoucherController::class, 'unpost'])->name('cash-vouchers.unpost');
 
         // Luân chuyển quỹ
-        Route::resource('fund-transfers', FundTransferController::class)->only(['index', 'create', 'store', 'show']);
+        Route::resource('fund-transfers', FundTransferController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
         Route::post('fund-transfers/{fundTransfer}/post',    [FundTransferController::class, 'post'])->name('fund-transfers.post');
         Route::post('fund-transfers/{fundTransfer}/reverse', [FundTransferController::class, 'reverse'])->name('fund-transfers.reverse');
         Route::post('fund-transfers/{fundTransfer}/cancel',  [FundTransferController::class, 'cancel'])->name('fund-transfers.cancel');
