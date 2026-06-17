@@ -109,7 +109,7 @@ class PurchaseInvoiceController extends Controller
     {
         $data = $request->validate([
             'code'                 => ['required', 'string', 'unique:purchase_invoices,code'],
-            'purchase_order_id'    => ['required', 'exists:purchase_orders,id'],
+            'purchase_order_id'    => ['nullable', 'exists:purchase_orders,id'],
             'supplier_id'          => ['required', 'exists:suppliers,id'],
             'invoice_number'       => ['nullable', 'string', 'max:100'],
             'invoice_date'         => ['nullable', 'date'],
