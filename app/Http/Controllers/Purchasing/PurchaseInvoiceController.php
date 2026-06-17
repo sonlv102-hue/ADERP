@@ -53,7 +53,7 @@ class PurchaseInvoiceController extends Controller
                     'status_color'   => $inv->status->color(),
                     'supplier'       => $inv->supplier->name,
                     'supplier_id'    => $inv->supplier_id,
-                    'purchase_order' => $inv->purchaseOrder->code,
+                    'purchase_order' => $inv->purchaseOrder?->code,
                     'total'          => $inv->total,
                     'paid_amount'    => $inv->paid_amount,
                     'remaining'      => $inv->remaining,
