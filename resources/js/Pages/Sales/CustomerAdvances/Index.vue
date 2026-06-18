@@ -111,7 +111,7 @@
 import { ref } from 'vue'
 import { router, Link } from '@inertiajs/vue3'
 import AppLayout from '@/Components/Layout/AppLayout.vue'
-import Pagination from '@/Components/Pagination.vue'
+import Pagination from '@/Components/Shared/Pagination.vue'
 import { usePermission } from '@/composables/usePermission'
 
 const { hasPermission: can } = usePermission()
