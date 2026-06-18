@@ -1116,7 +1116,7 @@ async function fetchPreview() {
       },
     });
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error ?? 'Lỗi server');
+    if (!res.ok) throw new Error(data.error ?? data.message ?? `Lỗi server (HTTP ${res.status})`);
     rollbackPreview.value = data;
     rollbackStep.value = 'preview';
   } catch (e) {
