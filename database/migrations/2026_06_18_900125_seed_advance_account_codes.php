@@ -34,10 +34,8 @@ return new class extends Migration
             );
         }
 
-        // Đánh dấu TK cha 131 + 331 là tổng hợp (is_detail=false) nếu chưa đúng
-        DB::table('account_codes')
-            ->whereIn('code', ['131', '331'])
-            ->update(['is_detail' => false, 'updated_at' => now()]);
+        // Không thay đổi is_detail của '131'/'331' — chúng vẫn có thể dùng trực tiếp trong JE
+        // (customer->getReceivableAccount() và supplier->getPayableAccount() trả về TK gốc).
 
         // Thêm AccountingSettings keys cho TK ứng trước
         $settings = [
