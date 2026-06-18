@@ -77,6 +77,15 @@
             Hủy xác nhận
           </button>
 
+          <!-- Rollback payments (accounting.manage + has paid items) -->
+          <button v-if="hasPaidItems && can('accounting.manage')" @click="openRollbackModal"
+            class="flex items-center gap-1.5 px-3 py-1.5 border border-red-500 text-red-700 bg-red-50 hover:bg-red-100 rounded-lg text-sm font-medium">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+            </svg>
+            Hủy thanh toán lương
+          </button>
+
           <!-- Status badge when not draft -->
           <span v-if="payroll.status !== 'draft'" :class="{
             'bg-blue-100 text-blue-800': payroll.status === 'confirmed',
@@ -681,6 +690,133 @@
       </div>
     </div>
 
+  <!-- Rollback Modal -->
+  <div v-if="showRollbackModal" class="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+      <div class="px-5 py-4 border-b bg-gray-50 flex justify-between sticky top-0 z-10">
+        <h3 class="font-bold text-red-700">Hủy thanh toán lương — {{ payroll.code }}</h3>
+        <button @click="closeRollback" class="text-gray-400 hover:text-gray-600 text-lg">&times;</button>
+      </div>
+
+      <!-- Step 1: scope + reason -->
+      <div v-if="rollbackStep === 'config'" class="p-5 space-y-4">
+        <div class="bg-amber-50 border border-amber-200 rounded-lg p-3 text-xs text-amber-800">
+          Thao tác này sẽ hủy các phiếu chi đã tạo, hoàn lại số dư quỹ và đưa bảng lương về trạng thái chưa thanh toán. Không thể hoàn tác tự động.
+        </div>
+
+        <div class="space-y-2">
+          <p class="text-sm font-semibold text-gray-700">Phạm vi hủy:</p>
+          <label class="flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors"
+            :class="rollbackScope === 'payment_only' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'">
+            <input type="radio" v-model="rollbackScope" value="payment_only" class="mt-0.5 shrink-0" />
+            <div>
+              <p class="text-sm font-semibold text-gray-800">
+                Chỉ hủy thanh toán
+                <span class="ml-1 text-xs font-normal text-blue-600 bg-blue-100 px-1.5 py-0.5 rounded-full">An toàn · Mặc định</span>
+              </p>
+              <p class="text-xs text-gray-500 mt-0.5">Hủy phiếu chi, hoàn lại số dư quỹ. Dữ liệu lương giữ nguyên. Bảng lương trở về "Đã xác nhận".</p>
+            </div>
+          </label>
+          <label class="flex items-start gap-3 p-3 border rounded-lg cursor-pointer transition-colors"
+            :class="rollbackScope === 'payment_and_accrual' ? 'border-red-400 bg-red-50' : 'border-gray-200 hover:bg-gray-50'">
+            <input type="radio" v-model="rollbackScope" value="payment_and_accrual" class="mt-0.5 shrink-0" />
+            <div>
+              <p class="text-sm font-semibold text-gray-800">Hủy thanh toán + hủy bút toán ghi nhận lương</p>
+              <p class="text-xs text-gray-500 mt-0.5">Đảo cả bút toán Nợ 642/154 / Có 3341. Bảng lương trở về "Nháp" để tính lại từ đầu.</p>
+            </div>
+          </label>
+        </div>
+
+        <div>
+          <label class="form-label text-sm">Lý do hủy <span class="text-red-500">*</span></label>
+          <textarea v-model="rollbackReason" rows="2" class="form-input text-sm resize-none"
+            placeholder="Ví dụ: Chi lương nhầm quỹ, sai số tiền..."></textarea>
+        </div>
+
+        <div class="flex gap-3">
+          <button @click="fetchPreview" :disabled="!rollbackReason.trim() || previewLoading"
+            class="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-semibold">
+            {{ previewLoading ? 'Đang tải...' : 'Xem trước' }}
+          </button>
+          <button @click="closeRollback" class="btn-secondary">Huỷ</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Preview + confirm -->
+      <div v-if="rollbackStep === 'preview' && rollbackPreview" class="p-5 space-y-4">
+        <!-- Period close warning -->
+        <div v-if="rollbackPreview.period_close_warning"
+          class="bg-amber-50 border border-amber-300 rounded-lg p-3 text-xs text-amber-800">
+          ⚠️ {{ rollbackPreview.period_close_warning }}
+        </div>
+
+        <!-- Current period locked -->
+        <div v-if="!rollbackPreview.current_period_open"
+          class="bg-red-50 border border-red-300 rounded-lg p-3 text-xs text-red-800 font-semibold">
+          ⛔ Kỳ kế toán hiện tại đã đóng/khóa. Hủy thanh toán sẽ thất bại. Cần mở lại kỳ kế toán trước khi thực hiện.
+        </div>
+
+        <!-- Summary -->
+        <div class="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
+          <div class="flex justify-between">
+            <span class="text-gray-600">Bảng lương:</span>
+            <span class="font-semibold">{{ rollbackPreview.payroll_code }} — Tháng {{ rollbackPreview.period }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-600">Số nhân viên bị ảnh hưởng:</span>
+            <span class="font-semibold">{{ rollbackPreview.paid_count }} người</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-600">Tổng tiền hoàn lại quỹ:</span>
+            <span class="font-semibold font-mono text-red-600">{{ fv(rollbackPreview.total_amount) }} đ</span>
+          </div>
+          <div v-if="rollbackScope === 'payment_and_accrual' && rollbackPreview.has_accrual_je"
+            class="flex justify-between border-t pt-2 mt-1">
+            <span class="text-gray-600">Bút toán lương sẽ đảo:</span>
+            <span class="font-semibold font-mono">{{ rollbackPreview.accrual_je_code }}</span>
+          </div>
+          <div class="border-t pt-2 mt-1 flex justify-between">
+            <span class="text-gray-600">Lý do:</span>
+            <span class="text-gray-700 text-right max-w-xs">{{ rollbackReason }}</span>
+          </div>
+        </div>
+
+        <!-- Voucher list -->
+        <div>
+          <p class="text-xs font-semibold text-gray-600 mb-2">Phiếu chi sẽ bị hủy:</p>
+          <div class="border rounded-lg overflow-hidden">
+            <table class="w-full text-xs">
+              <thead class="bg-gray-100">
+                <tr>
+                  <th class="px-3 py-2 text-left text-gray-600">Nhân viên</th>
+                  <th class="px-3 py-2 text-right text-gray-600">Số tiền (đ)</th>
+                  <th class="px-3 py-2 text-center text-gray-600">Phiếu chi</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="v in rollbackPreview.vouchers" :key="v.voucher_code ?? v.employee_name"
+                  class="border-t">
+                  <td class="px-3 py-1.5">{{ v.employee_name }}</td>
+                  <td class="px-3 py-1.5 text-right font-mono">{{ fv(v.amount) }}</td>
+                  <td class="px-3 py-1.5 text-center font-mono text-gray-500">{{ v.voucher_code || '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="flex gap-3">
+          <button @click="rollbackStep = 'config'" class="btn-secondary text-sm">← Quay lại</button>
+          <button @click="submitRollback"
+            :disabled="!rollbackPreview.current_period_open || rollbackForm.processing"
+            class="flex-1 bg-red-600 hover:bg-red-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white px-4 py-2 rounded-lg text-sm font-semibold">
+            {{ rollbackForm.processing ? 'Đang xử lý...' : 'Xác nhận hủy thanh toán' }}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   </AppLayout>
 </template>
 
@@ -942,6 +1078,60 @@ function submitAdj() {
   adjForm.patch(
     route('accounting.payrolls.items.adjustment', { payroll: props.payroll.id, item: activeItem.value.id }),
     { onSuccess: () => { showEditModal.value = false; } }
+  );
+}
+
+// Rollback modal
+const showRollbackModal = ref(false);
+const rollbackStep      = ref('config');
+const rollbackScope     = ref('payment_only');
+const rollbackReason    = ref('');
+const previewLoading    = ref(false);
+const rollbackPreview   = ref(null);
+const rollbackForm      = useForm({ scope: '', reason: '' });
+
+const hasPaidItems = computed(() => props.items.some(i => i.status === 'paid'));
+
+function openRollbackModal() {
+  rollbackStep.value   = 'config';
+  rollbackScope.value  = 'payment_only';
+  rollbackReason.value = '';
+  rollbackPreview.value = null;
+  showRollbackModal.value = true;
+}
+
+function closeRollback() {
+  showRollbackModal.value = false;
+}
+
+async function fetchPreview() {
+  previewLoading.value = true;
+  try {
+    const res = await fetch(route('accounting.payrolls.rollback-preview', props.payroll.id), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+        'Accept': 'application/json',
+      },
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error ?? 'Lỗi server');
+    rollbackPreview.value = data;
+    rollbackStep.value = 'preview';
+  } catch (e) {
+    alert('Lỗi khi tải preview: ' + e.message);
+  } finally {
+    previewLoading.value = false;
+  }
+}
+
+function submitRollback() {
+  rollbackForm.scope  = rollbackScope.value;
+  rollbackForm.reason = rollbackReason.value;
+  rollbackForm.post(
+    route('accounting.payrolls.rollback', props.payroll.id),
+    { onSuccess: () => { showRollbackModal.value = false; } }
   );
 }
 

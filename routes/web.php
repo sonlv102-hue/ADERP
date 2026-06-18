@@ -364,6 +364,8 @@ Route::middleware('auth')->group(function () {
         Route::patch('payrolls/{payroll}/items/{item}/adjustment', [PayrollController::class, 'updateAdjustment'])->name('payrolls.items.adjustment');
         Route::get('payrolls/{payroll}/export-excel', [PayrollController::class, 'exportExcel'])->name('payrolls.export-excel');
         Route::get('payrolls/{payroll}/export-pdf',   [PayrollController::class, 'exportPdf'])->name('payrolls.export-pdf');
+        Route::post('payrolls/{payroll}/rollback-preview', [PayrollController::class, 'rollbackPreview'])->name('payrolls.rollback-preview')->middleware('can:accounting.manage');
+        Route::post('payrolls/{payroll}/rollback',         [PayrollController::class, 'rollback'])->name('payrolls.rollback')->middleware('can:accounting.manage');
 
         // Kê khai thuế (Taxes)
         Route::get('taxes', [TaxController::class, 'index'])->name('taxes.index');

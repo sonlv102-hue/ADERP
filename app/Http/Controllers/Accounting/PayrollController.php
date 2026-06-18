@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Fund;
 use App\Models\Payroll;
 use App\Models\PayrollItem;
+use App\Services\PayrollRollbackService;
 use App\Services\PayrollService;
 use App\Services\PitCalculatorService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -22,8 +23,9 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 class PayrollController extends Controller
 {
     public function __construct(
-        private PayrollService       $service,
-        private PitCalculatorService $pit,
+        private PayrollService        $service,
+        private PitCalculatorService  $pit,
+        private PayrollRollbackService $rollbackService,
     ) {}
 
     public function index(Request $request): Response
@@ -495,6 +497,39 @@ class PayrollController extends Controller
 
         $filename = 'Bang-luong-' . str_replace('-', '', $payroll->period) . '.pdf';
         return $pdf->download($filename);
+    }
+
+    public function rollbackPreview(Payroll $payroll): \Illuminate\Http\JsonResponse
+    {
+        $this->authorize('accounting.manage');
+
+        try {
+            return response()->json($this->rollbackService->preview($payroll));
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+    }
+
+    public function rollback(Request $request, Payroll $payroll): RedirectResponse
+    {
+        $this->authorize('accounting.manage');
+
+        $data = $request->validate([
+            'scope'  => 'required|in:payment_only,payment_and_accrual',
+            'reason' => 'required|string|max:500',
+        ]);
+
+        try {
+            $this->rollbackService->rollback($payroll, $data['scope'], $data['reason']);
+
+            $msg = $data['scope'] === 'payment_and_accrual'
+                ? "Đã hủy thanh toán và bút toán lương {$payroll->code}. Bảng lương trở về nháp."
+                : "Đã hủy thanh toán lương {$payroll->code}. Bảng lương trở về đã xác nhận.";
+
+            return back()->with('success', $msg);
+        } catch (RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
     }
 
     public function destroy(Payroll $payroll): RedirectResponse
