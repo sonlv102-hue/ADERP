@@ -667,6 +667,10 @@
             </p>
           </div>
           <div>
+            <label class="form-label">Ngày chi lương</label>
+            <input type="date" v-model="payForm.payment_date" class="form-input" required />
+          </div>
+          <div>
             <label class="form-label">Quỹ/Tài khoản chi tiền</label>
             <select v-model="payForm.fund_id" class="form-input" required>
               <option value="" disabled>-- Chọn quỹ hoặc tài khoản ngân hàng --</option>
@@ -1137,13 +1141,14 @@ function submitRollback() {
 
 // Pay modal
 const showPayModal = ref(false);
-const payForm = useForm({ fund_id: '' });
+const payForm = useForm({ fund_id: '', payment_date: '' });
 const cashFunds = computed(() => props.funds.filter(f => f.type === 'cash'));
 const bankFunds = computed(() => props.funds.filter(f => f.type === 'bank'));
 
 function openPayModal(item) {
   activeItem.value = item;
   payForm.fund_id = '';
+  payForm.payment_date = new Date().toISOString().slice(0, 10);
   showPayModal.value = true;
 }
 

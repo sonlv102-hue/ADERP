@@ -452,7 +452,8 @@ class PayrollController extends Controller
     public function payEmployee(Request $request, Payroll $payroll, PayrollItem $item): RedirectResponse
     {
         $data = $request->validate([
-            'fund_id' => 'required|exists:funds,id',
+            'fund_id'      => 'required|exists:funds,id',
+            'payment_date' => 'nullable|date',
         ]);
 
         try {
@@ -460,7 +461,7 @@ class PayrollController extends Controller
             if (! $fund->is_active) {
                 throw new RuntimeException("Quỹ '{$fund->name}' không còn hoạt động.");
             }
-            $this->service->payEmployeeSalary($item, $fund);
+            $this->service->payEmployeeSalary($item, $fund, $data['payment_date'] ?? null);
             $employeeName = $item->employee?->name ?? $item->user?->name ?? 'nhân viên';
             return back()->with('success', "Đã thanh toán lương cho {$employeeName}.");
         } catch (RuntimeException $e) {
