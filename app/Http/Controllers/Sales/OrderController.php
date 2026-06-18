@@ -561,7 +561,7 @@ class OrderController extends Controller
                         'quantity'   => (float) $i->quantity,
                         'unit_price' => round(
                             (float) $i->unit_price * (1 - (float) $i->discount_percent / 100) * $docFactor,
-                            0
+                            2
                         ),
                         'vat_rate'   => $i->vat_rate !== null ? (float) $i->vat_rate : null,
                         '_type'      => $i->product_id ? 'product' : 'service',

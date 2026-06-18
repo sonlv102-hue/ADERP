@@ -53,8 +53,6 @@ class InventoryOpeningBalanceController extends Controller
     {
         return Inertia::render('Warehouse/OpeningBalance/Form', [
             'warehouses' => Warehouse::orderBy('name')->get(['id', 'name']),
-            'products'   => Product::where('is_active', true)->orderBy('name')
-                ->get(['id', 'code', 'name', 'unit', 'cost_price']),
         ]);
     }
 

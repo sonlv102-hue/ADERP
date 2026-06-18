@@ -65,14 +65,22 @@
                 </tr>
                 <tr v-for="(item, idx) in form.items" :key="idx" class="border-b border-gray-100">
                   <td class="px-3 py-2">
-                    <select v-if="form.type === 'ar'" v-model="item.customer_id" class="w-full form-input text-xs py-1">
-                      <option value="">-- Chọn KH --</option>
-                      <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.code }} - {{ c.name }}</option>
-                    </select>
-                    <select v-else v-model="item.supplier_id" class="w-full form-input text-xs py-1">
-                      <option value="">-- Chọn NCC --</option>
-                      <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.code }} - {{ s.name }}</option>
-                    </select>
+                    <RemoteSearchSelect
+                      v-if="form.type === 'ar'"
+                      v-model="item.customer_id"
+                      :search-url="route('search.customers')"
+                      :display-text="item._customerDisplay"
+                      placeholder="— Tìm khách hàng —"
+                      @change="opt => onPartySelect(item, opt, 'ar')"
+                    />
+                    <RemoteSearchSelect
+                      v-else
+                      v-model="item.supplier_id"
+                      :search-url="route('search.suppliers')"
+                      :display-text="item._supplierDisplay"
+                      placeholder="— Tìm nhà cung cấp —"
+                      @change="opt => onPartySelect(item, opt, 'ap')"
+                    />
                   </td>
                   <td class="px-3 py-2">
                     <input v-model="item.invoice_ref" type="text" placeholder="Số HĐ..."
@@ -139,9 +147,10 @@
 <script setup>
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
+import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
-const props = defineProps({ customers: Array, suppliers: Array, defaultType: String });
+const props = defineProps({ defaultType: String });
 const { formatDecimalVnd: fv } = useCurrency();
 
 const today = new Date().toISOString().slice(0, 7);
@@ -154,15 +163,24 @@ const form = useForm({
 
 function addRow() {
   form.items.push({
-    customer_id:      '',
-    supplier_id:      '',
-    invoice_ref:      '',
-    invoice_date:     '',
-    due_date:         '',
-    amount:           0,
-    remaining_amount: 0,
-    note:             '',
+    customer_id:        '',
+    supplier_id:        '',
+    _customerDisplay:   '',
+    _supplierDisplay:   '',
+    invoice_ref:        '',
+    invoice_date:       '',
+    due_date:           '',
+    amount:             0,
+    remaining_amount:   0,
+    note:               '',
   });
+}
+
+function onPartySelect(item, opt, type) {
+  if (!opt) return;
+  const display = opt.code ? `${opt.code} - ${opt.label}` : opt.label;
+  if (type === 'ar') item._customerDisplay = display;
+  else item._supplierDisplay = display;
 }
 
 function removeRow(idx) {
@@ -170,6 +188,9 @@ function removeRow(idx) {
 }
 
 function submit() {
-  form.post(route('accounting.ar-ap-opening-balance.store'));
+  form.transform(d => ({
+    ...d,
+    items: d.items.map(({ _customerDisplay, _supplierDisplay, ...rest }) => rest),
+  })).post(route('accounting.ar-ap-opening-balance.store'));
 }
 </script>

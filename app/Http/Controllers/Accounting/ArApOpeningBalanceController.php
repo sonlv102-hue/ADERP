@@ -62,8 +62,6 @@ class ArApOpeningBalanceController extends Controller
     public function create(Request $request): Response
     {
         return Inertia::render('Accounting/ArApOpeningBalance/Form', [
-            'customers' => Customer::orderBy('name')->get(['id', 'code', 'name']),
-            'suppliers' => Supplier::orderBy('name')->get(['id', 'code', 'name']),
             'defaultType' => $request->query('type', 'ar'),
         ]);
     }

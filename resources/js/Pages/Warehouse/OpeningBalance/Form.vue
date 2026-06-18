@@ -122,7 +122,6 @@
                 >
                   <td class="px-4 py-2.5">
                     <ProductSearch
-                      :options="products"
                       v-model="item.product_id"
                       @select="p => { if (p) item.unit_cost = p.cost_price ?? 0; }"
                     />
@@ -217,7 +216,7 @@ import FormField from '@/Components/Shared/FormField.vue';
 import ProductSearch from '@/Components/Shared/ProductSearch.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
-const props = defineProps({ warehouses: Array, products: Array });
+const props = defineProps({ warehouses: Array });
 const { formatVnd: fv } = useCurrency();
 
 const today = new Date().toISOString().slice(0, 7);
