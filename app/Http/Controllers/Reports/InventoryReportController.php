@@ -224,6 +224,8 @@ class InventoryReportController extends Controller
                     'sm.source_type as reference_type',
                     'sm.source_id as reference_id',
                     'warehouses.name as warehouse_name',
+                    'sm.unit_cost',
+                    'sm.amount',
                 ])
                 ->orderBy(DB::raw("COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at))"))
                 ->orderBy('sm.id')
@@ -235,7 +237,7 @@ class InventoryReportController extends Controller
                 $qtyIn   = $qty > 0 ? $qty : 0;
                 $qtyOut  = $qty < 0 ? abs($qty) : 0;
                 $runningBalance += $qty;
-                $unitCost        = (float) ($product->cost_price ?? 0);
+                $unitCost        = (float) ($m->unit_cost ?? $product->cost_price ?? 0);
 
                 // Derive description from reference_type
                 $refType = class_basename($m->reference_type ?? '');

@@ -273,6 +273,34 @@ class InventoryAuditCommand extends Command
         } else {
             $this->line("  G2: GL 154 khớp với WIP entries (chênh < 1.000đ). OK.");
         }
+
+        // G3: Tổng giá vốn movement xuất bán vs số dư GL 632x
+        $exitValue = DB::table('stock_movements as m')
+            ->join('stock_exits as x', function ($j) {
+                $j->on('x.id', '=', 'm.source_id')
+                  ->where('m.source_type', '=', \App\Models\StockExit::class);
+            })
+            ->where('x.status', \App\Enums\StockExitStatus::Confirmed->value)
+            ->whereNotNull('m.amount')
+            ->selectRaw('SUM(ABS(m.amount)) as total_value')
+            ->value('total_value') ?? 0;
+
+        $gl632 = DB::table('journal_entry_lines as jl')
+            ->join('journal_entries as je', 'je.id', '=', 'jl.journal_entry_id')
+            ->where('je.status', 'posted')
+            ->where('jl.account_code', 'LIKE', '632%')
+            ->selectRaw('SUM(jl.debit) - SUM(jl.credit) as balance')
+            ->value('balance') ?? 0;
+
+        $diff632 = abs((float)$exitValue - (float)$gl632);
+        if ($diff632 > 1000) {
+            $this->addFinding('G3', 'warning', sprintf(
+                "GL TK 632 (%.0f) lệch với tổng giá trị movement xuất bán (%.0f). Chênh: %.0f",
+                $gl632, $exitValue, $gl632 - $exitValue
+            ));
+        } else {
+            $this->line("  G3: GL 632 khớp với movement xuất bán (chênh < 1.000đ). OK.");
+        }
     }
 
     // ─── Output ────────────────────────────────────────────────────────────────

@@ -103,17 +103,18 @@ class StockService
                 ]);
 
                 StockMovement::create([
-                    'product_id'  => $item->product_id,
-                    'warehouse_id' => $entry->warehouse_id,
-                    'type'        => 'in',
-                    'quantity'    => (int) $item->quantity,
-                    'source_type' => StockEntry::class,
-                    'source_id'   => $entry->id,
-                    'created_by'  => auth()->id(),
-                    'notes'       => "Nhập kho từ phiếu {$entry->code}",
-                    'project_id'  => $projectId,
-                    'unit_cost'   => $unitCost,
-                    'amount'      => $unitCost * (float) $item->quantity,
+                    'product_id'     => $item->product_id,
+                    'warehouse_id'   => $entry->warehouse_id,
+                    'type'           => 'in',
+                    'quantity'       => (int) $item->quantity,
+                    'source_type'    => StockEntry::class,
+                    'source_id'      => $entry->id,
+                    'source_item_id' => $item->id,
+                    'created_by'     => auth()->id(),
+                    'notes'          => "Nhập kho từ phiếu {$entry->code}",
+                    'project_id'     => $projectId,
+                    'unit_cost'      => $unitCost,
+                    'amount'         => $unitCost * (float) $item->quantity,
                 ]);
 
                 // Tạo project inventory lot nếu hàng thuộc dự án
@@ -205,16 +206,20 @@ class StockService
                     }
                 }
 
+                $cancelCost = (float) ($item->unit_cost ?? $item->unit_price ?? 0);
                 StockMovement::create([
-                    'product_id'   => $item->product_id,
-                    'warehouse_id' => $entry->warehouse_id,
-                    'type'         => 'out',
-                    'quantity'     => -(int) $item->quantity,
-                    'source_type'  => StockEntry::class,
-                    'source_id'    => $entry->id,
-                    'created_by'   => auth()->id(),
-                    'notes'        => "Hủy phiếu nhập kho {$entry->code}",
-                    'project_id'   => $item->project_id,
+                    'product_id'     => $item->product_id,
+                    'warehouse_id'   => $entry->warehouse_id,
+                    'type'           => 'out',
+                    'quantity'       => -(int) $item->quantity,
+                    'source_type'    => StockEntry::class,
+                    'source_id'      => $entry->id,
+                    'source_item_id' => $item->id,
+                    'created_by'     => auth()->id(),
+                    'notes'          => "Hủy phiếu nhập kho {$entry->code}",
+                    'project_id'     => $item->project_id,
+                    'unit_cost'      => $cancelCost,
+                    'amount'         => -($cancelCost * (float) $item->quantity),
                 ]);
             }
 
@@ -268,16 +273,20 @@ class StockService
                     }
                 }
 
+                $recallCost = (float) ($item->unit_cost ?? $item->unit_price ?? 0);
                 StockMovement::create([
-                    'product_id'   => $item->product_id,
-                    'warehouse_id' => $entry->warehouse_id,
-                    'type'         => 'out',
-                    'quantity'     => -(int) $item->quantity,
-                    'source_type'  => StockEntry::class,
-                    'source_id'    => $entry->id,
-                    'created_by'   => auth()->id(),
-                    'notes'        => "Thu hồi phiếu nhập kho {$entry->code} để chỉnh sửa",
-                    'project_id'   => $item->project_id,
+                    'product_id'     => $item->product_id,
+                    'warehouse_id'   => $entry->warehouse_id,
+                    'type'           => 'out',
+                    'quantity'       => -(int) $item->quantity,
+                    'source_type'    => StockEntry::class,
+                    'source_id'      => $entry->id,
+                    'source_item_id' => $item->id,
+                    'created_by'     => auth()->id(),
+                    'notes'          => "Thu hồi phiếu nhập kho {$entry->code} để chỉnh sửa",
+                    'project_id'     => $item->project_id,
+                    'unit_cost'      => $recallCost,
+                    'amount'         => -($recallCost * (float) $item->quantity),
                 ]);
             }
 
@@ -357,17 +366,18 @@ class StockService
                     ]);
 
                     StockMovement::create([
-                        'product_id'  => $item->product_id,
-                        'warehouse_id' => $exit->warehouse_id,
-                        'type'        => 'out',
-                        'quantity'    => -$qty,
-                        'source_type' => StockExit::class,
-                        'source_id'   => $exit->id,
-                        'created_by'  => auth()->id(),
-                        'notes'       => "Xuất kho dự án từ phiếu {$exit->code}",
-                        'project_id'  => $exit->project_id,
-                        'unit_cost'   => $sourceCost,
-                        'amount'      => -$totalCost,
+                        'product_id'     => $item->product_id,
+                        'warehouse_id'   => $exit->warehouse_id,
+                        'type'           => 'out',
+                        'quantity'       => -$qty,
+                        'source_type'    => StockExit::class,
+                        'source_id'      => $exit->id,
+                        'source_item_id' => $item->id,
+                        'created_by'     => auth()->id(),
+                        'notes'          => "Xuất kho dự án từ phiếu {$exit->code}",
+                        'project_id'     => $exit->project_id,
+                        'unit_cost'      => $sourceCost,
+                        'amount'         => -$totalCost,
                     ]);
                 } else {
                     // ── Non-project: kiểm tra tổng kho warehouse ───────────────────────
@@ -396,17 +406,18 @@ class StockService
                     $item->update(['source_cost' => $unitCost, 'total_cost' => $totalCost]);
 
                     StockMovement::create([
-                        'product_id'   => $item->product_id,
-                        'warehouse_id' => $exit->warehouse_id,
-                        'type'         => 'out',
-                        'quantity'     => -$qty,
-                        'source_type'  => StockExit::class,
-                        'source_id'    => $exit->id,
-                        'created_by'   => auth()->id(),
-                        'notes'        => "Xuất kho từ phiếu {$exit->code}",
-                        'project_id'   => $exit->project_id,
-                        'unit_cost'    => $unitCost,
-                        'amount'       => -$totalCost,
+                        'product_id'     => $item->product_id,
+                        'warehouse_id'   => $exit->warehouse_id,
+                        'type'           => 'out',
+                        'quantity'       => -$qty,
+                        'source_type'    => StockExit::class,
+                        'source_id'      => $exit->id,
+                        'source_item_id' => $item->id,
+                        'created_by'     => auth()->id(),
+                        'notes'          => "Xuất kho từ phiếu {$exit->code}",
+                        'project_id'     => $exit->project_id,
+                        'unit_cost'      => $unitCost,
+                        'amount'         => -$totalCost,
                     ]);
                 }
 
@@ -507,17 +518,18 @@ class StockService
             // Tạo movement dương để đảo ngược tồn kho (giữ audit trail)
             foreach ($exit->items as $item) {
                 StockMovement::create([
-                    'product_id'   => $item->product_id,
-                    'warehouse_id' => $exit->warehouse_id,
-                    'type'         => 'in',
-                    'quantity'     => (int) $item->quantity,
-                    'source_type'  => StockExit::class,
-                    'source_id'    => $exit->id,
-                    'created_by'   => auth()->id(),
-                    'notes'        => "Hủy phiếu xuất kho {$exit->code}",
-                    'project_id'   => $item->project_id,
-                    'unit_cost'    => $item->source_cost,
-                    'amount'       => $item->total_cost,
+                    'product_id'     => $item->product_id,
+                    'warehouse_id'   => $exit->warehouse_id,
+                    'type'           => 'in',
+                    'quantity'       => (int) $item->quantity,
+                    'source_type'    => StockExit::class,
+                    'source_id'      => $exit->id,
+                    'source_item_id' => $item->id,
+                    'created_by'     => auth()->id(),
+                    'notes'          => "Hủy phiếu xuất kho {$exit->code}",
+                    'project_id'     => $item->project_id,
+                    'unit_cost'      => $item->source_cost,
+                    'amount'         => $item->total_cost,
                 ]);
             }
 
