@@ -10,40 +10,81 @@
 }
 
 @layer components {
+    /* ─── Cards & layout ─── */
     .erp-card {
         @apply bg-white rounded-xl border border-slate-200/80 shadow-sm;
     }
-    .erp-input {
+
+    /* ─── Inputs ─── */
+    .erp-input,
+    .form-input {
         @apply w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm
             placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20
+            disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed
             transition-colors;
     }
-    .erp-label {
+    .erp-input-error,
+    .form-input.is-invalid {
+        @apply border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-red-100/40;
+    }
+
+    /* ─── Labels ─── */
+    .erp-label,
+    .form-label {
         @apply block text-sm font-medium text-slate-700 mb-1;
     }
-    .erp-btn-primary {
+
+    /* ─── Error messages ─── */
+    .erp-error,
+    .form-error {
+        @apply mt-1.5 text-xs text-red-600;
+    }
+
+    /* ─── Hint / helper text ─── */
+    .form-hint {
+        @apply mt-1 text-xs text-slate-400 leading-relaxed;
+    }
+
+    /* ─── Buttons ─── */
+    .erp-btn-primary,
+    .btn-primary {
         @apply inline-flex items-center justify-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white
             hover:bg-primary-700 active:bg-primary-800 disabled:opacity-50 transition-colors cursor-pointer shadow-sm;
     }
-    .erp-btn-secondary {
+    .erp-btn-secondary,
+    .btn-secondary {
         @apply inline-flex items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700
             hover:bg-slate-50 hover:border-slate-400 active:bg-slate-100 disabled:opacity-50 transition-colors cursor-pointer shadow-sm;
     }
-    .erp-btn-danger {
+    .erp-btn-danger,
+    .btn-danger {
         @apply inline-flex items-center justify-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white
             hover:bg-red-700 active:bg-red-800 disabled:opacity-50 transition-colors cursor-pointer shadow-sm;
     }
+    .erp-btn-success {
+        @apply inline-flex items-center justify-center gap-2 rounded-lg bg-green-600 px-4 py-2 text-sm font-medium text-white
+            hover:bg-green-700 active:bg-green-800 disabled:opacity-50 transition-colors cursor-pointer shadow-sm;
+    }
+
+    /* ─── Tables ─── */
     .erp-table th {
         @apply px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500 bg-slate-50;
     }
     .erp-table td {
         @apply px-4 py-3 text-sm border-t border-slate-100;
     }
+
+    /* ─── Badges ─── */
     .erp-badge {
         @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium;
     }
 
-    /* Áp dụng shadow-sm cho mọi card trắng rounded-xl (không cần đổi class từng page) */
+    /* ─── Section header (card title bar) ─── */
+    .erp-section-header {
+        @apply flex items-center gap-2.5 border-b border-gray-100 bg-gray-50/60 px-6 py-4;
+    }
+
+    /* ─── Auto shadow for all white rounded-xl cards ─── */
     .bg-white.rounded-xl {
         @apply shadow-sm;
     }

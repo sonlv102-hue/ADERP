@@ -81,79 +81,210 @@
     </div>
 
     <!-- Payment Modal -->
-    <Modal :show="payModal !== null" @close="payModal = null">
-      <template #title>Ghi nhận thanh toán NCC — {{ payModal?.code }}</template>
+    <Modal :show="payModal !== null" @close="closeModal" max-width="2xl">
+      <template #title>Ghi nhận thanh toán NCC</template>
       <div class="space-y-4" v-if="payModal">
-        <div class="p-3 bg-orange-50 rounded-lg text-sm">
-          <div class="text-gray-600">Nhà cung cấp: <span class="font-medium text-gray-900">{{ payModal.supplier }}</span></div>
-          <div v-if="payModal.source_type === 'opening_balance'" class="text-amber-700 mt-1 text-xs font-medium">
-            Công nợ đầu kỳ
+
+        <!-- Info header -->
+        <div class="p-3 bg-orange-50 rounded-lg text-sm grid grid-cols-2 gap-x-4 gap-y-1">
+          <div class="col-span-2 font-semibold text-gray-800">{{ payModal.supplier }}
+            <span class="ml-2 font-mono text-xs text-gray-500">{{ payModal.code }}</span>
           </div>
-          <div class="text-gray-600 mt-1">Còn phải trả: <span class="font-semibold text-orange-600">{{ formatVnd(payModal.amount_due) }}</span></div>
+          <div class="text-gray-600">Tổng hóa đơn: <span class="font-medium text-gray-900">{{ formatVnd(payModal.total) }}</span></div>
+          <div class="text-gray-600">Đã thanh toán: <span class="font-medium text-green-700">{{ formatVnd(payModal.amount_paid) }}</span></div>
+          <div class="text-gray-600">Còn phải trả: <span class="font-semibold text-orange-600">{{ formatVnd(payModal.amount_due) }}</span></div>
+          <div v-if="totalOffset > 0" class="text-gray-600">
+            Sau đối trừ: <span class="font-semibold text-blue-600">{{ formatVnd(Math.max(0, payModal.amount_due - totalOffset)) }}</span>
+          </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-4">
+        <!-- Payment type selector -->
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-2">Kiểu xử lý thanh toán <span class="text-red-500">*</span></label>
+          <div class="flex gap-2 flex-wrap">
+            <button v-for="t in paymentTypes" :key="t.value"
+              @click="paymentType = t.value"
+              :class="paymentType === t.value
+                ? 'bg-orange-600 text-white border-orange-600'
+                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'"
+              class="px-4 py-2 text-sm font-medium rounded-lg border transition-colors">
+              {{ t.label }}
+            </button>
+          </div>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- OFFSET section (offset / combined) -->
+        <!-- ============================================================ -->
+        <div v-if="paymentType === 'offset' || paymentType === 'combined'"
+          class="border border-blue-200 rounded-lg overflow-hidden">
+          <div class="bg-blue-50 px-4 py-2 flex items-center justify-between">
+            <span class="text-sm font-semibold text-blue-800">Khoản trả trước có thể đối trừ</span>
+            <span v-if="totalOffset > 0" class="text-sm font-medium text-blue-700">
+              Tổng đối trừ: {{ formatVnd(totalOffset) }}
+            </span>
+          </div>
+
+          <div v-if="loadingAdvances" class="py-6 text-center text-sm text-gray-400">
+            Đang tải...
+          </div>
+
+          <div v-else-if="!advances.length" class="py-5 text-center text-sm text-gray-400">
+            Không có khoản trả trước khả dụng cho nhà cung cấp này.
+          </div>
+
+          <div v-else>
+            <!-- Allocation date -->
+            <div class="px-4 py-3 border-b border-blue-100 flex items-center gap-3">
+              <label class="text-sm font-medium text-gray-700 whitespace-nowrap">Ngày đối trừ <span class="text-red-500">*</span></label>
+              <input v-model="allocationDate" type="date"
+                class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+            </div>
+
+            <table class="w-full text-xs">
+              <thead class="bg-gray-50 border-b border-blue-100">
+                <tr>
+                  <th class="px-3 py-2 text-left font-semibold text-gray-600">Ngày CT</th>
+                  <th class="px-3 py-2 text-left font-semibold text-gray-600">Loại</th>
+                  <th class="px-3 py-2 text-left font-semibold text-gray-600">Số CT</th>
+                  <th class="px-3 py-2 text-right font-semibold text-gray-600">Số tiền gốc</th>
+                  <th class="px-3 py-2 text-right font-semibold text-gray-600">Còn khả dụng</th>
+                  <th class="px-3 py-2 text-right font-semibold text-blue-700">Đối trừ lần này</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <tr v-for="adv in advances" :key="adv.id" class="hover:bg-blue-50">
+                  <td class="px-3 py-2 text-gray-600">{{ adv.opening_date }}</td>
+                  <td class="px-3 py-2">
+                    <span class="px-1.5 py-0.5 rounded text-xs font-medium"
+                      :class="adv.advance_type === 'opening_balance'
+                        ? 'bg-amber-100 text-amber-700'
+                        : 'bg-blue-100 text-blue-700'">
+                      {{ adv.advance_type_label }}
+                    </span>
+                  </td>
+                  <td class="px-3 py-2 font-mono text-gray-600">{{ adv.reference_no || '—' }}</td>
+                  <td class="px-3 py-2 text-right text-gray-800">{{ formatVnd(adv.amount) }}</td>
+                  <td class="px-3 py-2 text-right font-semibold text-green-700">{{ formatVnd(adv.remaining_amount) }}</td>
+                  <td class="px-3 py-2 text-right">
+                    <input
+                      type="number"
+                      :max="adv.remaining_amount"
+                      min="0"
+                      :value="advAllocAmounts[adv.id] ?? 0"
+                      @input="setAllocAmount(adv.id, $event.target.value, adv.remaining_amount)"
+                      class="w-32 px-2 py-1 border border-gray-300 rounded text-right text-xs focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="0" />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <p v-if="offsetError" class="px-4 py-2 text-xs text-red-600 bg-red-50 border-t border-red-200">
+            {{ offsetError }}
+          </p>
+        </div>
+
+        <!-- ============================================================ -->
+        <!-- CASH section (cash / combined) -->
+        <!-- ============================================================ -->
+        <div v-if="paymentType === 'cash' || paymentType === 'combined'" class="space-y-4">
+          <div v-if="paymentType === 'combined'"
+            class="px-3 py-2 bg-gray-50 rounded-lg text-sm text-gray-600 border border-gray-200">
+            Chi thêm bằng tiền mặt / chuyển khoản sau khi đối trừ
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">
+                {{ paymentType === 'combined' ? 'Số tiền chi thêm' : 'Số tiền trả' }}
+                <span class="text-red-500">*</span>
+              </label>
+              <input v-model.number="payForm.amount" type="number" min="0"
+                :max="paymentType === 'combined' ? Math.max(0, payModal.amount_due - totalOffset) : payModal.amount_due"
+                :class="payAmountError ? 'border-red-400 focus:ring-red-400' : 'border-gray-300 focus:ring-primary-500'"
+                class="w-full px-3 py-2 border rounded-lg focus:ring-2 outline-none text-sm" />
+              <p v-if="payAmountError" class="mt-1 text-xs text-red-600">{{ payAmountError }}</p>
+              <p v-if="paymentType === 'combined' && totalOffset > 0" class="mt-1 text-xs text-gray-500">
+                Tối đa: {{ formatVnd(Math.max(0, payModal.amount_due - totalOffset)) }}
+              </p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Ngày trả <span class="text-red-500">*</span></label>
+              <input v-model="payForm.payment_date" type="date"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm" />
+            </div>
+          </div>
+
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Số tiền trả <span class="text-red-500">*</span></label>
-            <input v-model.number="payForm.amount" type="number" @invalid.prevent
-              :class="payAmountError ? 'border-red-400 focus:ring-red-400' : 'border-gray-300 focus:ring-primary-500'"
-              class="w-full px-3 py-2 border rounded-lg focus:ring-2 outline-none text-sm" />
-            <p v-if="payAmountError" class="mt-1 text-xs text-red-600">{{ payAmountError }}</p>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Hình thức thanh toán <span class="text-red-500">*</span></label>
+            <select v-model="payForm.method" @change="payForm.fund_id = null"
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm">
+              <option value="cash">Tiền mặt</option>
+              <option value="bank_transfer">Chuyển khoản</option>
+              <option value="other">Khác</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">
+              {{ payForm.method === 'cash' ? 'Quỹ tiền mặt' : (payForm.method === 'bank_transfer' ? 'Tài khoản ngân hàng' : 'Nguồn tiền') }}
+              <span class="text-red-500">*</span>
+            </label>
+            <select v-model="payForm.fund_id"
+              :class="payFundError ? 'border-red-400 focus:ring-red-400' : 'border-gray-300 focus:ring-primary-500'"
+              class="w-full px-3 py-2 border rounded-lg focus:ring-2 outline-none text-sm">
+              <option :value="null">-- Chọn {{ payForm.method === 'bank_transfer' ? 'tài khoản ngân hàng' : 'quỹ' }} --</option>
+              <option v-for="f in filteredFunds" :key="f.id" :value="f.id">
+                {{ f.name }}{{ f.account_code ? ` (TK ${f.account_code})` : '' }}
+              </option>
+            </select>
+            <p v-if="payFundError" class="mt-1 text-xs text-red-600">{{ payFundError }}</p>
+            <p v-if="!filteredFunds.length && payForm.method !== 'other'" class="mt-1 text-xs text-amber-600">
+              Chưa có quỹ {{ payForm.method === 'bank_transfer' ? 'ngân hàng' : 'tiền mặt' }} nào.
+            </p>
+          </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Số tham chiếu (UNC / Số séc)</label>
+            <input v-model="payForm.reference" type="text" placeholder="Số UNC, số séc, số giao dịch..."
+              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm" />
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1">Ngày trả <span class="text-red-500">*</span></label>
-            <input v-model="payForm.payment_date" type="date"
+            <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
+            <textarea v-model="payForm.notes" rows="2"
               class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm" />
           </div>
         </div>
 
-        <!-- Hình thức thanh toán -->
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Hình thức thanh toán <span class="text-red-500">*</span></label>
-          <select v-model="payForm.method" @change="payForm.fund_id = null"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm">
-            <option value="cash">Tiền mặt</option>
-            <option value="bank_transfer">Chuyển khoản</option>
-            <option value="other">Khác</option>
-          </select>
+        <!-- Summary row for combined -->
+        <div v-if="paymentType === 'combined' && (totalOffset > 0 || payForm.amount > 0)"
+          class="p-3 bg-gray-50 rounded-lg text-sm border border-gray-200">
+          <div class="flex justify-between text-gray-600">
+            <span>Đối trừ:</span>
+            <span class="font-medium text-blue-700">{{ formatVnd(totalOffset) }}</span>
+          </div>
+          <div class="flex justify-between text-gray-600 mt-1">
+            <span>Chi thêm:</span>
+            <span class="font-medium text-gray-900">{{ formatVnd(payForm.amount || 0) }}</span>
+          </div>
+          <div class="flex justify-between font-semibold mt-2 pt-2 border-t border-gray-300">
+            <span>Tổng xử lý:</span>
+            <span class="text-orange-700">{{ formatVnd(totalOffset + (payForm.amount || 0)) }}</span>
+          </div>
+          <div class="flex justify-between text-gray-500 text-xs mt-1">
+            <span>Còn phải trả sau:</span>
+            <span>{{ formatVnd(Math.max(0, payModal.amount_due - totalOffset - (payForm.amount || 0))) }}</span>
+          </div>
         </div>
 
-        <!-- Chọn quỹ / tài khoản ngân hàng -->
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">
-            {{ payForm.method === 'cash' ? 'Quỹ tiền mặt' : (payForm.method === 'bank_transfer' ? 'Tài khoản ngân hàng' : 'Nguồn tiền') }}
-            <span class="text-red-500">*</span>
-          </label>
-          <select v-model="payForm.fund_id"
-            :class="payFundError ? 'border-red-400 focus:ring-red-400' : 'border-gray-300 focus:ring-primary-500'"
-            class="w-full px-3 py-2 border rounded-lg focus:ring-2 outline-none text-sm">
-            <option :value="null">-- Chọn {{ payForm.method === 'bank_transfer' ? 'tài khoản ngân hàng' : 'quỹ' }} --</option>
-            <option v-for="f in filteredFunds" :key="f.id" :value="f.id">
-              {{ f.name }}{{ f.account_code ? ` (TK ${f.account_code})` : '' }}
-            </option>
-          </select>
-          <p v-if="payFundError" class="mt-1 text-xs text-red-600">{{ payFundError }}</p>
-          <p v-if="!filteredFunds.length && payForm.method !== 'other'" class="mt-1 text-xs text-amber-600">
-            Chưa có quỹ {{ payForm.method === 'bank_transfer' ? 'ngân hàng' : 'tiền mặt' }} nào. Vui lòng tạo quỹ trong Kế toán → Quỹ.
-          </p>
-        </div>
-
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Số tham chiếu (UNC / Số séc)</label>
-          <input v-model="payForm.reference" type="text" placeholder="Số UNC, số séc, số giao dịch..."
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm" />
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Ghi chú</label>
-          <textarea v-model="payForm.notes" rows="2"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none text-sm" />
-        </div>
       </div>
       <template #footer>
-        <button @click="payModal = null" class="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Hủy</button>
+        <button @click="closeModal" class="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50">Hủy</button>
         <button @click="submitPayment" :disabled="submitting"
           class="px-4 py-2 text-sm bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-60">
-          {{ submitting ? 'Đang lưu...' : 'Xác nhận thanh toán' }}
+          {{ submitting ? 'Đang lưu...' : submitLabel }}
         </button>
       </template>
     </Modal>
@@ -183,10 +314,24 @@ const filters = ref({
   status:      props.filters.status ?? '',
 });
 
-const payModal       = ref(null);
-const submitting     = ref(false);
-const payAmountError = ref('');
-const payFundError   = ref('');
+const paymentTypes = [
+  { value: 'cash',     label: 'Chi tiền mới' },
+  { value: 'offset',   label: 'Đối trừ tiền trả trước' },
+  { value: 'combined', label: 'Đối trừ + chi thêm' },
+];
+
+// Modal state
+const payModal         = ref(null);
+const paymentType      = ref('cash');
+const advances         = ref([]);
+const advAllocAmounts  = ref({});
+const allocationDate   = ref('');
+const loadingAdvances  = ref(false);
+const submitting       = ref(false);
+const payAmountError   = ref('');
+const payFundError     = ref('');
+const offsetError      = ref('');
+
 const payForm = ref({
   amount: 0, payment_date: new Date().toISOString().slice(0, 10),
   method: 'bank_transfer', fund_id: null, reference: '', notes: '',
@@ -194,11 +339,22 @@ const payForm = ref({
 
 const totalDue = computed(() => (props.items ?? []).reduce((s, i) => s + i.amount_due, 0));
 
+const totalOffset = computed(() =>
+  Object.values(advAllocAmounts.value).reduce((s, v) => s + (parseFloat(v) || 0), 0)
+);
+
 const filteredFunds = computed(() => {
   const method = payForm.value.method;
   if (method === 'cash')          return (props.funds ?? []).filter(f => f.type === 'cash');
   if (method === 'bank_transfer') return (props.funds ?? []).filter(f => f.type === 'bank');
   return props.funds ?? [];
+});
+
+const submitLabel = computed(() => {
+  if (submitting.value) return 'Đang lưu...';
+  if (paymentType.value === 'offset')   return 'Xác nhận đối trừ';
+  if (paymentType.value === 'combined') return 'Xác nhận đối trừ & thanh toán';
+  return 'Xác nhận thanh toán';
 });
 
 function applyFilters() {
@@ -208,8 +364,22 @@ function applyFilters() {
   }, { preserveState: true });
 }
 
-function openPayment(item) {
-  payModal.value = item;
+function setAllocAmount(advanceId, value, max) {
+  const v = Math.min(parseFloat(value) || 0, parseFloat(max) || 0);
+  advAllocAmounts.value = { ...advAllocAmounts.value, [advanceId]: v < 0 ? 0 : v };
+}
+
+async function openPayment(item) {
+  payModal.value        = item;
+  paymentType.value     = 'cash';
+  advances.value        = [];
+  advAllocAmounts.value = {};
+  allocationDate.value  = new Date().toISOString().slice(0, 10);
+  loadingAdvances.value = true;
+  payAmountError.value  = '';
+  payFundError.value    = '';
+  offsetError.value     = '';
+
   payForm.value = {
     amount:       item.amount_due,
     payment_date: new Date().toISOString().slice(0, 10),
@@ -218,50 +388,112 @@ function openPayment(item) {
     reference:    '',
     notes:        '',
   };
-  payAmountError.value = '';
-  payFundError.value   = '';
+
+  // Load available advances for this supplier
+  if (item.supplier_id) {
+    try {
+      const resp = await fetch(route('accounting.ap-payments.advances') + '?supplier_id=' + item.supplier_id);
+      const data = await resp.json();
+      advances.value = data;
+      const amounts = {};
+      data.forEach(a => { amounts[a.id] = 0; });
+      advAllocAmounts.value = amounts;
+    } catch {
+      // silently ignore — user can still use cash mode
+    }
+  }
+  loadingAdvances.value = false;
+}
+
+function closeModal() {
+  payModal.value = null;
+}
+
+function getActiveAllocations() {
+  return advances.value
+    .filter(a => (parseFloat(advAllocAmounts.value[a.id]) || 0) > 0)
+    .map(a => ({ advance_id: a.id, amount: parseFloat(advAllocAmounts.value[a.id]) }));
 }
 
 function submitPayment() {
   payAmountError.value = '';
   payFundError.value   = '';
+  offsetError.value    = '';
 
-  if (!payForm.value.amount || payForm.value.amount <= 0) {
-    payAmountError.value = 'Vui lòng nhập số tiền hợp lệ (lớn hơn 0).';
-    return;
+  const item = payModal.value;
+  const type = paymentType.value;
+
+  // Validate offset
+  if (type === 'offset' || type === 'combined') {
+    const activeAllocs = getActiveAllocations();
+    if (!activeAllocs.length) {
+      offsetError.value = 'Vui lòng nhập số tiền đối trừ ít nhất một khoản trả trước.';
+      return;
+    }
+    if (!allocationDate.value) {
+      offsetError.value = 'Vui lòng chọn ngày đối trừ.';
+      return;
+    }
+    if (totalOffset.value > item.amount_due + 0.01) {
+      offsetError.value = `Tổng đối trừ (${formatVnd(totalOffset.value)}) vượt quá số còn phải trả (${formatVnd(item.amount_due)}).`;
+      return;
+    }
   }
-  if (payForm.value.amount > payModal.value.amount_due) {
-    payAmountError.value = `Số tiền không được vượt quá số còn lại (${new Intl.NumberFormat('vi-VN').format(payModal.value.amount_due)} ₫).`;
-    return;
-  }
-  if (!payForm.value.payment_date) {
-    payAmountError.value = 'Vui lòng chọn ngày trả.';
-    return;
-  }
-  if (!payForm.value.fund_id) {
-    payFundError.value = 'Vui lòng chọn quỹ hoặc tài khoản ngân hàng để chi tiền.';
-    return;
+
+  // Validate cash
+  if (type === 'cash' || type === 'combined') {
+    const cashAmt = parseFloat(payForm.value.amount) || 0;
+    const maxCash = type === 'combined'
+      ? Math.max(0, item.amount_due - totalOffset.value)
+      : item.amount_due;
+
+    if (cashAmt <= 0) {
+      payAmountError.value = 'Vui lòng nhập số tiền hợp lệ (lớn hơn 0).';
+      return;
+    }
+    if (cashAmt > maxCash + 0.01) {
+      payAmountError.value = `Số tiền không được vượt quá ${formatVnd(maxCash)}.`;
+      return;
+    }
+    if (!payForm.value.payment_date) {
+      payAmountError.value = 'Vui lòng chọn ngày trả.';
+      return;
+    }
+    if (!payForm.value.fund_id) {
+      payFundError.value = 'Vui lòng chọn quỹ hoặc tài khoản ngân hàng để chi tiền.';
+      return;
+    }
   }
 
   submitting.value = true;
 
-  const item = payModal.value;
   const url = item.source_type === 'opening_balance'
     ? route('accounting.ar-ap-opening-balance.pay', item.id)
     : route('purchasing.purchase-invoices.payments.store', item.id);
 
-  router.post(url, {
-    amount:       payForm.value.amount,
-    payment_date: payForm.value.payment_date,
-    method:       payForm.value.method,
-    fund_id:      payForm.value.fund_id,
-    reference:    payForm.value.reference || null,
-    notes:        payForm.value.notes || null,
-  }, {
-    onSuccess: () => { payModal.value = null; submitting.value = false; payAmountError.value = ''; payFundError.value = ''; },
-    onError:   (errors) => {
+  const payload = { payment_type: type };
+
+  if (type === 'offset' || type === 'combined') {
+    payload.advance_allocations = getActiveAllocations();
+    payload.allocation_date     = allocationDate.value;
+  }
+
+  if (type === 'cash' || type === 'combined') {
+    payload.amount       = payForm.value.amount;
+    payload.payment_date = payForm.value.payment_date;
+    payload.method       = payForm.value.method;
+    payload.fund_id      = payForm.value.fund_id;
+    payload.reference    = payForm.value.reference || null;
+    payload.notes        = payForm.value.notes || null;
+  }
+
+  router.post(url, payload, {
+    onSuccess: () => { payModal.value = null; submitting.value = false; },
+    onError: (errors) => {
       submitting.value = false;
       if (errors.fund_id) payFundError.value = errors.fund_id;
+      if (errors.amount)  payAmountError.value = errors.amount;
+      if (errors.error)   offsetError.value = errors.error;
     },
   });
 }

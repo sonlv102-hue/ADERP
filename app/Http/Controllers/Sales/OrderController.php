@@ -92,9 +92,6 @@ class OrderController extends Controller
 
         return Inertia::render('Sales/Orders/Form', [
             'nextCode'         => Order::generateCode(),
-            'customers'        => Customer::orderBy('name')->get(['id', 'code', 'name', 'is_fdi']),
-            'products'         => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'sell_price']),
-            'services'         => Service::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'price']),
             'quotations'       => $this->approvedQuotations(),
             'fromQuotationId'  => $request->query('from_quotation'),
             'supplementaryFor' => $supplementaryFor,
@@ -256,7 +253,7 @@ class OrderController extends Controller
             'Không thể sửa đơn hàng đã hoàn thành.'
         );
 
-        $order->load('items');
+        $order->load(['items', 'customer']);
 
         return Inertia::render('Sales/Orders/Form', [
             'order'      => [
@@ -280,10 +277,10 @@ class OrderController extends Controller
                     '_type'            => $item->product_id ? 'product' : 'service',
                 ]),
             ],
-            'customers'  => Customer::orderBy('name')->get(['id', 'code', 'name', 'is_fdi']),
-            'products'   => Product::orderBy('name')->get(['id', 'code', 'name', 'unit', 'sell_price']),
-            'services'   => Service::orderBy('name')->get(['id', 'code', 'name', 'unit', 'price']),
-            'quotations' => $this->approvedQuotations(),
+            'initialCustomerName' => $order->customer?->name ?? '',
+            'initialCustomerCode' => $order->customer?->code ?? '',
+            'initialCustomerFdi'  => (bool) ($order->customer?->is_fdi ?? false),
+            'quotations'          => $this->approvedQuotations(),
         ]);
     }
 

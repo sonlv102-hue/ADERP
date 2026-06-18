@@ -6,13 +6,18 @@ use App\Http\Controllers\Controller;
 use App\Models\Fund;
 use App\Models\Supplier;
 use App\Services\ArApLedgerService;
+use App\Services\SupplierAdvanceService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class ApPaymentController extends Controller
 {
-    public function __construct(private ArApLedgerService $ledger) {}
+    public function __construct(
+        private ArApLedgerService $ledger,
+        private SupplierAdvanceService $advanceService,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -47,5 +52,30 @@ class ApPaymentController extends Controller
             ],
             'filters'   => $filters,
         ]);
+    }
+
+    public function advances(Request $request): JsonResponse
+    {
+        $supplierId = $request->integer('supplier_id');
+        if (!$supplierId) {
+            return response()->json([]);
+        }
+
+        $advances = $this->advanceService->getAvailable($supplierId);
+
+        return response()->json($advances->map(fn ($a) => [
+            'id'                 => $a->id,
+            'opening_date'       => $a->opening_date,
+            'advance_type'       => $a->advance_type,
+            'advance_type_label' => match ($a->advance_type) {
+                'opening_balance' => 'Số dư đầu kỳ',
+                'prepayment'      => 'Trả trước',
+                default           => $a->advance_type,
+            },
+            'reference_no'       => $a->reference_no,
+            'amount'             => (float) $a->amount,
+            'remaining_amount'   => (float) $a->remaining_amount,
+            'notes'              => $a->notes,
+        ])->values());
     }
 }

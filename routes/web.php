@@ -94,7 +94,16 @@ use App\Http\Controllers\Admin\ShareholderController;
 use App\Http\Controllers\Accounting\PersonalLoanController;
 use App\Http\Controllers\Accounting\PersonalExpenseController;
 use App\Http\Controllers\Accounting\JournalAuditController;
+use App\Http\Controllers\Accounting\SmallToolCategoryController;
+use App\Http\Controllers\Accounting\SmallToolController;
+use App\Http\Controllers\Accounting\SmallToolReceiptController;
+use App\Http\Controllers\Accounting\SmallToolIssueController;
+use App\Http\Controllers\Accounting\SmallToolAllocationController;
+use App\Http\Controllers\Accounting\SmallToolTransferController;
+use App\Http\Controllers\Accounting\SmallToolDisposalController;
+use App\Http\Controllers\Accounting\SmallToolReportController;
 use App\Http\Controllers\AttachmentController;
+use App\Http\Controllers\SearchController;
 use Illuminate\Support\Facades\Route;
 
 // Auth routes (guest only)
@@ -314,8 +323,9 @@ Route::middleware('auth')->group(function () {
         Route::delete('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'destroy'])->name('invoices.payments.destroy');
 
         // Công nợ phải thu / phải trả
-        Route::get('ar-collections', [ArCollectionController::class, 'index'])->name('ar-collections.index');
-        Route::get('ap-payments',    [ApPaymentController::class,    'index'])->name('ap-payments.index');
+        Route::get('ar-collections',       [ArCollectionController::class, 'index'])->name('ar-collections.index');
+        Route::get('ap-payments/advances', [ApPaymentController::class,    'advances'])->name('ap-payments.advances');
+        Route::get('ap-payments',          [ApPaymentController::class,    'index'])->name('ap-payments.index');
 
         // Quỹ và phiếu thu/chi
         Route::resource('funds', FundController::class)->except(['show']);
@@ -480,6 +490,58 @@ Route::middleware('auth')->group(function () {
             Route::post('{fixedAsset}/disposals', [FixedAssetDisposalController::class, 'store'])->name('disposals.store')->middleware('can:accounting.manage');
             Route::delete('{fixedAsset}/disposals/{disposal}', [FixedAssetDisposalController::class, 'destroy'])->name('disposals.destroy')->middleware('can:accounting.manage');
         });
+
+        // CCDC — Công cụ dụng cụ
+        Route::prefix('small-tools')->name('small-tools.')->group(function () {
+            // Categories
+            Route::get('categories', [SmallToolCategoryController::class, 'index'])->name('categories.index')->middleware('can:ccdc.view');
+            Route::post('categories', [SmallToolCategoryController::class, 'store'])->name('categories.store')->middleware('can:ccdc.manage');
+            Route::put('categories/{category}', [SmallToolCategoryController::class, 'update'])->name('categories.update')->middleware('can:ccdc.manage');
+            Route::delete('categories/{category}', [SmallToolCategoryController::class, 'destroy'])->name('categories.destroy')->middleware('can:ccdc.manage');
+
+            // Tools
+            Route::get('',               [SmallToolController::class, 'index'])->name('index')->middleware('can:ccdc.view');
+            Route::get('create',         [SmallToolController::class, 'create'])->name('create')->middleware('can:ccdc.manage');
+            Route::post('',              [SmallToolController::class, 'store'])->name('store')->middleware('can:ccdc.manage');
+            Route::get('{tool}',         [SmallToolController::class, 'show'])->name('show')->middleware('can:ccdc.view');
+            Route::get('{tool}/edit',    [SmallToolController::class, 'edit'])->name('edit')->middleware('can:ccdc.manage');
+            Route::put('{tool}',         [SmallToolController::class, 'update'])->name('update')->middleware('can:ccdc.manage');
+            Route::post('{tool}/confirm',[SmallToolController::class, 'confirm'])->name('confirm')->middleware('can:ccdc.manage');
+
+            // Receipts (CCNK-)
+            Route::get('receipts',                   [SmallToolReceiptController::class, 'index'])->name('receipts.index')->middleware('can:ccdc.view');
+            Route::get('receipts/create',            [SmallToolReceiptController::class, 'create'])->name('receipts.create')->middleware('can:ccdc.manage');
+            Route::post('receipts',                  [SmallToolReceiptController::class, 'store'])->name('receipts.store')->middleware('can:ccdc.manage');
+            Route::get('receipts/{receipt}',         [SmallToolReceiptController::class, 'show'])->name('receipts.show')->middleware('can:ccdc.view');
+            Route::post('receipts/{receipt}/confirm',[SmallToolReceiptController::class, 'confirm'])->name('receipts.confirm')->middleware('can:ccdc.manage');
+            Route::post('receipts/{receipt}/cancel', [SmallToolReceiptController::class, 'cancel'])->name('receipts.cancel')->middleware('can:ccdc.cancel');
+
+            // Issues (CCXD-)
+            Route::get('issues',                  [SmallToolIssueController::class, 'index'])->name('issues.index')->middleware('can:ccdc.view');
+            Route::get('issues/create',           [SmallToolIssueController::class, 'create'])->name('issues.create')->middleware('can:ccdc.manage');
+            Route::post('issues',                 [SmallToolIssueController::class, 'store'])->name('issues.store')->middleware('can:ccdc.manage');
+            Route::get('issues/{issue}',          [SmallToolIssueController::class, 'show'])->name('issues.show')->middleware('can:ccdc.view');
+            Route::post('issues/{issue}/confirm', [SmallToolIssueController::class, 'confirm'])->name('issues.confirm')->middleware('can:ccdc.manage');
+            Route::post('issues/{issue}/cancel',  [SmallToolIssueController::class, 'cancel'])->name('issues.cancel')->middleware('can:ccdc.cancel');
+
+            // Allocations (phân bổ hàng tháng)
+            Route::get('allocations',                      [SmallToolAllocationController::class, 'index'])->name('allocations.index')->middleware('can:ccdc.view');
+            Route::post('allocations/run',                 [SmallToolAllocationController::class, 'run'])->name('allocations.run')->middleware('can:ccdc.allocate');
+            Route::post('allocations/{allocation}/reverse',[SmallToolAllocationController::class, 'reverse'])->name('allocations.reverse')->middleware('can:ccdc.allocate');
+
+            // Transfers (CCCT-)
+            Route::get('{tool}/transfers/create', [SmallToolTransferController::class, 'create'])->name('transfers.create')->middleware('can:ccdc.manage');
+            Route::post('{tool}/transfers',       [SmallToolTransferController::class, 'store'])->name('transfers.store')->middleware('can:ccdc.manage');
+
+            // Disposals (CCXL-)
+            Route::get('{tool}/disposals/create', [SmallToolDisposalController::class, 'create'])->name('disposals.create')->middleware('can:ccdc.dispose');
+            Route::post('{tool}/disposals',       [SmallToolDisposalController::class, 'store'])->name('disposals.store')->middleware('can:ccdc.dispose');
+
+            // Reports
+            Route::get('reports/ledger',              [SmallToolReportController::class, 'ledger'])->name('reports.ledger')->middleware('can:ccdc.view');
+            Route::get('reports/allocation-schedule', [SmallToolReportController::class, 'allocationSchedule'])->name('reports.allocation-schedule')->middleware('can:ccdc.view');
+            Route::get('reports/gl-reconcile',        [SmallToolReportController::class, 'glReconcile'])->name('reports.gl-reconcile')->middleware('can:ccdc.view');
+        });
     });
 
     // Support - ticket kỹ thuật và bảo hành
@@ -535,6 +597,7 @@ Route::middleware('auth')->group(function () {
         Route::resource('purchase-returns', PurchaseReturnController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
         Route::post('purchase-returns/{purchaseReturn}/confirm', [PurchaseReturnController::class, 'confirm'])->name('purchase-returns.confirm');
         Route::post('purchase-returns/{purchaseReturn}/cancel',  [PurchaseReturnController::class, 'cancel'])->name('purchase-returns.cancel');
+
     });
 
     // Reports - báo cáo
@@ -599,4 +662,16 @@ Route::middleware('auth')->group(function () {
 
     // JSON API for unread count
     Route::get('api/notifications/unread-count', [\App\Http\Controllers\NotificationController::class, 'unreadCount'])->name('notifications.unread-count');
+
+    // ─── Lightweight JSON search endpoints (used by RemoteSearchSelect components) ───
+    Route::prefix('api/search')->name('search.')->group(function () {
+        Route::get('suppliers',     [SearchController::class, 'suppliers'])->name('suppliers');
+        Route::get('customers',     [SearchController::class, 'customers'])->name('customers');
+        Route::get('products',      [SearchController::class, 'products'])->name('products');
+        Route::get('account-codes', [SearchController::class, 'accountCodes'])->name('account-codes');
+        Route::get('employees',     [SearchController::class, 'employees'])->name('employees');
+        Route::get('projects',      [SearchController::class, 'projects'])->name('projects');
+        Route::get('warehouses',    [SearchController::class, 'warehouses'])->name('warehouses');
+        Route::get('services',      [SearchController::class, 'services'])->name('services');
+    });
 });

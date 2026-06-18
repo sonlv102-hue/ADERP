@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Enums\PurchaseInvoiceStatus;
+use App\Models\ArApOpeningBalance;
 use App\Models\PurchaseInvoice;
 use App\Models\SupplierAdvanceAllocation;
 use App\Models\SupplierOpeningAdvance;
@@ -154,7 +155,6 @@ class SupplierAdvanceService
 
         DB::transaction(function () use ($allocation, $reason) {
             $advance = $allocation->advance;
-            $invoice = $allocation->invoice;
             $amount  = (float) $allocation->allocated_amount;
 
             $allocation->update([
@@ -170,9 +170,77 @@ class SupplierAdvanceService
                 'status'           => $newRemaining >= (float) $advance->amount ? 'open' : 'partially_applied',
             ]);
 
-            $newAllocated = round(max(0, (float) $invoice->advance_allocated_amount - $amount), 2);
-            $invoice->update(['advance_allocated_amount' => $newAllocated]);
-            $this->recalculateInvoiceStatus($invoice->fresh());
+            if ($allocation->purchase_invoice_id) {
+                $invoice      = $allocation->invoice;
+                $newAllocated = round(max(0, (float) $invoice->advance_allocated_amount - $amount), 2);
+                $invoice->update(['advance_allocated_amount' => $newAllocated]);
+                $this->recalculateInvoiceStatus($invoice->fresh());
+            } elseif ($allocation->ar_ap_opening_balance_id) {
+                $ob = $allocation->openingBalance;
+                $ob->update(['remaining_amount' => round((float) $ob->remaining_amount + $amount, 2)]);
+            }
+        });
+    }
+
+    /**
+     * Đối trừ ứng trước NCC với công nợ đầu kỳ AP.
+     * Không tạo bút toán — chỉ allocation record + giảm remaining trên cả hai phía.
+     */
+    public function allocateToOpeningBalance(
+        SupplierOpeningAdvance $advance,
+        ArApOpeningBalance $openingBalance,
+        float $amount,
+        string $allocationDate,
+        ?string $reason = null
+    ): SupplierAdvanceAllocation {
+        if ($advance->supplier_id !== $openingBalance->supplier_id) {
+            throw new \RuntimeException('Khoản ứng trước và công nợ đầu kỳ phải thuộc cùng nhà cung cấp.');
+        }
+        if ($openingBalance->type !== 'ap') {
+            throw new \RuntimeException('Chỉ đối trừ được công nợ phải trả (AP).');
+        }
+        if (!$advance->isAvailable()) {
+            throw new \RuntimeException('Khoản ứng trước đã dùng hết hoặc đã hủy.');
+        }
+
+        $advRemaining = (float) $advance->remaining_amount;
+        if ($amount > $advRemaining + 0.01) {
+            throw new \RuntimeException(
+                'Số đối trừ (' . number_format($amount) . ') vượt quá ứng trước còn lại (' . number_format($advRemaining) . ').'
+            );
+        }
+
+        $obRemaining = (float) $openingBalance->remaining_amount;
+        if ($amount > $obRemaining + 0.01) {
+            throw new \RuntimeException(
+                'Số đối trừ (' . number_format($amount) . ') vượt quá công nợ còn lại (' . number_format($obRemaining) . ').'
+            );
+        }
+
+        return DB::transaction(function () use ($advance, $openingBalance, $amount, $allocationDate, $reason, $advRemaining, $obRemaining) {
+            $allocation = SupplierAdvanceAllocation::create([
+                'supplier_id'              => $advance->supplier_id,
+                'opening_advance_id'       => $advance->id,
+                'purchase_invoice_id'      => null,
+                'ar_ap_opening_balance_id' => $openingBalance->id,
+                'allocation_date'          => $allocationDate,
+                'allocated_amount'         => $amount,
+                'status'                   => 'active',
+                'reason'                   => $reason,
+                'created_by'               => auth()->id(),
+            ]);
+
+            $newAdvRemaining = round($advRemaining - $amount, 2);
+            $advance->update([
+                'remaining_amount' => $newAdvRemaining,
+                'status'           => $newAdvRemaining <= 0 ? 'fully_applied' : 'partially_applied',
+            ]);
+
+            $openingBalance->update(['remaining_amount' => round($obRemaining - $amount, 2)]);
+
+            Log::info("SupplierAdvance #{$advance->id} đối trừ " . number_format($amount) . " đ vào công nợ ĐK #{$openingBalance->id}");
+
+            return $allocation;
         });
     }
 

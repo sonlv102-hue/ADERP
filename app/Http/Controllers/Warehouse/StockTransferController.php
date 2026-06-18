@@ -150,7 +150,7 @@ class StockTransferController extends Controller
                 ->with('error', 'Chỉ có thể chỉnh sửa phiếu ở trạng thái nháp.');
         }
 
-        $stockTransfer->load(['items.serials']);
+        $stockTransfer->load(['items.product', 'items.serials']);
 
         // Allow overriding warehouse for serial reload via query param
         $fromWarehouseId = $request->query('from_warehouse_id')
@@ -166,9 +166,11 @@ class StockTransferController extends Controller
                 'transfer_date'     => $stockTransfer->transfer_date->format('Y-m-d'),
                 'notes'             => $stockTransfer->notes,
                 'items'             => $stockTransfer->items->map(fn ($item) => [
-                    'product_id' => $item->product_id,
-                    'quantity'   => $item->quantity,
-                    'serial_ids' => $item->serials->pluck('id')->toArray(),
+                    'product_id'   => $item->product_id,
+                    'product_name' => $item->product?->name ?? '',
+                    'product_unit' => $item->product?->unit ?? '',
+                    'quantity'     => $item->quantity,
+                    'serial_ids'   => $item->serials->pluck('id')->toArray(),
                 ]),
             ],
             'nextCode'   => null,

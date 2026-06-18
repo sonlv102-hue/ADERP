@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\Accounting;
 
 use App\Http\Controllers\Controller;
-use App\Models\AccountCode;
 use App\Models\AccountingPeriod;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
@@ -70,10 +69,6 @@ class JournalEntryController extends Controller
         return Inertia::render('Accounting/JournalEntries/Form', [
             'entry'    => null,
             'nextCode' => JournalEntry::generateCode(),
-            'accounts' => AccountCode::where('is_active', true)
-                ->where('is_detail', true)
-                ->orderBy('code')
-                ->get(['code', 'name', 'type', 'normal_balance']),
         ]);
     }
 
@@ -84,7 +79,7 @@ class JournalEntryController extends Controller
                 ->with('error', 'Chỉ có thể sửa bút toán ở trạng thái Nháp.');
         }
 
-        $journalEntry->load('lines');
+        $journalEntry->load('lines.account');
 
         return Inertia::render('Accounting/JournalEntries/Form', [
             'entry'    => [
@@ -96,17 +91,14 @@ class JournalEntryController extends Controller
                 'is_auto'        => $journalEntry->is_auto,
                 'edited_by_user' => $journalEntry->edited_by_user,
                 'lines'          => $journalEntry->lines->map(fn ($l) => [
-                    'account_code' => $l->account_code,
-                    'description'  => $l->description,
-                    'debit'        => (float) $l->debit,
-                    'credit'       => (float) $l->credit,
+                    'account_code'    => $l->account_code,
+                    'account_name'    => $l->account?->name ?? '',
+                    'description'     => $l->description,
+                    'debit'           => (float) $l->debit,
+                    'credit'          => (float) $l->credit,
                 ])->values()->toArray(),
             ],
             'nextCode' => null,
-            'accounts' => AccountCode::where('is_active', true)
-                ->where('is_detail', true)
-                ->orderBy('code')
-                ->get(['code', 'name', 'type', 'normal_balance']),
         ]);
     }
 

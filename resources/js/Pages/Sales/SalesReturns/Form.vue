@@ -29,23 +29,24 @@
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Đơn hàng <span class="text-red-500">*</span></label>
-              <select v-model="form.order_id" @change="onOrderChange"
+              <SearchableSelect
+                v-model="form.order_id"
+                :options="orderOptions"
+                placeholder="-- Chọn đơn hàng --"
                 :disabled="!!salesReturn"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none disabled:bg-gray-100 disabled:text-gray-500"
-                :class="{ 'border-red-500': form.errors.order_id }">
-                <option value="">-- Chọn đơn hàng --</option>
-                <option v-for="o in orders" :key="o.id" :value="o.id">{{ o.code }} — {{ o.customer_name }}</option>
-              </select>
+                :has-error="!!form.errors.order_id"
+                @change="onOrderChange"
+              />
               <p v-if="form.errors.order_id" class="mt-1 text-xs text-red-600">{{ form.errors.order_id }}</p>
             </div>
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Kho nhận hàng trả <span class="text-red-500">*</span></label>
-              <select v-model="form.warehouse_id"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                :class="{ 'border-red-500': form.errors.warehouse_id }">
-                <option value="">-- Chọn kho --</option>
-                <option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
-              </select>
+              <SearchableSelect
+                v-model="form.warehouse_id"
+                :options="warehouseOptions"
+                placeholder="-- Chọn kho --"
+                :has-error="!!form.errors.warehouse_id"
+              />
               <p v-if="form.errors.warehouse_id" class="mt-1 text-xs text-red-600">{{ form.errors.warehouse_id }}</p>
             </div>
             <div>
@@ -141,6 +142,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
+import SearchableSelect from '@/Components/Shared/SearchableSelect.vue';
 import axios from 'axios';
 
 const props = defineProps({
@@ -150,6 +152,16 @@ const props = defineProps({
   salesReturn: Object,
   preSelectedOrderId: { type: Number, default: null },
 });
+
+const orderOptions = computed(() =>
+  (props.orders ?? []).map(o => ({
+    value: o.id,
+    label: `${o.code} — ${o.customer_name}`,
+  }))
+);
+const warehouseOptions = computed(() =>
+  (props.warehouses ?? []).map(w => ({ value: w.id, label: w.name }))
+);
 
 const availableItems = ref([]);
 const loadingItems = ref(false);

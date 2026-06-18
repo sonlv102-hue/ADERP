@@ -25,18 +25,12 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Quỹ nguồn <span class="text-red-500">*</span></label>
-            <select v-model="form.from_fund_id"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-              :class="{ 'border-red-500': form.errors.from_fund_id }">
-              <option :value="null">-- Chọn quỹ nguồn --</option>
-              <optgroup v-for="(group, type) in groupedFunds" :key="type" :label="type">
-                <option v-for="f in group" :key="f.id" :value="f.id"
-                  :disabled="f.id === form.to_fund_id">
-                  {{ f.name }}
-                  <template v-if="f.account_code"> ({{ f.account_code }})</template>
-                </option>
-              </optgroup>
-            </select>
+            <SearchableSelect
+              v-model="form.from_fund_id"
+              :options="fromFundOptions"
+              placeholder="-- Chọn quỹ nguồn --"
+              :has-error="!!form.errors.from_fund_id"
+            />
             <p v-if="fromFund" class="mt-1 text-xs text-gray-500">
               Số dư: <span :class="fromFund.balance < 0 ? 'text-red-600 font-semibold' : 'text-gray-700'">{{ formatVnd(fromFund.balance) }}</span>
             </p>
@@ -45,18 +39,12 @@
 
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Quỹ đích <span class="text-red-500">*</span></label>
-            <select v-model="form.to_fund_id"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-              :class="{ 'border-red-500': form.errors.to_fund_id }">
-              <option :value="null">-- Chọn quỹ đích --</option>
-              <optgroup v-for="(group, type) in groupedFunds" :key="type" :label="type">
-                <option v-for="f in group" :key="f.id" :value="f.id"
-                  :disabled="f.id === form.from_fund_id">
-                  {{ f.name }}
-                  <template v-if="f.account_code"> ({{ f.account_code }})</template>
-                </option>
-              </optgroup>
-            </select>
+            <SearchableSelect
+              v-model="form.to_fund_id"
+              :options="toFundOptions"
+              placeholder="-- Chọn quỹ đích --"
+              :has-error="!!form.errors.to_fund_id"
+            />
             <p v-if="form.errors.to_fund_id" class="mt-1 text-xs text-red-600">{{ form.errors.to_fund_id }}</p>
           </div>
         </div>
@@ -106,6 +94,7 @@
 import { computed } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
+import SearchableSelect from '@/Components/Shared/SearchableSelect.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({
@@ -122,6 +111,27 @@ const form = useForm({
   amount:        null,
   description:   '',
 });
+
+const fromFundOptions = computed(() =>
+  (props.funds ?? [])
+    .filter(f => f.id !== form.to_fund_id)
+    .map(f => ({
+      value: f.id,
+      label: f.name,
+      code: f.account_code || '',
+      meta: f.type === 'bank' ? 'Ngân hàng' : 'Tiền mặt',
+    }))
+);
+const toFundOptions = computed(() =>
+  (props.funds ?? [])
+    .filter(f => f.id !== form.from_fund_id)
+    .map(f => ({
+      value: f.id,
+      label: f.name,
+      code: f.account_code || '',
+      meta: f.type === 'bank' ? 'Ngân hàng' : 'Tiền mặt',
+    }))
+);
 
 const groupedFunds = computed(() => {
   const groups = { 'Tiền mặt': [], 'Ngân hàng': [] };

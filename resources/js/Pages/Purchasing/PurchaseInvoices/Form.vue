@@ -37,11 +37,13 @@
           <!-- Nhà cung cấp -->
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Nhà cung cấp <span class="text-red-500">*</span></label>
-            <select v-model="form.supplier_id"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-              <option value="">-- Chọn NCC --</option>
-              <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}</option>
-            </select>
+            <RemoteSearchSelect
+              v-model="form.supplier_id"
+              :search-url="route('search.suppliers')"
+              :display-text="supplierDisplay"
+              placeholder="-- Tìm nhà cung cấp --"
+              :has-error="!!form.errors.supplier_id"
+            />
             <p v-if="form.errors.supplier_id" class="text-red-500 text-xs mt-1">{{ form.errors.supplier_id }}</p>
           </div>
         </div>
@@ -114,11 +116,11 @@
         <!-- TK chi phí: ẩn khi hàng hóa/TSCĐ/chi phí trả trước (kế toán xử lý bởi service khác) -->
         <div v-if="showExpenseAccount">
           <label class="block text-sm font-medium text-gray-700 mb-1">{{ expenseAccountLabel }}</label>
-          <select v-model="form.expense_account_code"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-            <option value="">-- {{ expenseAccountPlaceholder }} --</option>
-            <option v-for="acc in expenseAccounts" :key="acc.code" :value="acc.code">{{ acc.name }}</option>
-          </select>
+          <SearchableSelect
+            v-model="form.expense_account_code"
+            :options="expenseAccountOptions"
+            :placeholder="`-- ${expenseAccountPlaceholder} --`"
+          />
         </div>
 
         <!-- Ghi chú -->
@@ -144,21 +146,34 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
+import SearchableSelect from '@/Components/Shared/SearchableSelect.vue';
+import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 
 const props = defineProps({
-  invoice:         Object,
-  nextCode:        String,
-  purchaseOrders:  Array,
-  suppliers:       Array,
-  expenseAccounts: Array,
-  invoiceTypes:    Array,
-  selectedOrderId: [Number, String],
+  invoice:              Object,
+  nextCode:             String,
+  purchaseOrders:       Array,
+  expenseAccounts:      Array,
+  invoiceTypes:         Array,
+  selectedOrderId:      [Number, String],
+  initialSupplierName:  String,
+  initialSupplierCode:  String,
 });
 
 const today = new Date().toISOString().split('T')[0];
+
+const supplierDisplay = ref(
+  props.initialSupplierCode && props.initialSupplierName
+    ? `${props.initialSupplierCode} - ${props.initialSupplierName}`
+    : (props.initialSupplierName ?? '')
+);
+
+const expenseAccountOptions = computed(() =>
+  (props.expenseAccounts ?? []).map(a => ({ value: a.code, code: a.code, label: a.name }))
+);
 
 const form = useForm({
   code:                 props.invoice?.code              ?? props.nextCode,
@@ -224,9 +239,7 @@ function onOrderChange() {
   if (!po) return;
 
   form.supplier_id = po.supplier_id;
-
-  const supplier = props.suppliers?.find(s => s.id === po.supplier_id);
-  form.supplier_tax_code = supplier?.tax_code ?? '';
+  supplierDisplay.value = po.supplier ?? '';
 
   form.subtotal   = po.subtotal   ?? 0;
   form.tax_amount = po.tax_amount ?? 0;

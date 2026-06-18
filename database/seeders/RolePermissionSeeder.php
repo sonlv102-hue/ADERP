@@ -46,6 +46,8 @@ class RolePermissionSeeder extends Seeder
             'purchase-returns.view', 'purchase-returns.create', 'purchase-returns.edit', 'purchase-returns.delete',
             // Price Lists
             'price-lists.view', 'price-lists.create', 'price-lists.edit', 'price-lists.delete',
+            // CCDC — Công cụ dụng cụ
+            'ccdc.view', 'ccdc.manage', 'ccdc.allocate', 'ccdc.dispose', 'ccdc.cancel',
             // Admin
             'admin.users', 'admin.roles',
         ];
@@ -120,6 +122,7 @@ class RolePermissionSeeder extends Seeder
                 'commissions.view', 'commissions.pay',
                 'documents.view', 'documents.create', 'documents.manage',
                 'reports.view',
+                'ccdc.view', 'ccdc.manage', 'ccdc.allocate', 'ccdc.dispose', 'ccdc.cancel',
             ],
             'cskh' => [
                 'customers.view', 'customers.create', 'customers.edit',

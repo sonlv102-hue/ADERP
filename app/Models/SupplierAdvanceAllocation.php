@@ -9,6 +9,7 @@ class SupplierAdvanceAllocation extends Model
 {
     protected $fillable = [
         'supplier_id', 'opening_advance_id', 'purchase_invoice_id',
+        'ar_ap_opening_balance_id',
         'allocation_date', 'allocated_amount', 'status', 'reason',
         'created_by', 'reversed_by', 'reversed_at',
     ];
@@ -27,6 +28,11 @@ class SupplierAdvanceAllocation extends Model
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(PurchaseInvoice::class, 'purchase_invoice_id');
+    }
+
+    public function openingBalance(): BelongsTo
+    {
+        return $this->belongsTo(ArApOpeningBalance::class, 'ar_ap_opening_balance_id');
     }
 
     public function supplier(): BelongsTo

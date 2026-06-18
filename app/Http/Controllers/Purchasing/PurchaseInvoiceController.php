@@ -10,7 +10,6 @@ use App\Models\Fund;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
-use App\Models\Supplier;
 use App\Services\PurchaseInvoiceService;
 use App\Services\SupplierAdvanceService;
 use Illuminate\Http\RedirectResponse;
@@ -99,7 +98,6 @@ class PurchaseInvoiceController extends Controller
                     ),
                     'default_invoice_type' => $this->detectInvoiceType($po->items),
                 ]),
-            'suppliers'        => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'name', 'tax_code']),
             'selectedOrderId'  => $request->input('purchase_order_id'),
             'expenseAccounts'  => $this->expenseAccountList(),
             'invoiceTypes'     => $this->invoiceTypeList(),
@@ -270,8 +268,12 @@ class PurchaseInvoiceController extends Controller
 
     public function edit(PurchaseInvoice $purchaseInvoice): Response
     {
+        $purchaseInvoice->load('supplier');
+
         return Inertia::render('Purchasing/PurchaseInvoices/Form', [
-            'invoice'        => $purchaseInvoice,
+            'invoice'             => $purchaseInvoice,
+            'initialSupplierName' => $purchaseInvoice->supplier?->name ?? '',
+            'initialSupplierCode' => $purchaseInvoice->supplier?->code ?? '',
             'purchaseOrders' => PurchaseOrder::with(['supplier', 'items'])
                 ->where(fn ($q) => $q->whereIn('status', ['sent', 'received'])
                     ->orWhere('id', $purchaseInvoice->purchase_order_id))
@@ -284,7 +286,6 @@ class PurchaseInvoiceController extends Controller
                     'supplier'             => $po->supplier->name,
                     'default_invoice_type' => $this->detectInvoiceType($po->items),
                 ]),
-            'suppliers'       => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'name', 'tax_code']),
             'expenseAccounts' => $this->expenseAccountList(),
             'invoiceTypes'    => $this->invoiceTypeList(),
         ]);

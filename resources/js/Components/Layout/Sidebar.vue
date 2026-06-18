@@ -54,6 +54,7 @@
           <NavItem :href="route('purchasing.purchase-orders.index')" icon="document-text" sub>Đơn mua hàng</NavItem>
           <NavItem :href="route('purchasing.purchase-contracts.index')" icon="document" sub>Hợp đồng mua</NavItem>
           <NavItem :href="route('purchasing.purchase-invoices.index')" icon="receipt-tax" sub>Hóa đơn đầu vào</NavItem>
+          <NavItem :href="route('purchasing.supplier-advances.index')" icon="cash" sub>Tiền trả trước NCC</NavItem>
           <NavItem v-if="can('purchase-returns.view')" :href="route('purchasing.purchase-returns.index')" icon="reply" sub>Trả hàng mua</NavItem>
         </NavGroup>
 
@@ -99,15 +100,15 @@
 
           <NavGroup label="Công nợ phải thu (AR)" icon="inbox-in" prefix="/accounting/ar">
             <NavItem :href="route('accounting.ar-collections.index')" icon="inbox-in" sub>Thu nợ KH (TK 131)</NavItem>
-            <NavItem v-if="can('accounting.manage')" :href="route('accounting.ar-ap-opening-balance.index')" icon="users" sub>Công nợ đầu kỳ</NavItem>
-            <NavItem :href="route('reports.ar.aging')" icon="users" sub>Công nợ phải thu (AR)</NavItem>
+            <NavItem v-if="can('accounting.manage')" :href="route('accounting.ar-ap-opening-balance.index')" icon="clock" sub>Công nợ đầu kỳ</NavItem>
+            <NavItem :href="route('reports.ar.aging')" icon="chart-bar" sub>Công nợ phải thu (AR)</NavItem>
             <NavItem :href="route('reports.ar.detail')" icon="document-text" sub>Sổ chi tiết CN phải thu</NavItem>
           </NavGroup>
 
-          <NavGroup label="Công nợ phải trả (AP)" icon="inbox" prefix="/accounting/ap">
-            <NavItem :href="route('accounting.ap-payments.index')" icon="inbox" sub>Trả NCC (TK 331)</NavItem>
-            <NavItem v-if="can('accounting.manage')" :href="route('accounting.ar-ap-opening-balance.index')" icon="users" sub>Công nợ đầu kỳ</NavItem>
-            <NavItem :href="route('reports.ap.aging')" icon="truck" sub>Công nợ phải trả (AP)</NavItem>
+          <NavGroup label="Công nợ phải trả (AP)" icon="arrows-expand" prefix="/accounting/ap">
+            <NavItem :href="route('accounting.ap-payments.index')" icon="currency-dollar" sub>Trả NCC (TK 331)</NavItem>
+            <NavItem v-if="can('accounting.manage')" :href="route('accounting.ar-ap-opening-balance.index')" icon="clock" sub>Công nợ đầu kỳ</NavItem>
+            <NavItem :href="route('reports.ap.aging')" icon="chart-bar" sub>Công nợ phải trả (AP)</NavItem>
             <NavItem :href="route('reports.ap.detail')" icon="document-text" sub>Sổ chi tiết CN phải trả</NavItem>
           </NavGroup>
 
@@ -134,12 +135,24 @@
             <NavItem :href="route('accounting.fixed-assets.reports.reconciliation')" icon="check-circle" sub>Báo cáo TSCĐ</NavItem>
           </NavGroup>
 
+          <NavGroup v-if="can('ccdc.view')" label="Công cụ dụng cụ" icon="wrench" prefix="/accounting/small-tools">
+            <NavItem :href="route('accounting.small-tools.index')" icon="view-list" sub>Danh sách CCDC</NavItem>
+            <NavItem :href="route('accounting.small-tools.receipts.index')" icon="inbox" sub>Phiếu nhập CCDC</NavItem>
+            <NavItem :href="route('accounting.small-tools.issues.index')" icon="share" sub>Phiếu xuất dùng</NavItem>
+            <NavItem :href="route('accounting.small-tools.allocations.index')" icon="refresh" sub>Phân bổ hàng tháng</NavItem>
+            <NavItem :href="route('accounting.small-tools.reports.ledger')" icon="document-text" sub>Sổ theo dõi CCDC</NavItem>
+            <NavItem :href="route('accounting.small-tools.reports.allocation-schedule')" icon="calendar" sub>Bảng phân bổ</NavItem>
+            <NavItem v-if="can('accounting.manage')" :href="route('accounting.small-tools.reports.gl-reconcile')" icon="check-circle" sub>Đối soát GL</NavItem>
+            <NavItem v-if="can('ccdc.manage')" :href="route('accounting.small-tools.categories.index')" icon="tag" sub>Danh mục CCDC</NavItem>
+          </NavGroup>
+
           <NavGroup label="Kế toán tổng hợp" icon="pencil-alt" prefix="/accounting/journal">
             <NavItem v-if="can('accounting.manage')" :href="route('accounting.opening-balance.index')" icon="database" sub>Số dư đầu kỳ (TK)</NavItem>
             <NavItem :href="route('accounting.journal-entries.index')" icon="pencil-alt" sub>Phiếu kế toán</NavItem>
             <NavItem v-if="can('accounting.manage')" :href="route('accounting.account-codes.index')" icon="view-list" sub>Hệ thống tài khoản</NavItem>
             <NavItem v-if="can('accounting.manage')" :href="route('accounting.accounting-periods.index')" icon="calendar" sub>Kỳ kế toán</NavItem>
             <NavItem v-if="can('accounting.manage')" :href="route('accounting.period-close.index')" icon="check-circle" sub>Kết chuyển cuối kỳ</NavItem>
+            <NavItem v-if="can('accounting.manage')" :href="route('accounting.journal-audit.index')" icon="magnifying-glass" sub>Kiểm toán bút toán</NavItem>
             <NavItem :href="route('reports.general_journal')" icon="book-open" sub>Sổ nhật ký chung</NavItem>
             <NavItem :href="route('reports.account_ledger')" icon="document-text" sub>Sổ chi tiết TK</NavItem>
             <NavItem :href="route('reports.document_checklist')" icon="clipboard-check" sub>Bảng kê chứng từ</NavItem>

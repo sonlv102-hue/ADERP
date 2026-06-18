@@ -57,30 +57,24 @@
 
               <!-- Nhà cung cấp -->
               <FormField label="Nhà cung cấp" required :error="form.errors.supplier_id">
-                <select
+                <RemoteSearchSelect
                   v-model="form.supplier_id"
-                  class="w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow]"
-                  :class="form.errors.supplier_id
-                    ? 'border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-2 focus:ring-red-100'
-                    : 'border-gray-200 bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100'"
-                >
-                  <option value="">— Chọn nhà cung cấp —</option>
-                  <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.code }} – {{ s.name }}</option>
-                </select>
+                  :search-url="route('search.suppliers')"
+                  :display-text="initialSupplierDisplay"
+                  placeholder="— Chọn nhà cung cấp —"
+                  :has-error="!!form.errors.supplier_id"
+                />
               </FormField>
 
               <!-- Kho nhận hàng -->
               <FormField label="Kho nhận hàng" required :error="form.errors.warehouse_id">
-                <select
+                <RemoteSearchSelect
                   v-model="form.warehouse_id"
-                  class="w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow]"
-                  :class="form.errors.warehouse_id
-                    ? 'border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-2 focus:ring-red-100'
-                    : 'border-gray-200 bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100'"
-                >
-                  <option value="">— Chọn kho —</option>
-                  <option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
-                </select>
+                  :search-url="route('search.warehouses')"
+                  :display-text="initialWarehouseDisplay"
+                  placeholder="— Chọn kho —"
+                  :has-error="!!form.errors.warehouse_id"
+                />
               </FormField>
 
               <!-- Ngày đặt -->
@@ -127,13 +121,12 @@
 
               <!-- Dự án liên kết -->
               <FormField label="Dự án liên kết" optional>
-                <select
+                <RemoteSearchSelect
                   v-model="form.project_id"
-                  class="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow] focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
-                >
-                  <option :value="null">— Không liên kết —</option>
-                  <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.code }} — {{ p.name }}</option>
-                </select>
+                  :search-url="route('search.projects')"
+                  :display-text="initialProjectDisplay"
+                  placeholder="— Không liên kết —"
+                />
               </FormField>
             </div>
 
@@ -210,14 +203,14 @@
                   class="transition-colors hover:bg-blue-50/20">
                   <td class="px-5 py-2.5">
                     <ProductSearch
-                      :options="products"
                       v-model="item.product_id"
+                      :display-text="item._productDisplay"
                       @select="onProductSelect(index, $event)"
                     />
                   </td>
                   <td class="px-3 py-2.5">
                     <input
-                      :value="itemUnit(item.product_id)"
+                      :value="item._unit"
                       type="text"
                       readonly
                       tabindex="-1"
@@ -329,23 +322,45 @@ import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import FormField from '@/Components/Shared/FormField.vue';
 import ProductSearch from '@/Components/Shared/ProductSearch.vue';
+import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({
-  nextCode: String,
-  suppliers: Array,
-  warehouses: Array,
-  products: Array,
-  projects: { type: Array, default: () => [] },
-  orders: { type: Array, default: () => [] },
-  prefillOrderId: { type: Number, default: null },
-  invoiceTypes: Array,
-  purchaseOrder: Object,
+  nextCode:          String,
+  purchaseOrder:     Object,
+  orders:            { type: Array, default: () => [] },
+  prefillOrderId:    { type: Number, default: null },
+  prefillOrderLabel: { type: String, default: null },
+  invoiceTypes:      Array,
 });
 
 const { formatVnd } = useCurrency();
 
+// Initial display text for edit mode (for RemoteSearchSelect)
+const initialSupplierDisplay = computed(() =>
+  props.purchaseOrder
+    ? [props.purchaseOrder.supplier_code, props.purchaseOrder.supplier_name].filter(Boolean).join(' - ')
+    : ''
+);
+const initialWarehouseDisplay = computed(() =>
+  props.purchaseOrder ? props.purchaseOrder.warehouse_name ?? '' : ''
+);
+const initialProjectDisplay = computed(() =>
+  props.purchaseOrder?.project_id
+    ? [props.purchaseOrder.project_code, props.purchaseOrder.project_name].filter(Boolean).join(' - ')
+    : ''
+);
+
 const today = new Date().toISOString().slice(0, 10);
+
+// Map items to include _productDisplay/_unit for edit mode
+const initItems = () => (props.purchaseOrder?.items ?? []).map(item => ({
+  ...item,
+  _productDisplay: item.product_code && item.product_name
+    ? `${item.product_code} - ${item.product_name}`
+    : '',
+  _unit: item.unit ?? '',
+}));
 
 const form = useForm({
   code:          props.purchaseOrder?.code          ?? props.nextCode ?? '',
@@ -357,36 +372,45 @@ const form = useForm({
   expected_date: props.purchaseOrder?.expected_date  ?? '',
   notes:         props.purchaseOrder?.notes          ?? '',
   invoice_type:  props.purchaseOrder?.invoice_type   ?? 'vat',
-  items:         props.purchaseOrder?.items          ?? [],
+  items:         initItems(),
 });
 
 const addRow = () => {
-  form.items.push({ product_id: '', quantity: 1, unit_price: 0, vat_rate: 10 });
+  form.items.push({ product_id: null, quantity: 1, unit_price: 0, vat_rate: 10, _productDisplay: '', _unit: '' });
 };
 
 const removeRow = (index) => {
   form.items.splice(index, 1);
 };
 
-const onProductSelect = (index, product) => {
-  if (product) form.items[index].unit_price = product.cost_price ?? 0;
+const onProductSelect = (index, opt) => {
+  if (opt) {
+    form.items[index].unit_price      = opt.cost_price ?? 0;
+    form.items[index]._unit           = opt.unit ?? opt.meta ?? '';
+    form.items[index]._productDisplay = `${opt.code} - ${opt.label}`;
+  } else {
+    form.items[index]._unit           = '';
+    form.items[index]._productDisplay = '';
+  }
 };
-
-const itemUnit = (productId) => props.products.find(p => p.id === productId)?.unit ?? '';
 
 const itemBase = (item) => (item.quantity || 0) * (item.unit_price || 0);
 const itemVat  = (item) => Math.round(itemBase(item) * (item.vat_rate || 0) / 100);
 const itemTotalWithVat = (item) => itemBase(item) + itemVat(item);
 
-const subtotal = computed(() => form.items.reduce((s, i) => s + itemBase(i), 0));
-const totalVat = computed(() => form.items.reduce((s, i) => s + itemVat(i), 0));
+const subtotal   = computed(() => form.items.reduce((s, i) => s + itemBase(i), 0));
+const totalVat   = computed(() => form.items.reduce((s, i) => s + itemVat(i), 0));
 const grandTotal = computed(() => subtotal.value + totalVat.value);
 
 const submit = () => {
+  // Strip internal display fields before sending
+  const payload = form.items.map(({ _productDisplay, _unit, ...rest }) => rest);
   if (props.purchaseOrder) {
-    form.put(route('purchasing.purchase-orders.update', props.purchaseOrder.id));
+    form.transform(data => ({ ...data, items: payload }))
+        .put(route('purchasing.purchase-orders.update', props.purchaseOrder.id));
   } else {
-    form.post(route('purchasing.purchase-orders.store'));
+    form.transform(data => ({ ...data, items: payload }))
+        .post(route('purchasing.purchase-orders.store'));
   }
 };
 </script>

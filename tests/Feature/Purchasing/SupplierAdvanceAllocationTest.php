@@ -4,6 +4,7 @@ namespace Tests\Feature\Purchasing;
 
 use App\Enums\PurchaseInvoiceStatus;
 use App\Models\AccountingPeriod;
+use App\Models\ArApOpeningBalance;
 use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\Supplier;
@@ -259,5 +260,103 @@ class SupplierAdvanceAllocationTest extends TestCase
         // Không thể thu hồi lần nữa
         $this->expectException(\RuntimeException::class);
         $this->service->reverse($allocation, 'Lần 2');
+    }
+
+    // ─── Helpers cho opening balance ─────────────────────────────────────
+
+    private function makeOpeningBalance(Supplier $supplier, float $amount): ArApOpeningBalance
+    {
+        return ArApOpeningBalance::create([
+            'type'             => 'ap',
+            'period'           => '2026-01',
+            'supplier_id'      => $supplier->id,
+            'amount'           => $amount,
+            'remaining_amount' => $amount,
+            'created_by'       => $this->user->id,
+        ]);
+    }
+
+    // ─── TC7: đối trừ advance vào opening balance AP ─────────────────────
+
+    public function test_tc7_advance_offset_opening_balance_fully(): void
+    {
+        $advance = $this->makeAdvance($this->supplier, 5_000_000);
+        $ob      = $this->makeOpeningBalance($this->supplier, 5_000_000);
+
+        $allocation = $this->service->allocateToOpeningBalance(
+            $advance, $ob, 5_000_000, '2026-06-18', 'Đối trừ CN ĐK'
+        );
+
+        $advance->refresh();
+        $ob->refresh();
+
+        // Opening balance = 0
+        $this->assertEquals(0.0, (float) $ob->remaining_amount);
+
+        // Ứng trước hết
+        $this->assertEquals(0.0, (float) $advance->remaining_amount);
+        $this->assertEquals('fully_applied', $advance->status);
+
+        // Allocation record đúng
+        $this->assertDatabaseHas('supplier_advance_allocations', [
+            'id'                       => $allocation->id,
+            'ar_ap_opening_balance_id' => $ob->id,
+            'purchase_invoice_id'      => null,
+            'status'                   => 'active',
+        ]);
+    }
+
+    // ─── TC8: không cho đối trừ advance của NCC khác vào opening balance ──
+
+    public function test_tc8_cannot_offset_other_supplier_advance_to_opening_balance(): void
+    {
+        $advance = $this->makeAdvance($this->otherSupplier, 5_000_000);
+        $ob      = $this->makeOpeningBalance($this->supplier, 5_000_000);
+
+        $this->expectException(\RuntimeException::class);
+        $this->service->allocateToOpeningBalance($advance, $ob, 5_000_000, '2026-06-18');
+    }
+
+    // ─── TC9: không cho đối trừ vượt advance remaining ──────────────────
+
+    public function test_tc9_cannot_over_allocate_to_opening_balance(): void
+    {
+        $advance = $this->makeAdvance($this->supplier, 3_000_000);
+        $ob      = $this->makeOpeningBalance($this->supplier, 5_000_000);
+
+        $this->expectException(\RuntimeException::class);
+        $this->service->allocateToOpeningBalance($advance, $ob, 4_000_000, '2026-06-18');
+    }
+
+    // ─── TC10: thu hồi đối trừ opening balance → hoàn lại cả hai ────────
+
+    public function test_tc10_reverse_opening_balance_allocation_restores_both(): void
+    {
+        $advance = $this->makeAdvance($this->supplier, 10_000_000);
+        $ob      = $this->makeOpeningBalance($this->supplier, 8_000_000);
+
+        $allocation = $this->service->allocateToOpeningBalance(
+            $advance, $ob, 8_000_000, '2026-06-18', 'Đối trừ ĐK'
+        );
+
+        // Sau đối trừ
+        $advance->refresh();
+        $ob->refresh();
+        $this->assertEquals(2_000_000, (float) $advance->remaining_amount);
+        $this->assertEquals(0.0, (float) $ob->remaining_amount);
+
+        // Thu hồi
+        $this->service->reverse($allocation, 'Thu hồi test');
+
+        $advance->refresh();
+        $ob->refresh();
+
+        // Cả hai hoàn lại
+        $this->assertEquals(10_000_000, (float) $advance->remaining_amount);
+        $this->assertEquals(8_000_000, (float) $ob->remaining_amount);
+        $this->assertEquals('open', $advance->status);
+
+        $allocation->refresh();
+        $this->assertEquals('reversed', $allocation->status);
     }
 }

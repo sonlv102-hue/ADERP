@@ -64,31 +64,23 @@
 
               <!-- Kho nguồn -->
               <FormField label="Kho nguồn" required :error="form.errors.from_warehouse_id">
-                <select
+                <SearchableSelect
                   v-model="form.from_warehouse_id"
+                  :options="warehouseOptions"
+                  placeholder="— Chọn kho nguồn —"
+                  :has-error="!!form.errors.from_warehouse_id"
                   @change="onFromWarehouseChange"
-                  class="w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow]"
-                  :class="form.errors.from_warehouse_id
-                    ? 'border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-2 focus:ring-red-100'
-                    : 'border-gray-200 bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100'"
-                >
-                  <option value="">— Chọn kho nguồn —</option>
-                  <option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
-                </select>
+                />
               </FormField>
 
               <!-- Kho đích -->
               <FormField label="Kho đích" required :error="form.errors.to_warehouse_id">
-                <select
+                <SearchableSelect
                   v-model="form.to_warehouse_id"
-                  class="w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow]"
-                  :class="form.errors.to_warehouse_id
-                    ? 'border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-2 focus:ring-red-100'
-                    : 'border-gray-200 bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100'"
-                >
-                  <option value="">— Chọn kho đích —</option>
-                  <option v-for="w in toWarehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
-                </select>
+                  :options="toWarehouseOptions"
+                  placeholder="— Chọn kho đích —"
+                  :has-error="!!form.errors.to_warehouse_id"
+                />
               </FormField>
             </div>
 
@@ -157,9 +149,9 @@
                 <div class="flex-1">
                   <label class="mb-1.5 block text-xs font-medium text-gray-600">Sản phẩm</label>
                   <ProductSearch
-                    :options="products"
                     v-model="item.product_id"
-                    @select="() => onProductChange(index)"
+                    :display-text="item._productDisplay"
+                    @select="opt => onProductChange(index, opt)"
                     :has-error="!!form.errors[`items.${index}.product_id`]"
                   />
                   <p v-if="form.errors[`items.${index}.product_id`]"
@@ -308,6 +300,7 @@ import { Link, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import FormField from '@/Components/Shared/FormField.vue';
 import ProductSearch from '@/Components/Shared/ProductSearch.vue';
+import SearchableSelect from '@/Components/Shared/SearchableSelect.vue';
 
 const props = defineProps({
   nextCode: String,
@@ -326,14 +319,23 @@ const form = useForm({
   transfer_date: props.transfer?.transfer_date ?? today,
   notes: props.transfer?.notes ?? '',
   items: props.transfer?.items?.map(i => ({
-    product_id: i.product_id,
-    quantity: i.quantity,
-    serial_ids: i.serial_ids ?? [],
+    product_id:      i.product_id,
+    quantity:        i.quantity,
+    serial_ids:      i.serial_ids ?? [],
+    _productDisplay: i.product_name ?? '',
+    _unit:           i.product_unit ?? '',
   })) ?? [],
 });
 
 const toWarehouses = computed(() =>
   props.warehouses.filter(w => w.id !== form.from_warehouse_id)
+);
+
+const warehouseOptions = computed(() =>
+  (props.warehouses ?? []).map(w => ({ value: w.id, label: w.name }))
+);
+const toWarehouseOptions = computed(() =>
+  toWarehouses.value.map(w => ({ value: w.id, label: w.name }))
 );
 
 const getProduct = (productId) => props.products.find(p => p.id === productId);
@@ -364,8 +366,12 @@ const onFromWarehouseChange = () => {
   form.items.forEach(item => { item.serial_ids = []; });
 };
 
-const onProductChange = (index) => {
+const onProductChange = (index, opt) => {
   form.items[index].serial_ids = [];
+  if (opt) {
+    form.items[index]._productDisplay = opt.code ? `${opt.code} - ${opt.label}` : opt.label;
+    form.items[index]._unit = opt.unit ?? opt.meta ?? '';
+  }
 };
 
 const onQuantityChange = (index) => {
@@ -387,7 +393,7 @@ const toggleSerial = (index, serialId) => {
 };
 
 const addRow = () => {
-  form.items.push({ product_id: '', quantity: 1, serial_ids: [] });
+  form.items.push({ product_id: null, quantity: 1, serial_ids: [], _productDisplay: '', _unit: '' });
 };
 
 const removeRow = (index) => {

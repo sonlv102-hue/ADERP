@@ -250,17 +250,20 @@
         </div>
 
         <!-- Form thêm thanh toán -->
-        <div v-if="showPayForm" class="px-5 py-4 border-b border-gray-100 bg-green-50 space-y-3">
+        <div v-if="showPayForm" class="px-5 py-5 border-b border-gray-100 bg-gray-50 space-y-4">
           <!-- Payment type selector -->
-          <div v-if="available_advances?.length > 0" class="flex gap-2">
-            <button v-for="pt in paymentTypes" :key="pt.value" type="button"
-              @click="paymentType = pt.value"
-              :class="paymentType === pt.value
-                ? 'bg-green-600 text-white border-green-600'
-                : 'bg-white text-gray-600 border-gray-300 hover:border-green-400'"
-              class="px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors">
-              {{ pt.label }}
-            </button>
+          <div v-if="available_advances?.length > 0">
+            <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Hình thức thanh toán</p>
+            <div class="flex gap-2">
+              <button v-for="pt in paymentTypes" :key="pt.value" type="button"
+                @click="paymentType = pt.value"
+                :class="paymentType === pt.value
+                  ? 'bg-primary-600 text-white border-primary-600 shadow-sm'
+                  : 'bg-white text-gray-600 border-gray-300 hover:border-primary-400 hover:text-primary-600'"
+                class="px-4 py-2 rounded-lg text-sm font-medium border transition-all">
+                {{ pt.label }}
+              </button>
+            </div>
           </div>
 
           <!-- Advance selection (offset / combined) -->

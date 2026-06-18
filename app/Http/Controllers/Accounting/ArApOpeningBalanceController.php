@@ -11,8 +11,10 @@ use App\Models\CashVoucher;
 use App\Models\Customer;
 use App\Models\Fund;
 use App\Models\Supplier;
+use App\Models\SupplierOpeningAdvance;
 use App\Services\AccountingService;
 use App\Services\CashVoucherService;
+use App\Services\SupplierAdvanceService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,6 +28,7 @@ class ArApOpeningBalanceController extends Controller
     public function __construct(
         private AccountingService $accounting,
         private CashVoucherService $cashVoucherService,
+        private SupplierAdvanceService $advanceService,
     ) {}
 
     public function index(Request $request): Response
@@ -198,72 +201,134 @@ class ArApOpeningBalanceController extends Controller
             return back()->with('error', 'Công nợ đầu kỳ này đã được thanh toán đầy đủ.');
         }
 
-        $data = $request->validate([
-            'amount'       => ['required', 'numeric', 'min:0.01', 'max:' . $remaining],
-            'payment_date' => ['required', 'date'],
-            'method'       => ['required', 'string', 'in:cash,bank_transfer,other'],
-            'fund_id'      => ['required', Rule::exists('funds', 'id')->where('is_active', true)],
-            'reference'    => ['nullable', 'string', 'max:100'],
-            'notes'        => ['nullable', 'string'],
-        ]);
-
-        $fund = Fund::find($data['fund_id']);
-        if ($data['method'] === 'cash' && $fund?->type !== 'cash') {
-            return back()->withErrors(['fund_id' => 'Hình thức Tiền mặt phải chọn quỹ tiền mặt.']);
-        }
-        if ($data['method'] === 'bank_transfer' && $fund?->type !== 'bank') {
-            return back()->withErrors(['fund_id' => 'Hình thức Chuyển khoản phải chọn tài khoản ngân hàng.']);
+        // Offset/combined chỉ dùng cho AP (thanh toán NCC)
+        $paymentType = $request->input('payment_type', 'cash');
+        if ($isAr && $paymentType !== 'cash') {
+            $paymentType = 'cash';
         }
 
-        DB::transaction(function () use ($arApOpeningBalance, $data, $isAr, $fund) {
-            $amount       = round((float) $data['amount'], 2);
-            $newRemaining = round((float) $arApOpeningBalance->remaining_amount - $amount, 2);
-            $arApOpeningBalance->update(['remaining_amount' => $newRemaining]);
+        $rules = ['payment_type' => ['required', 'in:cash,offset,combined']];
 
-            $docRef = $arApOpeningBalance->invoice_ref
-                ? "CN ĐK {$arApOpeningBalance->invoice_ref}"
-                : "CN ĐK #{$arApOpeningBalance->id}";
+        if (in_array($paymentType, ['offset', 'combined'])) {
+            $rules['advance_allocations']              = ['required', 'array', 'min:1'];
+            $rules['advance_allocations.*.advance_id'] = ['required', 'integer', 'exists:supplier_opening_advances,id'];
+            $rules['advance_allocations.*.amount']     = ['required', 'numeric', 'min:1'];
+            $rules['allocation_date']                  = ['required', 'date'];
+        }
 
-            if ($isAr) {
-                $arApOpeningBalance->loadMissing('customer');
-                $voucher = CashVoucher::create([
-                    'code'           => CashVoucher::generateCode(CashVoucherType::Receipt),
-                    'type'           => CashVoucherType::Receipt,
-                    'status'         => CashVoucherStatus::Draft,
-                    'fund_id'        => $data['fund_id'],
-                    'customer_id'    => $arApOpeningBalance->customer_id,
-                    'partner_type'   => 'customer',
-                    'amount'         => $amount,
-                    'voucher_date'   => $data['payment_date'],
-                    'description'    => "Thu công nợ đầu kỳ {$docRef}",
-                    'business_type'  => CashVoucherBusinessType::CollectCustomer->value,
-                    'reference_type' => 'ar_ap_opening_balance',
-                    'reference_id'   => $arApOpeningBalance->id,
-                    'created_by'     => auth()->id(),
-                ]);
-            } else {
-                $arApOpeningBalance->loadMissing('supplier');
-                $voucher = CashVoucher::create([
-                    'code'           => CashVoucher::generateCode(CashVoucherType::Payment),
-                    'type'           => CashVoucherType::Payment,
-                    'status'         => CashVoucherStatus::Draft,
-                    'fund_id'        => $data['fund_id'],
-                    'supplier_id'    => $arApOpeningBalance->supplier_id,
-                    'partner_type'   => 'supplier',
-                    'amount'         => $amount,
-                    'voucher_date'   => $data['payment_date'],
-                    'description'    => "Thanh toán công nợ đầu kỳ {$docRef}",
-                    'business_type'  => CashVoucherBusinessType::PaySupplier->value,
-                    'reference_type' => 'ar_ap_opening_balance',
-                    'reference_id'   => $arApOpeningBalance->id,
-                    'created_by'     => auth()->id(),
-                ]);
+        if (in_array($paymentType, ['cash', 'combined'])) {
+            $rules['amount']       = ['required', 'numeric', 'min:0.01', 'max:' . $remaining];
+            $rules['payment_date'] = ['required', 'date'];
+            $rules['method']       = ['required', 'string', 'in:cash,bank_transfer,other'];
+            $rules['fund_id']      = ['required', Rule::exists('funds', 'id')->where('is_active', true)];
+            $rules['reference']    = ['nullable', 'string', 'max:100'];
+            $rules['notes']        = ['nullable', 'string'];
+        }
+
+        $data = $request->validate($rules);
+
+        // Validate total not exceeding remaining
+        if (in_array($paymentType, ['offset', 'combined'])) {
+            $totalOffset = collect($data['advance_allocations'])->sum('amount');
+            $totalCash   = $paymentType === 'combined' ? ($data['amount'] ?? 0) : 0;
+            if ($totalOffset + $totalCash > $remaining + 0.01) {
+                return back()->with('error',
+                    'Tổng xử lý (' . number_format($totalOffset + $totalCash) .
+                    ' đ) vượt quá số còn phải trả (' . number_format($remaining) . ' đ).'
+                );
             }
+        }
 
-            $this->cashVoucherService->confirm($voucher);
-        });
+        if (in_array($paymentType, ['cash', 'combined'])) {
+            $fund = Fund::find($data['fund_id']);
+            if ($data['method'] === 'cash' && $fund?->type !== 'cash') {
+                return back()->withErrors(['fund_id' => 'Hình thức Tiền mặt phải chọn quỹ tiền mặt.']);
+            }
+            if ($data['method'] === 'bank_transfer' && $fund?->type !== 'bank') {
+                return back()->withErrors(['fund_id' => 'Hình thức Chuyển khoản phải chọn tài khoản ngân hàng.']);
+            }
+        }
 
-        $msg = $isAr ? 'Đã ghi nhận thu tiền công nợ đầu kỳ.' : 'Đã ghi nhận thanh toán công nợ đầu kỳ.';
+        try {
+            DB::transaction(function () use ($arApOpeningBalance, $data, $paymentType, $isAr) {
+                // 1. Advance offset (AP only — offset / combined)
+                if (!$isAr && in_array($paymentType, ['offset', 'combined'])) {
+                    foreach ($data['advance_allocations'] as $alloc) {
+                        $advance = SupplierOpeningAdvance::findOrFail($alloc['advance_id']);
+                        if ($advance->supplier_id !== $arApOpeningBalance->supplier_id) {
+                            throw new \RuntimeException('Khoản ứng trước không thuộc nhà cung cấp này.');
+                        }
+                        $this->advanceService->allocateToOpeningBalance(
+                            $advance,
+                            $arApOpeningBalance,
+                            (float) $alloc['amount'],
+                            $data['allocation_date'],
+                            'Đối trừ khoản trả trước NCC với công nợ đầu kỳ'
+                        );
+                    }
+                    // Refresh so remaining_amount reflects allocations above
+                    $arApOpeningBalance->refresh();
+                }
+
+                // 2. Cash payment (cash / combined)
+                if (in_array($paymentType, ['cash', 'combined'])) {
+                    $amount       = round((float) $data['amount'], 2);
+                    $newRemaining = round((float) $arApOpeningBalance->remaining_amount - $amount, 2);
+                    $arApOpeningBalance->update(['remaining_amount' => $newRemaining]);
+
+                    $docRef = $arApOpeningBalance->invoice_ref
+                        ? "CN ĐK {$arApOpeningBalance->invoice_ref}"
+                        : "CN ĐK #{$arApOpeningBalance->id}";
+
+                    if ($isAr) {
+                        $arApOpeningBalance->loadMissing('customer');
+                        $voucher = CashVoucher::create([
+                            'code'           => CashVoucher::generateCode(CashVoucherType::Receipt),
+                            'type'           => CashVoucherType::Receipt,
+                            'status'         => CashVoucherStatus::Draft,
+                            'fund_id'        => $data['fund_id'],
+                            'customer_id'    => $arApOpeningBalance->customer_id,
+                            'partner_type'   => 'customer',
+                            'amount'         => $amount,
+                            'voucher_date'   => $data['payment_date'],
+                            'description'    => "Thu công nợ đầu kỳ {$docRef}",
+                            'business_type'  => CashVoucherBusinessType::CollectCustomer->value,
+                            'reference_type' => 'ar_ap_opening_balance',
+                            'reference_id'   => $arApOpeningBalance->id,
+                            'created_by'     => auth()->id(),
+                        ]);
+                    } else {
+                        $arApOpeningBalance->loadMissing('supplier');
+                        $voucher = CashVoucher::create([
+                            'code'           => CashVoucher::generateCode(CashVoucherType::Payment),
+                            'type'           => CashVoucherType::Payment,
+                            'status'         => CashVoucherStatus::Draft,
+                            'fund_id'        => $data['fund_id'],
+                            'supplier_id'    => $arApOpeningBalance->supplier_id,
+                            'partner_type'   => 'supplier',
+                            'amount'         => $amount,
+                            'voucher_date'   => $data['payment_date'],
+                            'description'    => "Thanh toán công nợ đầu kỳ {$docRef}",
+                            'business_type'  => CashVoucherBusinessType::PaySupplier->value,
+                            'reference_type' => 'ar_ap_opening_balance',
+                            'reference_id'   => $arApOpeningBalance->id,
+                            'created_by'     => auth()->id(),
+                        ]);
+                    }
+
+                    $this->cashVoucherService->confirm($voucher);
+                }
+            });
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        $msg = match ($paymentType) {
+            'offset'   => 'Đã đối trừ khoản trả trước NCC.',
+            'combined' => 'Đã ghi nhận thanh toán kết hợp đối trừ + chi tiền.',
+            default    => $isAr ? 'Đã ghi nhận thu tiền công nợ đầu kỳ.' : 'Đã ghi nhận thanh toán công nợ đầu kỳ.',
+        };
+
         return back()->with('success', $msg);
     }
 

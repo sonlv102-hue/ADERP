@@ -9,10 +9,8 @@ use App\Enums\SerialStatus;
 use App\Enums\StockExitStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Contract;
-use App\Models\Customer;
 use App\Models\JournalEntry;
 use App\Models\Order;
-use App\Models\Product;
 use App\Models\ProductSerial;
 use App\Models\Project;
 use App\Models\ProjectInventoryLot;
@@ -81,13 +79,9 @@ class StockExitController extends Controller
         return Inertia::render('Warehouse/StockExits/Form', [
             'nextCode'      => StockExit::generateCode(),
             'warehouses'    => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'customers'     => Customer::orderBy('name')->get(['id', 'code', 'name']),
-            'products'      => Product::where('is_active', true)->orderBy('name')
-                ->get(['id', 'code', 'name', 'unit', 'sell_price', 'has_serial', 'inventory_account']),
             'serials'       => ProductSerial::where('status', SerialStatus::InStock)
                 ->get(['id', 'product_id', 'warehouse_id', 'serial_number']),
             'orders'        => $this->pendingOrdersForDropdown(),
-            'projects'      => $this->activeProjectsForDropdown(),
             'usageTypes'    => collect(ItemUsageType::cases())->map(fn ($t) => [
                 'value' => $t->value,
                 'label' => $t->label(),
@@ -364,7 +358,7 @@ class StockExitController extends Controller
                 ->with('error', 'Chỉ có thể sửa phiếu ở trạng thái nháp.');
         }
 
-        $stockExit->load(['items.serials']);
+        $stockExit->load(['customer', 'project', 'items.product', 'items.serials']);
 
         return Inertia::render('Warehouse/StockExits/Form', [
             'exit'       => [
@@ -373,26 +367,30 @@ class StockExitController extends Controller
                 'exit_date'       => $stockExit->exit_date->format('Y-m-d'),
                 'warehouse_id'    => $stockExit->warehouse_id,
                 'customer_id'     => $stockExit->customer_id,
+                'customer_name'   => $stockExit->customer?->name ?? '',
+                'customer_code'   => $stockExit->customer?->code ?? '',
                 'order_id'        => $stockExit->order_id,
                 'item_usage_type' => $stockExit->item_usage_type?->value ?? 'commercial',
                 'project_id'      => $stockExit->project_id,
+                'project_name'    => $stockExit->project?->name ?? '',
+                'project_code'    => $stockExit->project?->code ?? '',
+                'issue_purpose'   => $stockExit->issue_purpose,
                 'reason'          => $stockExit->reason,
                 'notes'           => $stockExit->notes,
                 'items'           => $stockExit->items->map(fn ($item) => [
-                    'product_id' => $item->product_id,
-                    'quantity'   => $item->quantity,
-                    'unit_price' => (float) $item->unit_price,
-                    'serial_ids' => $item->serials->pluck('id')->toArray(),
+                    'product_id'      => $item->product_id,
+                    'product_name'    => $item->product?->name ?? '',
+                    'product_code'    => $item->product?->code ?? '',
+                    'product_unit'    => $item->product?->unit ?? '',
+                    'quantity'        => $item->quantity,
+                    'unit_price'      => (float) $item->unit_price,
+                    'serial_ids'      => $item->serials->pluck('id')->toArray(),
                 ])->values(),
             ],
             'warehouses'  => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'customers'   => Customer::orderBy('name')->get(['id', 'code', 'name']),
-            'products'    => Product::where('is_active', true)->orderBy('name')
-                ->get(['id', 'code', 'name', 'unit', 'sell_price', 'has_serial']),
             'serials'     => ProductSerial::where('status', SerialStatus::InStock)
                 ->get(['id', 'product_id', 'warehouse_id', 'serial_number']),
             'orders'      => $this->pendingOrdersForDropdown(),
-            'projects'    => $this->activeProjectsForDropdown(),
             'usageTypes'  => collect(ItemUsageType::cases())->map(fn ($t) => [
                 'value' => $t->value,
                 'label' => $t->label(),

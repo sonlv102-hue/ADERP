@@ -67,17 +67,13 @@
 
               <!-- Kho -->
               <FormField label="Kho xuất" required :error="form.errors.warehouse_id">
-                <select
+                <SearchableSelect
                   v-model="form.warehouse_id"
+                  :options="warehouseOptions"
+                  placeholder="— Chọn kho —"
+                  :has-error="!!form.errors.warehouse_id"
                   @change="onWarehouseChange"
-                  class="w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow]"
-                  :class="form.errors.warehouse_id
-                    ? 'border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-2 focus:ring-red-100'
-                    : 'border-gray-200 bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100'"
-                >
-                  <option value="">— Chọn kho —</option>
-                  <option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
-                </select>
+                />
               </FormField>
 
               <!-- Mục đích xuất kho -->
@@ -97,14 +93,13 @@
 
               <!-- Khách hàng -->
               <FormField label="Khách hàng" optional :error="form.errors.customer_id">
-                <select
+                <RemoteSearchSelect
                   v-model="form.customer_id"
+                  :search-url="route('search.customers')"
+                  :display-text="initialCustomerDisplay"
+                  placeholder="— Tìm khách hàng —"
                   @change="onCustomerChange"
-                  class="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow] focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
-                >
-                  <option :value="null">— Không liên kết —</option>
-                  <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.code }} – {{ c.name }}</option>
-                </select>
+                />
               </FormField>
 
               <!-- Đơn hàng liên kết -->
@@ -132,16 +127,13 @@
 
               <!-- Dự án (project_cost only) -->
               <FormField v-if="form.issue_purpose === 'project_cost'" label="Dự án" required :error="form.errors.project_id">
-                <select
+                <RemoteSearchSelect
                   v-model="form.project_id"
-                  class="w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow]"
-                  :class="form.errors.project_id
-                    ? 'border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-2 focus:ring-red-100'
-                    : 'border-gray-200 bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100'"
-                >
-                  <option :value="null">— Chọn dự án —</option>
-                  <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.code }} — {{ p.name }}</option>
-                </select>
+                  :search-url="route('search.projects')"
+                  :display-text="initialProjectDisplay"
+                  placeholder="— Tìm dự án —"
+                  :has-error="!!form.errors.project_id"
+                />
               </FormField>
 
               <!-- Available lots panel -->
@@ -272,15 +264,15 @@
                   <tr class="transition-colors hover:bg-blue-50/20">
                     <td class="px-5 py-2.5">
                       <ProductSearch
-                        :options="products"
                         v-model="item.product_id"
-                        @select="p => onProductSelect(index, p)"
+                        :display-text="item._productDisplay"
+                        @select="opt => onProductSelect(index, opt)"
                         :has-error="!!form.errors[`items.${index}.product_id`]"
                       />
                     </td>
                     <td class="px-3 py-2.5">
                       <input
-                        :value="itemUnit(item.product_id)"
+                        :value="item._unit"
                         type="text"
                         readonly
                         tabindex="-1"
@@ -413,22 +405,36 @@ import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import FormField from '@/Components/Shared/FormField.vue';
 import ProductSearch from '@/Components/Shared/ProductSearch.vue';
+import SearchableSelect from '@/Components/Shared/SearchableSelect.vue';
+import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({
   nextCode: String,
   warehouses: Array,
-  customers: Array,
-  products: Array,
   serials: Array,
   orders: { type: Array, default: () => [] },
-  projects: { type: Array, default: () => [] },
   usageTypes: { type: Array, default: () => [] },
   issuePurposes: { type: Array, default: () => [] },
   exit: { type: Object, default: null },
 });
 
 const { formatVnd } = useCurrency();
+
+const warehouseOptions = computed(() =>
+  (props.warehouses ?? []).map(w => ({ value: w.id, code: w.code ?? '', label: w.name }))
+);
+
+const initialCustomerDisplay = computed(() =>
+  props.exit?.customer_code && props.exit?.customer_name
+    ? `${props.exit.customer_code} - ${props.exit.customer_name}`
+    : (props.exit?.customer_name ?? '')
+);
+const initialProjectDisplay = computed(() =>
+  props.exit?.project_code && props.exit?.project_name
+    ? `${props.exit.project_code} - ${props.exit.project_name}`
+    : (props.exit?.project_name ?? '')
+);
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -444,10 +450,12 @@ const form = useForm({
   reason:           props.exit?.reason           ?? '',
   notes:            props.exit?.notes            ?? '',
   items: props.exit?.items?.map(item => ({
-    product_id: item.product_id,
-    quantity:   item.quantity,
-    unit_price: item.unit_price,
-    serial_ids: item.serial_ids ?? [],
+    product_id:      item.product_id,
+    quantity:        item.quantity,
+    unit_price:      item.unit_price,
+    serial_ids:      item.serial_ids ?? [],
+    _productDisplay: item.product_code ? `${item.product_code} - ${item.product_name}` : (item.product_name ?? ''),
+    _unit:           item.product_unit ?? '',
   })) ?? [],
 });
 
@@ -524,11 +532,11 @@ const onOrderChange = () => {
   const filled = order.items
     .filter(i => i.remaining > 0)
     .map(i => ({ product_id: i.product_id, quantity: i.remaining, unit_price: i.unit_price, serial_ids: [] }));
-  if (filled.length) form.items = filled;
+  if (filled.length) form.items = filled.map(i => ({ ...i, _productDisplay: i.product_name ?? '', _unit: '' }));
 };
 
 const addRow = () => {
-  form.items.push({ product_id: '', quantity: 1, unit_price: 0, serial_ids: [] });
+  form.items.push({ product_id: null, quantity: 1, unit_price: 0, serial_ids: [], _productDisplay: '', _unit: '' });
 };
 
 const removeRow = (index) => {
@@ -539,13 +547,17 @@ const onWarehouseChange = () => {
   form.items.forEach(item => { item.serial_ids = []; });
 };
 
-const onProductSelect = (index, product) => {
+const onProductSelect = (index, opt) => {
+  if (!opt) return;
+  form.items[index]._productDisplay = opt.code ? `${opt.code} - ${opt.label}` : opt.label;
+  form.items[index]._unit = opt.unit ?? opt.meta ?? '';
+
   const order = form.order_id ? props.orders.find(o => o.id === form.order_id) : null;
-  const orderItem = product ? order?.items?.find(i => i.product_id === product.id) : null;
+  const orderItem = order?.items?.find(i => i.product_id === opt.value);
   if (orderItem) {
     form.items[index].unit_price = orderItem.unit_price;
   } else {
-    form.items[index].unit_price = Number(product?.sell_price ?? 0);
+    form.items[index].unit_price = Number(opt.sell_price ?? 0);
   }
   form.items[index].serial_ids = [];
 };
@@ -580,7 +592,6 @@ const toggleSerial = (index, serialId) => {
   }
 };
 
-const itemUnit = (productId) => props.products.find(p => p.id === productId)?.unit ?? '';
 
 const grandTotal = computed(() =>
   form.items.reduce((sum, item) => sum + (item.quantity * item.unit_price), 0)

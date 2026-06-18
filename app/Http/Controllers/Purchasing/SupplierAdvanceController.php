@@ -57,6 +57,11 @@ class SupplierAdvanceController extends Controller
                 ['value' => 'opening_balance', 'label' => 'Số dư đầu kỳ'],
                 ['value' => 'prepayment',      'label' => 'Trả trước trong kỳ'],
             ],
+            'summary' => [
+                'open'            => SupplierOpeningAdvance::whereIn('status', ['open', 'partially_applied'])->count(),
+                'closed'          => SupplierOpeningAdvance::whereIn('status', ['fully_applied', 'cancelled'])->count(),
+                'total_remaining' => (float) SupplierOpeningAdvance::whereIn('status', ['open', 'partially_applied'])->sum('remaining_amount'),
+            ],
         ]);
     }
 
@@ -113,7 +118,20 @@ class SupplierAdvanceController extends Controller
         ]);
 
         return Inertia::render('Purchasing/SupplierAdvances/Show', [
-            'advance' => $supplierAdvance,
+            'advance' => array_merge($supplierAdvance->toArray(), [
+                'type_label'   => $supplierAdvance->typeLabel(),
+                'status_label' => $supplierAdvance->statusLabel(),
+                'allocations'  => $supplierAdvance->allocations->map(fn ($a) => [
+                    'id'                  => $a->id,
+                    'allocation_date'     => $a->allocation_date,
+                    'purchase_invoice_id' => $a->purchase_invoice_id,
+                    'allocated_amount'    => (float) $a->allocated_amount,
+                    'reason'              => $a->reason,
+                    'status'              => $a->status,
+                    'invoice'             => $a->invoice ? ['code' => $a->invoice->code] : null,
+                    'creator'             => $a->creator ? ['name' => $a->creator->name] : null,
+                ]),
+            ]),
         ]);
     }
 

@@ -87,18 +87,14 @@
 
               <!-- Khách hàng -->
               <FormField label="Khách hàng" required :error="form.errors.customer_id">
-                <select
+                <RemoteSearchSelect
                   v-model="form.customer_id"
-                  class="w-full rounded-xl border px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow]"
-                  :class="form.errors.customer_id
-                    ? 'border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-2 focus:ring-red-100'
-                    : 'border-gray-200 bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-100'"
-                >
-                  <option value="">— Chọn khách hàng —</option>
-                  <option v-for="c in customers" :key="c.id" :value="c.id">
-                    {{ c.code }} – {{ c.name }}{{ c.is_fdi ? ' 🔶 FDI' : '' }}
-                  </option>
-                </select>
+                  :search-url="route('search.customers')"
+                  :display-text="initialCustomerDisplay"
+                  placeholder="— Chọn khách hàng —"
+                  :has-error="!!form.errors.customer_id"
+                  @change="onCustomerChange"
+                />
               </FormField>
 
               <!-- Ngày đặt hàng -->
@@ -240,20 +236,19 @@
                   <td class="px-4 py-2.5">
                     <template v-if="item._type === 'product'">
                       <ProductSearch
-                        :options="products"
                         v-model="item.product_id"
+                        :display-text="item._productDisplay"
                         @select="p => onProductSelect(idx, p)"
                       />
                     </template>
                     <template v-else>
-                      <select
+                      <RemoteSearchSelect
                         v-model="item.service_id"
-                        @change="onItemChange(idx)"
-                        class="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
-                      >
-                        <option value="">— Chọn dịch vụ —</option>
-                        <option v-for="s in services" :key="s.id" :value="s.id">{{ s.code }} – {{ s.name }}</option>
-                      </select>
+                        :search-url="route('search.services')"
+                        :display-text="item._serviceDisplay"
+                        placeholder="— Tìm dịch vụ —"
+                        @change="opt => onServiceSelect(idx, opt)"
+                      />
                     </template>
                   </td>
 
@@ -417,23 +412,49 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import FormField from '@/Components/Shared/FormField.vue';
 import ProductSearch from '@/Components/Shared/ProductSearch.vue';
+import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({
-  nextCode:        String,
-  order:           Object,
-  customers:       Array,
-  products:        Array,
-  services:        Array,
-  quotations:      Array,
-  fromQuotationId: { type: [Number, String], default: null },
-  supplementaryFor: { type: Object, default: null },
+  nextCode:             String,
+  order:                Object,
+  quotations:           { type: Array, default: () => [] },
+  fromQuotationId:      { type: [Number, String], default: null },
+  supplementaryFor:     { type: Object, default: null },
+  initialCustomerName:  { type: String, default: '' },
+  initialCustomerCode:  { type: String, default: '' },
+  initialCustomerFdi:   { type: Boolean, default: false },
 });
+
+// Track FDI status reactively (from selected customer)
+const customerIsFdi = ref(props.initialCustomerFdi)
+
+const initialCustomerDisplay = computed(() =>
+  props.order
+    ? [props.initialCustomerCode, props.initialCustomerName].filter(Boolean).join(' - ')
+    : props.supplementaryFor
+      ? props.supplementaryFor.customer_name ?? ''
+      : ''
+)
+
+const selectedCustomerIsFdi = computed(() => customerIsFdi.value)
+
+function onCustomerChange(opt) {
+  customerIsFdi.value = opt?.is_fdi ?? false
+}
+
+// Map items for edit mode — items already have name/unit (snapshot)
+const initItems = () =>
+  (props.order?.items ?? []).map(i => ({
+    ...i,
+    _productDisplay: i.product_id && i.name ? `${i.name}` : '',
+    _serviceDisplay: i.service_id && i.name ? `${i.name}` : '',
+  }))
 
 const form = useForm({
   code:                       props.order?.code ?? props.nextCode ?? '',
@@ -443,12 +464,7 @@ const form = useForm({
   order_date:                 props.order?.order_date ?? new Date().toISOString().slice(0, 10),
   expected_delivery:          props.order?.expected_delivery ?? '',
   notes:                      props.order?.notes ?? '',
-  items:                      props.order?.items ? props.order.items.map(i => ({ ...i })) : [],
-});
-
-const selectedCustomerIsFdi = computed(() => {
-  if (!form.customer_id) return false;
-  return props.customers.find(c => c.id === Number(form.customer_id))?.is_fdi ?? false;
+  items:                      initItems(),
 });
 
 const onQuotationChange = () => {
@@ -456,7 +472,7 @@ const onQuotationChange = () => {
   const q = props.quotations.find(q => q.id === form.quotation_id);
   if (!q) return;
   form.customer_id = q.customer_id;
-  form.items = q.items.map(i => ({ ...i }));
+  form.items = q.items.map(i => ({ ...i, _productDisplay: '', _serviceDisplay: '' }));
 };
 
 onMounted(() => {
@@ -469,8 +485,10 @@ onMounted(() => {
 const addRow = (type) => {
   form.items.push({
     _type:            type,
-    product_id:       type === 'product' ? '' : null,
-    service_id:       type === 'service' ? '' : null,
+    product_id:       type === 'product' ? null : null,
+    service_id:       type === 'service' ? null : null,
+    _productDisplay:  '',
+    _serviceDisplay:  '',
     name:             '',
     unit:             '',
     quantity:         1,
@@ -482,20 +500,27 @@ const addRow = (type) => {
 
 const removeRow = (idx) => form.items.splice(idx, 1);
 
-const onProductSelect = (idx, product) => {
+const onProductSelect = (idx, opt) => {
   const item = form.items[idx];
-  if (product) {
-    item.name = product.name;
-    item.unit = product.unit ?? '';
-    item.unit_price = product.sell_price ?? 0;
+  if (opt) {
+    item.name            = opt.label;
+    item.unit            = opt.unit ?? opt.meta ?? '';
+    item.unit_price      = opt.sell_price ?? opt.cost_price ?? 0;
+    item._productDisplay = `${opt.code} - ${opt.label}`;
+  } else {
+    item.name = ''; item.unit = ''; item._productDisplay = '';
   }
 };
 
-const onItemChange = (idx) => {
+const onServiceSelect = (idx, opt) => {
   const item = form.items[idx];
-  if (item._type === 'service') {
-    const s = props.services.find(s => s.id === item.service_id);
-    if (s) { item.name = s.name; item.unit = s.unit ?? ''; item.unit_price = s.price ?? 0; }
+  if (opt) {
+    item.name            = opt.label;
+    item.unit            = opt.unit ?? opt.meta ?? '';
+    item.unit_price      = opt.price ?? 0;
+    item._serviceDisplay = `${opt.code} - ${opt.label}`;
+  } else {
+    item.name = ''; item.unit = ''; item._serviceDisplay = '';
   }
 };
 
@@ -516,7 +541,7 @@ const hasNullVat = computed(() => form.items.some(i => i.vat_rate === null));
 const { formatVnd } = useCurrency();
 
 const submit = () => {
-  const payload = form.items.map(({ _type, ...rest }) => ({
+  const payload = form.items.map(({ _type, _productDisplay, _serviceDisplay, ...rest }) => ({
     ...rest,
     vat_rate:        rest.vat_rate ?? null,
     discount_amount: Math.round((rest.quantity || 0) * (rest.unit_price || 0) * (rest.discount_percent || 0) / 100),

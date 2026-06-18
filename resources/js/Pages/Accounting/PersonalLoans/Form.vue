@@ -27,18 +27,20 @@
               <span class="text-sm">{{ t.label }}</span>
             </label>
           </div>
-          <select v-if="form.lender_type === 'employee'" v-model="form.employee_id"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-500"
-            :class="{ 'border-red-500': form.errors.employee_id }">
-            <option :value="null">-- Chọn nhân viên --</option>
-            <option v-for="e in employees" :key="e.id" :value="e.id">{{ e.name }} ({{ e.code }})</option>
-          </select>
-          <select v-else-if="form.lender_type === 'shareholder'" v-model="form.shareholder_id"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-500"
-            :class="{ 'border-red-500': form.errors.shareholder_id }">
-            <option :value="null">-- Chọn thành viên/cổ đông --</option>
-            <option v-for="s in shareholders" :key="s.id" :value="s.id">{{ s.name }} ({{ s.code }})</option>
-          </select>
+          <SearchableSelect
+            v-if="form.lender_type === 'employee'"
+            v-model="form.employee_id"
+            :options="employeeOptions"
+            placeholder="-- Chọn nhân viên --"
+            :has-error="!!form.errors.employee_id"
+          />
+          <SearchableSelect
+            v-else-if="form.lender_type === 'shareholder'"
+            v-model="form.shareholder_id"
+            :options="shareholderOptions"
+            placeholder="-- Chọn thành viên/cổ đông --"
+            :has-error="!!form.errors.shareholder_id"
+          />
           <input v-else v-model="form.lender_name" type="text" placeholder="Họ tên người cho vay"
             class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-500" />
         </div>
@@ -71,16 +73,12 @@
 
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-1">Quỹ nhận tiền <span class="text-red-500">*</span></label>
-          <select v-model="form.fund_id"
-            class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-500"
-            :class="{ 'border-red-500': form.errors.fund_id }">
-            <option :value="null">-- Chọn quỹ --</option>
-            <optgroup v-for="(group, type) in groupedFunds" :key="type" :label="type">
-              <option v-for="f in group" :key="f.id" :value="f.id">
-                {{ f.name }} {{ f.account_code ? `(${f.account_code})` : '' }} — {{ formatVnd(f.balance) }}
-              </option>
-            </optgroup>
-          </select>
+          <SearchableSelect
+            v-model="form.fund_id"
+            :options="fundOptions"
+            placeholder="-- Chọn quỹ --"
+            :has-error="!!form.errors.fund_id"
+          />
           <p v-if="form.errors.fund_id" class="mt-1 text-xs text-red-600">{{ form.errors.fund_id }}</p>
         </div>
 
@@ -112,6 +110,7 @@
 import { computed } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
+import SearchableSelect from '@/Components/Shared/SearchableSelect.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({ loan: Object, employees: Array, shareholders: Array, funds: Array });
@@ -136,6 +135,21 @@ const form = useForm({
   fund_id:        null,
   notes:          '',
 });
+
+const employeeOptions = computed(() =>
+  (props.employees ?? []).map(e => ({ value: e.id, code: e.code, label: e.name }))
+);
+const shareholderOptions = computed(() =>
+  (props.shareholders ?? []).map(s => ({ value: s.id, code: s.code, label: s.name }))
+);
+const fundOptions = computed(() =>
+  (props.funds ?? []).map(f => ({
+    value: f.id,
+    label: f.name,
+    code: f.account_code || '',
+    meta: f.type === 'bank' ? 'Ngân hàng' : 'Tiền mặt',
+  }))
+);
 
 const groupedFunds = computed(() => {
   const g = { 'Tiền mặt': [], 'Ngân hàng': [] };

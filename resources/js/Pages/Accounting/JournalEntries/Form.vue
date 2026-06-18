@@ -67,15 +67,15 @@
               <tbody class="divide-y divide-gray-100">
                 <tr v-for="(line, i) in form.lines" :key="i">
                   <td class="px-3 py-2">
-                    <select v-model="line.account_code" required
-                      class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary-500">
-                      <option value="">— Chọn TK —</option>
-                      <optgroup v-for="group in accountGroups" :key="group.label" :label="group.label">
-                        <option v-for="a in group.accounts" :key="a.code" :value="a.code">
-                          {{ a.code }} — {{ a.name }}
-                        </option>
-                      </optgroup>
-                    </select>
+                    <RemoteSearchSelect
+                      v-model="line.account_code"
+                      :search-url="route('search.account-codes')"
+                      :extra-params="{ detail_only: 1 }"
+                      :display-text="line._accountDisplay"
+                      placeholder="— Tìm TK —"
+                      empty-text="Không tìm thấy tài khoản"
+                      @change="opt => onAccountSelect(line, opt)"
+                    />
                   </td>
                   <td class="px-3 py-2">
                     <input v-model="line.description" placeholder="Diễn giải..."
@@ -172,12 +172,12 @@
 import { computed } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
+import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({
   nextCode: String,
   entry:    { type: Object, default: null },
-  accounts: Array,
 });
 
 const { formatVnd } = useCurrency();
@@ -193,14 +193,15 @@ const form = useForm({
   save_as_draft: false,
   lines: props.entry?.lines?.length
     ? props.entry.lines.map(l => ({
-        account_code: l.account_code,
-        description:  l.description ?? '',
-        debit:        l.debit,
-        credit:       l.credit,
+        account_code:    l.account_code,
+        _accountDisplay: l.account_code && l.account_name ? `${l.account_code} - ${l.account_name}` : (l.account_code ?? ''),
+        description:     l.description ?? '',
+        debit:           l.debit,
+        credit:          l.credit,
       }))
     : [
-        { account_code: '', description: '', debit: 0, credit: 0 },
-        { account_code: '', description: '', debit: 0, credit: 0 },
+        { account_code: '', _accountDisplay: '', description: '', debit: 0, credit: 0 },
+        { account_code: '', _accountDisplay: '', description: '', debit: 0, credit: 0 },
       ],
 });
 
@@ -219,38 +220,42 @@ const typeLabels = {
   contra:    'Tài khoản điều chỉnh',
 };
 
-const accountGroups = computed(() => {
-  const groups = {};
-  for (const a of props.accounts) {
-    const label = typeLabels[a.type] ?? a.type;
-    if (!groups[label]) groups[label] = { label, accounts: [] };
-    groups[label].accounts.push(a);
-  }
-  return Object.values(groups);
-});
-
 const totalDebit  = computed(() => form.lines.reduce((s, l) => s + (Number(l.debit)  || 0), 0));
 const totalCredit = computed(() => form.lines.reduce((s, l) => s + (Number(l.credit) || 0), 0));
 const isBalanced  = computed(() => Math.abs(totalDebit.value - totalCredit.value) < 1 && totalDebit.value > 0);
 
 function addLine() {
-  form.lines.push({ account_code: '', description: '', debit: 0, credit: 0 });
+  form.lines.push({ account_code: '', _accountDisplay: '', description: '', debit: 0, credit: 0 });
 }
 function removeLine(i) {
   form.lines.splice(i, 1);
 }
 
+function onAccountSelect(line, opt) {
+  if (!opt) return;
+  line._accountDisplay = opt.code ? `${opt.code} - ${opt.label}` : opt.label;
+}
+
 function submitEdit() {
-  form.put(route('accounting.journal-entries.update', props.entry.id));
+  form.transform(d => ({
+    ...d,
+    lines: d.lines.map(({ _accountDisplay, ...rest }) => rest),
+  })).put(route('accounting.journal-entries.update', props.entry.id));
 }
 
 function submitDraft() {
   form.save_as_draft = true;
-  form.post(route('accounting.journal-entries.store'));
+  form.transform(d => ({
+    ...d,
+    lines: d.lines.map(({ _accountDisplay, ...rest }) => rest),
+  })).post(route('accounting.journal-entries.store'));
 }
 
 function submitPost() {
   form.save_as_draft = false;
-  form.post(route('accounting.journal-entries.store'));
+  form.transform(d => ({
+    ...d,
+    lines: d.lines.map(({ _accountDisplay, ...rest }) => rest),
+  })).post(route('accounting.journal-entries.store'));
 }
 </script>

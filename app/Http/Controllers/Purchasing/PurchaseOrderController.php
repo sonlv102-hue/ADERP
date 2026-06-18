@@ -9,7 +9,6 @@ use App\Http\Controllers\Controller;
 use App\Imports\PurchaseOrderImport;
 use App\Models\Order;
 use App\Models\Product;
-use App\Models\Project;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\Supplier;
@@ -176,19 +175,23 @@ class PurchaseOrderController extends Controller
 
     public function create(Request $request): Response
     {
+        $prefillOrderId = $request->query('order_id') ? (int) $request->query('order_id') : null;
+        $prefillOrderLabel = null;
+        if ($prefillOrderId) {
+            $o = Order::with('customer')->find($prefillOrderId);
+            if ($o) $prefillOrderLabel = $o->code . ' — ' . $o->customer->name;
+        }
+
         return Inertia::render('Purchasing/PurchaseOrders/Form', [
-            'nextCode'       => PurchaseOrder::generateCode(),
-            'suppliers'      => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
-            'warehouses'     => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'products'       => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'cost_price', 'vat_percent']),
-            'projects'       => Project::whereIn('status', ['planning', 'in_progress'])->orderByDesc('id')->get(['id', 'code', 'name']),
-            'orders'         => Order::whereNotIn('status', ['cancelled'])->with('customer')->orderByDesc('id')->get()->map(fn ($o) => [
+            'nextCode'           => PurchaseOrder::generateCode(),
+            'orders'             => Order::whereNotIn('status', ['cancelled'])->with('customer')->orderByDesc('id')->get()->map(fn ($o) => [
                 'id'   => $o->id,
                 'code' => $o->code,
                 'label'=> $o->code . ' — ' . $o->customer->name,
             ]),
-            'prefillOrderId' => $request->query('order_id') ? (int) $request->query('order_id') : null,
-            'invoiceTypes'   => collect(PurchaseOrderInvoiceType::cases())->map(fn ($e) => [
+            'prefillOrderId'     => $prefillOrderId,
+            'prefillOrderLabel'  => $prefillOrderLabel,
+            'invoiceTypes'       => collect(PurchaseOrderInvoiceType::cases())->map(fn ($e) => [
                 'value' => $e->value, 'label' => $e->label(),
             ]),
         ]);
@@ -310,36 +313,43 @@ class PurchaseOrderController extends Controller
 
         $purchaseOrder->load('items');
 
+        $purchaseOrder->load(['supplier', 'warehouse', 'project', 'items.product']);
+
         return Inertia::render('Purchasing/PurchaseOrders/Form', [
             'purchaseOrder' => [
-                'id'            => $purchaseOrder->id,
-                'code'          => $purchaseOrder->code,
-                'supplier_id'   => $purchaseOrder->supplier_id,
-                'warehouse_id'  => $purchaseOrder->warehouse_id,
-                'project_id'    => $purchaseOrder->project_id,
-                'order_id'      => $purchaseOrder->order_id,
-                'order_date'    => $purchaseOrder->order_date->format('Y-m-d'),
-                'expected_date' => $purchaseOrder->expected_date?->format('Y-m-d'),
-                'notes'         => $purchaseOrder->notes,
-                'invoice_type'  => $purchaseOrder->invoice_type->value,
-                'items'         => $purchaseOrder->items->map(fn ($item) => [
-                    'product_id' => $item->product_id,
-                    'quantity'   => $item->quantity,
-                    'unit_price' => (float) $item->unit_price,
-                    'vat_rate'   => $item->vat_rate !== null ? (float) $item->vat_rate : null,
+                'id'                  => $purchaseOrder->id,
+                'code'                => $purchaseOrder->code,
+                'supplier_id'         => $purchaseOrder->supplier_id,
+                'supplier_name'       => $purchaseOrder->supplier->name,
+                'supplier_code'       => $purchaseOrder->supplier->code,
+                'warehouse_id'        => $purchaseOrder->warehouse_id,
+                'warehouse_name'      => $purchaseOrder->warehouse->name,
+                'project_id'          => $purchaseOrder->project_id,
+                'project_name'        => $purchaseOrder->project?->name,
+                'project_code'        => $purchaseOrder->project?->code,
+                'order_id'            => $purchaseOrder->order_id,
+                'order_date'          => $purchaseOrder->order_date->format('Y-m-d'),
+                'expected_date'       => $purchaseOrder->expected_date?->format('Y-m-d'),
+                'notes'               => $purchaseOrder->notes,
+                'invoice_type'        => $purchaseOrder->invoice_type->value,
+                'items'               => $purchaseOrder->items->map(fn ($item) => [
+                    'product_id'   => $item->product_id,
+                    'product_name' => $item->product?->name ?? '',
+                    'product_code' => $item->product?->code ?? '',
+                    'unit'         => $item->product?->unit ?? '',
+                    'quantity'     => $item->quantity,
+                    'unit_price'   => (float) $item->unit_price,
+                    'vat_rate'     => $item->vat_rate !== null ? (float) $item->vat_rate : null,
                 ])->values(),
             ],
-            'suppliers'      => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name']),
-            'warehouses'     => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'products'       => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'cost_price', 'vat_percent']),
-            'projects'       => Project::whereIn('status', ['planning', 'in_progress'])->orderByDesc('id')->get(['id', 'code', 'name']),
-            'orders'         => Order::whereNotIn('status', ['cancelled'])->with('customer')->orderByDesc('id')->get()->map(fn ($o) => [
+            'orders'        => Order::whereNotIn('status', ['cancelled'])->with('customer')->orderByDesc('id')->get()->map(fn ($o) => [
                 'id'   => $o->id,
                 'code' => $o->code,
                 'label'=> $o->code . ' — ' . $o->customer->name,
             ]),
-            'prefillOrderId' => null,
-            'invoiceTypes'   => collect(PurchaseOrderInvoiceType::cases())->map(fn ($e) => [
+            'prefillOrderId'    => null,
+            'prefillOrderLabel' => null,
+            'invoiceTypes'      => collect(PurchaseOrderInvoiceType::cases())->map(fn ($e) => [
                 'value' => $e->value, 'label' => $e->label(),
             ]),
         ]);

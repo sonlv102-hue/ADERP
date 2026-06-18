@@ -60,11 +60,8 @@ class QuotationController extends Controller
     public function create(): Response
     {
         return Inertia::render('Sales/Quotations/Form', [
-            'nextCode'    => Quotation::generateCode(),
-            'customers'   => Customer::orderBy('name')->get(['id', 'code', 'name']),
-            'products'    => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'sell_price', 'vat_percent']),
-            'services'    => Service::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'price']),
-            'priceLists'  => PriceList::select('id', 'code', 'name')->orderBy('name')->get(),
+            'nextCode'   => Quotation::generateCode(),
+            'priceLists' => PriceList::select('id', 'code', 'name')->orderBy('name')->get(),
         ]);
     }
 
@@ -175,19 +172,21 @@ class QuotationController extends Controller
             'Chỉ có thể sửa báo giá ở trạng thái nháp.'
         );
 
-        $quotation->load('items');
+        $quotation->load(['items', 'customer']);
 
         return Inertia::render('Sales/Quotations/Form', [
             'quotation' => [
-                'id'             => $quotation->id,
-                'code'           => $quotation->code,
-                'customer_id'    => $quotation->customer_id,
-                'assigned_to'    => $quotation->assigned_to,
-                'valid_until'    => $quotation->valid_until?->format('Y-m-d'),
-                'discount_type'  => $quotation->discount_type,
-                'discount_value' => (float) $quotation->discount_value,
-                'notes'          => $quotation->notes,
-                'items'          => $quotation->items->map(fn ($item) => [
+                'id'                  => $quotation->id,
+                'code'                => $quotation->code,
+                'customer_id'         => $quotation->customer_id,
+                'customer_name'       => $quotation->customer?->name ?? '',
+                'customer_code'       => $quotation->customer?->code ?? '',
+                'assigned_to'         => $quotation->assigned_to,
+                'valid_until'         => $quotation->valid_until?->format('Y-m-d'),
+                'discount_type'       => $quotation->discount_type,
+                'discount_value'      => (float) $quotation->discount_value,
+                'notes'               => $quotation->notes,
+                'items'               => $quotation->items->map(fn ($item) => [
                     'id'               => $item->id,
                     'item_type'        => $item->item_type,
                     'product_id'       => $item->product_id,
@@ -200,9 +199,6 @@ class QuotationController extends Controller
                     'discount_amount'  => (int) $item->discount_amount,
                 ]),
             ],
-            'customers'  => Customer::orderBy('name')->get(['id', 'code', 'name']),
-            'products'   => Product::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'sell_price', 'vat_percent']),
-            'services'   => Service::where('is_active', true)->orderBy('name')->get(['id', 'code', 'name', 'unit', 'price']),
             'priceLists' => PriceList::select('id', 'code', 'name')->orderBy('name')->get(),
         ]);
     }
