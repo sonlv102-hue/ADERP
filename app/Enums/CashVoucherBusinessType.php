@@ -16,6 +16,8 @@ enum CashVoucherBusinessType: string
     case EquityContribution         = 'equity_contribution';         // Nhận góp vốn → Cr 4111
     case CollectPersonalReceivable  = 'collect_personal_receivable'; // Thu hồi phải thu cá nhân → Cr 1388
     case SalaryPayment              = 'salary_payment';              // Chi lương → Dr 3341
+    case SupplierPrepayment         = 'supplier_prepayment';         // Trả trước NCC → Dr 331UT
+    case CustomerAdvance            = 'customer_advance';            // Nhận ứng trước KH → Cr 131UT
 
     public function label(): string
     {
@@ -30,6 +32,8 @@ enum CashVoucherBusinessType: string
             self::EquityContribution        => 'Nhận góp vốn chủ sở hữu',
             self::CollectPersonalReceivable => 'Thu hồi phải thu cá nhân',
             self::SalaryPayment             => 'Thanh toán lương',
+            self::SupplierPrepayment        => 'Trả trước nhà cung cấp',
+            self::CustomerAdvance           => 'Nhận ứng trước khách hàng',
         };
     }
 
@@ -38,9 +42,9 @@ enum CashVoucherBusinessType: string
     {
         return match ($this) {
             self::AdvancePayment, self::PayOffset, self::PaySupplier,
-            self::ExpensePayment, self::SalaryPayment                                     => 'payment',
+            self::ExpensePayment, self::SalaryPayment, self::SupplierPrepayment           => 'payment',
             self::AdvanceReturn, self::CollectOffset, self::CollectCustomer,
-            self::EquityContribution, self::CollectPersonalReceivable                     => 'receipt',
+            self::EquityContribution, self::CollectPersonalReceivable, self::CustomerAdvance => 'receipt',
         };
     }
 
@@ -65,6 +69,8 @@ enum CashVoucherBusinessType: string
             self::EquityContribution                     => '4111',
             self::CollectPersonalReceivable              => '1388',
             self::SalaryPayment                          => AccountingSettings::get('salary_payable_account', '3341'),
+            self::SupplierPrepayment                     => AccountingSettings::get('supplier_advance_account', '331UT'),
+            self::CustomerAdvance                        => AccountingSettings::get('customer_advance_account', '131UT'),
         };
     }
 
@@ -75,8 +81,8 @@ enum CashVoucherBusinessType: string
             self::AdvancePayment, self::AdvanceReturn,
             self::CollectPersonalReceivable,
             self::SalaryPayment                          => 'employee',
-            self::PaySupplier                            => 'supplier',
-            self::CollectCustomer                        => 'customer',
+            self::PaySupplier, self::SupplierPrepayment  => 'supplier',
+            self::CollectCustomer, self::CustomerAdvance => 'customer',
             self::EquityContribution                     => 'shareholder',
             default                                      => null,
         };

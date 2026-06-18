@@ -5,14 +5,17 @@ namespace App\Services;
 use App\Enums\PurchaseInvoiceStatus;
 use App\Models\ArApOpeningBalance;
 use App\Models\PurchaseInvoice;
+use App\Models\Supplier;
 use App\Models\SupplierAdvanceAllocation;
 use App\Models\SupplierOpeningAdvance;
+use App\Services\AccountingSettings;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class SupplierAdvanceService
 {
+    public function __construct(private AccountingService $accounting) {}
     public function create(array $data): SupplierOpeningAdvance
     {
         $data['remaining_amount'] = $data['amount'];
@@ -42,7 +45,7 @@ class SupplierAdvanceService
             'source_id'        => $sourceId,
             'fiscal_year'      => \Illuminate\Support\Facades\DB::getDriverName() === 'pgsql' ? null : (int) date('Y'),
             'opening_date'     => $date,
-            'account_code'     => '3311',
+            'account_code'     => AccountingSettings::get('supplier_advance_account', '331UT'),
             'amount'           => $amount,
             'remaining_amount' => $amount,
             'currency'         => 'VND',
@@ -117,6 +120,42 @@ class SupplierAdvanceService
         }
 
         return DB::transaction(function () use ($advance, $invoice, $amount, $allocationDate, $reason) {
+            // JE đối trừ: Dr 3311 (giảm phải trả NCC) / Cr 331UT (giảm trả trước NCC)
+            // Chỉ tạo JE khi advance là prepayment (có account_code = 331UT)
+            $jeId = null;
+            if ($advance->account_code === AccountingSettings::get('supplier_advance_account', '331UT')) {
+                $supplier        = Supplier::findOrFail($advance->supplier_id);
+                $payableAccount  = $supplier->getPayableAccount();
+                $advanceAccount  = $advance->account_code;
+
+                $je = $this->accounting->post(
+                    description: "Đối trừ trả trước NCC #{$advance->id} vào HĐ {$invoice->code}",
+                    date: $allocationDate,
+                    lines: [
+                        [
+                            'account'      => $payableAccount,
+                            'debit'        => $amount,
+                            'credit'       => 0,
+                            'description'  => "Đối trừ phải trả NCC {$supplier->name} HĐ {$invoice->code}",
+                            'partner_type' => 'supplier',
+                            'partner_id'   => $advance->supplier_id,
+                        ],
+                        [
+                            'account'     => $advanceAccount,
+                            'debit'       => 0,
+                            'credit'      => $amount,
+                            'description' => "Giảm trả trước NCC {$supplier->name}",
+                            'partner_type' => 'supplier',
+                            'partner_id'   => $advance->supplier_id,
+                        ],
+                    ],
+                    referenceType: SupplierAdvanceAllocation::class,
+                    referenceId: 0,
+                    isAuto: false,
+                );
+                $jeId = $je?->id;
+            }
+
             $allocation = SupplierAdvanceAllocation::create([
                 'supplier_id'         => $advance->supplier_id,
                 'opening_advance_id'  => $advance->id,
@@ -125,8 +164,15 @@ class SupplierAdvanceService
                 'allocated_amount'    => $amount,
                 'status'              => 'active',
                 'reason'              => $reason,
+                'journal_entry_id'    => $jeId,
                 'created_by'          => auth()->id(),
             ]);
+
+            // Update JE referenceId now that we have allocation->id
+            if ($jeId) {
+                \App\Models\JournalEntry::where('id', $jeId)
+                    ->update(['reference_id' => $allocation->id]);
+            }
 
             $newRemaining = round((float) $advance->remaining_amount - $amount, 2);
             $advance->update([
@@ -156,6 +202,14 @@ class SupplierAdvanceService
         DB::transaction(function () use ($allocation, $reason) {
             $advance = $allocation->advance;
             $amount  = (float) $allocation->allocated_amount;
+
+            // Đảo JE đối trừ nếu có
+            if ($allocation->journal_entry_id) {
+                $je = \App\Models\JournalEntry::find($allocation->journal_entry_id);
+                if ($je && $je->status === 'posted') {
+                    $this->accounting->reverse($je, "Thu hồi đối trừ trả trước: {$reason}");
+                }
+            }
 
             $allocation->update([
                 'status'      => 'reversed',

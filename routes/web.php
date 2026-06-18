@@ -32,6 +32,7 @@ use App\Http\Controllers\Reports\CashFlowController;
 use App\Http\Controllers\Reports\IncomeStatementController;
 use App\Http\Controllers\Sales\CommissionController;
 use App\Http\Controllers\Sales\ContractController;
+use App\Http\Controllers\Sales\CustomerAdvanceController;
 use App\Http\Controllers\Sales\SalesReturnController;
 use App\Http\Controllers\Projects\ProjectController;
 use App\Http\Controllers\Projects\TaskController;
@@ -264,6 +265,11 @@ Route::middleware('auth')->group(function () {
         Route::post('sales-returns/{salesReturn}/confirm', [SalesReturnController::class, 'confirm'])->name('sales-returns.confirm');
         Route::post('sales-returns/{salesReturn}/cancel', [SalesReturnController::class, 'cancel'])->name('sales-returns.cancel');
         Route::get('sales-returns-order-items/{order}', [SalesReturnController::class, 'orderItems'])->name('sales-returns.order-items');
+
+        // Customer Advances — ứng trước khách hàng
+        Route::resource('customer-advances', CustomerAdvanceController::class)
+            ->only(['index', 'create', 'store', 'show']);
+        Route::post('customer-advances/{customerAdvance}/cancel', [CustomerAdvanceController::class, 'cancel'])->name('customer-advances.cancel');
     });
 
     // Commissions - hoa hồng & chi phí khách hàng

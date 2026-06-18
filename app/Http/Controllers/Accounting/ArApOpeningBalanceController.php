@@ -9,11 +9,14 @@ use App\Http\Controllers\Controller;
 use App\Models\ArApOpeningBalance;
 use App\Models\CashVoucher;
 use App\Models\Customer;
+use App\Models\CustomerOpeningAdvance;
 use App\Models\Fund;
 use App\Models\Supplier;
 use App\Models\SupplierOpeningAdvance;
 use App\Services\AccountingService;
+use App\Services\AccountingSettings;
 use App\Services\CashVoucherService;
+use App\Services\CustomerAdvanceService;
 use App\Services\SupplierAdvanceService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -29,6 +32,7 @@ class ArApOpeningBalanceController extends Controller
         private AccountingService $accounting,
         private CashVoucherService $cashVoucherService,
         private SupplierAdvanceService $advanceService,
+        private CustomerAdvanceService $customerAdvanceService,
     ) {}
 
     public function index(Request $request): Response
@@ -130,24 +134,33 @@ class ArApOpeningBalanceController extends Controller
                     if ($isAr) {
                         $partyCustomer  = Customer::find($item['customer_id']);
                         $partyName      = $partyCustomer?->name ?? '?';
-                        $partyAccount   = $partyCustomer
+                        $normalAccount  = $partyCustomer
                             ? $partyCustomer->getReceivableAccount()
                             : throw new \RuntimeException("Khách hàng không tồn tại (id={$item['customer_id']}).");
+                        // AR âm = KH ứng trước → dùng 131UT (Dư Có) thay vì ghi âm vào 1311
+                        $jeAccount = $remaining < 0
+                            ? AccountingSettings::get('customer_advance_account', '131UT')
+                            : $normalAccount;
+                        $desc = $remaining < 0 ? 'KH ứng trước ĐK' : 'Phải thu ĐK';
                     } else {
                         $partySupplier  = Supplier::find($item['supplier_id']);
                         $partyName      = $partySupplier?->name ?? '?';
-                        $partyAccount   = $partySupplier
+                        $normalAccount  = $partySupplier
                             ? $partySupplier->getPayableAccount()
                             : throw new \RuntimeException("Nhà cung cấp không tồn tại (id={$item['supplier_id']}).");
+                        // AP âm = Trả trước NCC → dùng 331UT (Dư Nợ) thay vì ghi âm vào 3311
+                        $jeAccount = $remaining < 0
+                            ? AccountingSettings::get('supplier_advance_account', '331UT')
+                            : $normalAccount;
+                        $desc = $remaining < 0 ? 'Trả trước NCC ĐK' : 'Phải trả ĐK';
                     }
 
                     $lines[] = [
-                        'account'      => $partyAccount,
+                        'account'      => $jeAccount,
                         'debit'        => $lineDr,
                         'credit'       => $lineCr,
-                        'description'  => ($isAr ? 'Phải thu ĐK' : 'Phải trả ĐK') . " {$partyName}" .
+                        'description'  => "{$desc} {$partyName}" .
                             ($item['invoice_ref'] ? " HĐ {$item['invoice_ref']}" : ''),
-                        // partner_type/partner_id cần thiết cho ArDetail/ApDetail query theo đối tác
                         'partner_type' => $isAr ? 'customer' : 'supplier',
                         'partner_id'   => $isAr ? ($item['customer_id'] ?: null) : ($item['supplier_id'] ?: null),
                     ];
@@ -199,17 +212,13 @@ class ArApOpeningBalanceController extends Controller
             return back()->with('error', 'Công nợ đầu kỳ này đã được thanh toán đầy đủ.');
         }
 
-        // Offset/combined chỉ dùng cho AP (thanh toán NCC)
         $paymentType = $request->input('payment_type', 'cash');
-        if ($isAr && $paymentType !== 'cash') {
-            $paymentType = 'cash';
-        }
 
         $rules = ['payment_type' => ['required', 'in:cash,offset,combined']];
 
         if (in_array($paymentType, ['offset', 'combined'])) {
             $rules['advance_allocations']              = ['required', 'array', 'min:1'];
-            $rules['advance_allocations.*.advance_id'] = ['required', 'integer', 'exists:supplier_opening_advances,id'];
+            $rules['advance_allocations.*.advance_id'] = ['required', 'integer'];
             $rules['advance_allocations.*.amount']     = ['required', 'numeric', 'min:1'];
             $rules['allocation_date']                  = ['required', 'date'];
         }
@@ -249,22 +258,35 @@ class ArApOpeningBalanceController extends Controller
 
         try {
             DB::transaction(function () use ($arApOpeningBalance, $data, $paymentType, $isAr) {
-                // 1. Advance offset (AP only — offset / combined)
-                if (!$isAr && in_array($paymentType, ['offset', 'combined'])) {
+                // 1. Advance offset (AR hoặc AP)
+                if (in_array($paymentType, ['offset', 'combined'])) {
                     foreach ($data['advance_allocations'] as $alloc) {
-                        $advance = SupplierOpeningAdvance::findOrFail($alloc['advance_id']);
-                        if ($advance->supplier_id !== $arApOpeningBalance->supplier_id) {
-                            throw new \RuntimeException('Khoản ứng trước không thuộc nhà cung cấp này.');
+                        if ($isAr) {
+                            $advance = CustomerOpeningAdvance::findOrFail($alloc['advance_id']);
+                            if ($advance->customer_id !== $arApOpeningBalance->customer_id) {
+                                throw new \RuntimeException('Khoản ứng trước không thuộc khách hàng này.');
+                            }
+                            $this->customerAdvanceService->allocateToOpeningBalance(
+                                $advance,
+                                $arApOpeningBalance,
+                                (float) $alloc['amount'],
+                                $data['allocation_date'],
+                                'Đối trừ ứng trước KH với công nợ đầu kỳ'
+                            );
+                        } else {
+                            $advance = SupplierOpeningAdvance::findOrFail($alloc['advance_id']);
+                            if ($advance->supplier_id !== $arApOpeningBalance->supplier_id) {
+                                throw new \RuntimeException('Khoản ứng trước không thuộc nhà cung cấp này.');
+                            }
+                            $this->advanceService->allocateToOpeningBalance(
+                                $advance,
+                                $arApOpeningBalance,
+                                (float) $alloc['amount'],
+                                $data['allocation_date'],
+                                'Đối trừ khoản trả trước NCC với công nợ đầu kỳ'
+                            );
                         }
-                        $this->advanceService->allocateToOpeningBalance(
-                            $advance,
-                            $arApOpeningBalance,
-                            (float) $alloc['amount'],
-                            $data['allocation_date'],
-                            'Đối trừ khoản trả trước NCC với công nợ đầu kỳ'
-                        );
                     }
-                    // Refresh so remaining_amount reflects allocations above
                     $arApOpeningBalance->refresh();
                 }
 

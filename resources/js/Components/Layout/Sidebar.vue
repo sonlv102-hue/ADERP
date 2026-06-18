@@ -46,6 +46,7 @@
           <NavItem :href="route('sales.contracts.index')" icon="document" sub>Hợp đồng bán</NavItem>
           <NavItem :href="route('accounting.invoices.index')" icon="document-text" sub>Hóa đơn bán hàng</NavItem>
           <NavItem v-if="can('commissions.view')" :href="route('sales.commissions.index')" icon="currency-dollar" sub>Hoa hồng</NavItem>
+          <NavItem v-if="can('accounting.view')" :href="route('sales.customer-advances.index')" icon="cash" sub>Ứng trước khách hàng</NavItem>
         </NavGroup>
 
         <!-- Mua hàng -->

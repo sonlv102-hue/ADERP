@@ -2,16 +2,27 @@
 
 namespace App\Http\Controllers\Purchasing;
 
+use App\Enums\CashVoucherBusinessType;
+use App\Enums\CashVoucherStatus;
+use App\Enums\CashVoucherType;
 use App\Http\Controllers\Controller;
+use App\Models\CashVoucher;
+use App\Models\Fund;
 use App\Models\Supplier;
 use App\Models\SupplierOpeningAdvance;
+use App\Services\CashVoucherService;
 use App\Services\SupplierAdvanceService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 
 class SupplierAdvanceController extends Controller
 {
-    public function __construct(private SupplierAdvanceService $service) {}
+    public function __construct(
+        private SupplierAdvanceService $service,
+        private CashVoucherService $cashVoucherService,
+    ) {}
 
     public function index(Request $request)
     {
@@ -69,6 +80,7 @@ class SupplierAdvanceController extends Controller
     {
         return Inertia::render('Purchasing/SupplierAdvances/Form', [
             'suppliers' => Supplier::orderBy('name')->get(['id', 'name', 'code']),
+            'funds'     => Fund::where('is_active', true)->orderBy('name')->get(['id', 'name', 'type']),
         ]);
     }
 
@@ -91,15 +103,46 @@ class SupplierAdvanceController extends Controller
             $rules['original_payment_date'] = ['nullable', 'date'];
             $rules['original_payment_note'] = ['nullable', 'string'];
         } else {
-            $rules['fiscal_year'] = ['nullable'];
+            // Prepayment: bắt buộc chọn quỹ/ngân hàng để tạo phiếu chi + bút toán Dr 331UT / Cr fund
+            $rules['fiscal_year']    = ['nullable'];
+            $rules['fund_id']        = ['required', Rule::exists('funds', 'id')->where('is_active', true)];
+            $rules['payment_method'] = ['required', 'in:cash,bank_transfer'];
         }
 
         $data = $request->validate($rules);
 
-        $advance = $this->service->create($data);
+        try {
+            $advance = DB::transaction(function () use ($data, $advanceType) {
+                $advance = $this->service->create($data);
+
+                if ($advanceType === 'prepayment') {
+                    $fund = Fund::findOrFail($data['fund_id']);
+                    $voucher = CashVoucher::create([
+                        'code'           => CashVoucher::generateCode(CashVoucherType::Payment),
+                        'type'           => CashVoucherType::Payment,
+                        'status'         => CashVoucherStatus::Draft,
+                        'fund_id'        => $fund->id,
+                        'supplier_id'    => $advance->supplier_id,
+                        'partner_type'   => 'supplier',
+                        'amount'         => $advance->amount,
+                        'voucher_date'   => $advance->opening_date,
+                        'description'    => 'Trả trước NCC' . ($advance->reference_no ? " {$advance->reference_no}" : ''),
+                        'business_type'  => CashVoucherBusinessType::SupplierPrepayment->value,
+                        'reference_type' => SupplierOpeningAdvance::class,
+                        'reference_id'   => $advance->id,
+                        'created_by'     => auth()->id(),
+                    ]);
+                    $this->cashVoucherService->confirm($voucher);
+                }
+
+                return $advance;
+            });
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['general' => $e->getMessage()]);
+        }
 
         $msg = $advanceType === 'prepayment'
-            ? 'Đã tạo khoản trả trước trong kỳ.'
+            ? 'Đã tạo khoản trả trước và ghi sổ phiếu chi.'
             : 'Đã tạo khoản ứng trước đầu kỳ.';
 
         return redirect()->route('purchasing.supplier-advances.show', $advance)
@@ -140,6 +183,7 @@ class SupplierAdvanceController extends Controller
         return Inertia::render('Purchasing/SupplierAdvances/Form', [
             'advance'   => $supplierAdvance->load('supplier'),
             'suppliers' => Supplier::orderBy('name')->get(['id', 'name', 'code']),
+            'funds'     => Fund::where('is_active', true)->orderBy('name')->get(['id', 'name', 'type']),
         ]);
     }
 
