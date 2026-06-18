@@ -39,8 +39,11 @@ class InventoryReportController extends Controller
                  SUM(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) BETWEEN ? AND ? AND sm.quantity > 0 THEN sm.quantity ELSE 0 END) as stock_in,
                  SUM(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) BETWEEN ? AND ? AND sm.quantity < 0 THEN ABS(sm.quantity) ELSE 0 END) as stock_out,
                  MAX(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) BETWEEN ? AND ? AND sm.quantity > 0 THEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) END) as last_in_date,
-                 MAX(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) BETWEEN ? AND ? AND sm.quantity < 0 THEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) END) as last_out_date",
-                [$dateFrom, $dateFrom, $dateTo, $dateFrom, $dateTo, $dateFrom, $dateTo, $dateFrom, $dateTo]
+                 MAX(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) BETWEEN ? AND ? AND sm.quantity < 0 THEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) END) as last_out_date,
+                 SUM(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) < ? THEN COALESCE(sm.amount, 0) ELSE 0 END) as amount_begin,
+                 SUM(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) BETWEEN ? AND ? AND sm.quantity > 0 THEN COALESCE(sm.amount, 0) ELSE 0 END) as amount_in,
+                 SUM(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) BETWEEN ? AND ? AND sm.quantity < 0 THEN ABS(COALESCE(sm.amount, 0)) ELSE 0 END) as amount_out",
+                [$dateFrom, $dateFrom, $dateTo, $dateFrom, $dateTo, $dateFrom, $dateTo, $dateFrom, $dateTo, $dateFrom, $dateFrom, $dateTo, $dateFrom, $dateTo]
             )
             ->groupBy('sm.product_id');
 
@@ -59,6 +62,9 @@ class InventoryReportController extends Controller
                 DB::raw('COALESCE(sm_agg.stock_out, 0) as stock_out'),
                 DB::raw('sm_agg.last_in_date'),
                 DB::raw('sm_agg.last_out_date'),
+                DB::raw('COALESCE(sm_agg.amount_begin, 0) as amount_begin'),
+                DB::raw('COALESCE(sm_agg.amount_in, 0) as amount_in'),
+                DB::raw('COALESCE(sm_agg.amount_out, 0) as amount_out'),
             ])
             ->whereNull('products.deleted_at')
             ->when($search, fn ($q) =>
@@ -73,11 +79,14 @@ class InventoryReportController extends Controller
         $rows = $query->paginate(30);
 
         $rows->through(function ($row) {
-            $begin = (float) $row->stock_begin;
-            $in    = (float) $row->stock_in;
-            $out   = (float) $row->stock_out;
-            $end   = $begin + $in - $out;
-            $cost  = (float) $row->cost_price;
+            $begin     = (float) $row->stock_begin;
+            $in        = (float) $row->stock_in;
+            $out       = (float) $row->stock_out;
+            $end       = $begin + $in - $out;
+            $cost      = (float) $row->cost_price;
+            $beginVal  = (float) $row->amount_begin;
+            $inVal     = (float) $row->amount_in;
+            $outVal    = (float) $row->amount_out;
 
             return [
                 'id'           => $row->id,
@@ -90,10 +99,10 @@ class InventoryReportController extends Controller
                 'stock_in'     => $in,
                 'stock_out'    => $out,
                 'stock_end'    => $end,
-                'value_begin'  => $begin * $cost,
-                'value_in'     => $in  * $cost,
-                'value_out'    => $out * $cost,
-                'value_end'    => $end * $cost,
+                'value_begin'  => $beginVal,
+                'value_in'     => $inVal,
+                'value_out'    => $outVal,
+                'value_end'    => $beginVal + $inVal - $outVal,
                 'last_in_date' => $row->last_in_date,
                 'last_out_date'=> $row->last_out_date,
             ];
@@ -115,8 +124,11 @@ class InventoryReportController extends Controller
                 "sm.product_id,
                  SUM(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) < ? THEN sm.quantity ELSE 0 END) as stock_begin,
                  SUM(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) BETWEEN ? AND ? AND sm.quantity > 0 THEN sm.quantity ELSE 0 END) as stock_in,
-                 SUM(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) BETWEEN ? AND ? AND sm.quantity < 0 THEN ABS(sm.quantity) ELSE 0 END) as stock_out",
-                [$dateFrom, $dateFrom, $dateTo, $dateFrom, $dateTo]
+                 SUM(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) BETWEEN ? AND ? AND sm.quantity < 0 THEN ABS(sm.quantity) ELSE 0 END) as stock_out,
+                 SUM(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) < ? THEN COALESCE(sm.amount, 0) ELSE 0 END) as amount_begin,
+                 SUM(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) BETWEEN ? AND ? AND sm.quantity > 0 THEN COALESCE(sm.amount, 0) ELSE 0 END) as amount_in,
+                 SUM(CASE WHEN COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at)) BETWEEN ? AND ? AND sm.quantity < 0 THEN ABS(COALESCE(sm.amount, 0)) ELSE 0 END) as amount_out",
+                [$dateFrom, $dateFrom, $dateTo, $dateFrom, $dateTo, $dateFrom, $dateFrom, $dateTo, $dateFrom, $dateTo]
             )
             ->groupBy('sm.product_id');
 
@@ -131,10 +143,10 @@ class InventoryReportController extends Controller
             )
             ->when($categoryId, fn ($q) => $q->where('products.category_id', $categoryId))
             ->selectRaw(
-                "SUM(COALESCE(sms.stock_begin, 0) * products.cost_price) as begin_val,
-                 SUM(COALESCE(sms.stock_in,    0) * products.cost_price) as in_val,
-                 SUM(COALESCE(sms.stock_out,   0) * products.cost_price) as out_val,
-                 SUM((COALESCE(sms.stock_begin, 0) + COALESCE(sms.stock_in, 0) - COALESCE(sms.stock_out, 0)) * products.cost_price) as end_val"
+                "SUM(COALESCE(sms.amount_begin, 0)) as begin_val,
+                 SUM(COALESCE(sms.amount_in,    0)) as in_val,
+                 SUM(COALESCE(sms.amount_out,   0)) as out_val,
+                 SUM(COALESCE(sms.amount_begin, 0) + COALESCE(sms.amount_in, 0) - COALESCE(sms.amount_out, 0)) as end_val"
             )
             ->first();
 
@@ -198,8 +210,20 @@ class InventoryReportController extends Controller
                 ->where(DB::raw("COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at))"), '<', $dateFrom)
                 ->sum('sm.quantity');
 
-            // Đơn giá bình quân đầu kỳ
-            $openingValue = $openingBalance * (float) ($product->cost_price ?? 0);
+            // Giá trị đầu kỳ — tính từ sm.amount thực tế (không dùng cost_price hiện tại)
+            $openingValue = (float) DB::table('stock_movements as sm')
+                ->leftJoin('stock_entries as se', function ($join) {
+                    $join->on('sm.source_id', '=', 'se.id')
+                         ->where('sm.source_type', '=', 'App\\Models\\StockEntry');
+                })
+                ->leftJoin('stock_exits as sx', function ($join) {
+                    $join->on('sm.source_id', '=', 'sx.id')
+                         ->where('sm.source_type', '=', 'App\\Models\\StockExit');
+                })
+                ->where('sm.product_id', $productId)
+                ->when($warehouseId, fn ($q) => $q->where('sm.warehouse_id', $warehouseId))
+                ->where(DB::raw("COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at))"), '<', $dateFrom)
+                ->sum(DB::raw('COALESCE(sm.amount, 0)'));
 
             // Các phát sinh trong kỳ — dùng ngày phiếu NK/XK
             $movements = DB::table('stock_movements as sm')

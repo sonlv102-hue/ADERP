@@ -107,6 +107,8 @@ class InventoryOpeningBalanceController extends Controller
                         'warehouse_id' => $data['warehouse_id'],
                         'product_id'   => $item['product_id'],
                         'quantity'     => $qty,
+                        'unit_cost'    => $cost,
+                        'amount'       => $qty * $cost,
                         'type'         => 'opening',
                         'source_type'  => InventoryOpeningBalance::class,
                         'source_id'    => $balance->id,
