@@ -13,7 +13,7 @@
       <form @submit.prevent="submit" class="space-y-5">
         <!-- Header -->
         <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">Mã phiếu</label>
               <input :value="nextCode" disabled class="erp-input bg-gray-50 text-gray-500" />
@@ -37,7 +37,7 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">Ghi nhận chi phí <span class="text-red-500">*</span></label>
               <select v-model="form.recognition_method" class="erp-input">
@@ -51,7 +51,7 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">TK chi phí <span class="text-red-500">*</span></label>
               <select v-model="form.expense_account_code" class="erp-input">

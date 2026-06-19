@@ -1,7 +1,7 @@
 ﻿<template>
   <AppLayout>
     <div class="space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-slate-900">Bảng tính và phân bổ khấu hao</h1>
         <div class="flex gap-2 items-center">
           <input v-model="period" type="month" @change="applyFilters" class="erp-input w-40" />
@@ -14,8 +14,8 @@
         <div><span class="text-indigo-600 font-semibold">Tổng KH:</span> <strong>{{ fmt(total) }}</strong></div>
       </div>
 
-      <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-slate-50 border-b border-slate-200">
             <tr>
               <th class="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Mã TSCĐ</th>

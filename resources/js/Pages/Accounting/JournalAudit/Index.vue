@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout title="Rà soát bút toán kế toán">
     <div class="max-w-7xl mx-auto px-4 py-6 space-y-5">
       <!-- Header -->
@@ -55,7 +55,7 @@
 
       <template v-else>
         <!-- Summary cards -->
-        <div class="grid grid-cols-3 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <div class="bg-white rounded-lg shadow p-4 text-center">
             <p class="text-3xl font-bold text-gray-900">{{ summary.total }}</p>
             <p class="text-sm text-gray-500 mt-1">Tổng vấn đề phát hiện</p>

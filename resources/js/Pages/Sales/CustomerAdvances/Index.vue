@@ -1,9 +1,9 @@
-<template>
+﻿<template>
   <AppLayout title="Ứng trước khách hàng">
     <div class="space-y-5">
 
       <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div>
           <h1 class="text-2xl font-bold text-gray-900">Ứng trước khách hàng</h1>
           <p class="text-sm text-gray-500 mt-0.5">Quản lý khoản khách hàng ứng trước (131UT)</p>
@@ -15,7 +15,7 @@
       </div>
 
       <!-- Summary -->
-      <div class="grid grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <div class="bg-white rounded-xl border border-gray-200 p-4">
           <div class="text-sm text-gray-500">Khoản còn dư</div>
           <div class="text-xl font-bold text-gray-900 mt-1">{{ summary.open }}</div>
@@ -47,8 +47,8 @@
       </div>
 
       <!-- Table -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-4 py-3 text-xs font-semibold text-gray-600 uppercase tracking-wide">Khách hàng</th>

@@ -37,8 +37,8 @@
       </div>
 
       <!-- Items -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden mb-5">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto mb-5">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b">
             <tr>
               <th class="px-4 py-3 text-left">Mã CCDC</th>

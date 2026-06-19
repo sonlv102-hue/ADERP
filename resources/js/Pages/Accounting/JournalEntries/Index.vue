@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-slate-900">Phiếu kế toán / Bút toán</h1>
         <div class="flex items-center gap-2">
           <button v-if="can('accounting.manage') && draftCount > 0" @click="showBulkApprove = true"
@@ -37,8 +37,8 @@
         <input v-model="to" @change="applyFilters" type="date" class="erp-input w-40" />
       </div>
 
-      <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-slate-50 border-b border-slate-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wide">Mã BT</th>

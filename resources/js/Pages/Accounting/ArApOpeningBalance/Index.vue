@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-7xl">
       <div class="flex items-center justify-between mb-6">
@@ -33,8 +33,8 @@
       </div>
 
       <!-- Table -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="px-4 py-3 text-left font-semibold text-gray-600">Mã</th>

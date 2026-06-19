@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-6xl">
       <div class="flex items-center justify-between mb-6">
@@ -21,7 +21,7 @@
         </div>
 
         <div class="overflow-x-auto">
-          <table class="w-full text-xs">
+          <table class="min-w-full text-xs">
             <thead class="bg-gray-50 border-b text-gray-500">
               <tr>
                 <th class="px-3 py-2 text-left">Kỳ</th>

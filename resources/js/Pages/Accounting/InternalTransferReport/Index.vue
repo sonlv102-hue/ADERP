@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout title="Báo cáo chuyển khoản nội bộ">
     <div class="space-y-5">
 
@@ -117,7 +117,7 @@
       </div>
 
       <!-- Transactions table -->
-      <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
         <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
           <h2 class="text-sm font-semibold text-slate-700">Chi tiết giao dịch — {{ formatMonth(month) }}</h2>
           <div class="flex gap-2">
@@ -131,7 +131,7 @@
           </div>
         </div>
 
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-slate-50 border-b border-slate-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wide w-24">Ngày</th>

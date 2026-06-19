@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-3xl">
       <div class="flex items-center gap-3 mb-6">
@@ -28,7 +28,7 @@
             </label>
           </div>
 
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">
                 {{ form.person_type === 'employee' ? 'Nhân viên' : form.person_type === 'shareholder' ? 'Thành viên/Cổ đông' : 'Họ tên' }}
@@ -65,7 +65,7 @@
         </div>
 
         <!-- Lines -->
-        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <div class="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
             <h3 class="text-sm font-semibold text-gray-700">Chi tiết khoản chi hộ</h3>
             <button type="button" @click="addLine" class="text-sm text-primary-600 hover:text-primary-700 font-medium">+ Thêm dòng</button>
@@ -73,7 +73,7 @@
 
           <div v-if="form.errors.lines" class="px-4 py-2 text-xs text-red-600 bg-red-50">{{ form.errors.lines }}</div>
 
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="border-b border-gray-100">
               <tr>
                 <th class="text-left px-4 py-2 text-xs font-medium text-gray-500 w-32">TK chi phí</th>

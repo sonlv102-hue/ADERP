@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
       <!-- Header -->
@@ -76,7 +76,7 @@
       </div>
 
       <!-- Items table -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between gap-3 flex-wrap">
           <h2 class="font-semibold text-gray-800 text-sm">Danh sách sản phẩm kiểm kê</h2>
           <div class="flex items-center gap-3">
@@ -89,7 +89,7 @@
         </div>
 
         <div class="overflow-x-auto">
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th class="text-left px-4 py-2 font-semibold text-gray-600 text-xs">Mã SP</th>

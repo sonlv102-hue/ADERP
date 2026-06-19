@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-5xl">
       <div class="flex items-center gap-3 mb-6">
@@ -11,7 +11,7 @@
       <form @submit.prevent="submit" class="space-y-6">
         <!-- Header -->
         <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="form-label">Loại <span class="text-red-500">*</span></label>
               <div class="flex gap-3">
@@ -44,7 +44,7 @@
           </div>
 
           <div class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <table class="min-w-full text-sm">
               <thead class="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th class="px-3 py-2 text-left text-xs font-semibold text-gray-600 w-40">

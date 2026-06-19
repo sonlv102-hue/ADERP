@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-gray-900">Sao lưu dữ liệu</h1>
         <button
           @click="createBackup"
@@ -34,7 +34,7 @@
       </div>
 
       <!-- Backup list -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div v-if="backups.length === 0" class="text-center py-16 text-gray-400">
           <svg class="mx-auto h-12 w-12 mb-3 opacity-40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 8h14M5 8a2 2 0 110-4h14a2 2 0 110 4M5 8v10a2 2 0 002 2h10a2 2 0 002-2V8m-9 4h4"/>

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-3xl space-y-5">
       <!-- Header -->
@@ -14,7 +14,7 @@
             <p class="text-sm text-gray-500">Phiếu chi hộ · {{ report.expense_date_f }}</p>
           </div>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
           <span :class="statusClass(report.status_color)" class="inline-flex px-3 py-1 rounded-full text-xs font-semibold">
             {{ report.status_label }}
           </span>
@@ -68,11 +68,11 @@
       </div>
 
       <!-- Lines -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="px-4 py-3 bg-gray-50 border-b border-gray-200">
           <h3 class="text-sm font-semibold text-gray-700">Chi tiết khoản chi</h3>
         </div>
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="border-b border-gray-100">
             <tr>
               <th class="text-left px-4 py-2 text-xs font-medium text-gray-500">TK</th>

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
       <!-- Header -->
@@ -59,7 +59,7 @@
 
       <!-- Monthly table -->
       <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-4 py-3 font-semibold text-gray-600">Tháng</th>
@@ -104,7 +104,7 @@
                         Hóa đơn mua (đầu vào)
                       </button>
                     </div>
-                    <table class="w-full text-xs">
+                    <table class="min-w-full text-xs">
                       <thead>
                         <tr class="text-gray-500">
                           <th class="text-left py-1 pr-4">Số HĐ</th>

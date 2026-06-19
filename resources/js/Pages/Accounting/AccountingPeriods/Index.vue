@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-gray-900">Kỳ kế toán</h1>
         <button v-if="can('accounting.manage')" @click="showAdd = true"
           class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
@@ -12,8 +12,8 @@
         </button>
       </div>
 
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Kỳ kế toán</th>
@@ -57,7 +57,7 @@
             </button>
           </div>
           <form @submit.prevent="submitAdd" class="p-6 space-y-4">
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Tháng</label>
                 <select v-model="addForm.month" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">

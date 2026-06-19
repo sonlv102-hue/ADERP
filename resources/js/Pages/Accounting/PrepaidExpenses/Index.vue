@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div>
           <h1 class="text-2xl font-bold text-gray-900">Chi phí trả trước</h1>
           <p class="text-sm text-gray-500 mt-0.5">TK 142 (ngắn hạn) / TK 242 (dài hạn)</p>
@@ -28,8 +28,8 @@
         </select>
       </div>
 
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã</th>

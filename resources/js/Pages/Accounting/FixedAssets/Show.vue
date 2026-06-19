@@ -2,7 +2,7 @@
   <AppLayout>
     <div class="space-y-5">
       <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div class="flex items-center gap-3">
           <Link :href="route('accounting.fixed-assets.index')" class="text-slate-400 hover:text-slate-600">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -10,14 +10,14 @@
             </svg>
           </Link>
           <div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
               <h1 class="text-2xl font-bold text-slate-900">{{ asset.name }}</h1>
               <span class="erp-badge" :class="badgeClass(asset.status_color)">{{ asset.status_label }}</span>
             </div>
             <p class="text-sm text-slate-500 font-mono">{{ asset.code }} · {{ asset.category_name }}</p>
           </div>
         </div>
-        <div class="flex items-center gap-2" v-if="can('accounting.manage')">
+        <div class="flex items-center gap-2 flex-wrap" v-if="can('accounting.manage')">
           <!-- Place in service -->
           <button v-if="asset.status === 'pending_use'" @click="showPlaceInService = true"
             class="erp-btn-secondary text-green-700 border-green-300 hover:bg-green-50">
@@ -47,7 +47,7 @@
       </div>
 
       <!-- KPI summary -->
-      <div class="grid grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="bg-white rounded-xl border border-slate-200 p-5">
           <p class="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-1">Nguyên giá</p>
           <p class="text-2xl font-bold text-slate-900">{{ fmt(asset.acquisition_cost) }}</p>
@@ -116,13 +116,13 @@
       </div>
 
       <!-- Tab: Lịch khấu hao -->
-      <div v-show="activeTab === 'schedule'" class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div v-show="activeTab === 'schedule'" class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
         <div class="p-4 border-b border-slate-100 flex justify-between items-center">
           <h3 class="font-semibold text-slate-800">Lịch khấu hao</h3>
           <span class="text-xs text-slate-400">{{ schedule.length }} kỳ</span>
         </div>
         <div class="overflow-y-auto max-h-96">
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="bg-slate-50 sticky top-0">
               <tr>
                 <th class="text-left px-4 py-2 text-xs font-semibold text-slate-500">Kỳ</th>
@@ -156,11 +156,11 @@
       </div>
 
       <!-- Tab: Lịch sử bút toán -->
-      <div v-show="activeTab === 'journals'" class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div v-show="activeTab === 'journals'" class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
         <div class="p-4 border-b border-slate-100">
           <h3 class="font-semibold text-slate-800">Lịch sử khấu hao đã ghi sổ</h3>
         </div>
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-slate-50">
             <tr>
               <th class="text-left px-4 py-2 text-xs font-semibold text-slate-500">Kỳ</th>
@@ -194,11 +194,11 @@
       </div>
 
       <!-- Tab: Điều chuyển -->
-      <div v-show="activeTab === 'movements'" class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div v-show="activeTab === 'movements'" class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
         <div class="p-4 border-b border-slate-100">
           <h3 class="font-semibold text-slate-800">Lịch sử điều chuyển và thay đổi</h3>
         </div>
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-slate-50">
             <tr>
               <th class="text-left px-4 py-2 text-xs font-semibold text-slate-500">Ngày</th>
@@ -232,8 +232,8 @@
             + Ghi nhận sửa chữa
           </Link>
         </div>
-        <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
-          <table class="w-full text-sm">
+        <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+          <table class="min-w-full text-sm">
             <thead class="bg-slate-50">
               <tr>
                 <th class="text-left px-4 py-2 text-xs font-semibold text-slate-500">Ngày</th>
@@ -271,11 +271,11 @@
       </div>
 
       <!-- Tab: Thanh lý -->
-      <div v-show="activeTab === 'disposals'" class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div v-show="activeTab === 'disposals'" class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
         <div class="p-4 border-b border-slate-100">
           <h3 class="font-semibold text-slate-800">Thanh lý / nhượng bán</h3>
         </div>
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-slate-50">
             <tr>
               <th class="text-left px-4 py-2 text-xs font-semibold text-slate-500">Ngày</th>

@@ -34,7 +34,7 @@
       </div>
 
       <!-- Preview table -->
-      <div v-if="preview.length > 0" class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div v-if="preview.length > 0" class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
         <div class="p-4 border-b border-slate-100 flex justify-between items-center">
           <h3 class="font-semibold text-slate-800">
             Xem trước khấu hao kỳ {{ period }}
@@ -45,7 +45,7 @@
           </div>
         </div>
         <div class="overflow-x-auto">
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th class="text-left px-4 py-3 font-semibold text-slate-500 text-xs uppercase">Mã</th>

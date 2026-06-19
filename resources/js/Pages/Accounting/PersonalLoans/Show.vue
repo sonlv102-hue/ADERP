@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-3xl space-y-5">
       <!-- Header -->
@@ -14,7 +14,7 @@
             <p class="text-sm text-gray-500">Vay cá nhân · {{ loan.loan_date_f }}</p>
           </div>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
           <span :class="statusClass(loan.status_color)" class="inline-flex px-3 py-1 rounded-full text-xs font-semibold">
             {{ loan.status_label }}
           </span>
@@ -85,7 +85,7 @@
       </div>
 
       <!-- Repayments -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="flex items-center justify-between px-4 py-3 bg-gray-50 border-b border-gray-200">
           <h3 class="text-sm font-semibold text-gray-700">Lịch sử trả nợ</h3>
           <button v-if="['active','partially_repaid'].includes(loan.status)" @click="showRepayModal = true"

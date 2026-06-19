@@ -10,13 +10,13 @@
       </div>
 
       <!-- Preview table -->
-      <div v-if="preview.length" class="bg-white rounded-xl border border-gray-200 overflow-hidden mb-5">
+      <div v-if="preview.length" class="bg-white rounded-xl border border-gray-200 overflow-x-auto mb-5">
         <div class="px-5 py-4 border-b border-gray-200">
           <h2 class="text-base font-semibold text-gray-800">
             Kỳ {{ period }} — {{ preview.length }} CCDC cần phân bổ
           </h2>
         </div>
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b">
             <tr>
               <th class="px-4 py-3 text-left">Mã CCDC</th>

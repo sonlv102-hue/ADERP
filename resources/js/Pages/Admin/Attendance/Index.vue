@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout title="Bảng Chấm Công">
     <div class="max-w-5xl mx-auto py-6 px-4">
 
@@ -22,8 +22,8 @@
       <div v-if="$page.props.flash?.error"   class="mb-4 bg-red-50 border border-red-200 text-red-800 rounded-xl px-4 py-3 text-sm">{{ $page.props.flash.error }}</div>
 
       <!-- Table -->
-      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
             <tr>
               <th class="px-4 py-3 text-left">Mã bảng</th>

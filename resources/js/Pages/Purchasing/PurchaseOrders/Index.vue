@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-gray-900">Đơn mua hàng</h1>
         <div class="flex gap-2">
           <button v-if="can('purchasing.create')" @click="openImport"
@@ -25,7 +25,7 @@
       <div class="flex gap-3 flex-wrap">
         <input v-model="search" @input="doSearch" type="text"
           placeholder="Tìm đơn mua, nhà cung cấp, mã chứng từ..."
-          class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-72 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full sm:w-72 focus:outline-none focus:ring-2 focus:ring-primary-500" />
         <select v-model="statusFilter" @change="doSearch"
           class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
           <option value="">Tất cả trạng thái</option>
@@ -35,8 +35,8 @@
           class="text-gray-500 hover:text-gray-700 px-3 py-2 text-sm">Xóa lọc</button>
       </div>
 
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã đơn</th>
@@ -205,7 +205,7 @@
         <div v-if="preview.orders.length">
           <h4 class="text-sm font-semibold text-gray-700 mb-2">Đơn hàng sẽ import ({{ preview.orders.length }})</h4>
           <div class="border border-gray-200 rounded-lg overflow-hidden">
-            <table class="w-full text-xs">
+            <table class="min-w-full text-xs">
               <thead class="bg-gray-50">
                 <tr>
                   <th class="text-left px-3 py-2 font-semibold text-gray-600">Mã đơn</th>
@@ -241,7 +241,7 @@
         <div v-if="preview.warnings.length">
           <h4 class="text-sm font-semibold text-yellow-700 mb-2">Cảnh báo chênh lệch số tiền ({{ preview.warnings.length }})</h4>
           <div class="border border-yellow-200 rounded-lg overflow-hidden">
-            <table class="w-full text-xs">
+            <table class="min-w-full text-xs">
               <thead class="bg-yellow-50">
                 <tr>
                   <th class="text-left px-3 py-2">Dòng</th>
@@ -271,7 +271,7 @@
         <div v-if="preview.errors.length">
           <h4 class="text-sm font-semibold text-red-600 mb-2">Dòng lỗi ({{ preview.errors.length }}) — sẽ không được import</h4>
           <div class="border border-red-200 rounded-lg overflow-hidden">
-            <table class="w-full text-xs">
+            <table class="min-w-full text-xs">
               <thead class="bg-red-50">
                 <tr>
                   <th class="text-left px-3 py-2">Dòng Excel</th>

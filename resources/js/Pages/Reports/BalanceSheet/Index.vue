@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
       <!-- Header -->
@@ -177,12 +177,12 @@
       <div v-show="activeTab === 'report'" class="transition-opacity" :class="{ 'opacity-60': isLoading }">
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <!-- TÀI SẢN -->
-          <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
             <div class="bg-blue-50 border-b border-gray-200 px-5 py-3 flex items-center justify-between">
               <h2 class="font-semibold text-blue-800">PHẦN I — TÀI SẢN</h2>
               <span class="text-xs text-blue-600 font-mono">Mã 200 = {{ fmt(summary.total_assets) }}</span>
             </div>
-            <table class="w-full text-sm">
+            <table class="min-w-full text-sm">
               <thead>
                 <tr class="border-b border-gray-100 bg-gray-50 text-xs text-gray-500">
                   <th class="px-3 py-2 text-center w-12 font-medium">Mã</th>
@@ -222,12 +222,12 @@
           </div>
 
           <!-- NGUỒN VỐN -->
-          <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
             <div class="bg-green-50 border-b border-gray-200 px-5 py-3 flex items-center justify-between">
               <h2 class="font-semibold text-green-800">PHẦN II — NGUỒN VỐN</h2>
               <span class="text-xs text-green-600 font-mono">Mã 500 = {{ fmt(summary.total_liabilities_equity) }}</span>
             </div>
-            <table class="w-full text-sm">
+            <table class="min-w-full text-sm">
               <thead>
                 <tr class="border-b border-gray-100 bg-gray-50 text-xs text-gray-500">
                   <th class="px-3 py-2 text-center w-12 font-medium">Mã</th>
@@ -271,7 +271,7 @@
       </div>
 
       <!-- Tab: TK chưa map -->
-      <div v-show="activeTab === 'unmapped'" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div v-show="activeTab === 'unmapped'" class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="px-5 py-4 border-b border-gray-200 bg-orange-50 flex items-start justify-between gap-3">
           <div>
             <h2 class="font-semibold text-orange-800">Tài khoản có số dư nhưng chưa map vào B01a-DNN</h2>
@@ -336,11 +336,11 @@
 
       <!-- Tab: Kiểm tra cân đối -->
       <div v-show="activeTab === 'check'" class="space-y-4">
-        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <div class="px-5 py-4 border-b border-gray-200 bg-gray-50">
             <h2 class="font-semibold text-gray-800">Kiểm tra cân đối</h2>
           </div>
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <tbody class="divide-y divide-gray-100">
               <tr class="hover:bg-gray-50">
                 <td class="px-5 py-3 text-gray-600">Tổng tài sản (Mã 200)</td>
@@ -382,11 +382,11 @@
         </div>
 
         <!-- Trial balance -->
-        <div v-if="trialBalance" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div v-if="trialBalance" class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <div class="px-5 py-4 border-b border-gray-200 bg-gray-50">
             <h2 class="font-semibold text-gray-800">Trạng thái Trial Balance</h2>
           </div>
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <tbody class="divide-y divide-gray-100">
               <tr class="hover:bg-gray-50">
                 <td class="px-5 py-3 text-gray-600">Tổng phát sinh Nợ</td>
@@ -420,7 +420,7 @@
       </div>
       <!-- Tab: Đối soát GL -->
       <div v-show="activeTab === 'gl'" class="space-y-4">
-        <div class="flex items-center justify-between">
+        <div class="flex items-center justify-between flex-wrap gap-y-3">
           <p class="text-xs text-gray-500">
             Nhấn vào dòng chỉ tiêu để xem danh sách tài khoản GL đóng góp vào chỉ tiêu đó.
           </p>
@@ -433,11 +433,11 @@
         </div>
 
         <!-- PHẦN I — TÀI SẢN -->
-        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <div class="bg-blue-50 border-b border-gray-200 px-5 py-3">
             <h2 class="font-semibold text-blue-800">PHẦN I — TÀI SẢN</h2>
           </div>
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="border-b border-gray-100 bg-gray-50 text-xs text-gray-500">
               <tr>
                 <th class="w-6 px-2 py-2"></th>
@@ -485,11 +485,11 @@
         </div>
 
         <!-- PHẦN II — NGUỒN VỐN -->
-        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <div class="bg-green-50 border-b border-gray-200 px-5 py-3">
             <h2 class="font-semibold text-green-800">PHẦN II — NGUỒN VỐN</h2>
           </div>
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="border-b border-gray-100 bg-gray-50 text-xs text-gray-500">
               <tr>
                 <th class="w-6 px-2 py-2"></th>

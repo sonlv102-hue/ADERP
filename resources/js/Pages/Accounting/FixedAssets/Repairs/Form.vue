@@ -14,7 +14,7 @@
       </div>
 
       <form @submit.prevent="submit" class="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label class="erp-label">Loại sửa chữa <span class="text-red-500">*</span></label>
             <select v-model="form.repair_type" class="erp-input w-full" required>
@@ -34,7 +34,7 @@
           <input v-model="form.description" class="erp-input w-full" required />
         </div>
 
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label class="erp-label">Số tiền (chưa VAT) <span class="text-red-500">*</span></label>
             <input v-model.number="form.amount" type="number" min="0" step="1" class="erp-input w-full" required />

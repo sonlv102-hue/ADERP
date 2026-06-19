@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
       <div class="flex items-center justify-between flex-wrap gap-3">
@@ -58,14 +58,14 @@
       </div>
 
       <!-- Groups -->
-      <div v-for="group in groups" :key="group.name" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div v-for="group in groups" :key="group.name" class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="bg-gray-50 border-b border-gray-200 px-5 py-3 flex items-center justify-between">
           <h2 class="font-semibold text-gray-800">
             <span class="font-mono text-primary-700 mr-2">TK {{ group.tk }}</span>{{ group.name }}
           </h2>
           <span class="text-sm font-bold text-red-700">{{ fmt(group.total) }}</span>
         </div>
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="border-b border-gray-100 bg-gray-50">
             <tr>
               <th class="text-left px-4 py-2 font-semibold text-gray-500 text-xs">Ngày</th>

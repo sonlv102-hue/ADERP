@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-5xl space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-gray-900">Quản lý quỹ</h1>
         <div class="flex gap-2">
           <Link :href="route('accounting.fund-transfers.index')"
@@ -23,11 +23,11 @@
       </div>
 
       <!-- Cash funds -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="px-5 py-4 border-b border-gray-200 bg-gray-50">
           <h2 class="font-semibold text-gray-700">Quỹ tiền mặt</h2>
         </div>
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="border-b border-gray-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã / Tên quỹ</th>
@@ -66,11 +66,11 @@
       </div>
 
       <!-- Bank accounts -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="px-5 py-4 border-b border-gray-200 bg-gray-50">
           <h2 class="font-semibold text-gray-700">Tài khoản ngân hàng</h2>
         </div>
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="border-b border-gray-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Tên tài khoản</th>

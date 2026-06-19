@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-5xl space-y-5">
       <div class="flex items-center justify-between flex-wrap gap-3">
@@ -22,8 +22,8 @@
         </select>
       </div>
 
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="border-b border-gray-200 bg-gray-50">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Số phiếu</th>

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout :title="account ? 'Sửa tài khoản NH' : 'Thêm tài khoản NH'">
     <div class="max-w-xl mx-auto">
       <div class="flex items-center gap-3 mb-6">
@@ -9,7 +9,7 @@
       </div>
 
       <form @submit.prevent="submit" class="bg-white rounded-xl shadow-sm p-6 space-y-5">
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div class="col-span-2">
             <label class="form-label">Tên tài khoản <span class="text-red-500">*</span></label>
             <input v-model="form.name" class="form-input" :class="{ 'border-red-500': form.errors.name }"

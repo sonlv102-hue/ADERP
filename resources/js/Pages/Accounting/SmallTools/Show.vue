@@ -88,14 +88,14 @@
           </div>
 
           <!-- Allocation schedule -->
-          <div v-if="allocations.length" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div v-if="allocations.length" class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
             <div class="px-5 py-4 border-b border-gray-200 flex justify-between items-center">
               <h2 class="text-sm font-semibold text-gray-800">Lịch phân bổ</h2>
               <Link v-if="can('ccdc.allocate')"
                 :href="route('accounting.small-tools.allocations.index', { period: currentPeriod })"
                 class="text-xs text-primary-600 hover:text-primary-800">Phân bổ tháng →</Link>
             </div>
-            <table class="w-full text-xs">
+            <table class="min-w-full text-xs">
               <thead class="bg-gray-50">
                 <tr>
                   <th class="px-4 py-2 text-left text-gray-600">Kỳ</th>
@@ -122,7 +122,7 @@
           </div>
 
           <!-- Transfers -->
-          <div v-if="transfers.length" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div v-if="transfers.length" class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
             <div class="px-5 py-4 border-b border-gray-200">
               <h2 class="text-sm font-semibold text-gray-800">Lịch sử điều chuyển</h2>
             </div>

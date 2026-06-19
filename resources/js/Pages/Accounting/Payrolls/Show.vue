@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-full space-y-4">
 
@@ -172,9 +172,9 @@
       </div>
 
       <!-- Full Payroll Table -->
-      <div class="bg-white rounded-xl shadow-sm overflow-hidden" id="payroll-table-container">
+      <div class="bg-white rounded-xl shadow-sm overflow-x-auto" id="payroll-table-container">
         <div class="overflow-x-auto">
-          <table class="w-full text-xs whitespace-nowrap border-collapse" style="min-width: 2400px">
+          <table class="min-w-full text-xs whitespace-nowrap border-collapse" style="min-width: 2400px">
             <thead>
               <!-- Row 1: column group headers -->
               <tr class="bg-primary-700 text-white text-center">
@@ -793,7 +793,7 @@
         <div>
           <p class="text-xs font-semibold text-gray-600 mb-2">Phiếu chi sẽ bị hủy:</p>
           <div class="border rounded-lg overflow-hidden">
-            <table class="w-full text-xs">
+            <table class="min-w-full text-xs">
               <thead class="bg-gray-100">
                 <tr>
                   <th class="px-3 py-2 text-left text-gray-600">Nhân viên</th>

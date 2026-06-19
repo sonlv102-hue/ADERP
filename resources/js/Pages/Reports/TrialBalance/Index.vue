@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
       <div class="flex items-center justify-between flex-wrap gap-3">
@@ -117,12 +117,12 @@
       </div>
 
       <!-- Table -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden transition-opacity" :class="{ 'opacity-60': isLoading }">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto transition-opacity" :class="{ 'opacity-60': isLoading }">
         <div class="bg-gray-50 border-b border-gray-200 px-5 py-3">
           <h2 class="font-semibold text-gray-800">BẢNG CÂN ĐỐI SỐ PHÁT SINH — {{ currentYear }}</h2>
         </div>
         <div class="overflow-x-auto">
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="border-b-2 border-gray-300">
               <tr class="bg-gray-50">
                 <th class="text-left px-4 py-2 font-semibold text-gray-600 text-xs" rowspan="2">TK</th>

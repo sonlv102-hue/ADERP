@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div>
           <h1 class="text-2xl font-bold text-slate-900">Kiểm tra tuân thủ TSCĐ</h1>
           <p class="text-sm text-slate-500 mt-1">Phát hiện bất thường và vi phạm quy định kế toán</p>

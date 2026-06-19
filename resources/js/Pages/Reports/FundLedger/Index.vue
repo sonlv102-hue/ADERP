@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-6xl space-y-5">
       <h1 class="text-2xl font-bold text-gray-900">Sổ quỹ</h1>
@@ -54,11 +54,11 @@
       </div>
 
       <!-- Ledger table -->
-      <div v-if="fund" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div v-if="fund" class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="px-5 py-4 border-b border-gray-200">
           <h2 class="font-semibold text-gray-800">Sổ quỹ: {{ fund.name }}</h2>
         </div>
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-4 py-3 font-semibold text-gray-600">Ngày</th>

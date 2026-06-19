@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-xl space-y-5">
       <div class="flex items-center space-x-2">
@@ -7,7 +7,7 @@
         </Link>
       </div>
 
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto shadow-sm">
         <div class="px-5 py-4 border-b border-gray-200 bg-gray-50">
           <h1 class="text-lg font-bold text-gray-900">Lập bảng lương tháng mới</h1>
           <p class="text-xs text-gray-500">Hệ thống sẽ tự động quét tất cả nhân viên đang hoạt động và khởi tạo dòng lương mặc định.</p>

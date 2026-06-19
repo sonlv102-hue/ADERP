@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
       <!-- Header -->
@@ -176,12 +176,12 @@
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 transition-opacity" :class="{ 'opacity-60': isLoading }">
         <!-- P&L Statement -->
-        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <div class="bg-gray-50 border-b border-gray-200 px-5 py-3 flex items-center justify-between">
             <h2 class="font-semibold text-gray-800">Báo cáo KQHĐKD — {{ periodLabel }}</h2>
             <span class="text-xs text-gray-400">Nguồn: GL đã posted</span>
           </div>
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="bg-gray-50 border-b border-gray-100">
               <tr>
                 <th class="text-left px-5 py-2 text-xs text-gray-500 font-medium">Chỉ tiêu</th>
@@ -223,11 +223,11 @@
         </div>
 
         <!-- Monthly breakdown -->
-        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <div class="bg-gray-50 border-b border-gray-200 px-5 py-3">
             <h2 class="font-semibold text-gray-800">Phân tích theo tháng — {{ currentYear }}</h2>
           </div>
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="border-b border-gray-200">
               <tr>
                 <th class="text-left px-4 py-2 font-semibold text-gray-600 text-xs">Tháng</th>

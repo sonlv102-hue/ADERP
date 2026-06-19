@@ -1,7 +1,7 @@
 <template>
   <div class="mb-0.5">
     <button @click="toggle"
-      class="w-full flex items-center gap-2.5 px-3 py-2 mx-2 text-sm rounded-lg transition-colors"
+      class="w-full flex items-center gap-2.5 px-3 py-2.5 mx-2 text-sm rounded-lg transition-colors min-h-[44px]"
       :class="matchesRoute ? 'text-white hover:bg-slate-700/60' : 'text-slate-400 hover:bg-slate-700/60 hover:text-white'">
       <component v-if="iconComponent" :is="iconComponent" class="w-4 h-4 flex-shrink-0" />
       <span class="flex-1 text-left font-medium">{{ label }}</span>

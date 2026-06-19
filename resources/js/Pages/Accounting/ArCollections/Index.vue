@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div>
           <h1 class="text-2xl font-bold text-gray-900">Thu nợ khách hàng (TK 131)</h1>
           <p class="text-sm text-gray-500 mt-0.5">Hóa đơn chưa thu + công nợ đầu kỳ — ghi nhận tiền nhận được</p>
@@ -31,8 +31,8 @@
       </div>
 
       <!-- Table -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Hóa đơn / Chứng từ</th>
@@ -160,7 +160,7 @@
               class="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
           </div>
 
-          <table class="w-full text-xs">
+          <table class="min-w-full text-xs">
             <thead class="bg-gray-50 border-b border-blue-100">
               <tr>
                 <th class="px-3 py-2 text-left font-semibold text-gray-600">Ngày CT</th>
@@ -211,7 +211,7 @@
             Thu thêm bằng tiền mặt / chuyển khoản sau khi đối trừ
           </div>
 
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">
                 {{ paymentType === 'combined' ? 'Số tiền thu thêm' : 'Số tiền thu' }}

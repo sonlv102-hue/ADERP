@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
       <!-- Header -->
@@ -56,7 +56,7 @@
       </div>
 
       <!-- Summary cards -->
-      <div class="grid grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div class="bg-white rounded-xl border border-green-200 bg-green-50 p-4">
           <p class="text-xs text-green-600 mb-1">Tổng Thu</p>
           <p class="text-lg font-bold text-green-700">{{ fmt(summary.total_in) }}</p>
@@ -76,7 +76,7 @@
 
       <!-- Table -->
       <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-4 py-3 font-semibold text-gray-600">Ngày</th>

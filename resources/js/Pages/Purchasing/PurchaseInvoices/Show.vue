@@ -2,7 +2,7 @@
   <AppLayout>
     <div class="max-w-4xl space-y-5">
       <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div class="flex items-center gap-3">
           <Link :href="route('purchasing.purchase-invoices.index')" class="text-gray-500 hover:text-gray-700">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -148,12 +148,12 @@
       </div>
 
       <!-- Dòng hàng từ đơn mua -->
-      <div v-if="invoice.po_items?.length" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div v-if="invoice.po_items?.length" class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
           <h2 class="text-base font-semibold text-gray-800">Dòng hàng</h2>
           <span class="text-xs text-gray-400">Loại dòng hàng xác định tài khoản kế toán khi nhập kho</span>
         </div>
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-100">
             <tr>
               <th class="text-left px-4 py-3 font-semibold text-gray-600">Sản phẩm</th>
@@ -240,7 +240,7 @@
       />
 
       <!-- Tab: Thanh toán -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
           <h2 class="text-base font-semibold text-gray-800">Lịch sử thanh toán</h2>
           <button v-if="canPay" @click="showPayForm = !showPayForm"
@@ -399,7 +399,7 @@
         </div>
 
         <!-- Danh sách thanh toán -->
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-100">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Ngày</th>
@@ -443,13 +443,13 @@
 
     <!-- ── Đối trừ ứng trước ── -->
     <div v-if="invoice.advance_allocations?.length"
-      class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
       <div class="px-5 py-4 border-b border-gray-200">
         <h2 class="text-base font-semibold text-gray-800">Đối trừ ứng trước đầu kỳ</h2>
       </div>
 
       <!-- Danh sách đối trừ -->
-      <table class="w-full text-sm">
+      <table class="min-w-full text-sm">
         <thead class="bg-gray-50 border-b border-gray-100">
           <tr>
             <th class="text-left px-5 py-3 font-semibold text-gray-600">Ngày</th>

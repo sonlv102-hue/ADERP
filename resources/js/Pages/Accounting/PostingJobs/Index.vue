@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div>
           <h1 class="text-2xl font-bold text-slate-900">Bút toán tự động</h1>
           <p class="text-sm text-slate-500 mt-1">Theo dõi và retry các bút toán hạch toán tự động bị lỗi</p>
@@ -22,8 +22,8 @@
         </select>
       </div>
 
-      <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-slate-50 border-b border-slate-200">
             <tr>
               <th class="px-4 py-3 text-left text-xs font-semibold text-slate-500 uppercase">Chứng từ</th>

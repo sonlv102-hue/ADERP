@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout :title="term ? 'Sửa điều khoản' : 'Thêm điều khoản'">
     <div class="max-w-xl mx-auto">
       <div class="flex items-center gap-3 mb-6">
@@ -9,7 +9,7 @@
       </div>
 
       <form @submit.prevent="submit" class="bg-white rounded-xl shadow-sm p-6 space-y-5">
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label class="form-label">Mã <span class="text-red-500">*</span></label>
             <input v-model="form.code" class="form-input font-mono uppercase"

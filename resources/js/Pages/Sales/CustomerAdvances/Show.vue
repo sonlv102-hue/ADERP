@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout :title="`Ứng trước #${advance.id}`">
     <div class="max-w-3xl mx-auto space-y-5">
 
@@ -66,11 +66,11 @@
       </div>
 
       <!-- Allocations -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="px-6 py-4 border-b border-gray-100">
           <h2 class="font-semibold text-gray-800">Lịch sử đối trừ</h2>
         </div>
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-100">
             <tr>
               <th class="text-left px-4 py-3 text-xs font-semibold text-gray-600">Ngày</th>

@@ -1,8 +1,8 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-3xl mx-auto space-y-6">
       <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div class="flex items-center gap-3">
           <Link :href="route('accounting.journal-entries.index')" class="text-gray-400 hover:text-gray-600">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -168,11 +168,11 @@
       </div>
 
       <!-- Journal Lines -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="px-5 py-3 border-b border-gray-100 bg-gray-50">
           <h3 class="font-semibold text-gray-700 text-sm">Các dòng bút toán</h3>
         </div>
-        <table class="w-full text-sm" :class="entry.status === 'voided' ? 'opacity-50' : ''">
+        <table class="min-w-full text-sm" :class="entry.status === 'voided' ? 'opacity-50' : ''">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600 w-36">Tài khoản</th>

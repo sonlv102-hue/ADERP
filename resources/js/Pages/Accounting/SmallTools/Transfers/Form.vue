@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-xl">
       <div class="flex items-center gap-3 mb-6">
@@ -22,7 +22,7 @@
             :class="{ 'border-red-500': form.errors.transfer_date }" />
         </div>
 
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label class="erp-label text-gray-400">Từ bộ phận</label>
             <input :value="tool.department || '—'" disabled class="erp-input bg-gray-50 text-gray-400" />
@@ -33,7 +33,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label class="erp-label text-gray-400">Nhân viên hiện tại</label>
             <input :value="tool.responsible_employee_id ? '' : '—'" disabled class="erp-input bg-gray-50 text-gray-400" />
@@ -44,7 +44,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label class="erp-label text-gray-400">Dự án hiện tại</label>
             <input :value="'—'" disabled class="erp-input bg-gray-50 text-gray-400" />

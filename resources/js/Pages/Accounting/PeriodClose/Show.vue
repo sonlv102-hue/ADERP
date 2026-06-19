@@ -1,8 +1,8 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-6">
       <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div class="flex items-center gap-3">
           <Link :href="route('period-close.index')" class="text-gray-400 hover:text-gray-600">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -80,7 +80,7 @@
         <h2 class="text-base font-semibold text-gray-800">Bút toán kết chuyển</h2>
 
         <div v-for="je in batch.journal_entries" :key="je.id"
-          class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <div class="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
             <div class="flex items-center gap-3">
               <span class="font-mono font-semibold text-gray-800 text-sm">{{ je.code }}</span>
@@ -89,7 +89,7 @@
             </div>
             <div class="text-sm text-gray-500">{{ je.entry_date }} · {{ formatVnd(je.total_debit) }}</div>
           </div>
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="bg-gray-50/50">
               <tr>
                 <th class="text-left px-5 py-2 font-medium text-gray-500 text-xs w-24">TK</th>

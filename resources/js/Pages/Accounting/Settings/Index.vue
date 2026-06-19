@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-4xl space-y-6">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-gray-900">Cài đặt Tài khoản Kế toán</h1>
         <button @click="saveAll" :disabled="form.processing"
           class="bg-primary-600 hover:bg-primary-700 disabled:opacity-50 text-white px-5 py-2 rounded-lg text-sm font-medium">

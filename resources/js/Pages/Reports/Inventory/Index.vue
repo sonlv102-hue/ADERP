@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
       <!-- Header -->
@@ -72,7 +72,7 @@
 
       <!-- Table -->
       <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto transition-opacity" :class="{ 'opacity-60': isLoading }">
-        <table class="w-full text-sm min-w-max">
+        <table class="min-w-full text-sm min-w-max">
           <thead class="bg-gray-50">
             <tr class="border-b border-gray-200">
               <th rowspan="2" class="text-left px-4 py-2 font-semibold text-gray-600 border-r border-gray-200 align-middle">Mã SP</th>

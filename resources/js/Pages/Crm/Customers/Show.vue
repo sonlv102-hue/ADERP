@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-6">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div class="flex items-center gap-3">
           <Link :href="route('crm.customers.index')" class="text-gray-500 hover:text-gray-700">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -60,7 +60,7 @@
         </div>
       </div>
 
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
           <h2 class="text-base font-semibold text-gray-800">Người liên hệ</h2>
           <button @click="showContactModal = true"
@@ -71,7 +71,7 @@
             Thêm liên hệ
           </button>
         </div>
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Họ tên</th>
@@ -136,7 +136,7 @@
             :class="{ 'border-red-500': contactForm.errors.email }" />
           <p v-if="contactForm.errors.email" class="mt-1 text-xs text-red-600">{{ contactForm.errors.email }}</p>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
           <input v-model="contactForm.is_primary" id="is_primary" type="checkbox"
             class="h-4 w-4 text-primary-600 rounded border-gray-300" />
           <label for="is_primary" class="text-sm text-gray-700">Người liên hệ chính</label>

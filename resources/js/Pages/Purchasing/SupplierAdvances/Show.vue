@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout :title="`Ứng trước — ${advance.supplier?.name}`">
     <div class="space-y-5">
 
@@ -88,11 +88,11 @@
       </div>
 
       <!-- Allocations Table -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="px-5 py-4 border-b border-gray-200">
           <h2 class="text-base font-semibold text-gray-900">Lịch sử đối trừ</h2>
         </div>
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Ngày</th>

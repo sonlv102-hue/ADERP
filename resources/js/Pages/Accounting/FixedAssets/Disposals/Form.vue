@@ -14,7 +14,7 @@
       </div>
 
       <!-- Summary -->
-      <div class="grid grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div class="bg-white rounded-xl border border-slate-200 p-4 text-center">
           <p class="text-xs text-slate-500 font-semibold uppercase">Nguyên giá</p>
           <p class="text-xl font-bold text-slate-900 mt-1">{{ fmt(asset.acquisition_cost) }}</p>
@@ -30,7 +30,7 @@
       </div>
 
       <form @submit.prevent="submit" class="bg-white rounded-xl border border-slate-200 p-6 space-y-5">
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label class="erp-label">Loại thanh lý <span class="text-red-500">*</span></label>
             <select v-model="form.disposal_type" class="erp-input w-full" required>
@@ -46,7 +46,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label class="erp-label">Giá bán (nếu có)</label>
             <input v-model.number="form.selling_price" type="number" min="0" step="1" class="erp-input w-full" @input="recalc" />
@@ -90,7 +90,7 @@
           <input v-model="form.buyer_name" class="erp-input w-full" />
         </div>
 
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label class="erp-label">TK chi phí thanh lý</label>
             <input v-model="form.disposal_account_code" class="erp-input w-full font-mono" placeholder="811" />

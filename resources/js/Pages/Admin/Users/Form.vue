@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-2xl">
       <div class="flex items-center gap-3 mb-6">
@@ -62,7 +62,7 @@
         <!-- Salary & Tax fields (visible only when editing) -->
         <div v-if="user" class="border-t border-gray-100 pt-4">
           <h3 class="text-sm font-semibold text-gray-600 uppercase tracking-wide mb-3">Lương & Thuế</h3>
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Lương cơ bản (₫)</label>
               <input v-model.number="form.base_salary" type="number" min="0" step="any"

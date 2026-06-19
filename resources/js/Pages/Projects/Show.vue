@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-6">
       <!-- Header -->
@@ -39,7 +39,7 @@
       </div>
 
       <!-- Info cards -->
-      <div class="grid grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="bg-white rounded-xl border border-gray-200 p-4">
           <p class="text-xs text-gray-500 font-medium uppercase tracking-wide">Tiến độ</p>
           <div class="mt-2">
@@ -202,7 +202,7 @@
             </button>
           </form>
 
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="bg-gray-50 border border-gray-200 rounded-lg">
               <tr>
                 <th class="text-left px-4 py-2 font-semibold text-gray-600">Sản phẩm</th>
@@ -260,7 +260,7 @@
             </div>
           </form>
 
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="bg-gray-50 border border-gray-200">
               <tr>
                 <th class="text-left px-4 py-2 font-semibold text-gray-600">Danh mục</th>
@@ -327,7 +327,7 @@
           </div>
 
           <!-- Entries table -->
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th class="text-left px-4 py-2.5 font-semibold text-gray-600">Ngày</th>

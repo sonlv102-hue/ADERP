@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-2xl space-y-5">
       <!-- Header -->
@@ -29,7 +29,7 @@
           </div>
 
           <!-- Loại + Trạng thái -->
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Loại chứng từ <span class="text-red-500">*</span></label>
               <select v-model="form.document_type_id"
@@ -49,7 +49,7 @@
           </div>
 
           <!-- Ngày phát hành + Hết hạn -->
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Ngày phát hành</label>
               <input v-model="form.issued_date" type="date"
@@ -90,7 +90,7 @@
         <!-- Gắn với nghiệp vụ (chỉ hiện khi tạo mới) -->
         <div v-if="!document" class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
           <h2 class="text-base font-semibold text-gray-800">Gắn với nghiệp vụ <span class="text-gray-400 font-normal text-sm">(tuỳ chọn)</span></h2>
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Loại nghiệp vụ</label>
               <select v-model="form.related_type"

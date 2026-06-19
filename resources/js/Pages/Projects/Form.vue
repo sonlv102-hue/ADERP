@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-3xl mx-auto space-y-6">
       <div class="flex items-center gap-3">
@@ -12,7 +12,7 @@
 
       <form @submit.prevent="submit" class="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
         <!-- Thông tin cơ bản -->
-        <div class="grid grid-cols-2 gap-5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Mã dự án</label>
             <input v-model="form.code" :disabled="isEdit" type="text"
@@ -27,7 +27,7 @@
           </div>
         </div>
 
-        <div class="grid grid-cols-2 gap-5">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Khách hàng <span class="text-red-500">*</span></label>
             <select v-model="form.customer_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">

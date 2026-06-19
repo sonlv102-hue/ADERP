@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-5xl space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div class="flex items-center gap-3">
           <Link :href="route('sales.orders.index')" class="text-gray-500 hover:text-gray-700">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -69,11 +69,11 @@
       </div>
 
       <!-- Items table -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="px-5 py-4 border-b border-gray-200">
           <h2 class="text-base font-semibold text-gray-800">Chi tiết đơn hàng</h2>
         </div>
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">#</th>
@@ -142,7 +142,7 @@
 
       <!-- Gợi ý giao hàng -->
       <div v-if="undeliveredItems.length && order.status !== 'cancelled'"
-        class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="px-5 py-4 border-b border-gray-200 flex items-center gap-2">
           <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -221,7 +221,7 @@
       </div>
 
       <!-- Đơn mua hàng liên kết -->
-      <div v-if="order.purchase_orders?.length" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div v-if="order.purchase_orders?.length" class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
           <p class="text-sm font-semibold text-gray-700">Đơn mua hàng liên kết ({{ order.purchase_orders.length }})</p>
           <Link :href="route('purchasing.purchase-orders.create') + '?order_id=' + order.id"
@@ -232,7 +232,7 @@
             Thêm đơn mua
           </Link>
         </div>
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã đơn</th>
@@ -264,8 +264,8 @@
         :class="order.customs_status === 'declared'
           ? 'bg-green-50 border-green-200'
           : 'bg-amber-50 border-amber-300'">
-        <div class="flex items-center justify-between">
-          <div class="flex items-center gap-2">
+        <div class="flex items-center justify-between flex-wrap gap-y-3">
+          <div class="flex items-center gap-2 flex-wrap">
             <svg class="w-5 h-5 flex-shrink-0" :class="order.customs_status === 'declared' ? 'text-green-500' : 'text-amber-500'"
               fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

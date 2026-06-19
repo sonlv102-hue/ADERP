@@ -24,7 +24,7 @@
         <!-- Thông tin cơ bản -->
         <div class="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
           <h2 class="font-semibold text-slate-800 text-base border-b border-slate-100 pb-2">Thông tin cơ bản</h2>
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">Mã TSCĐ</label>
               <input v-model="form.code" class="erp-input w-full font-mono" placeholder="Tự sinh nếu để trống" />
@@ -67,7 +67,7 @@
         <!-- Thông tin mua -->
         <div class="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
           <h2 class="font-semibold text-slate-800 text-base border-b border-slate-100 pb-2">Thông tin mua sắm</h2>
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">Nhà cung cấp</label>
               <select v-model="form.supplier_id" class="erp-input w-full">
@@ -110,7 +110,7 @@
         <!-- Khấu hao -->
         <div class="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
           <h2 class="font-semibold text-slate-800 text-base border-b border-slate-100 pb-2">Thông tin khấu hao</h2>
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">Ngày đưa vào sử dụng</label>
               <input v-model="form.placed_in_service_date" type="date" class="erp-input w-full" />
@@ -142,7 +142,7 @@
         <!-- Tài khoản kế toán -->
         <div class="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
           <h2 class="font-semibold text-slate-800 text-base border-b border-slate-100 pb-2">Tài khoản kế toán</h2>
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">TK nguyên giá</label>
               <select v-model="form.original_cost_account_code" class="erp-input w-full font-mono">
@@ -173,7 +173,7 @@
         <!-- Vị trí / bộ phận / người sử dụng -->
         <div class="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
           <h2 class="font-semibold text-slate-800 text-base border-b border-slate-100 pb-2">Vị trí & Bộ phận sử dụng</h2>
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">Bộ phận sử dụng</label>
               <input v-model="form.department" class="erp-input w-full" placeholder="VD: Ban Giám đốc, Kinh doanh..." />

@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-6xl space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-gray-900">Phiếu thu / Phiếu chi</h1>
         <div class="flex gap-2">
           <Link :href="route('accounting.cash-vouchers.create', { type: 'receipt' })"
@@ -43,8 +43,8 @@
           class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none flex-1 min-w-40" />
       </div>
 
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã phiếu</th>

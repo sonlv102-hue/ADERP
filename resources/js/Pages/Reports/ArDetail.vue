@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout title="Sổ chi tiết công nợ phải thu">
     <div class="max-w-5xl mx-auto">
       <h1 class="text-2xl font-bold text-gray-900 mb-6">Sổ chi tiết công nợ phải thu (TK 131)</h1>
@@ -68,8 +68,8 @@
         </div>
 
         <!-- Detail table -->
-        <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-          <table class="w-full text-sm">
+        <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
+          <table class="min-w-full text-sm">
             <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
               <tr>
                 <th class="px-4 py-3 text-left w-28">Ngày</th>

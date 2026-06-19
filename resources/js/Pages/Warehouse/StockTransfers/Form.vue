@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-5xl space-y-5">
 
@@ -207,7 +207,7 @@
                 v-if="item.product_id && getProduct(item.product_id)?.has_serial && form.from_warehouse_id"
                 class="rounded-xl border border-blue-100 bg-blue-50/60 p-4 space-y-3"
               >
-                <div class="flex items-center justify-between">
+                <div class="flex items-center justify-between flex-wrap gap-y-3">
                   <div class="flex items-center gap-2">
                     <svg class="h-4 w-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout title="Tài khoản nội bộ">
     <div class="space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div>
           <h1 class="text-2xl font-bold text-slate-900">Tài khoản nội bộ</h1>
           <p class="text-sm text-slate-500 mt-0.5">Các tài khoản NH của công ty / cá nhân nội bộ dùng để nhận dạng chuyển khoản nội bộ khi import sao kê.</p>
@@ -14,8 +14,8 @@
         </button>
       </div>
 
-      <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-slate-50 border-b border-slate-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wide">Tên / Mô tả</th>

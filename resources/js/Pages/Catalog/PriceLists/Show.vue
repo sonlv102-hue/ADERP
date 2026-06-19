@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-3xl space-y-5">
       <div class="flex items-center gap-3">
@@ -32,7 +32,7 @@
       </div>
 
       <!-- Items table -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
           <h2 class="text-base font-semibold text-gray-800">Danh sách sản phẩm ({{ priceList.items.length }})</h2>
           <Link :href="route('catalog.price-lists.edit', priceList.id)"
@@ -41,7 +41,7 @@
           </Link>
         </div>
 
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã SP</th>

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout title="Tài khoản ngân hàng">
     <div class="max-w-5xl mx-auto">
       <div class="flex justify-between items-center mb-6">
@@ -7,8 +7,8 @@
           class="btn-primary">+ Thêm tài khoản</Link>
       </div>
 
-      <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
             <tr>
               <th class="px-4 py-3 text-left">Tên TK</th>

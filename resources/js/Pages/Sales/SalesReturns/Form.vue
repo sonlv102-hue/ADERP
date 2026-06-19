@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-5xl">
       <div class="flex items-center gap-3 mb-6">
@@ -67,7 +67,7 @@
           Đang tải danh sách hàng hóa...
         </div>
 
-        <div v-else-if="availableItems.length" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div v-else-if="availableItems.length" class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <div class="px-5 py-4 border-b border-gray-200">
             <h2 class="text-base font-semibold text-gray-800">Hàng hóa cần trả</h2>
           </div>

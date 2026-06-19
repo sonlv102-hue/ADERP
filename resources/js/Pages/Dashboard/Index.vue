@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-6">
       <div class="flex items-center justify-between flex-wrap gap-3">
@@ -47,7 +47,7 @@
       </div>
 
       <!-- Over-delivery alerts -->
-      <div v-if="overDeliveryAlerts.length" class="bg-white rounded-xl border border-red-300 overflow-hidden">
+      <div v-if="overDeliveryAlerts.length" class="bg-white rounded-xl border border-red-300 overflow-x-auto">
         <div class="px-5 py-4 border-b border-red-200 flex items-center justify-between bg-red-50">
           <div class="flex items-center gap-2">
             <svg class="w-5 h-5 text-red-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -98,7 +98,7 @@
       </div>
 
       <!-- Accounting alerts -->
-      <div v-if="accountingAlerts.has_alerts" class="bg-white rounded-xl border border-amber-300 overflow-hidden">
+      <div v-if="accountingAlerts.has_alerts" class="bg-white rounded-xl border border-amber-300 overflow-x-auto">
         <div class="px-5 py-4 border-b border-amber-200 flex items-center gap-2 bg-amber-50">
           <svg class="w-5 h-5 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -148,7 +148,7 @@
       </div>
 
       <!-- Unfulfilled orders warning -->
-      <div v-if="unfulfilledOrders.length" class="bg-white rounded-xl border border-orange-200 overflow-hidden">
+      <div v-if="unfulfilledOrders.length" class="bg-white rounded-xl border border-orange-200 overflow-x-auto">
         <div class="px-5 py-4 border-b border-orange-100 flex items-center gap-2">
           <svg class="w-5 h-5 text-orange-500 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -211,7 +211,7 @@
         </div>
 
         <!-- Stock overview table -->
-        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between">
             <h3 class="text-base font-semibold text-gray-900">Tồn kho sản phẩm</h3>
             <div class="flex items-center gap-3 text-xs text-gray-500">
@@ -224,7 +224,7 @@
             </div>
           </div>
           <div v-if="stockOverview.length" class="overflow-y-auto max-h-72">
-            <table class="w-full text-sm">
+            <table class="min-w-full text-sm">
               <thead class="bg-gray-50 sticky top-0">
                 <tr>
                   <th class="text-left px-5 py-2.5 font-semibold text-gray-600 text-xs">Sản phẩm</th>

@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout :title="`Giao dịch — ${bankAccount.name}`">
     <div class="max-w-6xl mx-auto">
 
@@ -125,8 +125,8 @@
       </div>
 
       <!-- Transactions table -->
-      <div class="bg-white rounded-xl shadow-sm overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
             <tr>
               <th class="px-4 py-3 text-left w-24">Ngày</th>

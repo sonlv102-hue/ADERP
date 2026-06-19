@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-6xl space-y-6">
       <!-- Title & period selector -->
@@ -61,7 +61,7 @@
       </div>
 
       <!-- Detailed Tabs -->
-      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-x-auto">
         <!-- Tabs Header -->
         <div class="border-b border-gray-200 bg-gray-50 flex items-center justify-between px-5">
           <div class="flex space-x-6">
@@ -81,7 +81,7 @@
 
         <!-- Sales Invoices Tab -->
         <div v-show="activeTab === 'sales'" class="overflow-x-auto">
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="border-b border-gray-200 bg-gray-50">
               <tr>
                 <th class="text-left px-5 py-3 font-semibold text-gray-600">Số hóa đơn</th>
@@ -118,7 +118,7 @@
 
         <!-- Purchase Invoices Tab -->
         <div v-show="activeTab === 'purchases'" class="overflow-x-auto">
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="border-b border-gray-200 bg-gray-50">
               <tr>
                 <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã phiếu</th>

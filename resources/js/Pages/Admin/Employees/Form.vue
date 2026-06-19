@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-3xl mx-auto space-y-5">
 
@@ -23,7 +23,7 @@
       <form @submit.prevent="submit" class="space-y-4">
 
         <!-- ── Section 1: Thông tin cơ bản ── -->
-        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <div class="px-5 py-3.5 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
             <span class="p-1.5 bg-primary-100 rounded-md">
               <svg class="w-4 h-4 text-primary-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -34,7 +34,7 @@
             <h2 class="text-sm font-semibold text-gray-700">Thông tin cơ bản</h2>
           </div>
           <div class="p-5 space-y-4">
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">
                   Mã nhân viên <span class="text-red-500">*</span>
@@ -58,7 +58,7 @@
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Phòng ban</label>
                 <input v-model="form.department" type="text"
@@ -73,7 +73,7 @@
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Điện thoại</label>
                 <input v-model="form.phone" type="text"
@@ -90,7 +90,7 @@
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Ngày sinh</label>
                 <input v-model="form.birth_date" type="date"
@@ -110,7 +110,7 @@
         </div>
 
         <!-- ── Section 2: Hợp đồng lao động ── -->
-        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <div class="px-5 py-3.5 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
             <span class="p-1.5 bg-amber-100 rounded-md">
               <svg class="w-4 h-4 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -121,7 +121,7 @@
             <h2 class="text-sm font-semibold text-gray-700">Hợp đồng lao động</h2>
           </div>
           <div class="p-5">
-            <div class="grid grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Ngày vào làm</label>
                 <input v-model="form.hire_date" type="date"
@@ -150,7 +150,7 @@
         </div>
 
         <!-- ── Section 3: Lương cơ bản + BHXH ── -->
-        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <div class="px-5 py-3.5 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
             <span class="p-1.5 bg-green-100 rounded-md">
               <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -162,7 +162,7 @@
             <span class="ml-auto text-xs text-green-700 font-medium bg-green-100 px-2 py-0.5 rounded-full">Dùng tính BHXH</span>
           </div>
           <div class="p-5 space-y-4">
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Lương cơ bản / tháng</label>
                 <div class="relative">
@@ -200,7 +200,7 @@
               </div>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Số người phụ thuộc (NPT)</label>
                 <input v-model.number="form.dependents_count" type="number" min="0" max="20"
@@ -228,7 +228,7 @@
         </div>
 
         <!-- ── Section 4a: Phụ cấp lương (TÍNH BHXH) ── -->
-        <div class="bg-white rounded-xl border border-green-200 overflow-hidden">
+        <div class="bg-white rounded-xl border border-green-200 overflow-x-auto">
           <div class="px-5 py-3.5 bg-green-50 border-b border-green-200 flex items-center gap-2">
             <span class="p-1.5 bg-green-200 rounded-md">
               <svg class="w-4 h-4 text-green-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -246,7 +246,7 @@
               <strong>Nghị định 158/2025/NĐ-CP (01/07/2025):</strong> Phụ cấp chức vụ, trách nhiệm, thâm niên, chuyên môn và khoản bổ sung xác định được số tiền cụ thể, trả thường xuyên ổn định → <strong>phải tính vào căn cứ đóng BHXH</strong>.
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">
                   PC Trách nhiệm / Chức vụ
@@ -287,7 +287,7 @@
         </div>
 
         <!-- ── Section 4b: Trợ cấp & phúc lợi (KHÔNG tính BHXH) ── -->
-        <div class="bg-white rounded-xl border border-blue-200 overflow-hidden">
+        <div class="bg-white rounded-xl border border-blue-200 overflow-x-auto">
           <div class="px-5 py-3.5 bg-blue-50 border-b border-blue-200 flex items-center gap-2">
             <span class="p-1.5 bg-blue-200 rounded-md">
               <svg class="w-4 h-4 text-blue-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -305,7 +305,7 @@
               Ăn trưa, xăng xe, điện thoại… <strong>không phải phụ cấp lương</strong> mà là hỗ trợ/phúc lợi — ghi thành mục riêng trong HĐLĐ/quy chế lương để được loại trừ khỏi căn cứ BHXH.
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">
                   Hỗ trợ ăn trưa / ăn giữa ca
@@ -369,7 +369,7 @@
         </div>
 
         <!-- ── Section 5: Địa chỉ & Ghi chú ── -->
-        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <div class="px-5 py-3.5 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
             <span class="p-1.5 bg-purple-100 rounded-md">
               <svg class="w-4 h-4 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">

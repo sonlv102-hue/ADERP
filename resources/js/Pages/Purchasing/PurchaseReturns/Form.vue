@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-5xl">
       <div class="flex items-center gap-3 mb-6">
@@ -76,13 +76,13 @@
         </div>
 
         <!-- Items table -->
-        <div v-if="poItems.length > 0" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div v-if="poItems.length > 0" class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <div class="px-5 py-4 border-b border-gray-200">
             <h2 class="text-base font-semibold text-gray-800">Hàng hóa trả lại</h2>
             <p class="text-xs text-gray-500 mt-0.5">Nhập số lượng trả, tối đa theo cột "Có thể trả"</p>
           </div>
 
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th class="text-left px-5 py-3 font-semibold text-gray-600">Sản phẩm</th>
@@ -131,7 +131,7 @@
                 <tr v-if="poItems[index].has_serial && item.quantity > 0" class="bg-blue-50">
                   <td colspan="6" class="px-5 py-3">
                     <div class="space-y-2.5">
-                      <div class="flex items-center justify-between">
+                      <div class="flex items-center justify-between flex-wrap gap-y-3">
                         <div class="flex items-center gap-2">
                           <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"

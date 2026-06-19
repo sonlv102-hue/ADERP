@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-6xl space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div>
           <h1 class="text-2xl font-bold text-gray-900">Bảng lương tháng</h1>
           <p class="text-sm text-gray-500">Quản lý lương nhân viên, phụ cấp, thưởng phạt và chi trả lương.</p>
@@ -46,9 +46,9 @@
       </div>
 
       <!-- Payroll tables list -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto shadow-sm">
         <div class="overflow-x-auto">
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="border-b border-gray-200 bg-gray-50">
               <tr>
                 <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã bảng lương</th>

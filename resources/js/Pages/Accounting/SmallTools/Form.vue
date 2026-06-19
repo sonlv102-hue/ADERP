@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-2xl">
       <div class="flex items-center gap-3 mb-6">
@@ -15,7 +15,7 @@
         <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
           <h2 class="text-base font-semibold text-gray-800">Thông tin CCDC</h2>
 
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">Mã CCDC</label>
               <input :value="tool?.code || nextCode" disabled
@@ -33,7 +33,7 @@
             <p v-if="form.errors.name" class="erp-error">{{ form.errors.name }}</p>
           </div>
 
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">Nhóm CCDC</label>
               <SearchableSelect v-model="form.category_id" :options="categoryOptions" placeholder="-- Chọn nhóm --" />
@@ -46,7 +46,7 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label class="erp-label">Nguyên giá (chưa VAT) <span class="text-red-500">*</span></label>
               <input v-model.number="form.original_cost" type="number" min="0" step="1" class="erp-input"
@@ -68,7 +68,7 @@
         <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
           <h2 class="text-base font-semibold text-gray-800">Phương thức ghi nhận</h2>
 
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">Luồng nhập <span class="text-red-500">*</span></label>
               <select v-model="form.acquisition_type" class="erp-input">
@@ -85,7 +85,7 @@
             </div>
           </div>
 
-          <div v-if="form.recognition_method === 'allocation'" class="grid grid-cols-2 gap-4">
+          <div v-if="form.recognition_method === 'allocation'" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">Số kỳ phân bổ</label>
               <input v-model.number="form.allocation_periods" type="number" min="1" class="erp-input" />
@@ -117,7 +117,7 @@
         <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
           <h2 class="text-base font-semibold text-gray-800">Thông tin sử dụng</h2>
 
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">Ngày mua</label>
               <input v-model="form.purchase_date" type="date" class="erp-input" />
@@ -128,7 +128,7 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">Bộ phận sử dụng</label>
               <input v-model="form.department" type="text" class="erp-input" placeholder="Kế toán, Kỹ thuật..." />
@@ -140,7 +140,7 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">Kho lưu giữ</label>
               <SearchableSelect v-model="form.warehouse_id" :options="warehouseOptions"
@@ -158,7 +158,7 @@
         <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
           <h2 class="text-base font-semibold text-gray-800">Nhà cung cấp & thanh toán</h2>
 
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">Nhà cung cấp</label>
               <SearchableSelect v-model="form.supplier_id" :options="supplierOptions"
@@ -183,7 +183,7 @@
         <!-- Tài khoản kế toán -->
         <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
           <h2 class="text-base font-semibold text-gray-800">Tài khoản kế toán</h2>
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">TK kho CCDC</label>
               <input v-model="form.stock_account_code" type="text" class="erp-input" placeholder="1531" />

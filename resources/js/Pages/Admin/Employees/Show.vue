@@ -1,8 +1,8 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-2xl mx-auto space-y-6">
       <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div class="flex items-center gap-3">
           <Link :href="route('admin.employees.index')" class="text-gray-400 hover:text-gray-600">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -10,7 +10,7 @@
             </svg>
           </Link>
           <div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 flex-wrap">
               <h1 class="text-2xl font-bold text-gray-900">{{ employee.name }}</h1>
               <StatusBadge :color="employee.status_color">{{ employee.status_label }}</StatusBadge>
             </div>

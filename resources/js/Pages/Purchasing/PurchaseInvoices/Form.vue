@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-2xl space-y-6">
       <div class="flex items-center gap-3">
@@ -25,7 +25,7 @@
           <p v-if="form.errors.purchase_order_id" class="text-red-500 text-xs mt-1">{{ form.errors.purchase_order_id }}</p>
         </div>
 
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <!-- Mã nội bộ -->
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Mã nội bộ <span class="text-red-500">*</span></label>
@@ -62,7 +62,7 @@
           </p>
         </div>
 
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <!-- Số hóa đơn NCC -->
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Số hóa đơn NCC</label>

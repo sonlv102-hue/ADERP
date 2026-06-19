@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-2xl space-y-5">
 
@@ -15,7 +15,7 @@
             <p class="text-sm text-gray-500 mt-0.5">Phiếu luân chuyển quỹ · {{ transfer.transfer_date_f }}</p>
           </div>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
           <span :class="statusClass(transfer.status_color)"
             class="inline-flex px-3 py-1 rounded-full text-xs font-semibold">
             {{ transfer.status_label }}

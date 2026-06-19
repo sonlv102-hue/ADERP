@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
       <h1 class="text-2xl font-bold text-gray-900">Bảng kê chứng từ</h1>
@@ -60,7 +60,7 @@
 
       <!-- Sales table -->
       <div v-if="activeTab === 'sales'" class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-4 py-3 font-semibold text-gray-600">Đơn hàng</th>
@@ -122,7 +122,7 @@
 
       <!-- Purchases table -->
       <div v-if="activeTab === 'purchases'" class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-4 py-3 font-semibold text-gray-600">Đơn mua</th>

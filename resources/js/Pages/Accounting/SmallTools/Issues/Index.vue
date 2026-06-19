@@ -22,8 +22,8 @@
         <button @click="applyFilters" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg text-sm">Lọc</button>
       </div>
 
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b">
             <tr>
               <th class="px-4 py-3 text-left">Mã phiếu</th>

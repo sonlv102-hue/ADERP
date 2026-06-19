@@ -1,8 +1,8 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-3xl space-y-5">
       <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div class="flex items-center gap-3">
           <Link :href="route('purchasing.purchase-contracts.index')" class="text-gray-500 hover:text-gray-700">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -12,7 +12,7 @@
           <h1 class="text-2xl font-bold text-gray-900">{{ contract.code }}</h1>
           <StatusBadge :color="contract.status_color">{{ contract.status_label }}</StatusBadge>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
           <Link v-if="contract.status === 'draft'"
             :href="route('purchasing.purchase-contracts.edit', contract.id)"
             class="px-4 py-2 border border-gray-300 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50">
@@ -77,7 +77,7 @@
       </div>
 
       <!-- Lịch thanh toán -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
           <div>
             <h2 class="text-base font-semibold text-gray-800">Lịch thanh toán</h2>

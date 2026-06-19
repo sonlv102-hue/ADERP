@@ -1,8 +1,8 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
       <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div class="flex items-center gap-3">
           <Link :href="route('accounting.invoices.index')" class="text-gray-500 hover:text-gray-700">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -12,7 +12,7 @@
           <h1 class="text-2xl font-bold text-gray-900">{{ invoice.code }}</h1>
           <StatusBadge :color="invoice.status_color">{{ invoice.status_label }}</StatusBadge>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
           <a :href="route('accounting.invoices.pdf', invoice.id)" target="_blank"
             class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium">
             PDF
@@ -178,7 +178,7 @@
 
             <template v-else>
               <p class="text-sm text-gray-500 mb-4">Chưa phát hành hóa đơn điện tử cho hóa đơn này.</p>
-              <form v-if="can('accounting.manage')" @submit.prevent="issueEInvoice" class="grid grid-cols-2 gap-4">
+              <form v-if="can('accounting.manage')" @submit.prevent="issueEInvoice" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label class="form-label text-xs">Mẫu số <span class="text-red-500">*</span></label>
                   <input v-model="eInvForm.e_inv_template" class="form-input text-sm font-mono" placeholder="01GTKT0/001" required />
@@ -197,7 +197,7 @@
           </div>
 
           <!-- Payments -->
-          <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+          <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
             <div class="flex items-center justify-between px-5 py-4 border-b border-gray-100">
               <h2 class="text-base font-semibold text-gray-900">Lịch sử thanh toán</h2>
               <button v-if="invoice.allowed_actions.includes('add_payment') && can('accounting.manage')"
@@ -258,7 +258,7 @@
               </div>
 
               <!-- Cash fields (cash / combined) -->
-              <div v-if="paymentType !== 'offset'" class="grid grid-cols-2 gap-4">
+              <div v-if="paymentType !== 'offset'" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label class="block text-xs font-medium text-gray-600 mb-1">
                     {{ paymentType === 'combined' ? 'Số tiền thu thêm' : 'Số tiền' }} <span class="text-red-500">*</span>
@@ -320,7 +320,7 @@
               </div>
             </div>
 
-            <table class="w-full text-sm">
+            <table class="min-w-full text-sm">
               <thead class="bg-gray-50 border-b border-gray-200">
                 <tr>
                   <th class="text-left px-5 py-3 font-semibold text-gray-600">Ngày</th>
@@ -351,7 +351,7 @@
 
           <!-- Advance allocations section -->
           <div v-if="invoice.advance_allocations?.length || canAdvanceAllocate"
-            class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
             <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
               <h2 class="text-base font-semibold text-gray-800">Đối trừ ứng trước khách hàng</h2>
               <button v-if="canAdvanceAllocate" @click="showAdvanceForm = !showAdvanceForm"
@@ -414,7 +414,7 @@
             </div>
 
             <!-- Danh sách đối trừ -->
-            <table class="w-full text-sm">
+            <table class="min-w-full text-sm">
               <thead class="bg-gray-50 border-b border-gray-100">
                 <tr>
                   <th class="text-left px-5 py-3 font-semibold text-gray-600">Ngày</th>

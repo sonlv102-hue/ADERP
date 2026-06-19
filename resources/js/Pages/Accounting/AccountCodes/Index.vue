@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div>
           <h1 class="text-2xl font-bold text-gray-900">Hệ thống tài khoản kế toán</h1>
           <p class="text-sm text-gray-500 mt-0.5">Thông tư 133/2016/TT-BTC — Chế độ kế toán doanh nghiệp nhỏ và vừa</p>
@@ -54,8 +54,8 @@
       </div>
 
       <!-- Table -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600 w-32">Mã TK</th>
@@ -155,7 +155,7 @@
         </div>
         <form @submit.prevent="submitForm" class="p-6 space-y-4">
           <template v-if="!editingAccount">
-            <div class="grid grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">Mã tài khoản *</label>
                 <input v-model="form.code" required class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />

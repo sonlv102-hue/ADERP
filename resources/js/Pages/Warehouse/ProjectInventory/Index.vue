@@ -1,8 +1,8 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
 
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div>
           <p class="text-xs font-medium text-gray-400 mb-0.5">Kho / Tồn kho dự án</p>
           <h1 class="text-2xl font-bold text-gray-900">Tồn kho theo dự án</h1>
@@ -37,7 +37,7 @@
 
       <!-- Table -->
       <div class="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50/60 border-b border-gray-100">
             <tr>
               <th class="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wide text-gray-400">Dự án</th>

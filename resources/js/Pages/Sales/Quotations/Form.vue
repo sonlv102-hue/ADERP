@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-5xl">
       <div class="flex items-center gap-3 mb-6">
@@ -113,7 +113,7 @@
         </div>
 
         <!-- Items -->
-        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200">
             <h2 class="text-base font-semibold text-gray-800">Chi tiết hàng hóa / dịch vụ</h2>
             <div class="flex gap-2">
@@ -128,7 +128,7 @@
             </div>
           </div>
 
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th class="text-left px-4 py-3 font-semibold text-gray-600">Sản phẩm/Dịch vụ</th>

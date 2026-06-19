@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-5xl space-y-5">
 
@@ -211,7 +211,7 @@
 
           <!-- Table -->
           <div v-else class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <table class="min-w-full text-sm">
               <thead class="border-b border-gray-100">
                 <tr class="bg-gray-50/60">
                   <th class="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">

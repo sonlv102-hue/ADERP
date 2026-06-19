@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-lg mx-auto space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-gray-900">Tạo phiếu kiểm kê</h1>
         <Link :href="route('warehouse.inventory-counts.index')"
           class="text-sm text-gray-500 hover:text-gray-700">← Danh sách</Link>

@@ -1,14 +1,14 @@
 ﻿<template>
   <AppLayout>
     <div class="space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-slate-900">Báo cáo tăng giảm TSCĐ</h1>
         <select v-model="year" @change="applyFilters" class="erp-input w-32">
           <option v-for="y in years" :key="y" :value="y">{{ y }}</option>
         </select>
       </div>
 
-      <div class="grid grid-cols-4 gap-4">
+      <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="bg-white rounded-xl border border-slate-200 p-5">
           <p class="text-xs text-slate-500 uppercase font-semibold">Đầu kỳ</p>
           <p class="text-xl font-bold text-slate-900 mt-1">{{ opening.count }} tài sản</p>

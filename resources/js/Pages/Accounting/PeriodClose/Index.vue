@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-6">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-gray-900">Kết chuyển cuối kỳ</h1>
       </div>
 
@@ -68,7 +68,7 @@
           <div v-show="activeTab === 'income'">
             <div v-if="!preview.incomeSections.length" class="text-sm text-gray-400 py-4 text-center">Không có phát sinh doanh thu trong kỳ.</div>
             <div v-else class="overflow-x-auto">
-              <table class="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+              <table class="min-w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
                 <thead class="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th class="text-left px-4 py-2 font-semibold text-gray-600 w-16">TK</th>
@@ -102,7 +102,7 @@
           <div v-show="activeTab === 'expense'">
             <div v-if="!preview.expenseSections.length" class="text-sm text-gray-400 py-4 text-center">Không có phát sinh chi phí trong kỳ.</div>
             <div v-else class="overflow-x-auto">
-              <table class="w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
+              <table class="min-w-full text-sm border border-gray-200 rounded-lg overflow-hidden">
                 <thead class="bg-gray-50 border-b border-gray-200">
                   <tr>
                     <th class="text-left px-4 py-2 font-semibold text-gray-600 w-16">TK</th>
@@ -163,7 +163,7 @@
             <!-- Bút toán kết chuyển lãi/lỗ sang 4212 -->
             <div v-if="preview.profitLines.length" class="border border-gray-200 rounded-lg overflow-hidden">
               <div class="bg-gray-50 px-4 py-2 text-xs font-semibold text-gray-600 border-b">Bút toán kết chuyển kết quả → TK 4212</div>
-              <table class="w-full text-sm">
+              <table class="min-w-full text-sm">
                 <tbody>
                   <tr v-for="(l, i) in preview.profitLines" :key="i" class="divide-x divide-gray-100">
                     <td class="px-4 py-2 font-mono text-gray-700 w-16">{{ l.account }}</td>
@@ -235,7 +235,7 @@
           </div>
 
           <div v-if="yearEndPlan.lines.length" class="border rounded-lg overflow-hidden text-sm">
-            <table class="w-full">
+            <table class="min-w-full">
               <thead class="bg-gray-50">
                 <tr>
                   <th class="text-left px-4 py-2 text-xs font-semibold text-gray-600">TK</th>
@@ -269,11 +269,11 @@
       </div>
 
       <!-- ─── Lịch sử batch ─── -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="px-5 py-4 border-b border-gray-200">
           <h2 class="text-base font-semibold text-gray-800">Lịch sử kết chuyển</h2>
         </div>
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã batch</th>

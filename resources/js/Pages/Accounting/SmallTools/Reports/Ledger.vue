@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-6xl">
       <div class="flex items-center justify-between mb-6">
@@ -25,8 +25,8 @@
         </div>
       </div>
 
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b text-xs text-gray-500">
             <tr>
               <th class="px-3 py-3 text-left">Mã CCDC</th>

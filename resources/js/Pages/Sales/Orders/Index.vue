@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-slate-900">Đơn hàng</h1>
         <Link :href="route('sales.orders.create')" class="erp-btn-primary">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -15,7 +15,7 @@
       <div class="flex gap-3 flex-wrap">
         <input v-model="search" @input="doSearch" type="text"
           placeholder="Tìm đơn hàng, khách hàng, mã chứng từ..."
-          class="border border-slate-300 rounded-lg px-3 py-2 text-sm w-72 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          class="border border-slate-300 rounded-lg px-3 py-2 text-sm w-full sm:w-72 focus:outline-none focus:ring-2 focus:ring-primary-500" />
         <select v-model="statusFilter" @change="doSearch"
           class="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
           <option value="">Tất cả trạng thái</option>
@@ -25,8 +25,8 @@
           class="text-slate-500 hover:text-slate-700 px-3 py-2 text-sm">Xóa lọc</button>
       </div>
 
-      <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-slate-50 border-b border-slate-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wide">Mã ĐH</th>

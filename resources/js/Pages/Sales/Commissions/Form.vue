@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-2xl space-y-6">
       <div class="flex items-center gap-3">
@@ -12,7 +12,7 @@
 
       <form @submit.prevent="submit" class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
 
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <!-- Mã -->
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Mã nội bộ <span class="text-red-500">*</span></label>
@@ -84,7 +84,7 @@
         <!-- Liên kết nghiệp vụ -->
         <div class="border-t border-gray-100 pt-4">
           <p class="text-sm font-medium text-gray-700 mb-3">Liên kết nghiệp vụ (tùy chọn)</p>
-          <div class="grid grid-cols-3 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label class="block text-xs text-gray-500 mb-1">Khách hàng</label>
               <select v-model="form.customer_id"

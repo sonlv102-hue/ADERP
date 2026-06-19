@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-7xl">
       <div class="flex items-center justify-between mb-6">
@@ -52,8 +52,8 @@
       </div>
 
       <!-- Table -->
-      <div v-if="f.product_id" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-        <table class="w-full text-sm">
+      <div v-if="f.product_id" class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-600">
             <tr>
               <th class="px-4 py-3 text-left w-24">Ngày</th>

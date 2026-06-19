@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-4xl">
       <div class="flex items-center justify-between mb-6">
@@ -64,9 +64,9 @@
       </div>
 
       <!-- Detail per tool -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="px-5 py-3 border-b font-semibold text-sm">Chi tiết từng CCDC</div>
-        <table class="w-full text-xs">
+        <table class="min-w-full text-xs">
           <thead class="bg-gray-50 border-b text-gray-500">
             <tr>
               <th class="px-3 py-2 text-left">Mã CCDC</th>

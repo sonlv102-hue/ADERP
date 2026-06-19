@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-2xl space-y-6">
       <!-- Header -->
@@ -12,7 +12,7 @@
       </div>
 
       <form @submit.prevent="submit" class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <!-- Mã hóa đơn -->
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Mã hóa đơn <span class="text-red-500">*</span></label>

@@ -13,7 +13,7 @@
       <form @submit.prevent="submit" class="space-y-5">
         <!-- Header -->
         <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">Mã phiếu</label>
               <input :value="nextCode" disabled class="erp-input bg-gray-50 text-gray-500" />
@@ -52,7 +52,7 @@
         </div>
 
         <!-- Items -->
-        <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+        <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
           <div class="px-5 py-4 border-b border-gray-200 flex justify-between items-center">
             <h2 class="text-base font-semibold text-gray-800">Danh sách CCDC nhập kho</h2>
             <button type="button" @click="addItem"

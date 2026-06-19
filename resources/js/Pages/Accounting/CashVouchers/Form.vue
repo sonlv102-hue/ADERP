@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-3xl">
       <div class="flex items-center gap-3 mb-6">
@@ -157,7 +157,7 @@
 
           <!-- Bảng bút toán -->
           <div v-if="form.lines.length > 0" class="overflow-x-auto">
-            <table class="w-full text-sm">
+            <table class="min-w-full text-sm">
               <thead>
                 <tr class="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200">
                   <th class="pb-2 pr-3 w-28">TK Nợ</th>

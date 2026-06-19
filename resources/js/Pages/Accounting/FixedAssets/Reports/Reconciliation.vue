@@ -1,7 +1,7 @@
 ﻿<template>
   <AppLayout>
     <div class="space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div>
           <h1 class="text-2xl font-bold text-slate-900">Đối chiếu TK 211 / 214 với danh mục TSCĐ</h1>
           <p class="text-sm text-slate-500 mt-1">So sánh số dư sổ cái với tổng giá trị trên danh mục tài sản</p>
@@ -9,7 +9,7 @@
         <input v-model="period" type="month" class="erp-input w-40" @change="applyFilters" />
       </div>
 
-      <div class="grid grid-cols-2 gap-6">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-6">
         <!-- TK 211 -->
         <div class="bg-white rounded-xl border" :class="Math.abs(diff211) < 1 ? 'border-green-200' : 'border-red-200'">
           <div class="p-5 border-b" :class="Math.abs(diff211) < 1 ? 'border-green-100 bg-green-50' : 'border-red-100 bg-red-50'">

@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div>
           <h1 class="text-2xl font-bold text-slate-900">Nhóm tài sản cố định</h1>
           <p class="text-sm text-slate-500 mt-1">Phân loại TSCĐ theo TT133/TT45</p>
@@ -14,8 +14,8 @@
         </button>
       </div>
 
-      <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
+        <table class="min-w-full text-sm">
           <thead class="bg-slate-50 border-b border-slate-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wide">Mã nhóm</th>
@@ -71,7 +71,7 @@
     <!-- Modal thêm/sửa -->
     <Modal :show="showForm" @close="closeForm" :title="editTarget ? 'Sửa nhóm tài sản' : 'Thêm nhóm tài sản'" max-width="2xl">
       <form @submit.prevent="submitForm" class="space-y-4">
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label class="erp-label">Mã nhóm <span class="text-red-500">*</span></label>
             <input v-model="form.code" class="erp-input w-full" placeholder="VD: PTTB" required />

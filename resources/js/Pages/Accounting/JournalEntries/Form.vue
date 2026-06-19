@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-3xl mx-auto space-y-6">
       <div class="flex items-center gap-3">
@@ -21,7 +21,7 @@
 
       <form @submit.prevent="" class="bg-white rounded-xl border border-gray-200 p-6 space-y-5">
         <!-- Header fields -->
-        <div class="grid grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Mã bút toán</label>
             <input :value="isEditing ? entry.code : nextCode" disabled
@@ -54,7 +54,7 @@
           </div>
 
           <div class="overflow-hidden rounded-lg border border-gray-200">
-            <table class="w-full text-sm">
+            <table class="min-w-full text-sm">
               <thead class="bg-gray-50">
                 <tr>
                   <th class="text-left px-3 py-2 font-semibold text-gray-600 w-44">Tài khoản</th>

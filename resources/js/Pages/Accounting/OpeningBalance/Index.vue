@@ -1,9 +1,9 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
 
       <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div>
           <h1 class="text-2xl font-bold text-gray-900">Số dư đầu kỳ</h1>
           <p class="text-sm text-gray-500 mt-1">
@@ -102,7 +102,7 @@
       </div>
 
       <!-- Bảng tài khoản theo nhóm -->
-      <div v-for="group in groupedAccounts" :key="group.type" class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div v-for="group in groupedAccounts" :key="group.type" class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="px-5 py-3 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
           <span class="font-semibold text-gray-700">{{ group.typeLabel }}</span>
           <span class="text-sm text-gray-500">
@@ -111,7 +111,7 @@
             <span class="text-green-600 font-medium">Có: {{ formatVnd(group.totalCredit) }}</span>
           </span>
         </div>
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="border-b border-gray-100">
             <tr class="text-gray-500 text-xs">
               <th class="text-left px-5 py-2 font-medium w-28">Mã TK</th>

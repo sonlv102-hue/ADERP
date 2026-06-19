@@ -1,7 +1,7 @@
 ﻿<template>
   <AppLayout>
     <div class="space-y-5">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-slate-900">Sổ tài sản cố định</h1>
         <div class="flex gap-2">
           <select v-model="category_id" @change="applyFilters" class="erp-input w-48">
@@ -19,7 +19,7 @@
       </div>
 
       <!-- Totals -->
-      <div class="grid grid-cols-3 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <div class="bg-white rounded-xl border border-slate-200 p-5">
           <p class="text-xs text-slate-500 uppercase font-semibold">Tổng nguyên giá</p>
           <p class="text-2xl font-bold text-slate-900 mt-1">{{ fmt(totals.original_cost) }}</p>
@@ -34,9 +34,9 @@
         </div>
       </div>
 
-      <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
         <div class="overflow-x-auto">
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="bg-slate-50 border-b border-slate-200">
               <tr>
                 <th class="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase">Mã</th>

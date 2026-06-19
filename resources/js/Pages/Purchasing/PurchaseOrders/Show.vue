@@ -1,8 +1,8 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-5xl space-y-5">
       <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div class="flex items-center gap-3">
           <Link :href="route('purchasing.purchase-orders.index')" class="text-gray-500 hover:text-gray-700">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -114,7 +114,7 @@
       </div>
 
       <!-- Tabs -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="border-b border-gray-200">
           <nav class="flex gap-0">
             <button v-for="tab in tabs" :key="tab.key" @click="activeTab = tab.key"
@@ -132,7 +132,7 @@
 
         <!-- Tab: Sản phẩm -->
         <div v-if="activeTab === 'items'">
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã SP</th>
@@ -212,7 +212,7 @@
               + Thêm hóa đơn
             </Link>
           </div>
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead class="bg-gray-50 border-b border-gray-200">
               <tr>
                 <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã</th>

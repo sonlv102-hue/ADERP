@@ -1,7 +1,7 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-3xl space-y-6">
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-gray-900">Cài đặt công ty</h1>
       </div>
 
@@ -11,7 +11,7 @@
           <h2 class="text-base font-semibold text-gray-800 mb-4">Logo công ty</h2>
           <div class="flex items-start gap-6">
             <div class="flex-shrink-0">
-              <div v-if="currentLogo" class="w-24 h-24 rounded-xl border border-gray-200 overflow-hidden bg-gray-50 flex items-center justify-center">
+              <div v-if="currentLogo" class="w-24 h-24 rounded-xl border border-gray-200 overflow-x-auto bg-gray-50 flex items-center justify-center">
                 <img :src="currentLogo" alt="Logo" class="w-full h-full object-contain p-2" />
               </div>
               <div v-else class="w-24 h-24 rounded-xl border-2 border-dashed border-gray-300 flex items-center justify-center bg-gray-50">
@@ -54,7 +54,7 @@
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
           </div>
 
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Mã số thuế</label>
               <input v-model="form.company_tax_code" type="text"
@@ -67,7 +67,7 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
               <input v-model="form.company_email" type="email"
@@ -98,7 +98,7 @@
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
               placeholder="Vd: Vietcombank" />
           </div>
-          <div class="grid grid-cols-2 gap-4">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Số tài khoản</label>
               <input v-model="form.company_bank_account" type="text"

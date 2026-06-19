@@ -1,8 +1,8 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="space-y-5">
       <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div>
           <h1 class="text-2xl font-bold text-gray-900">Báo cáo lợi nhuận — Đơn hàng</h1>
           <p class="text-sm text-gray-500 mt-0.5">Doanh thu (chưa VAT) − Giá vốn − Hoa hồng</p>
@@ -60,8 +60,8 @@
       </div>
 
       <!-- Table -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden transition-opacity" :class="{ 'opacity-60': isLoading }">
-        <table class="w-full text-sm">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto transition-opacity" :class="{ 'opacity-60': isLoading }">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-4 py-3 font-semibold text-gray-600">Đơn hàng</th>

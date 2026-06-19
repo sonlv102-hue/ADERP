@@ -8,8 +8,8 @@
       </Link>
     </div>
 
-    <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <table class="w-full text-sm">
+    <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+      <table class="min-w-full text-sm">
         <thead class="bg-gray-50 border-b border-gray-200">
           <tr>
             <th class="px-4 py-3 text-left font-semibold text-gray-700">Mã phiếu</th>

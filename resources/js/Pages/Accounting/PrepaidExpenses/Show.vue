@@ -1,8 +1,8 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-3xl mx-auto space-y-6">
       <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div class="flex items-center gap-3">
           <Link :href="route('accounting.prepaid-expenses.index')" class="text-gray-400 hover:text-gray-600">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -66,10 +66,10 @@
       </div>
 
       <!-- Allocations table -->
-      <div class="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
           <h3 class="font-semibold text-gray-700">Lịch sử phân bổ</h3>
-          <form v-if="expense.status === 'active'" @submit.prevent="submitAmortize" class="flex items-center gap-2">
+          <form v-if="expense.status === 'active'" @submit.prevent="submitAmortize" class="flex items-center gap-2 flex-wrap">
             <input v-model="amortizeForm.period" type="month" required
               class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
             <button type="submit" :disabled="amortizeForm.processing"
@@ -79,7 +79,7 @@
           </form>
         </div>
 
-        <table class="w-full text-sm">
+        <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Kỳ</th>

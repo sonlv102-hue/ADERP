@@ -1,8 +1,8 @@
-<template>
+﻿<template>
   <AppLayout>
     <div class="max-w-3xl space-y-5">
       <!-- Header -->
-      <div class="flex items-center justify-between">
+      <div class="flex items-center justify-between flex-wrap gap-y-3">
         <div class="flex items-center gap-3">
           <Link :href="route('accounting.cash-vouchers.index')" class="text-gray-500 hover:text-gray-700">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -94,7 +94,7 @@
       <div class="bg-white rounded-xl border border-gray-200 p-5">
         <div class="flex items-center justify-between mb-3">
           <h2 class="text-base font-semibold text-gray-800">Bút toán liên kết</h2>
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
             <span v-if="journal_entry_code" class="text-xs text-gray-500 font-mono">{{ journal_entry_code }}</span>
             <span v-if="voucher.status === 'confirmed'"
               class="px-2 py-0.5 text-xs rounded-full bg-green-50 text-green-700 font-medium border border-green-200">
@@ -108,7 +108,7 @@
         </div>
 
         <div v-if="lines && lines.length > 0" class="overflow-x-auto">
-          <table class="w-full text-sm">
+          <table class="min-w-full text-sm">
             <thead>
               <tr class="text-left text-xs font-semibold text-gray-500 uppercase tracking-wider border-b border-gray-200">
                 <th class="pb-2 pr-4 w-28">TK Nợ</th>
