@@ -8,6 +8,7 @@ use App\Models\SmallTool;
 use App\Models\SmallToolAllocation;
 use App\Models\SmallToolCategory;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -95,25 +96,53 @@ class SmallToolReportController extends Controller
     {
         $this->authorize('reports.view');
 
+        $asOf = $request->input('as_of', now()->toDateString());
+
+        $glBalance = function (string $account) use ($asOf): float {
+            return (float) (DB::table('journal_entry_lines')
+                ->join('journal_entries', 'journal_entries.id', '=', 'journal_entry_lines.journal_entry_id')
+                ->where('journal_entry_lines.account_code', $account)
+                ->where('journal_entries.status', 'posted')
+                ->where('journal_entries.entry_date', '<=', $asOf)
+                ->selectRaw('COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0) as balance')
+                ->value('balance') ?? 0);
+        };
+
+        $gl1531 = $glBalance('1531');
+        $gl2422 = $glBalance('2422');
+
         $tools = SmallTool::with('allocations')->get()->map(fn (SmallTool $t) => [
-            'code'               => $t->code,
-            'name'               => $t->name,
-            'original_cost'      => (float) $t->original_cost,
-            'total_allocated'    => (float) $t->total_allocated,
-            'total_remaining'    => $t->total_remaining,
-            'posted_periods'     => $t->allocations->where('status', 'posted')->count(),
-            'allocation_periods' => $t->allocation_periods,
-            'status'             => $t->status->value,
-            'status_label'       => $t->status->label(),
-            'stock_account'      => $t->stock_account_code,
-            'pending_account'    => $t->pending_account_code,
-            'expense_account'    => $t->expense_account_code,
-            'warnings'           => $this->detectWarnings($t),
+            'id'             => $t->id,
+            'code'           => $t->code,
+            'name'           => $t->name,
+            'original_cost'  => (float) $t->original_cost,
+            'total_allocated' => (float) $t->total_allocated,
+            'total_remaining' => (float) $t->total_remaining,
+            'status'         => $t->status->value,
+            'warnings'       => $this->detectWarnings($t),
         ]);
 
+        $inStockTotal       = $tools->where('status', 'in_stock')->sum('original_cost');
+        $allocatingRemaining = $tools->where('status', 'allocating')->sum('total_remaining');
+
+        $warnings = $tools->flatMap(fn ($t) => collect($t['warnings'])->map(fn ($msg) => [
+            'code'    => $t['code'],
+            'name'    => $t['name'],
+            'message' => $msg,
+        ]))->values()->all();
+
         return Inertia::render('Accounting/SmallTools/Reports/GlReconcile', [
-            'tools'         => $tools,
-            'warningCount'  => $tools->sum(fn ($t) => count($t['warnings'])),
+            'asOf'      => $asOf,
+            'reconcile' => [
+                'gl_1531'              => $gl1531,
+                'in_stock_total'       => $inStockTotal,
+                'diff_1531'            => $gl1531 - $inStockTotal,
+                'gl_2422'              => $gl2422,
+                'allocating_remaining' => $allocatingRemaining,
+                'diff_2422'            => $gl2422 - $allocatingRemaining,
+                'warnings'             => $warnings,
+                'tools'                => $tools->values()->all(),
+            ],
         ]);
     }
 
