@@ -132,11 +132,11 @@ function positionDropdown() {
   const spaceBelow = window.innerHeight - rect.bottom
   const dropHeight = 240
   const top = spaceBelow >= dropHeight
-    ? rect.bottom + window.scrollY + 4
-    : rect.top + window.scrollY - dropHeight - 4
+    ? rect.bottom + 4
+    : rect.top - dropHeight - 4
   dropdownStyle.value = {
     top: `${top}px`,
-    left: `${rect.left + window.scrollX}px`,
+    left: `${rect.left}px`,
     width: `${rect.width}px`,
   }
 }
