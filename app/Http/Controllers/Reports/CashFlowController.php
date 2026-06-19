@@ -137,7 +137,7 @@ class CashFlowController extends Controller
 
         // Phân trang thủ công
         $perPage = 50;
-        $page    = $request->input('page', 1);
+        $page    = (int) $request->input('page', 1);
         $total   = $rows->count();
         $slice   = $rows->slice(($page - 1) * $perPage, $perPage)->values();
 
