@@ -88,7 +88,8 @@
               <th class="text-left px-4 py-3 font-semibold text-gray-600">Ngày CT</th>
               <th class="text-left px-4 py-3 font-semibold text-gray-600">Hạn TT</th>
               <th class="text-right px-4 py-3 font-semibold text-gray-600">Tổng tiền</th>
-              <th class="text-right px-4 py-3 font-semibold text-gray-600">Đã trả</th>
+              <th class="text-right px-4 py-3 font-semibold text-gray-600">Đã trả (TM)</th>
+              <th class="text-right px-4 py-3 font-semibold text-blue-600">Trả trước đối trừ</th>
               <th class="text-right px-4 py-3 font-semibold text-gray-600">Còn lại</th>
               <th class="text-center px-4 py-3 font-semibold text-gray-600">Tình trạng</th>
             </tr>
@@ -114,6 +115,7 @@
               </td>
               <td class="px-4 py-3 text-right text-gray-800">{{ fmt(row.total) }}</td>
               <td class="px-4 py-3 text-right text-green-700">{{ fmt(row.paid) }}</td>
+              <td class="px-4 py-3 text-right text-blue-600">{{ row.advance_offset > 0 ? fmt(row.advance_offset) : '—' }}</td>
               <td class="px-4 py-3 text-right font-semibold" :class="row.remaining > 0 ? 'text-red-700' : 'text-gray-400'">
                 {{ fmt(row.remaining) }}
               </td>
@@ -124,7 +126,7 @@
               </td>
             </tr>
             <tr v-if="!rows.data?.length">
-              <td colspan="8" class="px-4 py-10 text-center text-gray-400">Không có dữ liệu</td>
+              <td colspan="9" class="px-4 py-10 text-center text-gray-400">Không có dữ liệu</td>
             </tr>
           </tbody>
           <tfoot v-if="rows.data?.length" class="bg-gray-50 border-t-2 border-gray-300">
@@ -132,6 +134,7 @@
               <td colspan="4" class="px-4 py-3 font-semibold text-gray-700">Tổng cộng</td>
               <td class="px-4 py-3 text-right font-semibold text-gray-800">{{ fmt(summary.total_invoiced) }}</td>
               <td class="px-4 py-3 text-right font-semibold text-green-700">{{ fmt(summary.total_paid) }}</td>
+              <td class="px-4 py-3 text-right font-semibold text-blue-600">{{ fmt(summary.total_advance_offset) }}</td>
               <td class="px-4 py-3 text-right font-semibold text-red-700">{{ fmt(summary.total_remaining) }}</td>
               <td></td>
             </tr>

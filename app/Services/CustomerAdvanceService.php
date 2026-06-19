@@ -62,7 +62,7 @@ class CustomerAdvanceService
             );
         }
 
-        $invoiceDue = (float) $invoice->amount_due - (float) ($invoice->advance_allocated_amount ?? 0);
+        $invoiceDue = $invoice->amountDue();
         if ($amount > $invoiceDue + 0.01) {
             throw new \RuntimeException(
                 'Số đối trừ (' . number_format($amount) . ') vượt quá số còn phải thu của hóa đơn (' . number_format($invoiceDue) . ').'
@@ -77,7 +77,7 @@ class CustomerAdvanceService
             // JE: Dr 131UT (giảm ứng trước KH) / Cr 1311 (giảm phải thu)
             $je = $this->accounting->post(
                 description: "Đối trừ ứng trước KH #{$advance->id} vào HĐ {$invoice->code}",
-                date: $allocationDate,
+                date: \Carbon\Carbon::parse($allocationDate),
                 lines: [
                     [
                         'account'      => $advanceAccount,
@@ -117,7 +117,7 @@ class CustomerAdvanceService
                 JournalEntry::where('id', $je->id)->update(['reference_id' => $allocation->id]);
             }
 
-            $newRemaining = round($remaining - $amount, 2);
+            $newRemaining = round((float) $advance->remaining_amount - $amount, 2);
             $advance->update([
                 'remaining_amount' => $newRemaining,
                 'status'           => $newRemaining <= 0 ? 'fully_applied' : 'partially_applied',

@@ -10,6 +10,7 @@ use App\Models\CashVoucher;
 use App\Models\Fund;
 use App\Models\Supplier;
 use App\Models\SupplierOpeningAdvance;
+use App\Services\AccountingSettings;
 use App\Services\CashVoucherService;
 use App\Services\SupplierAdvanceService;
 use Illuminate\Http\Request;
@@ -113,6 +114,9 @@ class SupplierAdvanceController extends Controller
 
         try {
             $advance = DB::transaction(function () use ($data, $advanceType) {
+                if ($advanceType === 'prepayment') {
+                    $data['account_code'] = AccountingSettings::get('supplier_advance_account', '331UT');
+                }
                 $advance = $this->service->create($data);
 
                 if ($advanceType === 'prepayment') {

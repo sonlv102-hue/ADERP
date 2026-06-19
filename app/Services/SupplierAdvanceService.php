@@ -22,6 +22,9 @@ class SupplierAdvanceService
         $data['status']           = 'open';
         $data['advance_type']     = $data['advance_type'] ?? 'opening_balance';
         $data['created_by']       = auth()->id();
+        if (!isset($data['fiscal_year']) || $data['fiscal_year'] === null) {
+            $data['fiscal_year'] = DB::getDriverName() === 'pgsql' ? null : (int) date('Y');
+        }
         return SupplierOpeningAdvance::create($data);
     }
 
@@ -130,7 +133,7 @@ class SupplierAdvanceService
 
                 $je = $this->accounting->post(
                     description: "Đối trừ trả trước NCC #{$advance->id} vào HĐ {$invoice->code}",
-                    date: $allocationDate,
+                    date: \Carbon\Carbon::parse($allocationDate),
                     lines: [
                         [
                             'account'      => $payableAccount,

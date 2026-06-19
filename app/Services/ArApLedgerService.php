@@ -60,20 +60,22 @@ class ArApLedgerService
     public function agingSummary(Collection $items): array
     {
         $s = [
-            'total_invoiced'  => 0.0,
-            'total_paid'      => 0.0,
-            'total_remaining' => 0.0,
-            'bucket_0'        => 0.0,
-            'bucket_1_30'     => 0.0,
-            'bucket_31_60'    => 0.0,
-            'bucket_61_90'    => 0.0,
-            'bucket_90_plus'  => 0.0,
+            'total_invoiced'       => 0.0,
+            'total_paid'           => 0.0,
+            'total_advance_offset' => 0.0,
+            'total_remaining'      => 0.0,
+            'bucket_0'             => 0.0,
+            'bucket_1_30'          => 0.0,
+            'bucket_31_60'         => 0.0,
+            'bucket_61_90'         => 0.0,
+            'bucket_90_plus'       => 0.0,
         ];
 
         foreach ($items as $item) {
-            $s['total_invoiced']  += $item['total'];
-            $s['total_paid']      += $item['paid'];
-            $s['total_remaining'] += $item['remaining'];
+            $s['total_invoiced']       += $item['total'];
+            $s['total_paid']           += $item['paid'];
+            $s['total_advance_offset'] += $item['advance_offset'] ?? 0;
+            $s['total_remaining']      += $item['remaining'];
             match ($item['bucket']) {
                 'Chưa đến hạn' => $s['bucket_0']       += $item['remaining'],
                 '1–30 ngày'    => $s['bucket_1_30']    += $item['remaining'],
@@ -154,34 +156,37 @@ class ArApLedgerService
                 'invoices.total',
                 'invoices.status',
                 DB::raw("COALESCE((SELECT SUM(p.amount) FROM payments p WHERE p.invoice_id = invoices.id), 0) as paid"),
+                'invoices.advance_allocated_amount',
             ])
             ->orderByDesc('invoices.id')
             ->get();
 
         return $rows->map(function ($r) {
-            $total       = (float) $r->total;
-            $paid        = (float) $r->paid;
-            $remaining   = max(0.0, $total - $paid);
-            $daysOverdue = $this->computeDaysOverdue($r->due_date, $remaining);
-            $bucket      = $this->getBucket($daysOverdue, $remaining);
+            $total         = (float) $r->total;
+            $paid          = (float) $r->paid;
+            $advanceOffset = (float) ($r->advance_allocated_amount ?? 0);
+            $remaining     = max(0.0, $total - $paid - $advanceOffset);
+            $daysOverdue   = $this->computeDaysOverdue($r->due_date, $remaining);
+            $bucket        = $this->getBucket($daysOverdue, $remaining);
 
             return [
-                'id'            => $r->id,
-                'source_type'   => 'invoice',
-                'code'          => $r->code,
-                'partner_id'    => $r->customer_id,
-                'partner_name'  => $r->partner_name,
-                'doc_date'      => $r->doc_date,
-                'due_date'      => $r->due_date,
-                'due_date_sort' => $r->due_date ?? '9999-12-31',
-                'total'         => $total,
-                'paid'          => $paid,
-                'remaining'     => $remaining,
-                'days_overdue'  => $daysOverdue,
-                'bucket'        => $bucket,
-                'status'        => $r->status,
-                'status_label'  => $this->invoiceLabel($r->status),
-                'status_color'  => $this->invoiceColor($r->status),
+                'id'             => $r->id,
+                'source_type'    => 'invoice',
+                'code'           => $r->code,
+                'partner_id'     => $r->customer_id,
+                'partner_name'   => $r->partner_name,
+                'doc_date'       => $r->doc_date,
+                'due_date'       => $r->due_date,
+                'due_date_sort'  => $r->due_date ?? '9999-12-31',
+                'total'          => $total,
+                'paid'           => $paid,
+                'advance_offset' => $advanceOffset,
+                'remaining'      => $remaining,
+                'days_overdue'   => $daysOverdue,
+                'bucket'         => $bucket,
+                'status'         => $r->status,
+                'status_label'   => $this->invoiceLabel($r->status),
+                'status_color'   => $this->invoiceColor($r->status),
             ];
         });
     }
@@ -224,29 +229,31 @@ class ArApLedgerService
             ->get();
 
         return $rows->map(function ($r) {
-            $total       = (float) $r->total;
-            $paid        = (float) $r->paid + (float) ($r->advance_allocated_amount ?? 0);
-            $remaining   = max(0.0, $total - $paid);
-            $daysOverdue = $this->computeDaysOverdue($r->due_date, $remaining);
-            $bucket      = $this->getBucket($daysOverdue, $remaining);
+            $total         = (float) $r->total;
+            $paid          = (float) $r->paid;
+            $advanceOffset = (float) ($r->advance_allocated_amount ?? 0);
+            $remaining     = max(0.0, $total - $paid - $advanceOffset);
+            $daysOverdue   = $this->computeDaysOverdue($r->due_date, $remaining);
+            $bucket        = $this->getBucket($daysOverdue, $remaining);
 
             return [
-                'id'            => $r->id,
-                'source_type'   => 'purchase_invoice',
-                'code'          => $r->code,
-                'partner_id'    => $r->supplier_id,
-                'partner_name'  => $r->partner_name,
-                'doc_date'      => $r->doc_date,
-                'due_date'      => $r->due_date,
-                'due_date_sort' => $r->due_date ?? '9999-12-31',
-                'total'         => $total,
-                'paid'          => $paid,
-                'remaining'     => $remaining,
-                'days_overdue'  => $daysOverdue,
-                'bucket'        => $bucket,
-                'status'        => $r->status,
-                'status_label'  => $this->piLabel($r->status),
-                'status_color'  => $this->piColor($r->status),
+                'id'             => $r->id,
+                'source_type'    => 'purchase_invoice',
+                'code'           => $r->code,
+                'partner_id'     => $r->supplier_id,
+                'partner_name'   => $r->partner_name,
+                'doc_date'       => $r->doc_date,
+                'due_date'       => $r->due_date,
+                'due_date_sort'  => $r->due_date ?? '9999-12-31',
+                'total'          => $total,
+                'paid'           => $paid,
+                'advance_offset' => $advanceOffset,
+                'remaining'      => $remaining,
+                'days_overdue'   => $daysOverdue,
+                'bucket'         => $bucket,
+                'status'         => $r->status,
+                'status_label'   => $this->piLabel($r->status),
+                'status_color'   => $this->piColor($r->status),
             ];
         });
     }
@@ -315,22 +322,23 @@ class ArApLedgerService
             $code        = $ob->invoice_ref ?? ('OPENING-' . strtoupper($isAr ? 'AR' : 'AP') . '-' . $ob->id);
 
             return [
-                'id'            => $ob->id,
-                'source_type'   => 'opening_balance',
-                'code'          => $code,
-                'partner_id'    => $partnerId,
-                'partner_name'  => $partner?->name ?? '—',
-                'doc_date'      => $ob->invoice_date?->toDateString(),
-                'due_date'      => $ob->due_date?->toDateString(),
-                'due_date_sort' => $ob->due_date?->toDateString() ?? '9999-12-31',
-                'total'         => $total,
-                'paid'          => $paid,
-                'remaining'     => $remaining,
-                'days_overdue'  => $daysOverdue,
-                'bucket'        => $bucket,
-                'status'        => $derivedStatus,
-                'status_label'  => $statusLabel,
-                'status_color'  => $statusColor,
+                'id'             => $ob->id,
+                'source_type'    => 'opening_balance',
+                'code'           => $code,
+                'partner_id'     => $partnerId,
+                'partner_name'   => $partner?->name ?? '—',
+                'doc_date'       => $ob->invoice_date?->toDateString(),
+                'due_date'       => $ob->due_date?->toDateString(),
+                'due_date_sort'  => $ob->due_date?->toDateString() ?? '9999-12-31',
+                'total'          => $total,
+                'paid'           => $paid,
+                'advance_offset' => 0.0,
+                'remaining'      => $remaining,
+                'days_overdue'   => $daysOverdue,
+                'bucket'         => $bucket,
+                'status'         => $derivedStatus,
+                'status_label'   => $statusLabel,
+                'status_color'   => $statusColor,
             ];
         })->filter()->values();
     }

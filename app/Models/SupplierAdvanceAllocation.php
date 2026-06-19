@@ -9,7 +9,7 @@ class SupplierAdvanceAllocation extends Model
 {
     protected $fillable = [
         'supplier_id', 'opening_advance_id', 'purchase_invoice_id',
-        'ar_ap_opening_balance_id',
+        'ar_ap_opening_balance_id', 'journal_entry_id',
         'allocation_date', 'allocated_amount', 'status', 'reason',
         'created_by', 'reversed_by', 'reversed_at',
     ];

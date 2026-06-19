@@ -160,7 +160,7 @@ class ArApOpeningBalanceController extends Controller
                         'debit'        => $lineDr,
                         'credit'       => $lineCr,
                         'description'  => "{$desc} {$partyName}" .
-                            ($item['invoice_ref'] ? " HĐ {$item['invoice_ref']}" : ''),
+                            (($item['invoice_ref'] ?? null) ? " HĐ {$item['invoice_ref']}" : ''),
                         'partner_type' => $isAr ? 'customer' : 'supplier',
                         'partner_id'   => $isAr ? ($item['customer_id'] ?: null) : ($item['supplier_id'] ?: null),
                     ];
