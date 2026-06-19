@@ -12,11 +12,11 @@
         ref="inputRef"
         v-model="query"
         type="text"
-        :placeholder="isOpen ? 'Nhập để tìm kiếm...' : (displayText || placeholder)"
+        :placeholder="isOpen ? 'Nhập để tìm kiếm...' : (selectedLabel || placeholder)"
         :disabled="disabled"
         autocomplete="off"
         class="flex-1 px-3 py-2 text-sm outline-none bg-transparent min-w-0"
-        :class="(!isOpen && displayText) ? 'text-slate-900' : 'text-slate-400'"
+        :class="(!isOpen && selectedLabel) ? 'text-slate-900' : 'text-slate-400'"
         @focus="onFocus"
         @input="onInput"
         @keydown="onKeydown"
@@ -99,7 +99,7 @@ import { ref, watch, nextTick, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps({
   modelValue:  { type: [Number, String, null], default: null },
-  displayText: { type: String, default: '' },     // shown when value is pre-selected
+  displayText: { type: String, default: '' },     // shown when value is pre-selected (edit mode)
   searchUrl:   { type: String, required: true },  // route('search.suppliers') etc.
   placeholder: { type: String, default: '-- Chọn --' },
   disabled:    { type: Boolean, default: false },
@@ -120,6 +120,9 @@ const results          = ref([])
 const searched         = ref(false)
 const highlightedIndex = ref(0)
 const dropdownStyle    = ref({})
+const selectedLabel    = ref(props.displayText || '')
+
+watch(() => props.displayText, (val) => { selectedLabel.value = val || '' })
 let debounceTimer      = null
 let abortController    = null
 
@@ -181,6 +184,7 @@ function onInput() {
 function select(opt) {
   emit('update:modelValue', opt.value)
   emit('change', opt)
+  selectedLabel.value = opt.code ? `${opt.code} - ${opt.label}` : opt.label
   query.value = ''
   isOpen.value = false
 }
@@ -188,6 +192,7 @@ function select(opt) {
 function clear() {
   emit('update:modelValue', null)
   emit('change', null)
+  selectedLabel.value = ''
   query.value = ''
   results.value = []
   searched.value = false

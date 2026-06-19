@@ -166,7 +166,7 @@ class SearchController extends Controller
                 $b2->whereRaw('LOWER(name) LIKE ?', ["%{$q}%"])
                    ->orWhereRaw('LOWER(code) LIKE ?', ["%{$q}%"])
             ))
-            ->whereIn('status', ['planning', 'active'])
+            ->whereIn('status', ['planning', 'in_progress', 'on_hold'])
             ->orderBy('name')
             ->limit(30)
             ->get(['id', 'code', 'name', 'status'])
@@ -185,11 +185,10 @@ class SearchController extends Controller
             ->when($q, fn ($b) => $b->whereRaw('LOWER(name) LIKE ?', ["%{$q}%"]))
             ->orderBy('name')
             ->limit(30)
-            ->get(['id', 'code', 'name'])
+            ->get(['id', 'name'])
             ->map(fn ($w) => [
                 'value' => $w->id,
                 'label' => $w->name,
-                'code'  => $w->code,
             ]);
         return response()->json(['data' => $items]);
     }
