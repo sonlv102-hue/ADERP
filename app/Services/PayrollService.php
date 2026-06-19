@@ -111,7 +111,7 @@ class PayrollService
         });
     }
 
-    public function payEmployeeSalary(PayrollItem $item, Fund $fund, ?string $paymentDate = null): void
+    public function payEmployeeSalary(PayrollItem $item, Fund $fund, ?string $paymentDate = null, ?float $actualAmount = null): void
     {
         if ($item->status === PayrollItemStatus::Paid) {
             throw new RuntimeException('Dòng lương này đã thanh toán.');
@@ -124,9 +124,10 @@ class PayrollService
 
         $voucherDate = $paymentDate ?? now()->toDateString();
 
-        DB::transaction(function () use ($item, $payroll, $fund, $voucherDate) {
+        DB::transaction(function () use ($item, $payroll, $fund, $voucherDate, $actualAmount) {
             $employeeName = $item->employee?->name ?? 'Nhân viên';
-            $net          = round((float) $item->net_salary);
+            $thucLinh     = max(0, (float) $item->net_salary + (float) ($item->adjustment_amount ?? 0) - (float) ($item->advance ?? 0));
+            $net          = (int) round($actualAmount ?? $thucLinh);
 
             // Tạo phiếu chi liên kết với dòng lương
             $voucher = CashVoucher::create([

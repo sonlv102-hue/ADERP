@@ -659,11 +659,15 @@
           <button @click="showPayModal = false" class="text-gray-400 hover:text-gray-600 text-lg">&times;</button>
         </div>
         <form @submit.prevent="submitPay" class="p-5 space-y-4">
-          <div class="text-center">
-            <p class="text-xs text-gray-500 mb-1">Số tiền thực chi</p>
-            <p class="text-2xl font-extrabold text-green-600 font-mono">{{ fv(activeItem.thuc_linh) }}</p>
-            <p v-if="activeItem.advance > 0" class="text-xs text-gray-400 mt-1">
-              Lương net {{ fv(activeItem.net_salary) }} - tạm ứng {{ fv(activeItem.advance) }}
+          <div>
+            <label class="form-label">Số tiền thực chi</label>
+            <input type="number" v-model="payForm.actual_amount" min="0" step="1000"
+              class="form-input text-right font-mono text-lg font-semibold" required />
+            <p class="text-xs text-gray-400 mt-1">
+              Mặc định: lương net {{ fv(activeItem.net_salary) }}
+              <template v-if="activeItem.adjustment_amount !== 0"> + điều chỉnh {{ fv(activeItem.adjustment_amount) }}</template>
+              <template v-if="activeItem.advance > 0"> − tạm ứng {{ fv(activeItem.advance) }}</template>
+              = {{ fv(activeItem.thuc_linh) }}
             </p>
           </div>
           <div>
@@ -1141,7 +1145,7 @@ function submitRollback() {
 
 // Pay modal
 const showPayModal = ref(false);
-const payForm = useForm({ fund_id: '', payment_date: '' });
+const payForm = useForm({ fund_id: '', payment_date: '', actual_amount: 0 });
 const cashFunds = computed(() => props.funds.filter(f => f.type === 'cash'));
 const bankFunds = computed(() => props.funds.filter(f => f.type === 'bank'));
 
@@ -1149,6 +1153,7 @@ function openPayModal(item) {
   activeItem.value = item;
   payForm.fund_id = '';
   payForm.payment_date = new Date().toISOString().slice(0, 10);
+  payForm.actual_amount = item.thuc_linh;
   showPayModal.value = true;
 }
 
