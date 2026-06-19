@@ -252,7 +252,7 @@
         <!-- Form thêm thanh toán -->
         <div v-if="showPayForm" class="px-5 py-5 border-b border-gray-100 bg-gray-50 space-y-4">
           <!-- Payment type selector -->
-          <div v-if="available_advances?.length > 0">
+          <div>
             <p class="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Hình thức thanh toán</p>
             <div class="flex gap-2">
               <button v-for="pt in paymentTypes" :key="pt.value" type="button"
@@ -264,6 +264,13 @@
                 {{ pt.label }}
               </button>
             </div>
+          </div>
+
+          <!-- No advance warning -->
+          <div v-if="paymentType !== 'cash' && !available_advances?.length"
+            class="border border-yellow-200 rounded-lg bg-yellow-50 p-3 text-xs text-yellow-800">
+            Không có khoản ứng trước / trả trước khả dụng cho nhà cung cấp này.
+            Vui lòng nhập dữ liệu qua <strong>Công nợ đầu kỳ → Ứng trước NCC</strong> hoặc chọn <strong>Chi tiền mới</strong>.
           </div>
 
           <!-- Advance selection (offset / combined) -->
