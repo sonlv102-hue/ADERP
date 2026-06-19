@@ -661,7 +661,7 @@
         <form @submit.prevent="submitPay" class="p-5 space-y-4">
           <div>
             <label class="form-label">Số tiền thực chi</label>
-            <input type="number" v-model="payForm.actual_amount" min="0" step="1000"
+            <input type="number" v-model="payForm.actual_amount" min="0" step="1"
               class="form-input text-right font-mono text-lg font-semibold" required />
             <p class="text-xs text-gray-400 mt-1">
               Mặc định: lương net {{ fv(activeItem.net_salary) }}
