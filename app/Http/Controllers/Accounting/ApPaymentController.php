@@ -9,6 +9,7 @@ use App\Services\ArApLedgerService;
 use App\Services\SupplierAdvanceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -23,21 +24,30 @@ class ApPaymentController extends Controller
     {
         $filters = $request->only(['supplier_id', 'status']);
 
+        // Sum available advance per supplier for the "advance_available" column
+        $advBySupplier = DB::table('supplier_opening_advances')
+            ->whereIn('status', ['open', 'partially_applied'])
+            ->where('remaining_amount', '>', 0)
+            ->selectRaw('supplier_id, SUM(remaining_amount) as total')
+            ->groupBy('supplier_id')
+            ->pluck('total', 'supplier_id');
+
         $items = $this->ledger->payables($filters, onlyOutstanding: true)
             ->map(fn ($item) => [
-                'id'           => $item['id'],
-                'source_type'  => $item['source_type'],
-                'code'         => $item['code'],
-                'supplier_id'  => $item['partner_id'],
-                'supplier'     => $item['partner_name'],
-                'invoice_date' => $item['doc_date'] ? date('d/m/Y', strtotime($item['doc_date'])) : '—',
-                'due_date'     => $item['due_date'] ? date('d/m/Y', strtotime($item['due_date'])) : null,
-                'total'        => $item['total'],
-                'amount_paid'  => $item['paid'],
-                'amount_due'   => $item['remaining'],
-                'status'       => $item['status'],
-                'status_label' => $item['status_label'],
-                'status_color' => $item['status_color'],
+                'id'                => $item['id'],
+                'source_type'       => $item['source_type'],
+                'code'              => $item['code'],
+                'supplier_id'       => $item['partner_id'],
+                'supplier'          => $item['partner_name'],
+                'invoice_date'      => $item['doc_date'] ? date('d/m/Y', strtotime($item['doc_date'])) : '—',
+                'due_date'          => $item['due_date'] ? date('d/m/Y', strtotime($item['due_date'])) : null,
+                'total'             => $item['total'],
+                'amount_paid'       => $item['paid'],
+                'amount_due'        => $item['remaining'],
+                'advance_available' => (float) ($advBySupplier[$item['partner_id']] ?? 0),
+                'status'            => $item['status'],
+                'status_label'      => $item['status_label'],
+                'status_color'      => $item['status_color'],
             ])
             ->values();
 

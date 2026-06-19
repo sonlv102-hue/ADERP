@@ -20,8 +20,13 @@
           <option value="">Tất cả trạng thái</option>
           <option v-for="s in statuses" :key="s.value" :value="s.value">{{ s.label }}</option>
         </select>
-        <div class="ml-auto text-sm text-gray-500 self-center">
-          Tổng cần trả: <span class="font-semibold text-orange-600">{{ formatVnd(totalDue) }}</span>
+        <div class="ml-auto flex items-center gap-4 text-sm text-gray-500">
+          <span>Tổng trả trước NCC:
+            <span class="font-semibold text-blue-600">{{ formatVnd(totalAdvanceAvailable) }}</span>
+          </span>
+          <span>Tổng cần trả:
+            <span class="font-semibold text-orange-600">{{ formatVnd(totalDue) }}</span>
+          </span>
         </div>
       </div>
 
@@ -37,6 +42,7 @@
               <th class="text-right px-5 py-3 font-semibold text-gray-600">Tổng tiền</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">Đã trả</th>
               <th class="text-right px-5 py-3 font-semibold text-orange-600">Còn phải trả</th>
+              <th class="text-right px-5 py-3 font-semibold text-blue-600">Trả trước NCC</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Trạng thái</th>
               <th class="px-5 py-3"></th>
             </tr>
@@ -62,18 +68,28 @@
               <td class="px-5 py-3 text-right text-gray-800">{{ formatVnd(item.total) }}</td>
               <td class="px-5 py-3 text-right text-green-700">{{ formatVnd(item.amount_paid) }}</td>
               <td class="px-5 py-3 text-right font-semibold text-orange-600">{{ formatVnd(item.amount_due) }}</td>
+              <td class="px-5 py-3 text-right">
+                <span v-if="item.advance_available > 0"
+                  class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                  {{ formatVnd(item.advance_available) }}
+                </span>
+                <span v-else class="text-gray-400 text-xs">—</span>
+              </td>
               <td class="px-5 py-3">
                 <StatusBadge :color="item.status_color">{{ item.status_label }}</StatusBadge>
               </td>
               <td class="px-5 py-3 text-right">
                 <button @click="openPayment(item)"
-                  class="px-3 py-1.5 text-xs font-medium bg-orange-600 text-white rounded-lg hover:bg-orange-700">
-                  Ghi trả tiền
+                  class="px-3 py-1.5 text-xs font-medium rounded-lg"
+                  :class="item.source_type === 'purchase_invoice' && item.advance_available > 0
+                    ? 'bg-blue-600 text-white hover:bg-blue-700'
+                    : 'bg-orange-600 text-white hover:bg-orange-700'">
+                  {{ item.source_type === 'purchase_invoice' && item.advance_available > 0 ? 'Trả / Đối trừ' : 'Ghi trả tiền' }}
                 </button>
               </td>
             </tr>
             <tr v-if="!items.length">
-              <td colspan="9" class="px-5 py-10 text-center text-gray-400">Không có khoản cần thanh toán</td>
+              <td colspan="10" class="px-5 py-10 text-center text-gray-400">Không có khoản cần thanh toán</td>
             </tr>
           </tbody>
         </table>
@@ -338,6 +354,7 @@ const payForm = ref({
 });
 
 const totalDue = computed(() => (props.items ?? []).reduce((s, i) => s + i.amount_due, 0));
+const totalAdvanceAvailable = computed(() => (props.items ?? []).reduce((s, i) => s + (i.advance_available ?? 0), 0));
 
 const totalOffset = computed(() =>
   Object.values(advAllocAmounts.value).reduce((s, v) => s + (parseFloat(v) || 0), 0)

@@ -332,9 +332,10 @@ Route::middleware('auth')->group(function () {
         Route::delete('invoice-advance-allocations/{allocation}', [CustomerAdvanceAllocationController::class, 'destroy'])->name('invoice-advance-allocations.destroy');
 
         // Công nợ phải thu / phải trả
-        Route::get('ar-collections',       [ArCollectionController::class, 'index'])->name('ar-collections.index');
-        Route::get('ap-payments/advances', [ApPaymentController::class,    'advances'])->name('ap-payments.advances');
-        Route::get('ap-payments',          [ApPaymentController::class,    'index'])->name('ap-payments.index');
+        Route::get('ar-collections/customer-advances', [ArCollectionController::class, 'customerAdvances'])->name('ar-collections.customer-advances');
+        Route::get('ar-collections',                   [ArCollectionController::class, 'index'])->name('ar-collections.index');
+        Route::get('ap-payments/advances',             [ApPaymentController::class,    'advances'])->name('ap-payments.advances');
+        Route::get('ap-payments',                      [ApPaymentController::class,    'index'])->name('ap-payments.index');
 
         // Quỹ và phiếu thu/chi
         Route::resource('funds', FundController::class)->except(['show']);
