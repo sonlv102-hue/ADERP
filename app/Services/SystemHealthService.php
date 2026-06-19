@@ -163,41 +163,84 @@ class SystemHealthService
 
     private function checkLog(): array
     {
+        $logPath = storage_path('logs/laravel.log');
+        $base    = [
+            'log_file'        => 'storage/logs/laravel.log',
+            'last_modified'   => null,
+            'log_size_kb'     => 0,
+            'total_errors'    => 0,
+            'total_criticals' => 0,
+            'detail'          => [],
+        ];
+
         try {
-            $logPath = storage_path('logs/laravel.log');
             if (! file_exists($logPath)) {
-                return ['status' => 'ok', 'label' => 'Laravel Log: Chưa có file log', 'detail' => [], 'log_size_kb' => 0];
+                return array_merge($base, ['status' => 'ok', 'label' => 'Laravel Log: Chưa có file log']);
             }
 
-            $size = filesize($logPath);
-            $fp   = fopen($logPath, 'rb');
-            fseek($fp, max(0, $size - 51200));
-            $content = fread($fp, 51200);
+            $size         = filesize($logPath);
+            $lastModified = date('Y-m-d H:i:s', filemtime($logPath));
+
+            $fp = fopen($logPath, 'rb');
+            fseek($fp, max(0, $size - 102400));
+            $content = fread($fp, 102400);
             fclose($fp);
 
-            $errors = [];
+            $allErrors = [];
             foreach (explode("\n", $content) as $line) {
-                if (preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\].*?\.(ERROR|CRITICAL|ALERT|EMERGENCY):\s*(.+)$/i', $line, $m)) {
-                    $errors[] = [
-                        'time'    => $m[1],
-                        'level'   => strtoupper($m[2]),
-                        'message' => Str::limit(trim($m[3]), 200),
+                if (preg_match('/^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\].*?\.(ERROR|CRITICAL|ALERT|EMERGENCY|WARNING):\s*(.+)$/i', $line, $m)) {
+                    $msg           = $this->redactSensitive(trim($m[3]));
+                    $allErrors[]   = [
+                        'time'          => $m[1],
+                        'level'         => strtoupper($m[2]),
+                        'message'       => Str::limit($msg, 500),
+                        'message_short' => Str::limit($msg, 200),
                     ];
                 }
             }
 
-            $errors = array_slice($errors, -10);
-            $hasCritical = collect($errors)->contains(fn ($e) => in_array($e['level'], ['CRITICAL', 'ALERT', 'EMERGENCY']));
+            $totalErrors   = count($allErrors);
+            $totalCritical = collect($allErrors)->filter(fn ($e) => in_array($e['level'], ['CRITICAL', 'ALERT', 'EMERGENCY']))->count();
+            $recent        = array_slice($allErrors, -10);
+            $hasCritical   = collect($recent)->contains(fn ($e) => in_array($e['level'], ['CRITICAL', 'ALERT', 'EMERGENCY']));
+            $hasError      = collect($recent)->contains(fn ($e) => $e['level'] === 'ERROR');
+
+            $status = 'ok';
+            if ($hasCritical) {
+                $status = 'error';
+            } elseif ($hasError || ! empty($recent)) {
+                $status = 'warning';
+            }
 
             return [
-                'status'      => empty($errors) ? 'ok' : ($hasCritical ? 'error' : 'warning'),
-                'label'       => empty($errors) ? 'Laravel Log: Không có lỗi gần đây' : 'Laravel Log: Có ' . count($errors) . ' lỗi gần đây',
-                'detail'      => $errors,
-                'log_size_kb' => round($size / 1024, 1),
+                'status'          => $status,
+                'label'           => $totalErrors === 0
+                    ? 'Laravel Log: Không có lỗi gần đây'
+                    : "Laravel Log: {$totalErrors} lỗi trong 100KB cuối",
+                'log_file'        => 'storage/logs/laravel.log',
+                'last_modified'   => $lastModified,
+                'log_size_kb'     => round($size / 1024, 1),
+                'total_errors'    => $totalErrors,
+                'total_criticals' => $totalCritical,
+                'detail'          => $recent,
             ];
         } catch (\Throwable $e) {
-            return ['status' => 'warning', 'label' => 'Log: Không đọc được', 'detail' => $e->getMessage(), 'log_size_kb' => 0];
+            return array_merge($base, [
+                'status' => 'warning',
+                'label'  => 'Log: Không đọc được',
+                'detail' => $e->getMessage(),
+            ]);
         }
+    }
+
+    private function redactSensitive(string $text): string
+    {
+        $keys = ['password', 'passwd', 'token', 'secret', 'api_key', 'app_key', 'auth', 'bearer', 'cookie', 'session'];
+        foreach ($keys as $key) {
+            $text = preg_replace('/"(' . $key . '[^"]*?)"\s*:\s*"[^"]{0,500}"/i', '"$1":"[REDACTED]"', $text);
+            $text = preg_replace('/\b(' . $key . '[\w_]*)\s*=\s*[^\s&",]{1,200}/i', '$1=[REDACTED]', $text);
+        }
+        return $text;
     }
 
     private function checkDeployMeta(): array

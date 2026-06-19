@@ -305,40 +305,67 @@
 
       <!-- Laravel Log -->
       <div class="bg-white rounded-xl border border-slate-200 overflow-hidden">
-        <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100">
-          <div class="flex items-center gap-3">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-slate-100 flex-wrap gap-y-2">
+          <div class="flex items-center gap-2 flex-wrap">
             <span :class="dotClass(checks.log.status)" class="w-3 h-3 rounded-full flex-shrink-0"></span>
             <h2 class="font-semibold text-slate-800">Laravel Log</h2>
-            <span v-if="checks.log.log_size_kb" class="text-xs text-slate-400">
-              (file: {{ checks.log.log_size_kb }} KB)
+            <span v-if="checks.log.total_errors > 0"
+              class="text-xs px-2 py-0.5 rounded-full font-semibold bg-red-100 text-red-700">
+              {{ checks.log.total_errors }} lỗi
+            </span>
+            <span v-if="checks.log.total_criticals > 0"
+              class="text-xs px-2 py-0.5 rounded-full font-semibold bg-orange-100 text-orange-700">
+              {{ checks.log.total_criticals }} critical
             </span>
           </div>
-          <span :class="chipClass(checks.log.status)" class="text-xs font-semibold px-2 py-0.5 rounded">
-            {{ statusLabel(checks.log.status) }}
-          </span>
+          <div class="flex items-center gap-3">
+            <button v-if="Array.isArray(checks.log.detail) && checks.log.detail.length"
+              @click="showLogDetail = !showLogDetail"
+              class="text-xs text-primary-600 hover:underline font-medium">
+              {{ showLogDetail ? 'Thu gọn' : 'Xem chi tiết' }}
+            </button>
+            <span :class="chipClass(checks.log.status)" class="text-xs font-semibold px-2 py-0.5 rounded">
+              {{ statusLabel(checks.log.status) }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Log file meta -->
+        <div v-if="checks.log.log_file" class="px-5 pt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-slate-400">
+          <span>File: <span class="font-mono text-slate-600">{{ checks.log.log_file }}</span></span>
+          <span v-if="checks.log.last_modified">Cập nhật: <span class="text-slate-600">{{ checks.log.last_modified }}</span></span>
+          <span v-if="checks.log.log_size_kb">Kích thước: <span class="text-slate-600">{{ checks.log.log_size_kb }} KB</span></span>
         </div>
 
         <div class="px-5 py-4">
           <template v-if="Array.isArray(checks.log.detail) && checks.log.detail.length">
-            <p class="text-xs text-slate-500 mb-3">10 lỗi gần nhất (đọc từ cuối log):</p>
+            <p class="text-xs text-slate-500 mb-3">
+              {{ checks.log.total_errors }} lỗi trong 100KB cuối log — {{ checks.log.detail.length }} gần nhất:
+            </p>
             <div class="space-y-2">
               <div v-for="(err, i) in checks.log.detail" :key="i"
-                class="flex gap-3 p-3 rounded-lg border text-xs"
+                class="p-3 rounded-lg border text-xs"
                 :class="['CRITICAL','ALERT','EMERGENCY'].includes(err.level)
                   ? 'bg-orange-50 border-orange-200'
-                  : 'bg-red-50 border-red-100'">
-                <div class="flex-shrink-0 font-mono text-slate-500 w-36">{{ err.time }}</div>
-                <div class="flex-1 min-w-0">
-                  <span class="font-bold mr-2"
-                    :class="['CRITICAL','ALERT','EMERGENCY'].includes(err.level) ? 'text-orange-700' : 'text-red-700'">
+                  : err.level === 'WARNING'
+                    ? 'bg-yellow-50 border-yellow-200'
+                    : 'bg-red-50 border-red-100'">
+                <div class="flex items-center gap-2 flex-wrap mb-1">
+                  <span class="font-bold"
+                    :class="['CRITICAL','ALERT','EMERGENCY'].includes(err.level)
+                      ? 'text-orange-700'
+                      : err.level === 'WARNING' ? 'text-yellow-700' : 'text-red-700'">
                     [{{ err.level }}]
                   </span>
-                  <span class="text-slate-700 break-words">{{ err.message }}</span>
+                  <span class="font-mono text-slate-500">{{ err.time }}</span>
                 </div>
+                <p class="text-slate-700 break-words leading-relaxed">
+                  {{ showLogDetail ? err.message : err.message_short }}
+                </p>
               </div>
             </div>
           </template>
-          <p v-else class="text-sm text-green-700">Không tìm thấy lỗi ERROR/CRITICAL gần đây trong log.</p>
+          <p v-else class="text-sm text-green-700">Không tìm thấy lỗi ERROR/CRITICAL/WARNING gần đây trong log.</p>
         </div>
       </div>
 
@@ -347,12 +374,15 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
 import { router } from '@inertiajs/vue3'
 import AppLayout from '@/Components/Layout/AppLayout.vue'
 
 defineProps({
   checks: Object,
 })
+
+const showLogDetail = ref(false)
 
 const CHECK_TITLES = {
   environment: 'Môi trường',
