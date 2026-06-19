@@ -188,7 +188,7 @@
                     :max="adv.remaining_amount"
                     min="0"
                     :value="advAllocAmounts[adv.id] ?? 0"
-                    @input="setAllocAmount(adv.id, $event.target.value, adv.remaining_amount)"
+                    @change="setAllocAmount(adv.id, $event.target.value, adv.remaining_amount)"
                     class="w-32 px-2 py-1 border border-gray-300 rounded text-right text-xs focus:ring-2 focus:ring-blue-500 outline-none"
                     placeholder="0" />
                 </td>
@@ -310,7 +310,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
@@ -374,6 +374,16 @@ const submitLabel = computed(() => {
   if (paymentType.value === 'offset')   return 'Xác nhận đối trừ';
   if (paymentType.value === 'combined') return 'Xác nhận đối trừ & thu tiền';
   return 'Xác nhận thu tiền';
+});
+
+// Trong combined mode: tự giảm số tiền thu nếu offset vượt quá
+watch(totalOffset, (newOffset) => {
+  if (paymentType.value === 'combined' && payModal.value) {
+    const maxCash = Math.max(0, payModal.value.amount_due - newOffset);
+    if ((payForm.value.amount || 0) > maxCash) {
+      payForm.value.amount = maxCash;
+    }
+  }
 });
 
 function isOverdue(item) {
@@ -477,14 +487,19 @@ function submitCashPayment() {
     ? route('accounting.ar-ap-opening-balance.pay', item.id)
     : route('accounting.invoices.payments.store', item.id);
 
-  router.post(url, {
+  const payload = {
     amount:       payForm.value.amount,
     payment_date: payForm.value.payment_date,
     method:       payForm.value.method,
     fund_id:      payForm.value.fund_id,
     reference:    payForm.value.reference || null,
     notes:        payForm.value.notes || null,
-  }, {
+  };
+  if (item.source_type === 'opening_balance') {
+    payload.payment_type = 'cash';
+  }
+
+  router.post(url, payload, {
     onSuccess: () => { payModal.value = null; submitting.value = false; },
     onError:   (errors) => {
       submitting.value = false;
