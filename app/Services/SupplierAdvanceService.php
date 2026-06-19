@@ -21,7 +21,10 @@ class SupplierAdvanceService
         $data['remaining_amount'] = $data['amount'];
         $data['status']           = 'open';
         $data['advance_type']     = $data['advance_type'] ?? 'opening_balance';
-        $data['created_by']       = auth()->id();
+        if (!isset($data['account_code'])) {
+            $data['account_code'] = AccountingSettings::get('supplier_advance_account', '331UT');
+        }
+        $data['created_by'] = auth()->id();
         if (!isset($data['fiscal_year']) || $data['fiscal_year'] === null) {
             $data['fiscal_year'] = DB::getDriverName() === 'pgsql' ? null : (int) date('Y');
         }
@@ -123,14 +126,15 @@ class SupplierAdvanceService
         }
 
         return DB::transaction(function () use ($advance, $invoice, $amount, $allocationDate, $reason) {
-            // JE đối trừ: Dr 3311 (giảm phải trả NCC) / Cr 331UT (giảm trả trước NCC)
-            // Chỉ tạo JE khi advance là prepayment (có account_code = 331UT)
-            $jeId = null;
-            if ($advance->account_code === AccountingSettings::get('supplier_advance_account', '331UT')) {
-                $supplier        = Supplier::findOrFail($advance->supplier_id);
-                $payableAccount  = $supplier->getPayableAccount();
-                $advanceAccount  = $advance->account_code;
+            // JE đối trừ: Dr payableAccount (giảm phải trả NCC) / Cr advanceAccount (giảm trả trước NCC)
+            // Tạo JE khi advanceAccount khác payableAccount (luồng chuẩn: 331UT ≠ 3311)
+            // Không tạo JE khi advance cùng TK với payable (dữ liệu cũ/đặc biệt)
+            $supplier       = Supplier::findOrFail($advance->supplier_id);
+            $payableAccount = $supplier->getPayableAccount();
+            $advanceAccount = $advance->account_code ?? AccountingSettings::get('supplier_advance_account', '331UT');
 
+            $jeId = null;
+            if ($advanceAccount !== $payableAccount) {
                 $je = $this->accounting->post(
                     description: "Đối trừ trả trước NCC #{$advance->id} vào HĐ {$invoice->code}",
                     date: \Carbon\Carbon::parse($allocationDate),
@@ -144,10 +148,10 @@ class SupplierAdvanceService
                             'partner_id'   => $advance->supplier_id,
                         ],
                         [
-                            'account'     => $advanceAccount,
-                            'debit'       => 0,
-                            'credit'      => $amount,
-                            'description' => "Giảm trả trước NCC {$supplier->name}",
+                            'account'      => $advanceAccount,
+                            'debit'        => 0,
+                            'credit'       => $amount,
+                            'description'  => "Giảm trả trước NCC {$supplier->name}",
                             'partner_type' => 'supplier',
                             'partner_id'   => $advance->supplier_id,
                         ],

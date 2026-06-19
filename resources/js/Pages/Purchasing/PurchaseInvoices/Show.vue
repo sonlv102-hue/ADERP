@@ -227,7 +227,7 @@
           NCC này còn <strong>{{ formatVnd(available_advances.reduce((s, a) => s + a.remaining_amount, 0)) }} đ</strong>
           ứng trước đầu kỳ chưa đối trừ.
         </p>
-        <button @click="showAdvanceForm = !showAdvanceForm"
+        <button @click="showPayForm = true; paymentType = 'offset'"
           class="flex-shrink-0 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-sm font-medium">
           Đối trừ ứng trước
         </button>
@@ -277,21 +277,38 @@
           <div v-if="paymentType !== 'cash' && available_advances?.length"
             class="border border-amber-200 rounded-lg bg-amber-50 p-3 space-y-2">
             <p class="text-xs font-semibold text-amber-800">Khoản ứng trước / trả trước có thể đối trừ</p>
-            <div v-for="adv in available_advances" :key="adv.id" class="flex items-center gap-3">
+            <!-- Header row -->
+            <div class="hidden sm:grid sm:grid-cols-[auto_1fr_80px_80px_80px_100px] gap-2 px-1 text-xs text-gray-500 font-medium border-b border-amber-200 pb-1">
+              <span></span>
+              <span>Mã / Ngày / Loại</span>
+              <span class="text-right">Gốc</span>
+              <span class="text-right">Đã dùng</span>
+              <span class="text-right">Còn lại</span>
+              <span class="text-right">Đối trừ</span>
+            </div>
+            <div v-for="adv in available_advances" :key="adv.id"
+              class="flex flex-col sm:grid sm:grid-cols-[auto_1fr_80px_80px_80px_100px] gap-2 sm:items-center py-1 border-b border-amber-100 last:border-0">
               <input type="checkbox" :id="'adv-'+adv.id"
                 :checked="isAdvanceSelected(adv.id)"
                 @change="toggleAdvance(adv)"
-                class="rounded border-gray-300 text-amber-500 focus:ring-amber-400" />
-              <label :for="'adv-'+adv.id" class="flex-1 text-xs text-gray-700 cursor-pointer">
-                <span class="font-medium">{{ adv.reference_no || ('ADV-' + adv.id) }}</span>
-                <span class="ml-1 text-amber-600 bg-amber-100 px-1 rounded text-xs">{{ adv.type_label }}</span>
-                <span class="ml-1">— còn <strong>{{ formatVnd(adv.remaining_amount) }}</strong></span>
+                class="rounded border-gray-300 text-amber-500 focus:ring-amber-400 mt-0.5" />
+              <label :for="'adv-'+adv.id" class="cursor-pointer">
+                <div class="flex items-center gap-1.5 flex-wrap">
+                  <span class="font-medium text-xs text-gray-800">{{ adv.reference_no || ('ADV-' + adv.id) }}</span>
+                  <span class="text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded text-xs">{{ adv.type_label }}</span>
+                  <span class="font-mono text-xs text-gray-400 bg-gray-100 px-1 rounded">{{ adv.account_code }}</span>
+                </div>
+                <span class="text-xs text-gray-500">{{ adv.opening_date }}</span>
               </label>
+              <span class="text-right text-xs text-gray-600">{{ formatVnd(adv.amount) }}</span>
+              <span class="text-right text-xs text-orange-600">{{ formatVnd(adv.amount - adv.remaining_amount) }}</span>
+              <span class="text-right text-xs font-semibold text-amber-800">{{ formatVnd(adv.remaining_amount) }}</span>
               <input v-if="isAdvanceSelected(adv.id)"
                 type="number" min="1" :max="adv.remaining_amount" step="1"
                 :value="getAdvanceAmount(adv.id)"
                 @input="setAdvanceAmount(adv.id, +$event.target.value)"
-                class="w-32 border border-amber-300 rounded px-2 py-1 text-xs text-right focus:outline-none focus:ring-1 focus:ring-amber-400" />
+                class="w-full border border-amber-300 rounded px-2 py-1 text-xs text-right focus:outline-none focus:ring-1 focus:ring-amber-400" />
+              <span v-else class="text-right text-xs text-gray-300">—</span>
             </div>
             <div class="flex items-center gap-3 pt-1">
               <label class="text-xs font-medium text-gray-600">Ngày đối trừ <span class="text-red-500">*</span></label>
@@ -425,67 +442,10 @@
     </div>
 
     <!-- ── Đối trừ ứng trước ── -->
-    <div v-if="invoice.advance_allocations?.length || canAdvanceAllocate"
+    <div v-if="invoice.advance_allocations?.length"
       class="bg-white rounded-xl border border-gray-200 overflow-hidden">
-      <div class="px-5 py-4 border-b border-gray-200 flex items-center justify-between">
+      <div class="px-5 py-4 border-b border-gray-200">
         <h2 class="text-base font-semibold text-gray-800">Đối trừ ứng trước đầu kỳ</h2>
-        <button v-if="canAdvanceAllocate" @click="showAdvanceForm = !showAdvanceForm"
-          class="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg text-sm font-medium">
-          + Đối trừ ứng trước
-        </button>
-      </div>
-
-      <!-- Form đối trừ -->
-      <div v-if="showAdvanceForm" class="px-5 py-4 border-b border-gray-100 bg-amber-50">
-        <form @submit.prevent="submitAdvanceAllocation" class="grid grid-cols-2 sm:grid-cols-4 gap-3 items-start">
-          <div class="col-span-2">
-            <label class="block text-xs font-medium text-gray-600 mb-1">Khoản ứng trước <span class="text-red-500">*</span></label>
-            <select v-model="advanceForm.opening_advance_id" @change="onAdvanceSelect"
-              class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400">
-              <option value="">-- Chọn khoản ứng trước --</option>
-              <option v-for="adv in available_advances" :key="adv.id" :value="adv.id">
-                {{ adv.reference_no || ('ADV-' + adv.id) }} ({{ adv.type_label }}) — còn {{ formatVnd(adv.remaining_amount) }}
-              </option>
-            </select>
-            <p v-if="selectedAdvance" class="text-xs text-amber-700 mt-0.5">
-              Ứng trước còn lại: <strong>{{ formatVnd(selectedAdvance.remaining_amount) }} đ</strong>
-            </p>
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Số tiền đối trừ <span class="text-red-500">*</span></label>
-            <input v-model.number="advanceForm.allocated_amount" type="number" min="1" :max="maxAllocatable" step="1"
-              class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
-            <p class="text-xs text-amber-700 font-medium mt-0.5">{{ formatVnd(advanceForm.allocated_amount || 0) }} đ</p>
-            <button type="button" @click="advanceForm.allocated_amount = maxAllocatable"
-              class="mt-1 text-xs text-amber-600 hover:text-amber-800 underline">
-              Dùng tối đa ({{ formatVnd(maxAllocatable) }} đ)
-            </button>
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-gray-600 mb-1">Ngày đối trừ <span class="text-red-500">*</span></label>
-            <input v-model="advanceForm.allocation_date" type="date"
-              class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
-          </div>
-          <div class="col-span-2 sm:col-span-3">
-            <label class="block text-xs font-medium text-gray-600 mb-1">Diễn giải</label>
-            <input v-model="advanceForm.reason" type="text" placeholder="Đối trừ ứng trước đầu kỳ năm..."
-              class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400" />
-          </div>
-          <div class="flex items-end gap-2">
-            <button type="submit" :disabled="!advanceForm.opening_advance_id || advanceProcessing"
-              class="bg-amber-500 hover:bg-amber-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium disabled:opacity-50">
-              {{ advanceProcessing ? 'Đang xử lý...' : 'Đối trừ' }}
-            </button>
-            <button type="button" @click="showAdvanceForm = false"
-              class="bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded-lg text-sm">
-              Hủy
-            </button>
-          </div>
-        </form>
-        <div class="mt-3 p-3 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
-          <strong>Lưu ý kế toán:</strong> Đối trừ ứng trước không tạo phiếu chi — không ghi Có 1111/1121.
-          Bút toán gốc (Nợ 3311) đã được ghi nhận từ số dư đầu kỳ năm {{ new Date().getFullYear() - 1 }}.
-        </div>
       </div>
 
       <!-- Danh sách đối trừ -->

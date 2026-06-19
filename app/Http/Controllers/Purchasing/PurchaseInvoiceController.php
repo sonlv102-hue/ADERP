@@ -241,6 +241,7 @@ class PurchaseInvoiceController extends Controller
                     'fiscal_year'      => $adv->fiscal_year,
                     'advance_type'     => $adv->advance_type,
                     'type_label'       => $adv->typeLabel(),
+                    'account_code'     => $adv->account_code,
                     'status'           => $adv->status,
                     'status_label'     => $adv->statusLabel(),
                 ]),

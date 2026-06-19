@@ -3,6 +3,7 @@
 namespace Tests\Feature\Purchasing;
 
 use App\Enums\PurchaseInvoiceStatus;
+use App\Models\AccountCode;
 use App\Models\AccountingPeriod;
 use App\Models\ArApOpeningBalance;
 use App\Models\PurchaseInvoice;
@@ -20,12 +21,13 @@ use Tests\TestCase;
 /**
  * VII. Test bắt buộc — đối trừ ứng trước đầu kỳ NCC
  *
- * TC1: ứng trước 20M, hóa đơn 10.8M → đối trừ toàn bộ HĐ, ứng trước còn 9.2M, không tạo bút toán CK
- * TC2: ứng trước 20M, hóa đơn 30M → đối trừ 20M, HĐ còn 10M, ứng trước = 0
- * TC3: NCC không có ứng trước → getAvailable() = rỗng
- * TC4: một NCC nhiều hóa đơn → phân bổ tuần tự, không vượt ứng trước
- * TC5: hóa đơn đã đối trừ → không cho đối trừ trùng (vượt quá remaining)
- * TC6: thu hồi đối trừ → hoàn lại ứng trước, hóa đơn về valid
+ * TC1:  ứng trước 20M (331UT), hóa đơn 10.8M → đối trừ toàn bộ HĐ, tạo JE Dr 3311/Cr 331UT
+ * TC2:  ứng trước 20M, hóa đơn 30M → đối trừ 20M, HĐ còn 10M, ứng trước = 0
+ * TC3:  NCC không có ứng trước → getAvailable() = rỗng
+ * TC4:  một NCC nhiều hóa đơn → phân bổ tuần tự, không vượt ứng trước
+ * TC5:  hóa đơn đã đối trừ → không cho đối trừ trùng (vượt quá remaining)
+ * TC6:  thu hồi đối trừ → hoàn lại ứng trước, đảo JE, hóa đơn về valid
+ * TC11: JE Dr 3311/Cr 331UT được tạo khi advance.account_code='331UT' (≠ payable='3311')
  */
 class SupplierAdvanceAllocationTest extends TestCase
 {
@@ -52,18 +54,34 @@ class SupplierAdvanceAllocationTest extends TestCase
 
         AccountingPeriod::create(['year' => 2026, 'month' => 6, 'status' => 'open']);
 
+        // Seed TK cần thiết cho JE đối trừ: Dr payableAccount / Cr advanceAccount
+        AccountCode::firstOrCreate(['code' => '331'], [
+            'name' => 'Phải trả NCC', 'type' => 'liability', 'normal_balance' => 'credit',
+            'parent_code' => null, 'level' => 2, 'is_detail' => false, 'is_active' => true,
+        ]);
+        AccountCode::firstOrCreate(['code' => '3311'], [
+            'name' => 'Phải trả NCC', 'type' => 'liability', 'normal_balance' => 'credit',
+            'parent_code' => '331', 'level' => 3, 'is_detail' => true, 'is_active' => true,
+        ]);
+        AccountCode::firstOrCreate(['code' => '331UT'], [
+            'name' => 'Trả trước cho người bán', 'type' => 'asset', 'normal_balance' => 'debit',
+            'parent_code' => '331', 'level' => 4, 'is_detail' => true, 'is_active' => true,
+        ]);
+
         $this->warehouse = Warehouse::create(['name' => 'Kho Test', 'code' => 'KHO-TEST']);
 
         $this->supplier = Supplier::create([
-            'code'  => 'NCC-TEST-1',
-            'name'  => 'NCC Test 1',
-            'phone' => '0901234567',
+            'code'                 => 'NCC-TEST-1',
+            'name'                 => 'NCC Test 1',
+            'phone'                => '0901234567',
+            'payable_account_code' => '3311',
         ]);
 
         $this->otherSupplier = Supplier::create([
-            'code'  => 'NCC-TEST-2',
-            'name'  => 'NCC Test 2',
-            'phone' => '0909999999',
+            'code'                 => 'NCC-TEST-2',
+            'name'                 => 'NCC Test 2',
+            'phone'                => '0909999999',
+            'payable_account_code' => '3311',
         ]);
     }
 
@@ -75,6 +93,7 @@ class SupplierAdvanceAllocationTest extends TestCase
             'supplier_id'      => $supplier->id,
             'fiscal_year'      => $year,
             'opening_date'     => '2026-01-01',
+            'account_code'     => '331UT',
             'amount'           => $amount,
             'remaining_amount' => $amount,
             'status'           => 'open',
@@ -131,7 +150,8 @@ class SupplierAdvanceAllocationTest extends TestCase
         $this->assertEquals(9_200_000, (float) $advance->remaining_amount);
         $this->assertEquals('partially_applied', $advance->status);
 
-        // Không tạo JE (allocation record only)
+        // JE được tạo (advance 331UT ≠ payable 3311)
+        $this->assertNotNull($allocation->journal_entry_id, 'Allocation phải có JE khi 331UT ≠ 3311');
         $this->assertDatabaseHas('supplier_advance_allocations', [
             'id'               => $allocation->id,
             'allocated_amount' => '10800000.00',
@@ -326,6 +346,58 @@ class SupplierAdvanceAllocationTest extends TestCase
 
         $this->expectException(\RuntimeException::class);
         $this->service->allocateToOpeningBalance($advance, $ob, 4_000_000, '2026-06-18');
+    }
+
+    // ─── TC11: JE Dr 3311/Cr 331UT được tạo khi allocate ────────────────
+
+    public function test_tc11_allocate_331ut_advance_creates_je_dr_3311_cr_331ut(): void
+    {
+        $advance = $this->makeAdvance($this->supplier, 15_000_000); // account_code = '331UT'
+        $invoice = $this->makeInvoice($this->supplier, 15_000_000);
+
+        $allocation = $this->service->allocate(
+            $advance, $invoice, 15_000_000, '2026-05-01', 'Đối trừ trả trước'
+        );
+
+        // JE phải được tạo
+        $this->assertNotNull($allocation->journal_entry_id, 'Phải tạo JE khi advance 331UT ≠ payable 3311');
+
+        // Kiểm tra JE lines
+        $je    = \App\Models\JournalEntry::find($allocation->journal_entry_id);
+        $this->assertNotNull($je);
+        $this->assertEquals('posted', $je->status);
+
+        $lines = $je->lines->keyBy('account_code');
+        $this->assertArrayHasKey('3311',  $lines->toArray(), 'Phải có dòng Dr 3311');
+        $this->assertArrayHasKey('331UT', $lines->toArray(), 'Phải có dòng Cr 331UT');
+        $this->assertEquals(15_000_000, (float) $lines['3311']->debit,  'Dr 3311 = 15M');
+        $this->assertEquals(15_000_000, (float) $lines['331UT']->credit, 'Cr 331UT = 15M');
+    }
+
+    // ─── TC12: advance.account_code = payable → không tạo JE (legacy) ───
+
+    public function test_tc12_advance_same_as_payable_account_no_je_created(): void
+    {
+        // Advance cũ dùng cùng TK với payable (không tạo JE — backward compat)
+        $legacyAdvance = SupplierOpeningAdvance::create([
+            'supplier_id'      => $this->supplier->id,
+            'fiscal_year'      => 2026,
+            'opening_date'     => '2026-01-01',
+            'account_code'     => '3311', // cùng TK với payable → không tạo JE
+            'amount'           => 10_000_000,
+            'remaining_amount' => 10_000_000,
+            'status'           => 'open',
+            'created_by'       => $this->user->id,
+        ]);
+
+        $invoice = $this->makeInvoice($this->supplier, 10_000_000);
+
+        $allocation = $this->service->allocate(
+            $legacyAdvance, $invoice, 10_000_000, '2026-05-01'
+        );
+
+        // Không tạo JE khi advance account = payable account (3311 === 3311)
+        $this->assertNull($allocation->journal_entry_id, 'Không tạo JE khi advance.account_code = payable');
     }
 
     // ─── TC10: thu hồi đối trừ opening balance → hoàn lại cả hai ────────

@@ -71,10 +71,10 @@ return [
             'item_code'    => '132',
             'item_name'    => '2. Trả trước cho người bán',
             'parent_code'  => '130',
-            'accounts'     => ['331', '3311', '3312', '3318'],
+            'accounts'     => ['331', '3311', '3312', '3318', '331UT'],
             'balance_side' => 'debit_detail',
             'negative'     => false,
-            'note'         => 'Dư Nợ chi tiết TK 331 = khoản trả trước NCC.',
+            'note'         => 'Dư Nợ chi tiết TK 331/331UT = khoản trả trước NCC. 331UT là TK chuẩn cho advance.',
         ],
         [
             'item_code'    => '133',

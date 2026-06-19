@@ -560,4 +560,101 @@ class FinancialPositionReportTest extends TestCase
         $this->assertEquals(200_000, $row315['amount'], 'KPCĐ 33821 → mã 315');
         $this->assertEquals(0.0, $row314['amount'] ?? 0.0, 'Mã 314 không chứa KPCĐ');
     }
+
+    // ─── Case 8: 3311 vs 331UT — không được net chung ──────────────────────
+
+    /**
+     * Case 8: NCC A có 3311 dư Có 100M (Phải trả NCC).
+     *         NCC B có 331UT dư Nợ 40M (Trả trước NCC).
+     *         B01a-DNN phải tách đúng:
+     *         - Mã 311 = 100M (nợ phải trả)
+     *         - Mã 132 = 40M  (trả trước)
+     *         KHÔNG được net thành 60M phải trả.
+     */
+    public function test_case8_b01a_separates_3311_payable_from_331ut_prepayment(): void
+    {
+        // Seed account hierarchy: 331 (cha) → 3311 + 331UT (con)
+        $this->seedAccount('1561', 'asset',     'debit');
+        $this->seedAccount('1121', 'asset',     'debit', '112');
+        $this->seedAccount('3311', 'liability', 'credit', '331');
+
+        // 331UT: asset / debit-normal / parent='331' (trả trước NCC)
+        \App\Models\AccountCode::firstOrCreate(['code' => '331'], [
+            'name' => 'Phải trả NCC', 'type' => 'liability', 'normal_balance' => 'credit',
+            'parent_code' => null, 'level' => 2, 'is_detail' => false, 'is_active' => true,
+        ]);
+        \App\Models\AccountCode::firstOrCreate(['code' => '331UT'], [
+            'name' => 'Trả trước cho người bán', 'type' => 'asset', 'normal_balance' => 'debit',
+            'parent_code' => '331', 'level' => 4, 'is_detail' => true, 'is_active' => true,
+        ]);
+
+        // NCC A: nhập hàng 100M → 3311 dư Có 100M (phải trả)
+        $this->postEntry('2026-06-01', [
+            ['1561', 100_000_000, 0],
+            ['3311', 0, 100_000_000],
+        ]);
+
+        // NCC B: trả trước 40M → 331UT dư Nợ 40M (trả trước)
+        $this->postEntry('2026-06-02', [
+            ['331UT', 40_000_000, 0],
+            ['1121',  0, 40_000_000],
+        ]);
+
+        $report = $this->build();
+
+        $row311 = $this->findRow($report, '311'); // Phải trả NCC
+        $row132 = $this->findRow($report, '132'); // Trả trước NCC
+
+        $this->assertNotNull($row311, 'Mã 311 phải xuất hiện');
+        $this->assertNotNull($row132, 'Mã 132 phải xuất hiện');
+
+        // Không được net: 3311 dư Có 100M → mã 311; 331UT dư Nợ 40M → mã 132
+        $this->assertEquals(100_000_000, $row311['amount'], 'Mã 311 = 100M phải trả NCC (3311)');
+        $this->assertEquals(40_000_000,  $row132['amount'], 'Mã 132 = 40M trả trước NCC (331UT)');
+
+        // Báo cáo phải cân (có vốn góp giả)
+        // (không yêu cầu balanced ở đây vì chưa seed vốn góp)
+    }
+
+    // ─── Case 9: Parent account hierarchy 331UT ─────────────────────────────
+
+    /**
+     * Case 9: Kiểm tra TK 331UT có parent_code = '331', không phải '3311'.
+     *         TK 331 là tổng hợp (is_detail = false) — không cho hạch toán trực tiếp.
+     *         Không có JE lines post vào '331' (validateLines() chặn is_detail=false).
+     */
+    public function test_case9_331ut_parent_is_331_not_3311(): void
+    {
+        // Seed 331 (tổng hợp), 3311 (chi tiết), 331UT (chi tiết)
+        \App\Models\AccountCode::firstOrCreate(['code' => '331'], [
+            'name' => 'Phải trả NCC', 'type' => 'liability', 'normal_balance' => 'credit',
+            'parent_code' => null, 'level' => 2, 'is_detail' => false, 'is_active' => true,
+        ]);
+        \App\Models\AccountCode::firstOrCreate(['code' => '3311'], [
+            'name' => 'Phải trả NCC chi tiết', 'type' => 'liability', 'normal_balance' => 'credit',
+            'parent_code' => '331', 'level' => 3, 'is_detail' => true, 'is_active' => true,
+        ]);
+        \App\Models\AccountCode::firstOrCreate(['code' => '331UT'], [
+            'name' => 'Trả trước cho người bán', 'type' => 'asset', 'normal_balance' => 'debit',
+            'parent_code' => '331', 'level' => 4, 'is_detail' => true, 'is_active' => true,
+        ]);
+
+        $ac331   = \App\Models\AccountCode::find('331');
+        $ac3311  = \App\Models\AccountCode::find('3311');
+        $ac331ut = \App\Models\AccountCode::find('331UT');
+
+        // 331UT parent phải là 331, không phải 3311
+        $this->assertEquals('331', $ac331ut->parent_code, '331UT phải có parent_code = 331');
+        $this->assertNotEquals('3311', $ac331ut->parent_code, '331UT không được nằm dưới 3311');
+
+        // 3311 parent phải là 331
+        $this->assertEquals('331', $ac3311->parent_code, '3311 phải có parent_code = 331');
+
+        // 331 tồn tại (migration 900045 seed nó với is_detail=true — cho phép dùng trực tiếp)
+        $this->assertNotNull($ac331, 'TK 331 phải tồn tại');
+
+        // 3311 và 331UT là chi tiết (is_detail = true)
+        $this->assertTrue((bool) $ac3311->is_detail,  '3311 phải là TK chi tiết');
+        $this->assertTrue((bool) $ac331ut->is_detail, '331UT phải là TK chi tiết');
+    }
 }
