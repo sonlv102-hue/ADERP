@@ -27,6 +27,7 @@ class Invoice extends Model
         'status', 'notes', 'revenue_account_code', 'created_by',
         'e_inv_template', 'e_inv_series', 'e_inv_number',
         'e_inv_status', 'e_inv_issued_at', 'e_inv_cancel_reason',
+        'advance_allocated_amount',
     ];
 
     protected function casts(): array
@@ -65,7 +66,7 @@ class Invoice extends Model
 
     public function amountDue(): float
     {
-        return (float) $this->total - $this->amountPaid();
+        return max(0, (float) $this->total - $this->amountPaid() - (float) ($this->advance_allocated_amount ?? 0));
     }
 
     public function customer(): BelongsTo
@@ -91,6 +92,11 @@ class Invoice extends Model
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);
+    }
+
+    public function advanceAllocations(): HasMany
+    {
+        return $this->hasMany(CustomerAdvanceAllocation::class);
     }
 
     public function attachments(): MorphMany

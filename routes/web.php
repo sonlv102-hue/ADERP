@@ -57,6 +57,7 @@ use App\Http\Controllers\Accounting\PayrollController;
 use App\Http\Controllers\Accounting\TaxController;
 use App\Http\Controllers\Accounting\ArCollectionController;
 use App\Http\Controllers\Accounting\ApPaymentController;
+use App\Http\Controllers\Accounting\CustomerAdvanceAllocationController;
 use App\Http\Controllers\Reports\ArDetailController;
 use App\Http\Controllers\Reports\ApDetailController;
 use App\Http\Controllers\Reports\FundLedgerController;
@@ -327,6 +328,8 @@ Route::middleware('auth')->group(function () {
 
         Route::post('invoices/{invoice}/payments',             [PaymentController::class, 'store'])->name('invoices.payments.store');
         Route::delete('invoices/{invoice}/payments/{payment}', [PaymentController::class, 'destroy'])->name('invoices.payments.destroy');
+        Route::post('invoices/{invoice}/advance-allocations',  [CustomerAdvanceAllocationController::class, 'store'])->name('invoices.advance-allocations.store');
+        Route::delete('invoice-advance-allocations/{allocation}', [CustomerAdvanceAllocationController::class, 'destroy'])->name('invoice-advance-allocations.destroy');
 
         // Công nợ phải thu / phải trả
         Route::get('ar-collections',       [ArCollectionController::class, 'index'])->name('ar-collections.index');

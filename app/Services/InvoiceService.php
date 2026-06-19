@@ -75,8 +75,9 @@ class InvoiceService
                 'created_by' => auth()->id(),
             ]);
 
-            // Auto-mark paid if fully settled
-            $paid = (float) $invoice->payments()->sum('amount');
+            // Auto-mark paid if fully settled (cash + advance offset)
+            $paid = (float) $invoice->payments()->sum('amount')
+                  + (float) ($invoice->advance_allocated_amount ?? 0);
             if ($paid >= (float) $invoice->total
                 && in_array($invoice->status, [InvoiceStatus::Sent, InvoiceStatus::Overdue])) {
                 $invoice->update(['status' => InvoiceStatus::Paid]);

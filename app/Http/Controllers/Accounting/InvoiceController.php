@@ -8,8 +8,10 @@ use App\Http\Controllers\Controller;
 use App\Models\AccountCode;
 use App\Models\Contract;
 use App\Models\Customer;
+use App\Models\Fund;
 use App\Models\Invoice;
 use App\Models\Order;
+use App\Services\CustomerAdvanceService;
 use App\Services\InvoiceService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
@@ -19,7 +21,10 @@ use Inertia\Response;
 
 class InvoiceController extends Controller
 {
-    public function __construct(private InvoiceService $service) {}
+    public function __construct(
+        private InvoiceService $service,
+        private CustomerAdvanceService $advanceService,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -111,7 +116,13 @@ class InvoiceController extends Controller
 
     public function show(Invoice $invoice): Response
     {
-        $invoice->load(['customer' => fn ($q) => $q->withTrashed(), 'order', 'contract', 'creator', 'payments.creator', 'attachments.creator']);
+        $invoice->load([
+            'customer' => fn ($q) => $q->withTrashed(),
+            'order', 'contract', 'creator',
+            'payments.creator',
+            'attachments.creator',
+            'advanceAllocations' => fn ($q) => $q->with(['advance', 'creator'])->orderBy('allocation_date'),
+        ]);
 
         return Inertia::render('Accounting/Invoices/Show', [
             'invoice' => [
@@ -125,8 +136,9 @@ class InvoiceController extends Controller
                 'subtotal'     => (float) $invoice->subtotal,
                 'tax_amount'   => (float) $invoice->tax_amount,
                 'total'        => (float) $invoice->total,
-                'amount_paid'  => $invoice->amountPaid(),
-                'amount_due'   => $invoice->amountDue(),
+                'amount_paid'              => $invoice->amountPaid(),
+                'advance_allocated_amount' => (float) ($invoice->advance_allocated_amount ?? 0),
+                'amount_due'               => $invoice->amountDue(),
                 'status'       => $invoice->status->value,
                 'status_label' => $invoice->status->label(),
                 'status_color' => $invoice->status->color(),
@@ -150,6 +162,15 @@ class InvoiceController extends Controller
                     'creator'      => $p->creator->name,
                     'created_at'   => $p->created_at->format('d/m/Y H:i'),
                 ]),
+                'advance_allocations' => $invoice->advanceAllocations->map(fn ($a) => [
+                    'id'              => $a->id,
+                    'allocation_date' => $a->allocation_date->format('d/m/Y'),
+                    'advance_ref'     => $a->advance?->reference_no ?? ('ADV-' . $a->opening_advance_id),
+                    'allocated_amount'=> (float) $a->allocated_amount,
+                    'reason'          => $a->reason,
+                    'status'          => $a->status,
+                    'creator'         => $a->creator?->name ?? '—',
+                ]),
                 'attachments'     => $invoice->attachments->map(fn ($a) => [
                     'id'         => $a->id,
                     'file_name'  => $a->file_name,
@@ -160,7 +181,15 @@ class InvoiceController extends Controller
                 ]),
                 'allowed_actions' => $this->allowedActions($invoice),
             ],
-            'methods' => collect(PaymentMethod::cases())->map(fn ($m) => ['value' => $m->value, 'label' => $m->label()]),
+            'methods'            => collect(PaymentMethod::cases())->map(fn ($m) => ['value' => $m->value, 'label' => $m->label()]),
+            'funds'              => Fund::where('is_active', true)->orderBy('name')->get(['id', 'name', 'type']),
+            'available_advances' => $this->advanceService->getAvailable($invoice->customer_id)->map(fn ($a) => [
+                'id'               => $a->id,
+                'reference_no'     => $a->reference_no,
+                'type_label'       => $a->typeLabel(),
+                'advance_date'     => $a->advance_date->format('d/m/Y'),
+                'remaining_amount' => (float) $a->remaining_amount,
+            ]),
         ]);
     }
 
