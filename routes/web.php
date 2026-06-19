@@ -511,14 +511,10 @@ Route::middleware('auth')->group(function () {
             Route::put('categories/{category}', [SmallToolCategoryController::class, 'update'])->name('categories.update')->middleware('can:ccdc.manage');
             Route::delete('categories/{category}', [SmallToolCategoryController::class, 'destroy'])->name('categories.destroy')->middleware('can:ccdc.manage');
 
-            // Tools
-            Route::get('',               [SmallToolController::class, 'index'])->name('index')->middleware('can:ccdc.view');
-            Route::get('create',         [SmallToolController::class, 'create'])->name('create')->middleware('can:ccdc.manage');
-            Route::post('',              [SmallToolController::class, 'store'])->name('store')->middleware('can:ccdc.manage');
-            Route::get('{tool}',         [SmallToolController::class, 'show'])->name('show')->middleware('can:ccdc.view');
-            Route::get('{tool}/edit',    [SmallToolController::class, 'edit'])->name('edit')->middleware('can:ccdc.manage');
-            Route::put('{tool}',         [SmallToolController::class, 'update'])->name('update')->middleware('can:ccdc.manage');
-            Route::post('{tool}/confirm',[SmallToolController::class, 'confirm'])->name('confirm')->middleware('can:ccdc.manage');
+            // Tools list (fixed segments — must come before {tool} wildcard)
+            Route::get('',      [SmallToolController::class, 'index'])->name('index')->middleware('can:ccdc.view');
+            Route::get('create',[SmallToolController::class, 'create'])->name('create')->middleware('can:ccdc.manage');
+            Route::post('',     [SmallToolController::class, 'store'])->name('store')->middleware('can:ccdc.manage');
 
             // Receipts (CCNK-)
             Route::get('receipts',                   [SmallToolReceiptController::class, 'index'])->name('receipts.index')->middleware('can:ccdc.view');
@@ -541,6 +537,17 @@ Route::middleware('auth')->group(function () {
             Route::post('allocations/run',                 [SmallToolAllocationController::class, 'run'])->name('allocations.run')->middleware('can:ccdc.allocate');
             Route::post('allocations/{allocation}/reverse',[SmallToolAllocationController::class, 'reverse'])->name('allocations.reverse')->middleware('can:ccdc.allocate');
 
+            // Reports
+            Route::get('reports/ledger',              [SmallToolReportController::class, 'ledger'])->name('reports.ledger')->middleware('can:ccdc.view');
+            Route::get('reports/allocation-schedule', [SmallToolReportController::class, 'allocationSchedule'])->name('reports.allocation-schedule')->middleware('can:ccdc.view');
+            Route::get('reports/gl-reconcile',        [SmallToolReportController::class, 'glReconcile'])->name('reports.gl-reconcile')->middleware('can:ccdc.view');
+
+            // Tool detail — {tool} wildcard LAST (after all fixed-segment routes above)
+            Route::get('{tool}',         [SmallToolController::class, 'show'])->name('show')->middleware('can:ccdc.view');
+            Route::get('{tool}/edit',    [SmallToolController::class, 'edit'])->name('edit')->middleware('can:ccdc.manage');
+            Route::put('{tool}',         [SmallToolController::class, 'update'])->name('update')->middleware('can:ccdc.manage');
+            Route::post('{tool}/confirm',[SmallToolController::class, 'confirm'])->name('confirm')->middleware('can:ccdc.manage');
+
             // Transfers (CCCT-)
             Route::get('{tool}/transfers/create', [SmallToolTransferController::class, 'create'])->name('transfers.create')->middleware('can:ccdc.manage');
             Route::post('{tool}/transfers',       [SmallToolTransferController::class, 'store'])->name('transfers.store')->middleware('can:ccdc.manage');
@@ -548,11 +555,6 @@ Route::middleware('auth')->group(function () {
             // Disposals (CCXL-)
             Route::get('{tool}/disposals/create', [SmallToolDisposalController::class, 'create'])->name('disposals.create')->middleware('can:ccdc.dispose');
             Route::post('{tool}/disposals',       [SmallToolDisposalController::class, 'store'])->name('disposals.store')->middleware('can:ccdc.dispose');
-
-            // Reports
-            Route::get('reports/ledger',              [SmallToolReportController::class, 'ledger'])->name('reports.ledger')->middleware('can:ccdc.view');
-            Route::get('reports/allocation-schedule', [SmallToolReportController::class, 'allocationSchedule'])->name('reports.allocation-schedule')->middleware('can:ccdc.view');
-            Route::get('reports/gl-reconcile',        [SmallToolReportController::class, 'glReconcile'])->name('reports.gl-reconcile')->middleware('can:ccdc.view');
         });
     });
 
