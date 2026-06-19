@@ -10,7 +10,7 @@ class StockExitItem extends Model
 {
     protected $fillable = [
         'stock_exit_id', 'project_id',
-        'product_id', 'quantity', 'unit_price', 'source_cost', 'total_cost',
+        'product_id', 'quantity', 'unit_price', 'source_cost', 'total_cost', 'cost_source',
     ];
 
     protected function casts(): array

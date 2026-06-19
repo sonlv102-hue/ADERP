@@ -9,8 +9,10 @@ use App\Enums\SerialStatus;
 use App\Enums\StockExitStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Contract;
+use App\Models\InventoryBalance;
 use App\Models\JournalEntry;
 use App\Models\Order;
+use App\Models\Product;
 use App\Models\ProductSerial;
 use App\Models\Project;
 use App\Models\ProjectInventoryLot;
@@ -140,6 +142,57 @@ class StockExitController extends Controller
         return response()->json(['lots' => $grouped]);
     }
 
+    /**
+     * Kiểm tra tồn kho trước khi lưu phiếu xuất (draft).
+     * Non-project: dùng inventory_balances (chỉ kiểm tra nếu đã có AVCO).
+     * Project: dùng project_inventory_lots.
+     * Trả về mảng lỗi hoặc [] nếu không có lỗi.
+     */
+    private function checkStockAvailability(array $items, int $warehouseId, bool $isProject, ?int $projectId): array
+    {
+        // Gộp số lượng theo từng product_id
+        $productQtyMap = [];
+        foreach ($items as $item) {
+            $pid = $item['product_id'];
+            $productQtyMap[$pid] = ($productQtyMap[$pid] ?? 0) + (int) $item['quantity'];
+        }
+
+        $errors = [];
+        $warehouse = Warehouse::find($warehouseId);
+
+        if ($isProject && $projectId) {
+            foreach ($productQtyMap as $productId => $requestedQty) {
+                $available = (float) (ProjectInventoryLot::where('project_id', $projectId)
+                    ->where('warehouse_id', $warehouseId)
+                    ->where('product_id', $productId)
+                    ->where('status', 'active')
+                    ->whereRaw('issued_qty < received_qty')
+                    ->selectRaw('SUM(received_qty - issued_qty) as avail')
+                    ->value('avail') ?? 0);
+
+                if ($available < $requestedQty) {
+                    $product = Product::find($productId);
+                    $errors[] = "Không đủ tồn kho cho {$product->code} - {$product->name} tại kho {$warehouse->name}. "
+                        . "Tồn dự án: {$available}, số lượng xuất: {$requestedQty}.";
+                }
+            }
+        } else {
+            foreach ($productQtyMap as $productId => $requestedQty) {
+                $balance = InventoryBalance::where('product_id', $productId)
+                    ->where('warehouse_id', $warehouseId)
+                    ->first();
+
+                if ($balance && (float) $balance->qty_on_hand < $requestedQty) {
+                    $product = Product::find($productId);
+                    $errors[] = "Không đủ tồn kho cho {$product->code} - {$product->name} tại kho {$warehouse->name}. "
+                        . "Tồn hiện có: {$balance->qty_on_hand}, số lượng xuất: {$requestedQty}.";
+                }
+            }
+        }
+
+        return $errors;
+    }
+
     private function issuePurposesForDropdown(): array
     {
         return [
@@ -265,6 +318,18 @@ class StockExitController extends Controller
                     "items.{$index}.serial_ids" => 'Một số serial không hợp lệ hoặc đã xuất kho.',
                 ])->withInput();
             }
+        }
+
+        // Kiểm tra tồn kho (cảnh báo sớm trước khi confirm)
+        $isProjectExit = ($data['issue_purpose'] ?? null) === 'project_cost' || $data['item_usage_type'] === 'project';
+        $stockErrors = $this->checkStockAvailability(
+            $data['items'],
+            (int) $data['warehouse_id'],
+            $isProjectExit,
+            isset($data['project_id']) ? (int) $data['project_id'] : null
+        );
+        if (! empty($stockErrors)) {
+            return back()->withErrors(['items' => implode(' | ', $stockErrors)])->withInput();
         }
 
         $exit = StockExit::create([
@@ -450,6 +515,18 @@ class StockExitController extends Controller
                     "items.{$index}.serial_ids" => 'Một số serial không hợp lệ hoặc đã xuất kho.',
                 ])->withInput();
             }
+        }
+
+        // Kiểm tra tồn kho
+        $isProjectExit = $data['item_usage_type'] === 'project';
+        $stockErrors = $this->checkStockAvailability(
+            $data['items'],
+            (int) $data['warehouse_id'],
+            $isProjectExit,
+            isset($data['project_id']) ? (int) $data['project_id'] : null
+        );
+        if (! empty($stockErrors)) {
+            return back()->withErrors(['items' => implode(' | ', $stockErrors)])->withInput();
         }
 
         DB::transaction(function () use ($data, $stockExit) {

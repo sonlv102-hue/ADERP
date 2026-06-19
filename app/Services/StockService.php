@@ -19,6 +19,7 @@ use App\Models\StockExit;
 use App\Models\StockExitItem;
 use App\Models\StockExitItemLotAllocation;
 use App\Models\StockMovement;
+use App\Services\AvcoService;
 use App\Services\ProjectWipService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -30,6 +31,7 @@ class StockService
     public function __construct(
         private AccountingService $accounting,
         private ProjectWipService $wip,
+        private AvcoService $avco,
     ) {}
     public function confirmEntry(StockEntry $entry): void
     {
@@ -102,7 +104,7 @@ class StockService
                     'unit_cost'  => $unitCost,
                 ]);
 
-                StockMovement::create([
+                $movement = StockMovement::create([
                     'product_id'     => $item->product_id,
                     'warehouse_id'   => $entry->warehouse_id,
                     'type'           => 'in',
@@ -116,6 +118,17 @@ class StockService
                     'unit_cost'      => $unitCost,
                     'amount'         => $unitCost * (float) $item->quantity,
                 ]);
+
+                // Cập nhật AVCO balance cho hàng không thuộc dự án
+                if (!$projectId) {
+                    $this->avco->recordEntry(
+                        $item->product_id,
+                        $entry->warehouse_id,
+                        (float) $item->quantity,
+                        $unitCost,
+                        $movement->id,
+                    );
+                }
 
                 // Tạo project inventory lot nếu hàng thuộc dự án
                 if ($projectId) {
@@ -221,6 +234,15 @@ class StockService
                     'unit_cost'      => $cancelCost,
                     'amount'         => -($cancelCost * (float) $item->quantity),
                 ]);
+
+                // Đảo ngược AVCO balance cho hàng không thuộc dự án (chỉ nếu balance đã tồn tại)
+                if (!$item->project_id && $this->avco->getBalance($item->product_id, $entry->warehouse_id) !== null) {
+                    $this->avco->recordExit(
+                        $item->product_id,
+                        $entry->warehouse_id,
+                        (float) $item->quantity,
+                    );
+                }
             }
 
             // Chuyển serial → Cancelled
@@ -288,6 +310,15 @@ class StockService
                     'unit_cost'      => $recallCost,
                     'amount'         => -($recallCost * (float) $item->quantity),
                 ]);
+
+                // Đảo ngược AVCO balance tạm thời (sẽ được cộng lại khi confirm lại)
+                if (!$item->project_id && $this->avco->getBalance($item->product_id, $entry->warehouse_id) !== null) {
+                    $this->avco->recordExit(
+                        $item->product_id,
+                        $entry->warehouse_id,
+                        (float) $item->quantity,
+                    );
+                }
             }
 
             // Serial giữ nguyên InStock (hàng vẫn đang trong kho vật lý)
@@ -363,6 +394,7 @@ class StockService
                         'project_id'  => $exit->project_id,
                         'source_cost' => $sourceCost,
                         'total_cost'  => $totalCost,
+                        'cost_source' => 'fifo',
                     ]);
 
                     StockMovement::create([
@@ -396,14 +428,19 @@ class StockService
                         );
                     }
 
-                    // Tính giá vốn excl VAT từ cost_price sản phẩm để lưu vào movement và item
-                    $vatRate   = (float)($item->product?->vat_percent ?? 10);
-                    $costIncl  = (float)($item->product?->cost_price ?? 0);
-                    $divisor   = $vatRate > 0 ? (1 + $vatRate / 100) : 1;
-                    $unitCost  = $costIncl / $divisor;
-                    $totalCost = $unitCost * (float)$qty;
+                    // Lấy giá bình quân gia quyền AVCO (cũng cập nhật inventory_balances)
+                    $avgCost   = $this->avco->recordExit(
+                        $item->product_id,
+                        $exit->warehouse_id,
+                        (float) $qty,
+                    );
+                    $totalCost = $avgCost * (float) $qty;
 
-                    $item->update(['source_cost' => $unitCost, 'total_cost' => $totalCost]);
+                    $item->update([
+                        'source_cost' => $avgCost,
+                        'total_cost'  => $totalCost,
+                        'cost_source' => 'avco',
+                    ]);
 
                     StockMovement::create([
                         'product_id'     => $item->product_id,
@@ -416,7 +453,7 @@ class StockService
                         'created_by'     => auth()->id(),
                         'notes'          => "Xuất kho từ phiếu {$exit->code}",
                         'project_id'     => $exit->project_id,
-                        'unit_cost'      => $unitCost,
+                        'unit_cost'      => $avgCost,
                         'amount'         => -$totalCost,
                     ]);
                 }
@@ -531,6 +568,16 @@ class StockService
                     'unit_cost'      => $item->source_cost,
                     'amount'         => $item->total_cost,
                 ]);
+
+                // Khôi phục AVCO balance cho phiếu non-project đã dùng AVCO
+                if ($item->cost_source === 'avco' && !$item->project_id) {
+                    $this->avco->recordEntry(
+                        $item->product_id,
+                        $exit->warehouse_id,
+                        (float) $item->quantity,
+                        (float) ($item->source_cost ?? 0),
+                    );
+                }
             }
 
             // Hoàn serial về InStock

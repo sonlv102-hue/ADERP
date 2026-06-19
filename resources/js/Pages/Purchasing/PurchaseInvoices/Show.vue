@@ -123,6 +123,16 @@
             <p v-else class="font-medium text-gray-900">—</p>
           </div>
           <div>
+            <p class="text-gray-500 mb-1">Dự án</p>
+            <Link v-if="invoice.project"
+              :href="route('projects.projects.show', invoice.project.id)"
+              class="inline-flex items-center gap-1 font-mono text-sm text-primary-600 hover:underline font-medium">
+              <span class="bg-primary-50 text-primary-700 px-1.5 py-0.5 rounded text-xs">{{ invoice.project.code }}</span>
+              {{ invoice.project.name }}
+            </Link>
+            <p v-else class="font-medium text-gray-900">—</p>
+          </div>
+          <div>
             <p class="text-gray-500 mb-1">Số HĐ NCC</p>
             <p class="font-medium text-gray-900">{{ invoice.invoice_number ?? '—' }}</p>
           </div>
@@ -187,6 +197,53 @@
               </td>
             </tr>
           </tbody>
+        </table>
+      </div>
+
+      <!-- Dòng chi phí (purchase_invoice_items) -->
+      <div v-if="invoice.items?.length" class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+        <div class="px-5 py-4 border-b border-gray-100">
+          <h2 class="text-base font-semibold text-gray-800">Dòng chi phí</h2>
+        </div>
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50 border-b border-gray-100 text-xs text-gray-500 uppercase">
+            <tr>
+              <th class="text-left px-4 py-3">Diễn giải</th>
+              <th class="text-left px-4 py-3">Tài khoản</th>
+              <th class="text-left px-4 py-3">Dự án</th>
+              <th class="text-right px-4 py-3">Trước thuế</th>
+              <th class="text-right px-4 py-3">VAT%</th>
+              <th class="text-right px-4 py-3">Tiền thuế</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <tr v-for="item in invoice.items" :key="item.id" class="hover:bg-gray-50">
+              <td class="px-4 py-3 text-gray-700">{{ item.description || '—' }}</td>
+              <td class="px-4 py-3 font-mono text-xs">
+                <span class="bg-gray-100 px-1.5 py-0.5 rounded">{{ item.account_code }}</span>
+              </td>
+              <td class="px-4 py-3">
+                <Link v-if="item.project"
+                  :href="route('projects.projects.show', item.project.id)"
+                  class="inline-flex items-center gap-1 text-primary-600 hover:underline text-xs font-medium">
+                  <span class="bg-primary-50 text-primary-700 px-1.5 py-0.5 rounded">{{ item.project.code }}</span>
+                  {{ item.project.name }}
+                </Link>
+                <span v-else class="text-amber-600 text-xs font-medium">Chưa gắn dự án</span>
+              </td>
+              <td class="px-4 py-3 text-right text-gray-700">{{ formatVnd(item.amount) }}</td>
+              <td class="px-4 py-3 text-right text-gray-500">{{ item.vat_rate }}%</td>
+              <td class="px-4 py-3 text-right text-gray-500">{{ formatVnd(item.tax_amount) }}</td>
+            </tr>
+          </tbody>
+          <tfoot class="bg-gray-50 text-sm font-semibold border-t border-gray-100">
+            <tr>
+              <td colspan="3" class="px-4 py-3 text-right text-gray-500">Tổng</td>
+              <td class="px-4 py-3 text-right">{{ formatVnd(invoice.items.reduce((s, i) => s + (i.amount ?? 0), 0)) }}</td>
+              <td class="px-4 py-3"></td>
+              <td class="px-4 py-3 text-right">{{ formatVnd(invoice.items.reduce((s, i) => s + (i.tax_amount ?? 0), 0)) }}</td>
+            </tr>
+          </tfoot>
         </table>
       </div>
 

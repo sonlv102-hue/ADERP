@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 class PurchaseInvoice extends Model
 {
     protected $fillable = [
-        'code', 'purchase_order_id', 'supplier_id',
+        'code', 'purchase_order_id', 'project_id', 'supplier_id',
         'invoice_number', 'invoice_date', 'supplier_tax_code',
         'subtotal', 'tax_amount', 'total', 'paid_amount', 'advance_allocated_amount',
         'due_date', 'status', 'notes', 'expense_account_code', 'invoice_type', 'created_by',
@@ -44,6 +44,16 @@ class PurchaseInvoice extends Model
     public function purchaseOrder(): BelongsTo
     {
         return $this->belongsTo(PurchaseOrder::class);
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
+    }
+
+    public function items(): HasMany
+    {
+        return $this->hasMany(PurchaseInvoiceItem::class)->orderBy('sort_order');
     }
 
     public function supplier(): BelongsTo

@@ -35,6 +35,7 @@ use App\Http\Controllers\Sales\ContractController;
 use App\Http\Controllers\Sales\CustomerAdvanceController;
 use App\Http\Controllers\Sales\SalesReturnController;
 use App\Http\Controllers\Projects\ProjectController;
+use App\Http\Controllers\Projects\ProjectDirectMaterialController;
 use App\Http\Controllers\Projects\TaskController;
 use App\Http\Controllers\Support\TicketController;
 use App\Http\Controllers\Support\WarrantyController;
@@ -91,11 +92,13 @@ use App\Http\Controllers\Reports\FixedAssetReportController;
 use App\Http\Controllers\Reports\DocumentChecklistController;
 use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\BackupController;
+use App\Http\Controllers\Admin\SystemHealthController;
 use App\Http\Controllers\Admin\AttendanceController;
 use App\Http\Controllers\Admin\ShareholderController;
 use App\Http\Controllers\Accounting\PersonalLoanController;
 use App\Http\Controllers\Accounting\PersonalExpenseController;
 use App\Http\Controllers\Accounting\JournalAuditController;
+use App\Http\Controllers\Accounting\RepairCenterController;
 use App\Http\Controllers\Accounting\SmallToolCategoryController;
 use App\Http\Controllers\Accounting\SmallToolController;
 use App\Http\Controllers\Accounting\SmallToolReceiptController;
@@ -150,6 +153,8 @@ Route::middleware('auth')->group(function () {
 
         // Thành viên / Cổ đông
         Route::resource('shareholders', ShareholderController::class)->except(['show']);
+
+        Route::get('system-health', SystemHealthController::class)->name('system-health.index');
     });
 
     // Catalog - danh mục sản phẩm và dịch vụ
@@ -312,6 +317,13 @@ Route::middleware('auth')->group(function () {
         Route::post('projects/{project}/recognize-cost', [ProjectController::class, 'recognizeCost'])
             ->middleware('can:accounting.manage')
             ->name('projects.recognize-cost');
+
+        Route::post('projects/{project}/direct-materials', [ProjectDirectMaterialController::class, 'store'])
+            ->name('projects.direct-materials.store');
+        Route::post('projects/{project}/direct-materials/preview', [ProjectDirectMaterialController::class, 'preview'])
+            ->name('projects.direct-materials.preview');
+        Route::delete('projects/{project}/direct-materials/{directMaterial}', [ProjectDirectMaterialController::class, 'destroy'])
+            ->name('projects.direct-materials.destroy');
     });
 
     // Accounting - kế toán
@@ -460,6 +472,15 @@ Route::middleware('auth')->group(function () {
 
         // Rà soát bút toán kế toán
         Route::get('journal-audit', [JournalAuditController::class, 'index'])->name('journal-audit.index');
+
+        // Trung tâm rà soát & xử lý kế toán (Accounting Repair Center)
+        Route::prefix('repair-center')->name('repair-center.')->middleware('can:accounting.manage')->group(function () {
+            Route::get('/',                        [RepairCenterController::class, 'index'])->name('index');
+            Route::post('repair-cancelled-advance',[RepairCenterController::class, 'repairCancelledAdvance'])->name('repair-cancelled-advance');
+            Route::post('repair-invoice-status',   [RepairCenterController::class, 'repairInvoiceStatus'])->name('repair-invoice-status');
+            Route::post('repair-all-invoice-statuses', [RepairCenterController::class, 'repairAllInvoiceStatuses'])->name('repair-all-invoice-statuses');
+            Route::post('reclass',                 [RepairCenterController::class, 'reclass'])->name('reclass');
+        });
 
         // Tài sản cố định
         Route::prefix('fixed-assets')->name('fixed-assets.')->group(function () {
@@ -686,6 +707,7 @@ Route::middleware('auth')->group(function () {
         Route::get('employees',     [SearchController::class, 'employees'])->name('employees');
         Route::get('projects',      [SearchController::class, 'projects'])->name('projects');
         Route::get('warehouses',    [SearchController::class, 'warehouses'])->name('warehouses');
-        Route::get('services',      [SearchController::class, 'services'])->name('services');
+        Route::get('services',           [SearchController::class, 'services'])->name('services');
+        Route::get('warehouse-products', [SearchController::class, 'warehouseProducts'])->name('warehouse-products');
     });
 });

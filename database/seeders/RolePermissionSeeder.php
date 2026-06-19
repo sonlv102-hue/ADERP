@@ -48,6 +48,8 @@ class RolePermissionSeeder extends Seeder
             'price-lists.view', 'price-lists.create', 'price-lists.edit', 'price-lists.delete',
             // CCDC — Công cụ dụng cụ
             'ccdc.view', 'ccdc.manage', 'ccdc.allocate', 'ccdc.dispose', 'ccdc.cancel',
+            // System
+            'system.health.view',
             // Admin
             'admin.users', 'admin.roles',
         ];

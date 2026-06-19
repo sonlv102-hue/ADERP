@@ -11,6 +11,7 @@ use App\Models\Customer;
 use App\Models\Fund;
 use App\Models\Invoice;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Services\CustomerAdvanceService;
 use App\Services\InvoiceService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -108,6 +109,17 @@ class InvoiceController extends Controller
 
         // Kiểm tra hạn mức công nợ khách hàng
         $warning = $this->checkCreditLimit($invoice->customer_id, (float) $invoice->total);
+
+        // Cảnh báo nếu dòng hàng trong đơn bán thiếu revenue_account_code
+        if (!empty($data['order_id'])) {
+            $missingCount = OrderItem::where('order_id', $data['order_id'])
+                ->whereNull('revenue_account_code')
+                ->count();
+            if ($missingCount > 0) {
+                $revWarning = "Có {$missingCount} dòng hàng chưa có tài khoản doanh thu — hệ thống tạm dùng TK 5111. Vui lòng cấu hình tại Catalog > Sản phẩm.";
+                $warning = $warning ? "{$warning} | {$revWarning}" : $revWarning;
+            }
+        }
 
         return redirect()->route('accounting.invoices.show', $invoice)
             ->with('success', "Đã tạo hóa đơn {$invoice->code}")

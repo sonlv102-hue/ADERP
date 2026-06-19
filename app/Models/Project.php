@@ -82,4 +82,9 @@ class Project extends Model
     {
         return $this->hasMany(ProjectExpense::class);
     }
+
+    public function directMaterials(): HasMany
+    {
+        return $this->hasMany(ProjectDirectMaterial::class);
+    }
 }

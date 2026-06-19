@@ -10,10 +10,14 @@ use App\Models\Customer;
 use App\Models\Employee;
 use App\Models\Product;
 use App\Models\Project;
+use App\Models\ProjectDirectMaterial;
 use App\Models\ProjectExpense;
 use App\Models\ProjectMaterial;
 use App\Models\ProjectMember;
+use App\Models\ProjectWipEntry;
+use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
+use App\Models\StockExit;
 use App\Models\User;
 use App\Services\ProjectService;
 use App\Services\ProjectWipService;
@@ -99,6 +103,68 @@ class ProjectController extends Controller
             'expenses.creator',
         ]);
 
+        // Phiếu xuất kho thực tế cho dự án (confirmed + cancelled để truy vết)
+        $stockExits = StockExit::with(['warehouse', 'items.product'])
+            ->where('project_id', $project->id)
+            ->where('issue_purpose', 'project_cost')
+            ->orderByDesc('exit_date')
+            ->get();
+
+        $wipByExitId = ProjectWipEntry::where('project_id', $project->id)
+            ->where('source_type', StockExit::class)
+            ->with('journalEntry')
+            ->get()
+            ->keyBy('source_id');
+
+        $stockExitItems = $stockExits->flatMap(fn ($exit) =>
+            $exit->items->map(fn ($item) => [
+                'exit_id'      => $exit->id,
+                'exit_code'    => $exit->code,
+                'exit_date'    => $exit->exit_date?->format('d/m/Y'),
+                'warehouse'    => $exit->warehouse->name,
+                'product_code' => $item->product->code,
+                'product_name' => $item->product->name,
+                'quantity'     => (float) $item->quantity,
+                'unit'         => $item->product->unit,
+                'unit_cost'    => (float) ($item->source_cost ?? $item->unit_price ?? 0),
+                'total_cost'   => (float) ($item->total_cost ?? ($item->quantity * ($item->source_cost ?? $item->unit_price ?? 0))),
+                'journal_code' => $wipByExitId->get($exit->id)?->journalEntry?->code ?? '—',
+                'status'       => $exit->status->value,
+                'status_label' => $exit->status->label(),
+                'is_cancelled' => $exit->status->value === 'cancelled',
+            ])
+        )->values();
+
+        // Vật tư phát sinh trực tiếp
+        $directMaterials = $project->directMaterials()
+            ->with(['product', 'journalEntry', 'creator', 'purchaseInvoiceItem'])
+            ->orderByDesc('occurrence_date')
+            ->get()
+            ->map(fn ($m) => [
+                'id'             => $m->id,
+                'product_name'   => $m->product?->name ?? $m->product_name ?? '—',
+                'product_code'   => $m->product?->code,
+                'quantity'       => (float) $m->quantity,
+                'unit_price'     => (float) $m->unit_price,
+                'total_amount'   => (float) $m->total_amount,
+                'occurrence_date'=> $m->occurrence_date->format('d/m/Y'),
+                'handling_type'  => $m->handling_type->value,
+                'handling_label' => $m->handling_type->label(),
+                'handling_color' => $m->handling_type->color(),
+                'status'         => $m->status,
+                'journal_code'   => $m->journalEntry?->code,
+                'pi_item_ref'    => $m->purchaseInvoiceItem ? "Dòng HĐ #{$m->purchase_invoice_item_id}" : null,
+                'notes'          => $m->notes,
+                'source_ref'     => $m->source_document_ref,
+                'creator'        => $m->creator?->name,
+                'cancel_reason'  => $m->cancel_reason,
+            ]);
+
+        $stockExitTotal    = $stockExitItems->where('is_cancelled', false)->sum('total_cost');
+        $directMaterialTotal = $directMaterials->where('status', 'active')
+            ->whereIn('handling_type', ['invoice_link', 'journal_entry', 'tracking_only'])
+            ->sum('total_amount');
+
         return Inertia::render('Projects/Show', [
             'project' => [
                 'id'                => $project->id,
@@ -183,6 +249,10 @@ class ProjectController extends Controller
                     'status_label'=> $po->status->label(),
                     'total'       => (float) $po->items()->sum(\DB::raw('quantity * unit_price')),
                 ]),
+            'stockExitItems'       => $stockExitItems,
+            'stockExitTotal'       => (float) $stockExitTotal,
+            'directMaterials'      => $directMaterials,
+            'directMaterialTotal'  => (float) $directMaterialTotal,
             // Budget (hợp đồng khách hàng) vs Actual (hóa đơn mua hàng qua PO dự án)
             'contract_value'  => $project->contract ? (float) $project->contract->value : null,
             'actual_cost_from_pi' => (float) \DB::table('purchase_invoices as pi')
@@ -190,6 +260,21 @@ class ProjectController extends Controller
                 ->where('po.project_id', $project->id)
                 ->whereIn('pi.status', ['valid', 'partial_paid', 'paid'])
                 ->sum('pi.total'),
+            'purchaseInvoices' => PurchaseInvoice::with(['supplier', 'purchaseOrder'])
+                ->whereHas('purchaseOrder', fn ($q) => $q->where('project_id', $project->id))
+                ->orderByDesc('id')
+                ->get()
+                ->map(fn ($pi) => [
+                    'id'           => $pi->id,
+                    'code'         => $pi->code,
+                    'supplier'     => $pi->supplier->name,
+                    'po_code'      => $pi->purchaseOrder?->code,
+                    'invoice_date' => $pi->invoice_date?->format('d/m/Y'),
+                    'total'        => (float) $pi->total,
+                    'status'       => $pi->status->value,
+                    'status_label' => $pi->status->label(),
+                    'status_color' => $pi->status->color(),
+                ]),
         ]);
     }
 

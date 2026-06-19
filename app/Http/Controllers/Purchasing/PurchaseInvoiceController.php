@@ -2,19 +2,24 @@
 
 namespace App\Http\Controllers\Purchasing;
 
+use App\Enums\ProjectStatus;
 use App\Enums\PurchaseInvoiceStatus;
 use App\Enums\PurchaseInvoiceType;
 use App\Http\Controllers\Controller;
 use App\Models\AccountCode;
 use App\Models\Fund;
+use App\Models\Project;
 use App\Models\PurchaseInvoice;
+use App\Models\PurchaseInvoiceItem;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Services\PurchaseInvoiceService;
 use App\Services\SupplierAdvanceService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -79,6 +84,7 @@ class PurchaseInvoiceController extends Controller
     {
         return Inertia::render('Purchasing/PurchaseInvoices/Form', [
             'nextCode'       => PurchaseInvoice::generateCode(),
+            'projects'       => $this->projectList(),
             'purchaseOrders' => PurchaseOrder::with(['supplier', 'items.product'])
                 ->whereIn('status', ['sent', 'received'])
                 ->orderByDesc('id')
@@ -109,6 +115,7 @@ class PurchaseInvoiceController extends Controller
         $data = $request->validate([
             'code'                 => ['required', 'string', 'unique:purchase_invoices,code'],
             'purchase_order_id'    => ['nullable', 'exists:purchase_orders,id'],
+            'project_id'           => ['nullable', 'exists:projects,id'],
             'supplier_id'          => ['required', 'exists:suppliers,id'],
             'invoice_number'       => ['nullable', 'string', 'max:100'],
             'invoice_date'         => ['nullable', 'date'],
@@ -120,14 +127,29 @@ class PurchaseInvoiceController extends Controller
             'notes'                => ['nullable', 'string'],
             'expense_account_code' => ['nullable', 'string', 'max:20'],
             'invoice_type'         => ['nullable', 'string', 'in:' . implode(',', array_column(PurchaseInvoiceType::cases(), 'value'))],
+            'items'                        => ['nullable', 'array'],
+            'items.*.description'          => ['nullable', 'string', 'max:255'],
+            'items.*.account_code'         => ['required_with:items', 'string', 'max:20', 'exists:account_codes,code'],
+            'items.*.project_id'           => ['nullable', 'exists:projects,id'],
+            'items.*.amount'               => ['required_with:items', 'numeric', 'min:0'],
+            'items.*.vat_rate'             => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'items.*.tax_amount'           => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        $invoice = PurchaseInvoice::create([
-            ...$data,
-            'paid_amount' => 0,
-            'status'      => PurchaseInvoiceStatus::Pending,
-            'created_by'  => auth()->id(),
-        ]);
+        $this->validateItemProjectLinks($data['items'] ?? []);
+
+        $invoice = DB::transaction(function () use ($data) {
+            $inv = PurchaseInvoice::create([
+                ...\Arr::except($data, ['items']),
+                'paid_amount' => 0,
+                'status'      => PurchaseInvoiceStatus::Pending,
+                'created_by'  => auth()->id(),
+            ]);
+
+            $this->syncItems($inv, $data['items'] ?? []);
+
+            return $inv;
+        });
 
         return redirect()->route('purchasing.purchase-invoices.show', $invoice)
             ->with('success', 'Đã tạo hóa đơn đầu vào.');
@@ -136,7 +158,8 @@ class PurchaseInvoiceController extends Controller
     public function show(PurchaseInvoice $purchaseInvoice): Response
     {
         $purchaseInvoice->load([
-            'supplier', 'purchaseOrder.items.product', 'creator',
+            'supplier', 'purchaseOrder.items.product', 'purchaseOrder.project',
+            'project', 'items.project', 'creator',
             'payments.creator', 'attachments.creator',
             'activeAdvanceAllocations.advance', 'activeAdvanceAllocations.creator',
         ]);
@@ -174,6 +197,20 @@ class PurchaseInvoiceController extends Controller
                 'supplier'          => $purchaseInvoice->supplier->name,
                 'purchase_order_id' => $purchaseInvoice->purchase_order_id,
                 'purchase_order'    => $purchaseInvoice->purchaseOrder?->code,
+                // Dự án gắn trực tiếp lên hóa đơn (ưu tiên) hoặc qua PO
+                'project'           => ($purchaseInvoice->project ?? $purchaseInvoice->purchaseOrder?->project)
+                    ? (function ($pj) { return ['id' => $pj->id, 'code' => $pj->code, 'name' => $pj->name]; })($purchaseInvoice->project ?? $purchaseInvoice->purchaseOrder->project)
+                    : null,
+                'items'             => $purchaseInvoice->items->map(fn ($item) => [
+                    'id'           => $item->id,
+                    'description'  => $item->description,
+                    'account_code' => $item->account_code,
+                    'project_id'   => $item->project_id,
+                    'project'      => $item->project ? ['id' => $item->project->id, 'code' => $item->project->code, 'name' => $item->project->name] : null,
+                    'amount'       => (float) $item->amount,
+                    'vat_rate'     => (float) $item->vat_rate,
+                    'tax_amount'   => (float) $item->tax_amount,
+                ]),
                 'subtotal'          => $purchaseInvoice->subtotal,
                 'tax_amount'        => $purchaseInvoice->tax_amount,
                 'total'             => $purchaseInvoice->total,
@@ -269,12 +306,25 @@ class PurchaseInvoiceController extends Controller
 
     public function edit(PurchaseInvoice $purchaseInvoice): Response
     {
-        $purchaseInvoice->load('supplier');
+        $purchaseInvoice->load(['supplier', 'items.project']);
 
         return Inertia::render('Purchasing/PurchaseInvoices/Form', [
-            'invoice'             => $purchaseInvoice,
+            'invoice'             => array_merge($purchaseInvoice->toArray(), [
+                'items' => $purchaseInvoice->items->map(fn ($item) => [
+                    'id'           => $item->id,
+                    'description'  => $item->description,
+                    'account_code' => $item->account_code,
+                    'project_id'   => $item->project_id,
+                    'project_name' => $item->project ? "{$item->project->code} — {$item->project->name}" : null,
+                    'amount'       => (float) $item->amount,
+                    'vat_rate'     => (float) $item->vat_rate,
+                    'tax_amount'   => (float) $item->tax_amount,
+                    'sort_order'   => $item->sort_order,
+                ])->toArray(),
+            ]),
             'initialSupplierName' => $purchaseInvoice->supplier?->name ?? '',
             'initialSupplierCode' => $purchaseInvoice->supplier?->code ?? '',
+            'projects'       => $this->projectList(),
             'purchaseOrders' => PurchaseOrder::with(['supplier', 'items'])
                 ->where(fn ($q) => $q->whereIn('status', ['sent', 'received'])
                     ->orWhere('id', $purchaseInvoice->purchase_order_id))
@@ -295,6 +345,7 @@ class PurchaseInvoiceController extends Controller
     public function update(Request $request, PurchaseInvoice $purchaseInvoice): RedirectResponse
     {
         $data = $request->validate([
+            'project_id'           => ['nullable', 'exists:projects,id'],
             'invoice_number'       => ['nullable', 'string', 'max:100'],
             'invoice_date'         => ['nullable', 'date'],
             'supplier_tax_code'    => ['nullable', 'string', 'max:50'],
@@ -305,9 +356,21 @@ class PurchaseInvoiceController extends Controller
             'notes'                => ['nullable', 'string'],
             'expense_account_code' => ['nullable', 'string', 'max:20'],
             'invoice_type'         => ['nullable', 'string', 'in:' . implode(',', array_column(PurchaseInvoiceType::cases(), 'value'))],
+            'items'                        => ['nullable', 'array'],
+            'items.*.description'          => ['nullable', 'string', 'max:255'],
+            'items.*.account_code'         => ['required_with:items', 'string', 'max:20', 'exists:account_codes,code'],
+            'items.*.project_id'           => ['nullable', 'exists:projects,id'],
+            'items.*.amount'               => ['required_with:items', 'numeric', 'min:0'],
+            'items.*.vat_rate'             => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'items.*.tax_amount'           => ['nullable', 'numeric', 'min:0'],
         ]);
 
-        $purchaseInvoice->update($data);
+        $this->validateItemProjectLinks($data['items'] ?? []);
+
+        DB::transaction(function () use ($purchaseInvoice, $data) {
+            $purchaseInvoice->update(Arr::except($data, ['items']));
+            $this->syncItems($purchaseInvoice, $data['items'] ?? []);
+        });
 
         return redirect()->route('purchasing.purchase-invoices.show', $purchaseInvoice)
             ->with('success', 'Đã cập nhật hóa đơn.');
@@ -397,6 +460,50 @@ class PurchaseInvoiceController extends Controller
         }
 
         return back()->with('success', 'Đã cập nhật trạng thái hóa đơn.');
+    }
+
+    /**
+     * Validate: dòng chi phí TK bắt đầu bằng 154 phải có project_id.
+     */
+    private function validateItemProjectLinks(array $items): void
+    {
+        foreach ($items as $index => $item) {
+            $code = $item['account_code'] ?? '';
+            if (str_starts_with((string) $code, '154') && empty($item['project_id'])) {
+                throw ValidationException::withMessages([
+                    "items.{$index}.project_id" => 'Dòng chi phí hạch toán vào TK 154 phải gắn với dự án.',
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Đồng bộ items: xóa cũ, tạo mới.
+     */
+    private function syncItems(PurchaseInvoice $invoice, array $items): void
+    {
+        $invoice->items()->delete();
+
+        foreach ($items as $index => $item) {
+            $invoice->items()->create([
+                'description'  => $item['description'] ?? null,
+                'account_code' => $item['account_code'],
+                'project_id'   => $item['project_id'] ?? null,
+                'amount'       => $item['amount'] ?? 0,
+                'vat_rate'     => $item['vat_rate'] ?? 0,
+                'tax_amount'   => $item['tax_amount'] ?? 0,
+                'sort_order'   => $index,
+            ]);
+        }
+    }
+
+    private function projectList(): array
+    {
+        return Project::where('status', ProjectStatus::InProgress)
+            ->orderBy('code')
+            ->get(['id', 'code', 'name'])
+            ->map(fn ($p) => ['id' => $p->id, 'code' => $p->code, 'name' => $p->name, 'label' => "{$p->code} — {$p->name}"])
+            ->toArray();
     }
 
     private function expenseAccountList(): array

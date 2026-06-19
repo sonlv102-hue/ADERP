@@ -204,6 +204,18 @@
           </div>
         </div>
 
+        <!-- Cảnh báo khi đổi kho sau khi đã có items -->
+        <div v-if="warehouseChangedWithItems && form.items.some(i => i.product_id)"
+          class="flex items-start gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-5 py-4">
+          <svg class="mt-0.5 h-4 w-4 shrink-0 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <p class="text-sm text-amber-800">
+            Kho xuất đã thay đổi. Vui lòng chọn lại sản phẩm để kiểm tra tồn kho tại kho mới.
+          </p>
+        </div>
+
         <!-- ─── Section 2: Chi tiết hàng hóa ─── -->
         <div class="overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-sm">
           <div class="flex items-center justify-between border-b border-gray-100 bg-gray-50/60 px-6 py-4">
@@ -242,7 +254,9 @@
             </div>
             <div>
               <p class="text-sm font-medium text-gray-600">Chưa có hàng hóa nào</p>
-              <p class="mt-0.5 text-xs text-gray-400">Nhấn "+ Thêm dòng" để thêm sản phẩm cần xuất.</p>
+              <p class="mt-0.5 text-xs text-gray-400">
+                {{ form.warehouse_id ? 'Nhấn "+ Thêm dòng" để thêm sản phẩm cần xuất.' : 'Vui lòng chọn kho xuất trước.' }}
+              </p>
             </div>
           </div>
 
@@ -266,6 +280,10 @@
                       <ProductSearch
                         v-model="item.product_id"
                         :display-text="item._productDisplay"
+                        :search-url="productSearchUrl"
+                        :extra-params="productSearchParams"
+                        :disabled="!form.warehouse_id"
+                        :placeholder="!form.warehouse_id ? 'Chọn kho xuất trước' : '-- Tìm sản phẩm --'"
                         @select="opt => onProductSelect(index, opt)"
                         :has-error="!!form.errors[`items.${index}.product_id`]"
                       />
@@ -288,9 +306,14 @@
                         class="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-right outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
                         :class="[
                           form.errors[`items.${index}.quantity`] && 'border-red-400 bg-red-50/40',
-                          !form.errors[`items.${index}.quantity`] && productAvailableQty(item.product_id) !== null && item.quantity > productAvailableQty(item.product_id) && 'border-amber-400 bg-amber-50/40',
+                          !form.errors[`items.${index}.quantity`] && item._qtyOnHand !== null && item.quantity > item._qtyOnHand && 'border-amber-400 bg-amber-50/40',
                         ]"
                       />
+                      <p v-if="item._qtyOnHand !== null"
+                         class="mt-0.5 text-right text-xs"
+                         :class="item.quantity > item._qtyOnHand ? 'font-semibold text-red-500' : 'text-gray-400'">
+                        Tồn: {{ item._qtyOnHand }}
+                      </p>
                     </td>
                     <td class="px-3 py-2.5">
                       <input
@@ -456,8 +479,27 @@ const form = useForm({
     serial_ids:      item.serial_ids ?? [],
     _productDisplay: item.product_code ? `${item.product_code} - ${item.product_name}` : (item.product_name ?? ''),
     _unit:           item.product_unit ?? '',
+    _qtyOnHand:      null,
   })) ?? [],
 });
+
+// URL search sản phẩm: dùng warehouse-products nếu đã chọn kho, fallback về search.products
+const productSearchUrl = computed(() =>
+  form.warehouse_id
+    ? window.route('search.warehouse-products')
+    : window.route('search.products')
+);
+
+// Extra params cho ProductSearch: luôn gửi warehouse_id khi có
+const productSearchParams = computed(() => {
+  const params = {};
+  if (form.warehouse_id) params.warehouse_id = form.warehouse_id;
+  if (form.issue_purpose === 'project_cost' && form.project_id) params.project_id = form.project_id;
+  return params;
+});
+
+// Flag cảnh báo khi user đổi kho sau khi đã có items
+const warehouseChangedWithItems = ref(false);
 
 const customerOrders = computed(() =>
   form.customer_id
@@ -504,10 +546,14 @@ const fetchAvailableLots = async () => {
 
 watch([() => form.project_id, () => form.warehouse_id], fetchAvailableLots);
 
-const productAvailableQty = (productId) => {
-  if (form.issue_purpose !== 'project_cost') return null;
-  return availableLots.value.find(l => l.product_id === productId)?.available_qty ?? null;
-};
+// Khi lots load xong, cập nhật _qtyOnHand cho các dòng hiện có (edit mode)
+watch(availableLots, (lots) => {
+  if (!lots.length) return;
+  form.items.forEach(item => {
+    const lot = lots.find(l => l.product_id === item.product_id);
+    if (lot) item._qtyOnHand = lot.available_qty;
+  });
+});
 
 const onIssuePurposeChange = () => {
   form.item_usage_type = form.issue_purpose === 'project_cost' ? 'project' : 'commercial';
@@ -515,6 +561,8 @@ const onIssuePurposeChange = () => {
     form.project_id = null;
     availableLots.value = [];
   }
+  // Xóa tồn kho đã cache vì nguồn dữ liệu thay đổi (lots vs inventory_balances)
+  form.items.forEach(item => { item._qtyOnHand = null; });
 };
 
 const onCustomerChange = () => {
@@ -532,11 +580,11 @@ const onOrderChange = () => {
   const filled = order.items
     .filter(i => i.remaining > 0)
     .map(i => ({ product_id: i.product_id, quantity: i.remaining, unit_price: i.unit_price, serial_ids: [] }));
-  if (filled.length) form.items = filled.map(i => ({ ...i, _productDisplay: i.product_name ?? '', _unit: '' }));
+  if (filled.length) form.items = filled.map(i => ({ ...i, _productDisplay: i.product_name ?? '', _unit: '', _qtyOnHand: null }));
 };
 
 const addRow = () => {
-  form.items.push({ product_id: null, quantity: 1, unit_price: 0, serial_ids: [], _productDisplay: '', _unit: '' });
+  form.items.push({ product_id: null, quantity: 1, unit_price: 0, serial_ids: [], _productDisplay: '', _unit: '', _qtyOnHand: null });
 };
 
 const removeRow = (index) => {
@@ -544,13 +592,24 @@ const removeRow = (index) => {
 };
 
 const onWarehouseChange = () => {
-  form.items.forEach(item => { item.serial_ids = []; });
+  if (form.items.some(i => i.product_id)) {
+    warehouseChangedWithItems.value = true;
+  }
+  form.items.forEach(item => {
+    item.serial_ids = [];
+    item._qtyOnHand = null; // Tồn kho chưa xác định ở kho mới
+  });
+  availableLots.value = [];
 };
 
 const onProductSelect = (index, opt) => {
-  if (!opt) return;
+  if (!opt) {
+    form.items[index]._qtyOnHand = null;
+    return;
+  }
   form.items[index]._productDisplay = opt.code ? `${opt.code} - ${opt.label}` : opt.label;
-  form.items[index]._unit = opt.unit ?? opt.meta ?? '';
+  form.items[index]._unit = opt.unit ?? '';
+  form.items[index]._qtyOnHand = opt.qty ?? null; // Lưu tồn kho từ warehouse-products endpoint
 
   const order = form.order_id ? props.orders.find(o => o.id === form.order_id) : null;
   const orderItem = order?.items?.find(i => i.product_id === opt.value);

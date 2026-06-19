@@ -9,9 +9,9 @@ class SupplierAdvanceAllocation extends Model
 {
     protected $fillable = [
         'supplier_id', 'opening_advance_id', 'purchase_invoice_id',
-        'ar_ap_opening_balance_id', 'journal_entry_id',
+        'ar_ap_opening_balance_id', 'journal_entry_id', 'reversal_entry_id',
         'allocation_date', 'allocated_amount', 'status', 'reason',
-        'created_by', 'reversed_by', 'reversed_at',
+        'created_by', 'reversed_by', 'reversed_at', 'reverse_reason',
     ];
 
     protected $casts = [
@@ -48,6 +48,11 @@ class SupplierAdvanceAllocation extends Model
     public function reversedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reversed_by');
+    }
+
+    public function reversalEntry(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\JournalEntry::class, 'reversal_entry_id');
     }
 
     public function isReversed(): bool

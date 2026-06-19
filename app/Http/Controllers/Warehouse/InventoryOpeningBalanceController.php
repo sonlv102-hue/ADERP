@@ -7,6 +7,7 @@ use App\Models\InventoryOpeningBalance;
 use App\Models\Product;
 use App\Models\Warehouse;
 use App\Services\AccountingService;
+use App\Services\AvcoService;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,7 +17,10 @@ use Inertia\Response;
 
 class InventoryOpeningBalanceController extends Controller
 {
-    public function __construct(private AccountingService $accounting) {}
+    public function __construct(
+        private AccountingService $accounting,
+        private AvcoService $avco,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -117,6 +121,16 @@ class InventoryOpeningBalanceController extends Controller
                         'created_at'   => $movDate,
                         'updated_at'   => now(),
                     ]);
+                }
+
+                // Đồng bộ AVCO balance từ tồn đầu kỳ (idempotent, override nếu đã tồn tại)
+                if ($qty > 0) {
+                    $this->avco->initializeFromOpeningBalance(
+                        $item['product_id'],
+                        $data['warehouse_id'],
+                        $qty,
+                        $cost,
+                    );
                 }
 
                 $product = Product::find($item['product_id']);

@@ -178,10 +178,9 @@ class PurchaseInvoiceService
                 ]);
             }
 
-            $invoice->update([
-                'paid_amount' => 0,
-                'status'      => PurchaseInvoiceStatus::Valid,
-            ]);
+            // Tính lại paid_amount và status dựa trên advance_allocated_amount còn active,
+            // tránh hardcode paid_amount=0 khi hóa đơn vẫn có khoản đối trừ trả trước.
+            $this->recalculatePaid($invoice->fresh());
 
             Log::info("PurchaseInvoice #{$invoice->id} ({$invoice->code}): recall {$activePayments->count()} payments by user {$userId}. Reason: {$reason}");
         });
@@ -207,8 +206,9 @@ class PurchaseInvoiceService
     /**
      * Post JE khi hóa đơn được duyệt hợp lệ.
      *
-     * Nếu có invoice_type rõ ràng: routing theo loại (hàng hóa/dịch vụ/dự án/TSCĐ/v.v.)
-     * Nếu invoice_type = null (hóa đơn cũ): dùng isGoodsPurchase() logic làm fallback.
+     * Ưu tiên 1: Nếu có purchase_invoice_items → per-line JE (mỗi dòng = một debit với project_id riêng)
+     * Ưu tiên 2: invoice_type rõ ràng → routing theo loại (header-level, không có items)
+     * Ưu tiên 3: invoice_type = null (hóa đơn cũ) → legacy fallback
      *
      * Hàng hóa/NVL/CCDC: JE post bởi StockService khi NK xác nhận — không post ở đây.
      * TSCĐ: JE post bởi FixedAssetService khi ghi nhận TSCĐ — không post ở đây.
@@ -216,6 +216,13 @@ class PurchaseInvoiceService
      */
     private function postInvoiceEntryIfNeeded(PurchaseInvoice $invoice): void
     {
+        // Ưu tiên 1: Có invoice_items → per-line JE với project_id riêng mỗi dòng
+        $invoice->loadMissing(['items', 'supplier']);
+        if ($invoice->items->isNotEmpty()) {
+            $this->postFromItems($invoice);
+            return;
+        }
+
         $type = $invoice->invoice_type;
 
         if ($type !== null) {
@@ -229,7 +236,6 @@ class PurchaseInvoiceService
 
             if ($subtotal <= 0 && $tax <= 0) return;
 
-            $invoice->loadMissing('supplier');
             $payableAccount = $invoice->supplier->getPayableAccount();
 
             $debitAccount = $invoice->expense_account_code ?? $type->defaultDebitAccount();
@@ -238,11 +244,13 @@ class PurchaseInvoiceService
             $lines = [];
 
             if ($subtotal > 0) {
+                $projectId = $invoice->project_id;
                 $lines[] = [
                     'account'     => $debitAccount,
                     'debit'       => (int) round($subtotal),
                     'credit'      => 0,
                     'description' => "{$type->label()} - {$invoice->code}",
+                    'project_id'  => $projectId,
                 ];
             }
 
@@ -326,6 +334,74 @@ class PurchaseInvoiceService
 
         $this->accounting->tryPost(
             "Hóa đơn dịch vụ {$invoice->code}",
+            Carbon::parse($invoice->invoice_date ?? now()),
+            $lines,
+            'purchase_invoice',
+            $invoice->id,
+            'ap'
+        );
+    }
+
+    /**
+     * Post JE per-line từ purchase_invoice_items.
+     * Mỗi item = một debit line với project_id riêng.
+     * VAT gom lại thành một dòng Nợ 1331.
+     * Cr 3311 = tổng tất cả debit.
+     */
+    private function postFromItems(PurchaseInvoice $invoice): void
+    {
+        $type       = $invoice->invoice_type;
+        $vatAccount = $type ? $type->vatInputAccount() : '1331';
+
+        // Block nếu là inventory/fixed_asset nhưng vẫn có items (không nên xảy ra)
+        if ($type && ($type->isInventoryBacked() || $type->isFixedAssetBacked())) {
+            return;
+        }
+
+        $payableAccount = $invoice->supplier->getPayableAccount();
+        $lines          = [];
+        $totalVat       = 0;
+
+        foreach ($invoice->items as $item) {
+            $amt = (int) round((float) $item->amount);
+            if ($amt <= 0) continue;
+
+            $lines[] = [
+                'account'     => $item->account_code,
+                'debit'       => $amt,
+                'credit'      => 0,
+                'description' => $item->description ?: "Chi phí {$invoice->code}",
+                'project_id'  => $item->project_id,
+            ];
+
+            $totalVat += (int) round((float) $item->tax_amount);
+        }
+
+        if (empty($lines)) return;
+
+        if ($totalVat > 0) {
+            $lines[] = [
+                'account'     => $vatAccount,
+                'debit'       => $totalVat,
+                'credit'      => 0,
+                'description' => "Thuế GTGT đầu vào - {$invoice->code}",
+            ];
+        }
+
+        $totalCredit = array_sum(array_column($lines, 'debit'));
+
+        $lines[] = [
+            'account'      => $payableAccount,
+            'debit'        => 0,
+            'credit'       => $totalCredit,
+            'description'  => "Phải trả NCC - {$invoice->code}",
+            'partner_type' => 'supplier',
+            'partner_id'   => $invoice->supplier_id,
+        ];
+
+        $label = $type ? $type->label() : 'Chi phí';
+        $this->accounting->tryPost(
+            "{$label} {$invoice->code}",
             Carbon::parse($invoice->invoice_date ?? now()),
             $lines,
             'purchase_invoice',

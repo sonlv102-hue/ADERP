@@ -2,8 +2,10 @@
 
 namespace App\Services;
 
+use App\Enums\CashVoucherStatus;
 use App\Enums\PurchaseInvoiceStatus;
 use App\Models\ArApOpeningBalance;
+use App\Models\CashVoucher;
 use App\Models\PurchaseInvoice;
 use App\Models\Supplier;
 use App\Models\SupplierAdvanceAllocation;
@@ -15,7 +17,10 @@ use Illuminate\Support\Facades\Log;
 
 class SupplierAdvanceService
 {
-    public function __construct(private AccountingService $accounting) {}
+    public function __construct(
+        private AccountingService $accounting,
+        private CashVoucherService $cashVoucherService,
+    ) {}
     public function create(array $data): SupplierOpeningAdvance
     {
         $data['remaining_amount'] = $data['amount'];
@@ -79,10 +84,35 @@ class SupplierAdvanceService
         if ($advance->activeAllocations()->exists()) {
             throw new \RuntimeException('Không thể hủy khoản ứng trước đã có đối trừ đang hoạt động. Thu hồi các đối trừ trước.');
         }
-        $advance->update([
-            'status' => 'cancelled',
-            'notes'  => trim(($advance->notes ?? '') . "\nHủy: {$reason}"),
-        ]);
+
+        DB::transaction(function () use ($advance, $reason) {
+            // Khi hủy prepayment: cần cancel CashVoucher liên kết để đảo JE Dr 331UT / Cr fund
+            if ($advance->isPrepayment()) {
+                $voucher = CashVoucher::where('reference_type', SupplierOpeningAdvance::class)
+                    ->where('reference_id', $advance->id)
+                    ->whereIn('status', [CashVoucherStatus::Confirmed->value, CashVoucherStatus::Draft->value])
+                    ->first();
+
+                if ($voucher) {
+                    $this->cashVoucherService->cancel($voucher);
+                } else {
+                    // Có JE trực tiếp nhưng không có CashVoucher — đảo JE trực tiếp
+                    // Trường hợp này hiếm (legacy). Dùng AccountingService để reverse.
+                    $this->accounting->reverseOrDelete(
+                        'supplier_advance',
+                        $advance->id,
+                        "Hủy khoản trả trước NCC: {$reason}"
+                    );
+                }
+            }
+
+            $advance->update([
+                'status' => 'cancelled',
+                'notes'  => trim(($advance->notes ?? '') . "\nHủy: {$reason}"),
+            ]);
+
+            Log::info("SupplierAdvance #{$advance->id} cancelled by user " . auth()->id() . ". Reason: {$reason}");
+        });
     }
 
     /**
@@ -211,18 +241,22 @@ class SupplierAdvanceService
             $amount  = (float) $allocation->allocated_amount;
 
             // Đảo JE đối trừ nếu có
+            $reversalEntryId = null;
             if ($allocation->journal_entry_id) {
                 $je = \App\Models\JournalEntry::find($allocation->journal_entry_id);
                 if ($je && $je->status === 'posted') {
-                    $this->accounting->reverse($je, "Thu hồi đối trừ trả trước: {$reason}");
+                    $reversalJe      = $this->accounting->reverse($je, "Thu hồi đối trừ trả trước: {$reason}");
+                    $reversalEntryId = $reversalJe?->id;
                 }
             }
 
             $allocation->update([
-                'status'      => 'reversed',
-                'reason'      => trim(($allocation->reason ?? '') . "\nThu hồi: {$reason}"),
-                'reversed_by' => auth()->id(),
-                'reversed_at' => now(),
+                'status'            => 'reversed',
+                'reason'            => trim(($allocation->reason ?? '') . "\nThu hồi: {$reason}"),
+                'reversed_by'       => auth()->id(),
+                'reversed_at'       => now(),
+                'reversal_entry_id' => $reversalEntryId,
+                'reverse_reason'    => $reason,
             ]);
 
             $newRemaining = round((float) $advance->remaining_amount + $amount, 2);

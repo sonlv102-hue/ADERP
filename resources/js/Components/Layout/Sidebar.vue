@@ -179,6 +179,7 @@
           <NavItem :href="route('admin.settings.index')" icon="cog">Cài đặt công ty</NavItem>
           <NavItem :href="route('admin.activity-logs.index')" icon="clipboard-list">Nhật ký hoạt động</NavItem>
           <NavItem :href="route('admin.backups.index')" icon="server">Sao lưu dữ liệu</NavItem>
+          <NavItem :href="route('admin.system-health.index')" icon="chip">Tình trạng hệ thống</NavItem>
         </div>
       </nav>
 

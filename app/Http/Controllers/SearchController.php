@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Models\AccountCode;
 use App\Models\Customer;
 use App\Models\Employee;
+use App\Models\InventoryBalance;
 use App\Models\Product;
 use App\Models\Project;
+use App\Models\ProjectInventoryLot;
 use App\Models\Service;
 use App\Models\Supplier;
 use App\Models\Warehouse;
@@ -190,6 +192,95 @@ class SearchController extends Controller
                 'value' => $w->id,
                 'label' => $w->name,
             ]);
+        return response()->json(['data' => $items]);
+    }
+
+    /**
+     * Trả sản phẩm có tồn kho trong kho cụ thể.
+     * - Non-project: lấy từ inventory_balances (AVCO).
+     * - Project: lấy từ project_inventory_lots (FIFO).
+     * GET /api/search/warehouse-products?warehouse_id=X&q=&project_id=
+     */
+    public function warehouseProducts(Request $request): JsonResponse
+    {
+        $request->validate([
+            'warehouse_id' => ['required', 'integer', 'exists:warehouses,id'],
+        ]);
+
+        $warehouseId = $request->integer('warehouse_id');
+        $projectId   = $request->integer('project_id');
+        $keyword     = $this->q($request);
+
+        if ($projectId) {
+            $lots = ProjectInventoryLot::with('product')
+                ->where('project_id', $projectId)
+                ->where('warehouse_id', $warehouseId)
+                ->where('status', 'active')
+                ->whereRaw('issued_qty < received_qty')
+                ->get()
+                ->groupBy('product_id');
+
+            $items = $lots->map(function ($productLots) use ($keyword) {
+                $first   = $productLots->first();
+                $product = $first->product;
+                if (! $product || ! $product->is_active) return null;
+
+                if ($keyword) {
+                    $kw = mb_strtolower($keyword);
+                    if (! str_contains(mb_strtolower($product->name), $kw)
+                        && ! str_contains(mb_strtolower($product->code ?? ''), $kw)) {
+                        return null;
+                    }
+                }
+
+                $availableQty = round(
+                    $productLots->sum(fn ($l) => (float) $l->received_qty - (float) $l->issued_qty),
+                    3
+                );
+
+                return [
+                    'value'      => $product->id,
+                    'label'      => $product->name,
+                    'code'       => $product->code,
+                    'meta'       => $product->unit ? "Tồn: {$availableQty} {$product->unit}" : "Tồn: {$availableQty}",
+                    'unit'       => $product->unit,
+                    'qty'        => $availableQty,
+                    'avg_cost'   => null,
+                    'sell_price' => (float) ($product->sell_price ?? 0),
+                ];
+            })->filter()->values()->take(30);
+
+            return response()->json(['data' => $items]);
+        }
+
+        // Non-project: query từ inventory_balances (AVCO)
+        $items = InventoryBalance::with('product')
+            ->where('warehouse_id', $warehouseId)
+            ->where('qty_on_hand', '>', 0)
+            ->whereHas('product', function ($q) use ($keyword) {
+                $q->where('is_active', true);
+                if ($keyword) {
+                    $q->where(function ($b) use ($keyword) {
+                        $b->whereRaw('LOWER(name) LIKE ?', ["%{$keyword}%"])
+                          ->orWhereRaw('LOWER(code) LIKE ?', ["%{$keyword}%"]);
+                    });
+                }
+            })
+            ->limit(30)
+            ->get()
+            ->map(fn ($ib) => [
+                'value'      => $ib->product_id,
+                'label'      => $ib->product->name,
+                'code'       => $ib->product->code,
+                'meta'       => $ib->product->unit
+                                    ? "Tồn: {$ib->qty_on_hand} {$ib->product->unit}"
+                                    : "Tồn: {$ib->qty_on_hand}",
+                'unit'       => $ib->product->unit,
+                'qty'        => (float) $ib->qty_on_hand,
+                'avg_cost'   => (float) $ib->avg_cost,
+                'sell_price' => (float) ($ib->product->sell_price ?? 0),
+            ]);
+
         return response()->json(['data' => $items]);
     }
 }

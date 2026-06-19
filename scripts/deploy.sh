@@ -54,4 +54,20 @@ $COMPOSE exec -T app php artisan cache:clear
 log "Restarting queue workers..."
 $COMPOSE restart queue scheduler
 
+# ── Write deploy metadata ─────────────────────────────────────────────────────
+log "Writing deploy metadata..."
+mkdir -p storage/app
+cat > storage/app/deploy.json <<EOF
+{
+  "deployed_at": "$(date '+%Y-%m-%d %H:%M:%S')",
+  "branch": "$(git rev-parse --abbrev-ref HEAD)",
+  "commit": "$(git rev-parse --short HEAD)",
+  "commit_message": "$(git log -1 --pretty=%s | tr '"' "'")",
+  "deployed_by": "$(whoami)@$(hostname -s 2>/dev/null || echo 'vps')",
+  "environment": "production"
+}
+EOF
+# Make readable by web process inside Docker
+$COMPOSE exec -T app sh -c 'mkdir -p /var/www/html/storage/app && cp /dev/stdin /var/www/html/storage/app/deploy.json' < storage/app/deploy.json || true
+
 log "Deploy complete."
