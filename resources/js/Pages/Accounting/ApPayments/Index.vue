@@ -118,7 +118,7 @@
         <div>
           <label class="block text-sm font-medium text-gray-700 mb-2">Kiểu xử lý thanh toán <span class="text-red-500">*</span></label>
           <div class="flex gap-2 flex-wrap">
-            <button v-for="t in paymentTypes" :key="t.value"
+            <button v-for="t in availablePaymentTypes" :key="t.value"
               @click="paymentType = t.value"
               :class="paymentType === t.value
                 ? 'bg-orange-600 text-white border-orange-600'
@@ -188,7 +188,7 @@
                       :max="adv.remaining_amount"
                       min="0"
                       :value="advAllocAmounts[adv.id] ?? 0"
-                      @input="setAllocAmount(adv.id, $event.target.value, adv.remaining_amount)"
+                      @change="setAllocAmount(adv.id, $event.target.value, adv.remaining_amount)"
                       class="w-32 px-2 py-1 border border-gray-300 rounded text-right text-xs focus:ring-2 focus:ring-blue-500 outline-none"
                       placeholder="0" />
                   </td>
@@ -308,7 +308,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
@@ -335,6 +335,11 @@ const paymentTypes = [
   { value: 'offset',   label: 'Đối trừ tiền trả trước' },
   { value: 'combined', label: 'Đối trừ + chi thêm' },
 ];
+
+const availablePaymentTypes = computed(() => {
+  if (loadingAdvances.value || advances.value.length > 0) return paymentTypes;
+  return paymentTypes.filter(t => t.value === 'cash');
+});
 
 // Modal state
 const payModal         = ref(null);
@@ -372,6 +377,23 @@ const submitLabel = computed(() => {
   if (paymentType.value === 'offset')   return 'Xác nhận đối trừ';
   if (paymentType.value === 'combined') return 'Xác nhận đối trừ & thanh toán';
   return 'Xác nhận thanh toán';
+});
+
+// Khi advances tải xong mà không có khoản nào, reset về cash mode
+watch(advances, (adv) => {
+  if (!loadingAdvances.value && adv.length === 0 && paymentType.value !== 'cash') {
+    paymentType.value = 'cash';
+  }
+});
+
+// Trong combined mode: tự giảm số tiền chi nếu offset vượt quá
+watch(totalOffset, (newOffset) => {
+  if (paymentType.value === 'combined' && payModal.value) {
+    const maxCash = Math.max(0, payModal.value.amount_due - newOffset);
+    if ((payForm.value.amount || 0) > maxCash) {
+      payForm.value.amount = maxCash;
+    }
+  }
 });
 
 function applyFilters() {
