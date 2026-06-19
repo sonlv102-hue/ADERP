@@ -85,6 +85,7 @@ class RolePermissionSeeder extends Seeder
                 'quotations.view', 'quotations.create', 'quotations.edit',
                 'orders.view', 'orders.create',
                 'sales-returns.view', 'sales-returns.create', 'sales-returns.edit', 'sales-returns.delete',
+                'accounting.view',
                 'commissions.view', 'commissions.create',
                 'documents.view', 'documents.create',
                 'reports.view',
