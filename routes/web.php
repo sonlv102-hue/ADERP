@@ -541,17 +541,17 @@ Route::middleware('auth')->group(function () {
             Route::get('receipts',                   [SmallToolReceiptController::class, 'index'])->name('receipts.index')->middleware('can:ccdc.view');
             Route::get('receipts/create',            [SmallToolReceiptController::class, 'create'])->name('receipts.create')->middleware('can:ccdc.manage');
             Route::post('receipts',                  [SmallToolReceiptController::class, 'store'])->name('receipts.store')->middleware('can:ccdc.manage');
-            Route::get('receipts/{receipt}',         [SmallToolReceiptController::class, 'show'])->name('receipts.show')->middleware('can:ccdc.view');
-            Route::post('receipts/{receipt}/confirm',[SmallToolReceiptController::class, 'confirm'])->name('receipts.confirm')->middleware('can:ccdc.manage');
-            Route::post('receipts/{receipt}/cancel', [SmallToolReceiptController::class, 'cancel'])->name('receipts.cancel')->middleware('can:ccdc.cancel');
+            Route::get('receipts/{receipt}',         [SmallToolReceiptController::class, 'show'])->name('receipts.show')->middleware('can:ccdc.view')->whereNumber('receipt');
+            Route::post('receipts/{receipt}/confirm',[SmallToolReceiptController::class, 'confirm'])->name('receipts.confirm')->middleware('can:ccdc.manage')->whereNumber('receipt');
+            Route::post('receipts/{receipt}/cancel', [SmallToolReceiptController::class, 'cancel'])->name('receipts.cancel')->middleware('can:ccdc.cancel')->whereNumber('receipt');
 
             // Issues (CCXD-)
             Route::get('issues',                  [SmallToolIssueController::class, 'index'])->name('issues.index')->middleware('can:ccdc.view');
             Route::get('issues/create',           [SmallToolIssueController::class, 'create'])->name('issues.create')->middleware('can:ccdc.manage');
             Route::post('issues',                 [SmallToolIssueController::class, 'store'])->name('issues.store')->middleware('can:ccdc.manage');
-            Route::get('issues/{issue}',          [SmallToolIssueController::class, 'show'])->name('issues.show')->middleware('can:ccdc.view');
-            Route::post('issues/{issue}/confirm', [SmallToolIssueController::class, 'confirm'])->name('issues.confirm')->middleware('can:ccdc.manage');
-            Route::post('issues/{issue}/cancel',  [SmallToolIssueController::class, 'cancel'])->name('issues.cancel')->middleware('can:ccdc.cancel');
+            Route::get('issues/{issue}',          [SmallToolIssueController::class, 'show'])->name('issues.show')->middleware('can:ccdc.view')->whereNumber('issue');
+            Route::post('issues/{issue}/confirm', [SmallToolIssueController::class, 'confirm'])->name('issues.confirm')->middleware('can:ccdc.manage')->whereNumber('issue');
+            Route::post('issues/{issue}/cancel',  [SmallToolIssueController::class, 'cancel'])->name('issues.cancel')->middleware('can:ccdc.cancel')->whereNumber('issue');
 
             // Allocations (phân bổ hàng tháng)
             Route::get('allocations',                      [SmallToolAllocationController::class, 'index'])->name('allocations.index')->middleware('can:ccdc.view');
@@ -563,19 +563,19 @@ Route::middleware('auth')->group(function () {
             Route::get('reports/allocation-schedule', [SmallToolReportController::class, 'allocationSchedule'])->name('reports.allocation-schedule')->middleware('can:ccdc.view');
             Route::get('reports/gl-reconcile',        [SmallToolReportController::class, 'glReconcile'])->name('reports.gl-reconcile')->middleware('can:ccdc.view');
 
-            // Tool detail — {tool} wildcard LAST (after all fixed-segment routes above)
-            Route::get('{tool}',         [SmallToolController::class, 'show'])->name('show')->middleware('can:ccdc.view');
-            Route::get('{tool}/edit',    [SmallToolController::class, 'edit'])->name('edit')->middleware('can:ccdc.manage');
-            Route::put('{tool}',         [SmallToolController::class, 'update'])->name('update')->middleware('can:ccdc.manage');
-            Route::post('{tool}/confirm',[SmallToolController::class, 'confirm'])->name('confirm')->middleware('can:ccdc.manage');
+            // Tool detail — {tool} wildcard LAST; whereNumber prevents non-ID segments from hitting model binding
+            Route::get('{tool}',         [SmallToolController::class, 'show'])->name('show')->middleware('can:ccdc.view')->whereNumber('tool');
+            Route::get('{tool}/edit',    [SmallToolController::class, 'edit'])->name('edit')->middleware('can:ccdc.manage')->whereNumber('tool');
+            Route::put('{tool}',         [SmallToolController::class, 'update'])->name('update')->middleware('can:ccdc.manage')->whereNumber('tool');
+            Route::post('{tool}/confirm',[SmallToolController::class, 'confirm'])->name('confirm')->middleware('can:ccdc.manage')->whereNumber('tool');
 
             // Transfers (CCCT-)
-            Route::get('{tool}/transfers/create', [SmallToolTransferController::class, 'create'])->name('transfers.create')->middleware('can:ccdc.manage');
-            Route::post('{tool}/transfers',       [SmallToolTransferController::class, 'store'])->name('transfers.store')->middleware('can:ccdc.manage');
+            Route::get('{tool}/transfers/create', [SmallToolTransferController::class, 'create'])->name('transfers.create')->middleware('can:ccdc.manage')->whereNumber('tool');
+            Route::post('{tool}/transfers',       [SmallToolTransferController::class, 'store'])->name('transfers.store')->middleware('can:ccdc.manage')->whereNumber('tool');
 
             // Disposals (CCXL-)
-            Route::get('{tool}/disposals/create', [SmallToolDisposalController::class, 'create'])->name('disposals.create')->middleware('can:ccdc.dispose');
-            Route::post('{tool}/disposals',       [SmallToolDisposalController::class, 'store'])->name('disposals.store')->middleware('can:ccdc.dispose');
+            Route::get('{tool}/disposals/create', [SmallToolDisposalController::class, 'create'])->name('disposals.create')->middleware('can:ccdc.dispose')->whereNumber('tool');
+            Route::post('{tool}/disposals',       [SmallToolDisposalController::class, 'store'])->name('disposals.store')->middleware('can:ccdc.dispose')->whereNumber('tool');
         });
     });
 
