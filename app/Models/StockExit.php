@@ -27,7 +27,7 @@ class StockExit extends Model
     protected static int    $codePad    = 4;
 
     protected $fillable = [
-        'code', 'warehouse_id', 'customer_id', 'order_id', 'created_by',
+        'code', 'warehouse_id', 'customer_id', 'order_id', 'purchase_order_id', 'created_by',
         'exit_date', 'reason', 'status', 'notes',
         'item_usage_type', 'project_id',
         'issue_purpose', 'cost_account', 'inventory_account',
@@ -61,6 +61,11 @@ class StockExit extends Model
     public function order(): BelongsTo
     {
         return $this->belongsTo(Order::class);
+    }
+
+    public function purchaseOrder(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\PurchaseOrder::class);
     }
 
     public function creator(): BelongsTo

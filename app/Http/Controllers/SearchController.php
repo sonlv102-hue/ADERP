@@ -9,6 +9,7 @@ use App\Models\InventoryBalance;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\ProjectInventoryLot;
+use App\Models\PurchaseOrder;
 use App\Models\Service;
 use App\Models\Supplier;
 use App\Models\Warehouse;
@@ -192,6 +193,43 @@ class SearchController extends Controller
                 'value' => $w->id,
                 'label' => $w->name,
             ]);
+        return response()->json(['data' => $items]);
+    }
+
+    /**
+     * Trả danh sách Purchase Orders có ít nhất 1 dòng gắn với project_id.
+     * GET /api/search/project-purchase-orders?project_id=X&q=
+     */
+    public function projectPurchaseOrders(Request $request): JsonResponse
+    {
+        $request->validate([
+            'project_id' => ['required', 'integer', 'exists:projects,id'],
+        ]);
+
+        $projectId = $request->integer('project_id');
+        $q         = mb_strtolower($this->q($request));
+
+        $items = PurchaseOrder::query()
+            ->whereHas('items', fn ($b) => $b->where('project_id', $projectId))
+            ->with(['supplier', 'items' => fn ($b) => $b->where('project_id', $projectId)])
+            ->whereIn('status', ['approved', 'partially_received', 'received', 'completed'])
+            ->when($q, fn ($b) => $b->where(fn ($b2) =>
+                $b2->whereRaw('LOWER(purchase_orders.code) LIKE ?', ["%{$q}%"])
+                   ->orWhereHas('supplier', fn ($s) => $s->whereRaw('LOWER(name) LIKE ?', ["%{$q}%"]))
+            ))
+            ->orderByDesc('id')
+            ->limit(30)
+            ->get()
+            ->map(fn ($po) => [
+                'value'         => $po->id,
+                'label'         => $po->code,
+                'code'          => $po->code,
+                'meta'          => ($po->supplier?->name ?? '') . ' · ' . ($po->order_date?->format('d/m/Y') ?? ''),
+                'supplier_name' => $po->supplier?->name ?? '',
+                'order_date'    => $po->order_date?->format('d/m/Y'),
+                'item_count'    => $po->items->count(),
+            ]);
+
         return response()->json(['data' => $items]);
     }
 

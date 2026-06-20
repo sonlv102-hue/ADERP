@@ -102,28 +102,46 @@
                 />
               </FormField>
 
-              <!-- Đơn hàng liên kết -->
-              <FormField label="Đơn hàng liên kết" optional :error="form.errors.order_id">
-                <select
-                  v-model="form.order_id"
-                  @change="onOrderChange"
-                  class="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow] focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
-                >
-                  <option :value="null">— Không liên kết —</option>
-                  <option v-for="o in customerOrders" :key="o.id" :value="o.id">
-                    {{ o.code }} ({{ o.status_label }})
-                  </option>
-                </select>
-                <div v-if="selectedOrderItems.length" class="mt-2 rounded-xl border border-blue-100 bg-blue-50 p-3">
-                  <p class="mb-1.5 text-xs font-semibold text-blue-700">Số lượng còn cần giao:</p>
-                  <div v-for="i in selectedOrderItems" :key="i.product_id" class="flex justify-between text-xs">
-                    <span class="text-gray-600">{{ i.product_name }}</span>
-                    <span :class="i.remaining <= 0 ? 'font-semibold text-green-600' : 'font-semibold text-blue-700'">
-                      {{ i.remaining <= 0 ? 'Đã giao đủ' : `còn ${i.remaining}` }}
-                    </span>
+              <!-- Đơn mua liên kết (project_cost) hoặc Đơn hàng liên kết (sale_delivery) -->
+              <template v-if="form.issue_purpose === 'project_cost'">
+                <FormField label="Đơn mua liên kết" optional :error="form.errors.purchase_order_id">
+                  <RemoteSearchSelect
+                    v-model="form.purchase_order_id"
+                    :search-url="purchaseOrderSearchUrl"
+                    :extra-params="{ project_id: form.project_id }"
+                    :display-text="initialPurchaseOrderDisplay"
+                    :disabled="!form.project_id"
+                    :placeholder="form.project_id ? '— Tìm đơn mua —' : '— Chọn dự án trước —'"
+                    :has-error="!!form.errors.purchase_order_id"
+                  />
+                  <p v-if="!form.project_id" class="mt-1 text-xs text-amber-600">
+                    Chọn dự án để tải danh sách đơn mua liên quan.
+                  </p>
+                </FormField>
+              </template>
+              <template v-else>
+                <FormField label="Đơn hàng liên kết" optional :error="form.errors.order_id">
+                  <select
+                    v-model="form.order_id"
+                    @change="onOrderChange"
+                    class="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow] focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+                  >
+                    <option :value="null">— Không liên kết —</option>
+                    <option v-for="o in customerOrders" :key="o.id" :value="o.id">
+                      {{ o.code }} ({{ o.status_label }})
+                    </option>
+                  </select>
+                  <div v-if="selectedOrderItems.length" class="mt-2 rounded-xl border border-blue-100 bg-blue-50 p-3">
+                    <p class="mb-1.5 text-xs font-semibold text-blue-700">Số lượng còn cần giao:</p>
+                    <div v-for="i in selectedOrderItems" :key="i.product_id" class="flex justify-between text-xs">
+                      <span class="text-gray-600">{{ i.product_name }}</span>
+                      <span :class="i.remaining <= 0 ? 'font-semibold text-green-600' : 'font-semibold text-blue-700'">
+                        {{ i.remaining <= 0 ? 'Đã giao đủ' : `còn ${i.remaining}` }}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              </FormField>
+                </FormField>
+              </template>
 
               <!-- Dự án (project_cost only) -->
               <FormField v-if="form.issue_purpose === 'project_cost'" label="Dự án" required :error="form.errors.project_id">
@@ -151,6 +169,8 @@
                       <div class="mt-1 flex flex-wrap gap-1">
                         <span v-for="l in lot.lots" :key="l.id"
                           class="rounded-md border border-emerald-200 bg-white px-1.5 py-0.5 text-xs text-gray-600">
+                          <span v-if="l.purchase_order_code" class="font-medium text-blue-700">{{ l.purchase_order_code }}</span>
+                          <span v-if="l.purchase_order_code"> / </span>
                           {{ l.stock_entry_code }}: {{ l.available_qty }}
                         </span>
                       </div>
@@ -458,20 +478,24 @@ const initialProjectDisplay = computed(() =>
     ? `${props.exit.project_code} - ${props.exit.project_name}`
     : (props.exit?.project_name ?? '')
 );
+const initialPurchaseOrderDisplay = computed(() =>
+  props.exit?.purchase_order_code ?? ''
+);
 
 const today = new Date().toISOString().slice(0, 10);
 
 const form = useForm({
-  code:             props.exit?.code             ?? props.nextCode ?? '',
-  exit_date:        props.exit?.exit_date        ?? today,
-  warehouse_id:     props.exit?.warehouse_id     ?? '',
-  customer_id:      props.exit?.customer_id      ?? null,
-  order_id:         props.exit?.order_id         ?? null,
-  item_usage_type:  props.exit?.item_usage_type  ?? 'commercial',
-  issue_purpose:    props.exit?.issue_purpose    ?? (props.exit?.item_usage_type === 'project' ? 'project_cost' : ''),
-  project_id:       props.exit?.project_id       ?? null,
-  reason:           props.exit?.reason           ?? '',
-  notes:            props.exit?.notes            ?? '',
+  code:              props.exit?.code              ?? props.nextCode ?? '',
+  exit_date:         props.exit?.exit_date         ?? today,
+  warehouse_id:      props.exit?.warehouse_id      ?? '',
+  customer_id:       props.exit?.customer_id       ?? null,
+  order_id:          props.exit?.order_id          ?? null,
+  purchase_order_id: props.exit?.purchase_order_id ?? null,
+  item_usage_type:   props.exit?.item_usage_type   ?? 'commercial',
+  issue_purpose:     props.exit?.issue_purpose     ?? (props.exit?.item_usage_type === 'project' ? 'project_cost' : ''),
+  project_id:        props.exit?.project_id        ?? null,
+  reason:            props.exit?.reason            ?? '',
+  notes:             props.exit?.notes             ?? '',
   items: props.exit?.items?.map(item => ({
     product_id:      item.product_id,
     quantity:        item.quantity,
@@ -489,6 +513,9 @@ const productSearchUrl = computed(() =>
     ? window.route('search.warehouse-products')
     : window.route('search.products')
 );
+
+// URL search đơn mua theo dự án
+const purchaseOrderSearchUrl = computed(() => window.route('search.project-purchase-orders'));
 
 // Extra params cho ProductSearch: luôn gửi warehouse_id khi có
 const productSearchParams = computed(() => {
@@ -559,9 +586,12 @@ const onIssuePurposeChange = () => {
   form.item_usage_type = form.issue_purpose === 'project_cost' ? 'project' : 'commercial';
   if (form.issue_purpose !== 'project_cost') {
     form.project_id = null;
+    form.purchase_order_id = null;
     availableLots.value = [];
+  } else {
+    // Khi chuyển sang project_cost: reset sales order, vì không liên quan
+    form.order_id = null;
   }
-  // Xóa tồn kho đã cache vì nguồn dữ liệu thay đổi (lots vs inventory_balances)
   form.items.forEach(item => { item._qtyOnHand = null; });
 };
 

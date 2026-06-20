@@ -720,6 +720,7 @@ Route::middleware('auth')->group(function () {
         Route::get('projects',      [SearchController::class, 'projects'])->name('projects');
         Route::get('warehouses',    [SearchController::class, 'warehouses'])->name('warehouses');
         Route::get('services',           [SearchController::class, 'services'])->name('services');
-        Route::get('warehouse-products', [SearchController::class, 'warehouseProducts'])->name('warehouse-products');
+        Route::get('warehouse-products',      [SearchController::class, 'warehouseProducts'])->name('warehouse-products');
+        Route::get('project-purchase-orders', [SearchController::class, 'projectPurchaseOrders'])->name('project-purchase-orders');
     });
 });
