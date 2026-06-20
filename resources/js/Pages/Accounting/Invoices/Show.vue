@@ -73,6 +73,27 @@
         </button>
       </div>
 
+      <!-- Banner: giá vốn chưa ghi nhận -->
+      <div v-if="invoice.cogs_status === 'cogs_missing'"
+        class="bg-orange-50 border border-orange-200 rounded-xl p-4 flex items-start gap-3">
+        <svg class="w-5 h-5 text-orange-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        </svg>
+        <div class="flex-1">
+          <p class="text-sm font-semibold text-orange-900">Giá vốn (TK 632) chưa được ghi nhận</p>
+          <p class="text-sm text-orange-700 mt-0.5">
+            Hóa đơn đã ghi doanh thu nhưng chưa có phiếu xuất kho xác nhận cho đơn hàng này.
+            Tạo và xác nhận phiếu xuất kho (XK-) để hệ thống tự ghi <strong>Nợ 632 / Có 1561</strong>.
+          </p>
+        </div>
+        <Link v-if="invoice.order"
+          :href="route('sales.orders.show', invoice.order.id)"
+          class="flex-shrink-0 px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white rounded-lg text-sm font-medium whitespace-nowrap">
+          Đến đơn hàng
+        </Link>
+      </div>
+
       <div class="grid grid-cols-3 gap-5">
         <!-- Info -->
         <div class="col-span-2 space-y-5">
@@ -117,6 +138,44 @@
               <dt class="text-xs text-gray-500 uppercase tracking-wide mb-1">Ghi chú</dt>
               <dd class="text-sm text-gray-700 whitespace-pre-wrap">{{ invoice.notes }}</dd>
             </div>
+          </div>
+
+          <!-- Line items -->
+          <div v-if="invoice.items?.length" class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+            <div class="px-5 py-4 border-b border-gray-100">
+              <h2 class="text-base font-semibold text-gray-900">Chi tiết hàng hóa / dịch vụ</h2>
+            </div>
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th class="text-left px-4 py-3 font-semibold text-gray-600 w-8">#</th>
+                  <th class="text-left px-4 py-3 font-semibold text-gray-600">Diễn giải</th>
+                  <th class="text-right px-4 py-3 font-semibold text-gray-600 w-20">SL</th>
+                  <th class="text-right px-4 py-3 font-semibold text-gray-600 w-32">Đơn giá</th>
+                  <th class="text-right px-4 py-3 font-semibold text-gray-600 w-24">Thành tiền</th>
+                  <th class="text-center px-4 py-3 font-semibold text-gray-600 w-20">Thuế suất</th>
+                  <th class="text-right px-4 py-3 font-semibold text-gray-600 w-28">Tiền thuế</th>
+                  <th class="text-right px-4 py-3 font-semibold text-gray-600 w-32">Tổng dòng</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <tr v-for="(item, idx) in invoice.items" :key="idx" class="hover:bg-gray-50">
+                  <td class="px-4 py-3 text-gray-400 text-xs">{{ idx + 1 }}</td>
+                  <td class="px-4 py-3 text-gray-800">{{ item.description }}</td>
+                  <td class="px-4 py-3 text-right text-gray-700">{{ item.quantity }}</td>
+                  <td class="px-4 py-3 text-right text-gray-700">{{ formatVnd(item.unit_price) }}</td>
+                  <td class="px-4 py-3 text-right text-gray-700">{{ formatVnd(Math.round(item.quantity * item.unit_price)) }}</td>
+                  <td class="px-4 py-3 text-center">
+                    <span class="text-xs font-medium px-2 py-0.5 rounded-full"
+                      :class="item.vat_rate === 0 ? 'bg-gray-100 text-gray-500' : 'bg-blue-50 text-blue-700'">
+                      {{ item.vat_rate === 0 ? 'KCT' : item.vat_rate + '%' }}
+                    </span>
+                  </td>
+                  <td class="px-4 py-3 text-right text-gray-700">{{ formatVnd(item.tax_amount) }}</td>
+                  <td class="px-4 py-3 text-right font-medium text-gray-900">{{ formatVnd(Math.round(item.quantity * item.unit_price) + item.tax_amount) }}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
 
           <!-- E-Invoice section -->

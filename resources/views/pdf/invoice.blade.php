@@ -126,6 +126,37 @@ if (!empty($co['company_logo'])) {
     </div>
   </div>
 
+  @php $invItems = $invoice->items->sortBy('sort_order'); @endphp
+  @if($invItems->count())
+  <h3 style="font-size:13px; font-weight:bold; margin-bottom:10px; color:#374151;">Chi tiết hàng hóa / dịch vụ</h3>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:4%">#</th>
+        <th>Diễn giải</th>
+        <th class="right" style="width:8%">SL</th>
+        <th class="right" style="width:14%">Đơn giá</th>
+        <th class="right" style="width:8%">Thuế suất</th>
+        <th class="right" style="width:12%">Tiền thuế</th>
+        <th class="right" style="width:14%">Thành tiền</th>
+      </tr>
+    </thead>
+    <tbody>
+      @foreach($invItems as $idx => $item)
+      <tr>
+        <td>{{ $idx + 1 }}</td>
+        <td>{{ $item->description }}</td>
+        <td class="right">{{ rtrim(rtrim(number_format((float)$item->quantity, 3, ',', '.'), '0'), ',') }}</td>
+        <td class="right">{{ number_format((float)$item->unit_price, 0, ',', '.') }} đ</td>
+        <td class="right">{{ (int)$item->vat_rate }}%</td>
+        <td class="right">{{ number_format($item->tax_amount, 0, ',', '.') }} đ</td>
+        <td class="right">{{ number_format((float)$item->quantity * (float)$item->unit_price + $item->tax_amount, 0, ',', '.') }} đ</td>
+      </tr>
+      @endforeach
+    </tbody>
+  </table>
+  @endif
+
   <div class="totals">
     <div class="totals-box">
       <div class="totals-row">

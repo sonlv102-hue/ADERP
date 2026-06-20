@@ -89,6 +89,11 @@ class Invoice extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    public function items(): HasMany
+    {
+        return $this->hasMany(InvoiceItem::class)->orderBy('sort_order');
+    }
+
     public function payments(): HasMany
     {
         return $this->hasMany(Payment::class);

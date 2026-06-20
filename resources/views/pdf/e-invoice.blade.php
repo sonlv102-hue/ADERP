@@ -93,9 +93,9 @@
   </div>
 </div>
 
-<!-- Items table -->
+<!-- Items table — nguồn: invoice_items (VAT per-line) -->
 @php
-  $items = $invoice->order?->items ?? collect();
+  $items = $invoice->items->sortBy('sort_order');
 @endphp
 
 <table class="items">
@@ -104,21 +104,26 @@
       <th style="width:4%">STT</th>
       <th>Tên hàng hóa, dịch vụ</th>
       <th style="width:8%; text-align:center">ĐVT</th>
-      <th style="width:8%; text-align:center">SL</th>
-      <th style="width:14%; text-align:right">Đơn giá</th>
-      <th style="width:14%; text-align:right">Thành tiền</th>
+      <th style="width:7%; text-align:center">SL</th>
+      <th style="width:13%; text-align:right">Đơn giá</th>
+      <th style="width:13%; text-align:right">Thành tiền</th>
+      <th style="width:7%; text-align:center">Thuế suất</th>
+      <th style="width:12%; text-align:right">Tiền thuế</th>
     </tr>
   </thead>
   <tbody>
     @if($items->count())
-      @foreach($items as $i => $item)
+      @foreach($items as $idx => $item)
+      @php $lineSubtotal = round((float)$item->quantity * (float)$item->unit_price); @endphp
       <tr>
-        <td class="center">{{ $i + 1 }}</td>
-        <td>{{ $item->name }}</td>
+        <td class="center">{{ $idx + 1 }}</td>
+        <td>{{ $item->description }}</td>
         <td class="center">—</td>
-        <td class="center">{{ number_format($item->quantity) }}</td>
-        <td class="right">{{ number_format($item->unit_price, 0, ',', '.') }}</td>
-        <td class="right">{{ number_format($item->subtotal, 0, ',', '.') }}</td>
+        <td class="center">{{ rtrim(rtrim(number_format((float)$item->quantity, 3, ',', '.'), '0'), ',') }}</td>
+        <td class="right">{{ number_format((float)$item->unit_price, 0, ',', '.') }}</td>
+        <td class="right">{{ number_format($lineSubtotal, 0, ',', '.') }}</td>
+        <td class="center">{{ (int)$item->vat_rate === 0 ? 'KCT' : (int)$item->vat_rate . '%' }}</td>
+        <td class="right">{{ number_format($item->tax_amount, 0, ',', '.') }}</td>
       </tr>
       @endforeach
     @else
@@ -127,28 +132,44 @@
         <td>{{ $invoice->order?->code ? 'Theo đơn hàng ' . $invoice->order->code : 'Hàng hóa / Dịch vụ' }}</td>
         <td class="center">—</td>
         <td class="center">1</td>
-        <td class="right">{{ number_format($invoice->subtotal, 0, ',', '.') }}</td>
-        <td class="right">{{ number_format($invoice->subtotal, 0, ',', '.') }}</td>
+        <td class="right">{{ number_format((float)$invoice->subtotal, 0, ',', '.') }}</td>
+        <td class="right">{{ number_format((float)$invoice->subtotal, 0, ',', '.') }}</td>
+        <td class="center">—</td>
+        <td class="right">{{ number_format((float)$invoice->tax_amount, 0, ',', '.') }}</td>
       </tr>
     @endif
   </tbody>
 </table>
 
-<!-- Totals -->
+<!-- Totals — nhóm theo thuế suất nếu có nhiều mức -->
+@php
+  $vatGroups = $items->count()
+    ? $items->groupBy(fn ($i) => (int)$i->vat_rate)
+    : collect();
+@endphp
 <div class="totals">
   <table>
     <tr>
       <td class="label">Cộng tiền hàng:</td>
-      <td class="amount">{{ number_format($invoice->subtotal, 0, ',', '.') }} ₫</td>
+      <td class="amount">{{ number_format((float)$invoice->subtotal, 0, ',', '.') }} ₫</td>
     </tr>
-    @php $vatRate = $invoice->subtotal > 0 ? round($invoice->tax_amount / $invoice->subtotal * 100) : 10; @endphp
-    <tr>
-      <td class="label">Thuế GTGT ({{ $vatRate }}%):</td>
-      <td class="amount">{{ number_format($invoice->tax_amount, 0, ',', '.') }} ₫</td>
-    </tr>
+    @if($vatGroups->count() > 1)
+      @foreach($vatGroups as $rate => $group)
+      <tr>
+        <td class="label">Thuế GTGT {{ $rate === 0 ? 'KCT' : $rate . '%' }}:</td>
+        <td class="amount">{{ number_format($group->sum('tax_amount'), 0, ',', '.') }} ₫</td>
+      </tr>
+      @endforeach
+    @else
+      @php $vatRate = $vatGroups->count() ? $vatGroups->keys()->first() : 0; @endphp
+      <tr>
+        <td class="label">Thuế GTGT {{ $vatRate === 0 ? 'KCT' : $vatRate . '%' }}:</td>
+        <td class="amount">{{ number_format((float)$invoice->tax_amount, 0, ',', '.') }} ₫</td>
+      </tr>
+    @endif
     <tr class="grand">
       <td class="label">Tổng thanh toán:</td>
-      <td class="amount">{{ number_format($invoice->total, 0, ',', '.') }} ₫</td>
+      <td class="amount">{{ number_format((float)$invoice->total, 0, ',', '.') }} ₫</td>
     </tr>
   </table>
 </div>

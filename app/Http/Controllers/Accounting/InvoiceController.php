@@ -4,19 +4,23 @@ namespace App\Http\Controllers\Accounting;
 
 use App\Enums\InvoiceStatus;
 use App\Enums\PaymentMethod;
+use App\Enums\StockExitStatus;
 use App\Http\Controllers\Controller;
 use App\Models\AccountCode;
 use App\Models\Contract;
 use App\Models\Customer;
 use App\Models\Fund;
 use App\Models\Invoice;
+use App\Models\InvoiceItem;
 use App\Models\Order;
 use App\Models\OrderItem;
+use App\Models\StockExit;
 use App\Services\CustomerAdvanceService;
 use App\Services\InvoiceService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -66,7 +70,7 @@ class InvoiceController extends Controller
         return Inertia::render('Accounting/Invoices/Form', [
             'nextCode'        => Invoice::generateCode(),
             'customers'       => Customer::orderBy('name')->get(['id', 'name']),
-            'orders'          => $this->ordersWithTotal(),
+            'orders'          => $this->ordersWithItems(),
             'contracts'       => Contract::orderByDesc('id')->get(['id', 'code', 'title', 'value', 'order_id']),
             'methods'         => collect(PaymentMethod::cases())->map(fn ($m) => ['value' => $m->value, 'label' => $m->label()]),
             'revenueAccounts' => $this->revenueAccountOptions(),
@@ -82,12 +86,17 @@ class InvoiceController extends Controller
             'contract_id'          => ['nullable', 'exists:contracts,id'],
             'issue_date'           => ['required', 'date'],
             'due_date'             => ['nullable', 'date', 'after_or_equal:issue_date'],
-            'subtotal'             => ['required', 'numeric', 'min:0'],
-            'tax_amount'           => ['required', 'numeric', 'min:0'],
-            'total'                => ['required', 'numeric', 'min:0'],
             'notes'                => ['nullable', 'string'],
             'revenue_account_code' => ['nullable', 'string', 'max:10', 'exists:account_codes,code'],
+            'items'                => ['required', 'array', 'min:1'],
+            'items.*.description'  => ['nullable', 'string', 'max:500'],
+            'items.*.quantity'     => ['required', 'numeric', 'min:0'],
+            'items.*.unit_price'   => ['required', 'numeric', 'min:0'],
+            'items.*.vat_rate'     => ['required', 'numeric', 'in:0,5,8,10'],
         ]);
+
+        [$subtotal, $taxAmount] = $this->computeFromItems($data['items']);
+        $total = $subtotal + $taxAmount;
 
         // Kiểm tra tổng hóa đơn không vượt giá trị đơn hàng
         if (!empty($data['order_id'])) {
@@ -96,16 +105,32 @@ class InvoiceController extends Controller
                 $existingTotal = Invoice::where('order_id', $data['order_id'])
                     ->where('status', '!=', InvoiceStatus::Cancelled->value)
                     ->sum('total');
-                $newTotal = (float) $data['total'];
-                if ($existingTotal + $newTotal > (float) $order->total * 1.001) {
+                if ($existingTotal + $total > (float) $order->total * 1.001) {
                     return back()
-                        ->withErrors(['total' => "Tổng hóa đơn (" . number_format($existingTotal + $newTotal, 0, ',', '.') . " ₫) vượt quá giá trị đơn hàng {$order->code} (" . number_format((float) $order->total, 0, ',', '.') . " ₫)."])
+                        ->withErrors(['items' => "Tổng hóa đơn (" . number_format($existingTotal + $total, 0, ',', '.') . " ₫) vượt quá giá trị đơn hàng {$order->code} (" . number_format((float) $order->total, 0, ',', '.') . " ₫)."])
                         ->withInput();
                 }
             }
         }
 
-        $invoice = Invoice::create([...$data, 'created_by' => auth()->id()]);
+        $invoice = DB::transaction(function () use ($data, $subtotal, $taxAmount, $total) {
+            $inv = Invoice::create([
+                'code'                 => $data['code'],
+                'customer_id'          => $data['customer_id'],
+                'order_id'             => $data['order_id'] ?? null,
+                'contract_id'          => $data['contract_id'] ?? null,
+                'issue_date'           => $data['issue_date'],
+                'due_date'             => $data['due_date'] ?? null,
+                'notes'                => $data['notes'] ?? null,
+                'revenue_account_code' => $data['revenue_account_code'] ?? null,
+                'subtotal'             => $subtotal,
+                'tax_amount'           => $taxAmount,
+                'total'                => $total,
+                'created_by'           => auth()->id(),
+            ]);
+            $this->saveInvoiceItems($inv, $data['items']);
+            return $inv;
+        });
 
         // Kiểm tra hạn mức công nợ khách hàng
         $warning = $this->checkCreditLimit($invoice->customer_id, (float) $invoice->total);
@@ -131,6 +156,7 @@ class InvoiceController extends Controller
         $invoice->load([
             'customer' => fn ($q) => $q->withTrashed(),
             'order', 'contract', 'creator',
+            'items',
             'payments.creator',
             'attachments.creator',
             'advanceAllocations' => fn ($q) => $q->with(['advance', 'creator'])->orderBy('allocation_date'),
@@ -191,7 +217,15 @@ class InvoiceController extends Controller
                     'mime_type'  => $a->mime_type,
                     'created_by' => $a->creator->name,
                 ]),
+                'items'           => $invoice->items->sortBy('sort_order')->values()->map(fn ($i) => [
+                    'description' => $i->description,
+                    'quantity'    => (float) $i->quantity,
+                    'unit_price'  => (float) $i->unit_price,
+                    'vat_rate'    => (float) $i->vat_rate,
+                    'tax_amount'  => (int) $i->tax_amount,
+                ])->all(),
                 'allowed_actions' => $this->allowedActions($invoice),
+                'cogs_status'     => $this->cogsStatus($invoice),
             ],
             'methods'            => collect(PaymentMethod::cases())->map(fn ($m) => ['value' => $m->value, 'label' => $m->label()]),
             'funds'              => Fund::where('is_active', true)->orderBy('name')->get(['id', 'name', 'type']),
@@ -207,11 +241,20 @@ class InvoiceController extends Controller
 
     public function edit(Invoice $invoice): Response
     {
+        $invoice->load('items');
         return Inertia::render('Accounting/Invoices/Form', [
-            'invoice'         => $invoice,
+            'invoice'         => array_merge($invoice->toArray(), [
+                'items' => $invoice->items->map(fn ($i) => [
+                    'description' => $i->description,
+                    'quantity'    => (float) $i->quantity,
+                    'unit_price'  => (float) $i->unit_price,
+                    'vat_rate'    => (float) $i->vat_rate,
+                    'tax_amount'  => $i->tax_amount,
+                ])->values()->all(),
+            ]),
             'nextCode'        => $invoice->code,
             'customers'       => Customer::orderBy('name')->get(['id', 'name']),
-            'orders'          => $this->ordersWithTotal(),
+            'orders'          => $this->ordersWithItems(),
             'contracts'       => Contract::orderByDesc('id')->get(['id', 'code', 'title', 'value', 'order_id']),
             'methods'         => collect(PaymentMethod::cases())->map(fn ($m) => ['value' => $m->value, 'label' => $m->label()]),
             'revenueAccounts' => $this->revenueAccountOptions(),
@@ -228,16 +271,55 @@ class InvoiceController extends Controller
             ->all();
     }
 
-    private function ordersWithTotal(): \Illuminate\Support\Collection
+    private function ordersWithItems(): \Illuminate\Support\Collection
     {
-        return Order::with('items:id,order_id,quantity,unit_price')
+        return Order::with('items:id,order_id,name,quantity,unit_price,vat_rate')
             ->orderByDesc('id')
             ->get(['id', 'code'])
             ->map(fn ($o) => [
                 'id'    => $o->id,
                 'code'  => $o->code,
                 'total' => (float) $o->items->sum(fn ($i) => $i->quantity * $i->unit_price),
+                'items' => $o->items->map(fn ($i) => [
+                    'description' => $i->name,
+                    'quantity'    => (float) $i->quantity,
+                    'unit_price'  => (float) $i->unit_price,
+                    'vat_rate'    => (float) ($i->vat_rate ?? 0),
+                    'tax_amount'  => (int) round((float) $i->quantity * (float) $i->unit_price * (float) ($i->vat_rate ?? 0) / 100),
+                ])->values()->all(),
             ]);
+    }
+
+    // Server tính lại tax_amount từng dòng rồi cộng — không tin số client gửi lên.
+    // Trả về [subtotal, taxTotal].
+    private function computeFromItems(array $items): array
+    {
+        $subtotal = 0.0;
+        $taxTotal = 0;
+        foreach ($items as $item) {
+            $lineSubtotal = (float) $item['quantity'] * (float) $item['unit_price'];
+            $lineTax      = (int) round($lineSubtotal * (float) $item['vat_rate'] / 100);
+            $subtotal    += $lineSubtotal;
+            $taxTotal    += $lineTax;
+        }
+        return [$subtotal, $taxTotal];
+    }
+
+    private function saveInvoiceItems(Invoice $invoice, array $items): void
+    {
+        $invoice->items()->delete();
+        foreach ($items as $sort => $item) {
+            $lineSubtotal = (float) $item['quantity'] * (float) $item['unit_price'];
+            InvoiceItem::create([
+                'invoice_id'  => $invoice->id,
+                'sort_order'  => $sort,
+                'description' => $item['description'] ?? null,
+                'quantity'    => $item['quantity'],
+                'unit_price'  => $item['unit_price'],
+                'vat_rate'    => $item['vat_rate'],
+                'tax_amount'  => (int) round($lineSubtotal * (float) $item['vat_rate'] / 100),
+            ]);
+        }
     }
 
     public function update(Request $request, Invoice $invoice): RedirectResponse
@@ -252,14 +334,32 @@ class InvoiceController extends Controller
             'contract_id'          => ['nullable', 'exists:contracts,id'],
             'issue_date'           => ['required', 'date'],
             'due_date'             => ['nullable', 'date', 'after_or_equal:issue_date'],
-            'subtotal'             => ['required', 'numeric', 'min:0'],
-            'tax_amount'           => ['required', 'numeric', 'min:0'],
-            'total'                => ['required', 'numeric', 'min:0'],
             'notes'                => ['nullable', 'string'],
             'revenue_account_code' => ['nullable', 'string', 'max:10', 'exists:account_codes,code'],
+            'items'                => ['required', 'array', 'min:1'],
+            'items.*.description'  => ['nullable', 'string', 'max:500'],
+            'items.*.quantity'     => ['required', 'numeric', 'min:0'],
+            'items.*.unit_price'   => ['required', 'numeric', 'min:0'],
+            'items.*.vat_rate'     => ['required', 'numeric', 'in:0,5,8,10'],
         ]);
 
-        $invoice->update($data);
+        [$subtotal, $taxAmount] = $this->computeFromItems($data['items']);
+
+        DB::transaction(function () use ($invoice, $data, $subtotal, $taxAmount) {
+            $invoice->update([
+                'customer_id'          => $data['customer_id'],
+                'order_id'             => $data['order_id'] ?? null,
+                'contract_id'          => $data['contract_id'] ?? null,
+                'issue_date'           => $data['issue_date'],
+                'due_date'             => $data['due_date'] ?? null,
+                'notes'                => $data['notes'] ?? null,
+                'revenue_account_code' => $data['revenue_account_code'] ?? null,
+                'subtotal'             => $subtotal,
+                'tax_amount'           => $taxAmount,
+                'total'                => $subtotal + $taxAmount,
+            ]);
+            $this->saveInvoiceItems($invoice, $data['items']);
+        });
 
         return redirect()->route('accounting.invoices.show', $invoice)
             ->with('success', 'Đã cập nhật hóa đơn.');
@@ -326,7 +426,7 @@ class InvoiceController extends Controller
 
     public function pdf(Invoice $invoice)
     {
-        $invoice->load(['customer', 'order', 'contract', 'creator', 'payments']);
+        $invoice->load(['customer', 'order', 'contract', 'creator', 'payments', 'items']);
         $pdf = Pdf::loadView('pdf.invoice', compact('invoice'))
             ->setPaper('a4', 'portrait');
 
@@ -374,12 +474,57 @@ class InvoiceController extends Controller
 
     public function eInvoicePdf(Invoice $invoice)
     {
-        $invoice->load(['customer', 'order', 'creator']);
+        $invoice->load(['customer', 'order', 'creator', 'items']);
         $company = \App\Models\Setting::getGroup('company');
         $pdf = Pdf::loadView('pdf.e-invoice', compact('invoice', 'company'))
             ->setPaper('a4', 'portrait');
 
         return $pdf->download("HDDT-{$invoice->e_inv_series}-{$invoice->e_inv_number}.pdf");
+    }
+
+    /**
+     * Trả về trạng thái COGS của invoice:
+     * - not_applicable: draft/cancelled, standalone, hoặc order không có dòng sản phẩm tồn kho
+     * - cogs_missing:   order có sản phẩm tồn kho nhưng chưa có confirmed exit + JE 63x posted
+     * - cogs_ok:        có confirmed exit VÀ JE 63x posted
+     */
+    private function cogsStatus(Invoice $invoice): string
+    {
+        if (!in_array($invoice->status, [InvoiceStatus::Sent, InvoiceStatus::Overdue, InvoiceStatus::Paid])) {
+            return 'not_applicable';
+        }
+        if (!$invoice->order_id) {
+            return 'not_applicable';
+        }
+
+        $hasInventoryItems = DB::table('order_items')
+            ->where('order_id', $invoice->order_id)
+            ->whereNotNull('product_id')
+            ->exists();
+
+        if (!$hasInventoryItems) {
+            return 'not_applicable';
+        }
+
+        $confirmedExitIds = StockExit::where('order_id', $invoice->order_id)
+            ->where('issue_purpose', 'sale_delivery')
+            ->where('status', StockExitStatus::Confirmed)
+            ->pluck('id');
+
+        if ($confirmedExitIds->isEmpty()) {
+            return 'cogs_missing';
+        }
+
+        $hasCogs = DB::table('journal_entries as je')
+            ->join('journal_entry_lines as jl', 'jl.journal_entry_id', '=', 'je.id')
+            ->where('je.reference_type', 'stock_exit')
+            ->whereIn('je.reference_id', $confirmedExitIds)
+            ->where('je.status', 'posted')
+            ->where('jl.debit', '>', 0)
+            ->whereRaw("jl.account_code LIKE '63%'")
+            ->exists();
+
+        return $hasCogs ? 'cogs_ok' : 'cogs_missing';
     }
 
     private function allowedActions(Invoice $invoice): array
