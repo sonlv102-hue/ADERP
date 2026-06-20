@@ -90,47 +90,47 @@ class ProjectWipService
     }
 
     /**
-     * Ghi nhận chi phí phát sinh dự án vào WIP.
-     * Nợ 154 / Có 627x (chi phí sản xuất chung tương ứng)
+     * Ghi nhận chi phí phát sinh dự án theo Thông tư 133.
+     * Nợ [expense TK theo category] + Nợ 1331 (nếu có VAT) / Có [payment TK].
+     * Debit/credit TK có thể override qua expense.debit_account / credit_account.
      */
     public function createFromExpense(ProjectExpense $expense): void
     {
         $amount = (int) round((float) $expense->amount);
         if ($amount <= 0 || !$expense->project_id) return;
 
-        $creditAccount = match ($expense->category) {
-            ExpenseCategory::Labor     => AccountingSettings::get('project_labor_account', '6271'),
-            ExpenseCategory::Material  => AccountingSettings::get('project_material_account', '6272'),
-            ExpenseCategory::Transport => AccountingSettings::get('project_transport_account', '6278'),
-            ExpenseCategory::Other     => AccountingSettings::get('project_other_account', '6279'),
-        };
+        $vatAmount   = (int) ($expense->vat_amount ?? 0);
+        $debitTk     = $expense->debit_account  ?? $this->resolveDebitAccount($expense);
+        $creditTk    = $expense->credit_account ?? $this->resolveCreditAccount($expense);
+        $projectCode = $expense->project?->code ?? $expense->project_id;
 
-        DB::transaction(function () use ($expense, $amount, $creditAccount) {
-            $projectCode = $expense->project?->code ?? $expense->project_id;
-            $wipAccount  = AccountingSettings::get('project_wip_account', '154');
+        DB::transaction(function () use ($expense, $amount, $vatAmount, $debitTk, $creditTk, $projectCode) {
+            $lines = [
+                ['account' => $debitTk, 'debit' => $amount, 'credit' => 0,
+                 'description' => $expense->description, 'project_id' => $expense->project_id],
+            ];
+
+            if ($vatAmount > 0) {
+                $lines[] = ['account' => '1331', 'debit' => $vatAmount, 'credit' => 0,
+                    'description' => 'Thuế GTGT — ' . $expense->description,
+                    'project_id'  => $expense->project_id];
+            }
+
+            $lines[] = ['account' => $creditTk, 'debit' => 0, 'credit' => $amount + $vatAmount,
+                'description' => $expense->description, 'project_id' => $expense->project_id];
+
             $je = $this->accounting->post(
                 "Chi phí phát sinh dự án {$projectCode}",
                 Carbon::parse($expense->expense_date),
-                [
-                    ['account' => $wipAccount, 'debit' => $amount, 'credit' => 0,
-                     'description' => $expense->description, 'project_id' => $expense->project_id],
-                    ['account' => $creditAccount, 'debit' => 0, 'credit' => $amount,
-                     'description' => $expense->description, 'project_id' => $expense->project_id],
-                ],
+                $lines,
                 ProjectExpense::class, $expense->id, true
             );
-
-            $wipType = match ($expense->category) {
-                ExpenseCategory::Labor    => 'labor',
-                ExpenseCategory::Material => 'material',
-                default                   => 'overhead',
-            };
 
             ProjectWipEntry::create([
                 'project_id'       => $expense->project_id,
                 'source_type'      => ProjectExpense::class,
                 'source_id'        => $expense->id,
-                'cost_type'        => $wipType,
+                'cost_type'        => $expense->category->wipCostType(),
                 'amount'           => $amount,
                 'description'      => $expense->description,
                 'entry_date'       => $expense->expense_date,
@@ -138,6 +138,42 @@ class ProjectWipService
                 'created_by'       => auth()->id(),
             ]);
         });
+    }
+
+    private function resolveDebitAccount(ProjectExpense $expense): string
+    {
+        $settingKey = match ($expense->category) {
+            ExpenseCategory::Labor     => 'project_labor_account',
+            ExpenseCategory::Equipment => 'project_equipment_account',
+            ExpenseCategory::Material  => 'project_material_account',
+            ExpenseCategory::Transport => 'project_transport_account',
+            ExpenseCategory::Other     => 'project_other_account',
+        };
+
+        return AccountingSettings::get($settingKey, $expense->category->defaultDebitAccount());
+    }
+
+    private function resolveCreditAccount(ProjectExpense $expense): string
+    {
+        $method = $expense->payment_method ?? 'payable';
+
+        if ($method === 'cash') {
+            return AccountingSettings::get('cash_account', '1111');
+        }
+        if ($method === 'bank') {
+            return AccountingSettings::get('bank_account', '1121');
+        }
+
+        // payable: dùng TK phải trả của NCC nếu có
+        if ($expense->supplier_id && $expense->relationLoaded('supplier') && $expense->supplier) {
+            return $expense->supplier->payable_account_code ?? '3311';
+        }
+        if ($expense->supplier_id) {
+            $expense->loadMissing('supplier');
+            return $expense->supplier?->payable_account_code ?? '3311';
+        }
+
+        return '3311';
     }
 
     /**

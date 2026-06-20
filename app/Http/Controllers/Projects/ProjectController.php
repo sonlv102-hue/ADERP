@@ -101,6 +101,7 @@ class ProjectController extends Controller
             'members.employee',
             'materials.product',
             'expenses.creator',
+            'expenses.supplier',
         ]);
 
         // Phiếu xuất kho thực tế cho dự án (confirmed + cancelled để truy vết)
@@ -112,6 +113,12 @@ class ProjectController extends Controller
 
         $wipByExitId = ProjectWipEntry::where('project_id', $project->id)
             ->where('source_type', StockExit::class)
+            ->with('journalEntry')
+            ->get()
+            ->keyBy('source_id');
+
+        $wipByExpenseId = ProjectWipEntry::where('project_id', $project->id)
+            ->where('source_type', ProjectExpense::class)
             ->with('journalEntry')
             ->get()
             ->keyBy('source_id');
@@ -220,13 +227,21 @@ class ProjectController extends Controller
                     'stock_exit_id'=> $m->stock_exit_id,
                 ]),
                 'expenses'          => $project->expenses->map(fn ($e) => [
-                    'id'           => $e->id,
-                    'category'     => $e->category->value,
-                    'category_label'=> $e->category->label(),
-                    'description'  => $e->description,
-                    'amount'       => $e->amount,
-                    'expense_date' => $e->expense_date->format('d/m/Y'),
-                    'creator'      => $e->creator?->name,
+                    'id'             => $e->id,
+                    'category'       => $e->category->value,
+                    'category_label' => $e->category->label(),
+                    'description'    => $e->description,
+                    'amount'         => $e->amount,
+                    'expense_date'   => $e->expense_date->format('d/m/Y'),
+                    'creator'        => $e->creator?->name,
+                    'supplier_id'    => $e->supplier_id,
+                    'supplier_name'  => $e->supplier?->name,
+                    'invoice_number' => $e->invoice_number,
+                    'payment_method' => $e->payment_method ?? 'payable',
+                    'vat_amount'     => $e->vat_amount ?? 0,
+                    'debit_account'  => $e->debit_account,
+                    'je_code'        => $wipByExpenseId->get($e->id)?->journalEntry?->code,
+                    'je_id'          => $wipByExpenseId->get($e->id)?->journal_entry_id,
                 ]),
                 'allowed_transitions' => $this->allowedTransitions($project),
             ],
@@ -404,24 +419,35 @@ class ProjectController extends Controller
     public function addExpense(Request $request, Project $project): RedirectResponse
     {
         $data = $request->validate([
-            'category'     => ['required', 'string'],
-            'description'  => ['required', 'string', 'max:255'],
-            'amount'       => ['required', 'numeric', 'min:0'],
-            'expense_date' => ['required', 'date'],
+            'category'            => ['required', 'string'],
+            'description'         => ['required', 'string', 'max:255'],
+            'amount'              => ['required', 'numeric', 'min:0'],
+            'expense_date'        => ['required', 'date'],
+            'supplier_id'         => ['nullable', 'integer', 'exists:suppliers,id'],
+            'purchase_invoice_id' => ['nullable', 'integer'],
+            'invoice_number'      => ['nullable', 'string', 'max:100'],
+            'payment_method'      => ['nullable', 'string', 'in:cash,bank,payable'],
+            'vat_rate'            => ['nullable', 'numeric', 'min:0'],
+            'vat_amount'          => ['nullable', 'integer', 'min:0'],
+            'debit_account'       => ['nullable', 'string', 'max:20'],
+            'credit_account'      => ['nullable', 'string', 'max:20'],
         ]);
 
-        $expense = $project->expenses()->create([
-            ...$data,
-            'created_by' => auth()->id(),
-        ]);
+        try {
+            DB::transaction(function () use ($data, $project) {
+                $expense = $project->expenses()->create([
+                    ...$data,
+                    'created_by' => auth()->id(),
+                ]);
 
-        if ((float) $expense->amount > 0) {
-            $expense->loadMissing('project');
-            try {
-                $this->wip->createFromExpense($expense);
-            } catch (\Throwable $e) {
-                \Log::warning("ProjectWip expense journal failed #{$expense->id}: {$e->getMessage()}");
-            }
+                if ((float) $expense->amount > 0) {
+                    $expense->loadMissing('project');
+                    $this->wip->createFromExpense($expense);
+                }
+            });
+        } catch (\Throwable $e) {
+            \Log::error("addExpense failed project#{$project->id}: {$e->getMessage()}");
+            return back()->with('error', 'Không thể ghi nhận chi phí: ' . $e->getMessage())->withInput();
         }
 
         return back()->with('success', 'Đã ghi nhận chi phí.');

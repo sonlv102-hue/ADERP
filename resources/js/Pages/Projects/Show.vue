@@ -413,20 +413,41 @@
 
         <!-- Expenses tab -->
         <div v-if="activeTab === 'expenses'" class="p-5 space-y-4">
-          <form v-if="can('projects.manage')" @submit.prevent="addExpense" class="grid grid-cols-1 sm:grid-cols-5 gap-3">
-            <select v-model="expenseForm.category" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-              <option v-for="c in expenseCategories" :key="c.value" :value="c.value">{{ c.label }}</option>
-            </select>
-            <input v-model="expenseForm.description" type="text" placeholder="Mô tả chi phí"
-              class="col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
-            <input v-model="expenseForm.amount" type="number" min="0" step="any" placeholder="Số tiền"
-              class="border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
-            <div class="flex gap-2">
+          <form v-if="can('projects.manage')" @submit.prevent="addExpense" class="space-y-2">
+            <!-- Row 1: thông tin bắt buộc -->
+            <div class="grid grid-cols-1 sm:grid-cols-5 gap-3">
+              <select v-model="expenseForm.category" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option v-for="c in expenseCategories" :key="c.value" :value="c.value">{{ c.label }}</option>
+              </select>
+              <input v-model="expenseForm.description" type="text" placeholder="Mô tả chi phí"
+                class="col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
+              <input v-model="expenseForm.amount" type="number" min="0" step="any" placeholder="Số tiền"
+                class="border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
               <input v-model="expenseForm.expense_date" type="date"
-                class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
-              <button type="submit" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-                Thêm
-              </button>
+                class="border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
+            </div>
+            <!-- Row 2: thông tin kế toán (tuỳ chọn) -->
+            <div class="grid grid-cols-1 sm:grid-cols-5 gap-3 items-end">
+              <RemoteSearchSelect
+                v-model="expenseForm.supplier_id"
+                search-url="/search/suppliers"
+                placeholder="NCC (tuỳ chọn)"
+                class="sm:col-span-2"
+              />
+              <select v-model="expenseForm.payment_method" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="payable">Ghi công nợ NCC</option>
+                <option value="cash">Tiền mặt</option>
+                <option value="bank">Chuyển khoản</option>
+              </select>
+              <input v-model="expenseForm.invoice_number" type="text" placeholder="Số hóa đơn (tuỳ chọn)"
+                class="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              <div class="flex gap-2">
+                <input v-model="expenseForm.vat_amount" type="number" min="0" placeholder="VAT"
+                  class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <button type="submit" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">
+                  Thêm
+                </button>
+              </div>
             </div>
           </form>
 
@@ -435,9 +456,10 @@
               <tr>
                 <th class="text-left px-4 py-2 font-semibold text-gray-600">Danh mục</th>
                 <th class="text-left px-4 py-2 font-semibold text-gray-600">Mô tả</th>
+                <th class="text-left px-4 py-2 font-semibold text-gray-600">NCC</th>
                 <th class="text-right px-4 py-2 font-semibold text-gray-600">Số tiền</th>
                 <th class="text-left px-4 py-2 font-semibold text-gray-600">Ngày</th>
-                <th class="text-left px-4 py-2 font-semibold text-gray-600">Người ghi</th>
+                <th class="text-left px-4 py-2 font-semibold text-gray-600">Bút toán</th>
                 <th class="px-4 py-2" />
               </tr>
             </thead>
@@ -446,10 +468,24 @@
                 <td class="px-4 py-2">
                   <span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-xs">{{ e.category_label }}</span>
                 </td>
-                <td class="px-4 py-2 text-gray-800">{{ e.description }}</td>
-                <td class="px-4 py-2 text-right font-medium text-gray-800">{{ formatVnd(e.amount) }}</td>
+                <td class="px-4 py-2 text-gray-800">
+                  <div>{{ e.description }}</div>
+                  <div v-if="e.invoice_number" class="text-xs text-gray-400">HĐ: {{ e.invoice_number }}</div>
+                </td>
+                <td class="px-4 py-2 text-gray-600 text-xs">{{ e.supplier_name ?? '—' }}</td>
+                <td class="px-4 py-2 text-right font-medium text-gray-800">
+                  {{ formatVnd(e.amount) }}
+                  <div v-if="e.vat_amount > 0" class="text-xs text-gray-400">VAT: {{ formatVnd(e.vat_amount) }}</div>
+                </td>
                 <td class="px-4 py-2 text-gray-600">{{ e.expense_date }}</td>
-                <td class="px-4 py-2 text-gray-500 text-xs">{{ e.creator ?? '—' }}</td>
+                <td class="px-4 py-2">
+                  <Link v-if="e.je_id"
+                    :href="route('accounting.journal-entries.show', e.je_id)"
+                    class="text-xs text-blue-600 hover:underline font-mono">
+                    {{ e.je_code }}
+                  </Link>
+                  <span v-else class="text-xs text-amber-500">Chưa có BT</span>
+                </td>
                 <td class="px-4 py-2 text-right">
                   <button v-if="can('projects.manage')" @click="removeExpense(e.id)" class="text-gray-400 hover:text-red-500">
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -459,10 +495,10 @@
                 </td>
               </tr>
               <tr v-if="!project.expenses.length">
-                <td colspan="6" class="px-4 py-8 text-center text-gray-400">Chưa có chi phí nào</td>
+                <td colspan="7" class="px-4 py-8 text-center text-gray-400">Chưa có chi phí nào</td>
               </tr>
               <tr v-if="project.expenses.length" class="bg-gray-50 font-semibold">
-                <td colspan="2" class="px-4 py-2 text-right text-gray-700">Tổng chi phí phát sinh:</td>
+                <td colspan="3" class="px-4 py-2 text-right text-gray-700">Tổng chi phí phát sinh:</td>
                 <td class="px-4 py-2 text-right text-gray-900">{{ formatVnd(project.total_expenses) }}</td>
                 <td colspan="3" />
               </tr>
@@ -883,6 +919,7 @@ import { ref, computed, reactive, watch } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
+import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 import { usePermission } from '@/composables/usePermission';
 import { useCurrency } from '@/composables/useCurrency';
 
@@ -1097,11 +1134,27 @@ const removeMember = (memberId) => {
 };
 
 // Expense form
-const expenseForm = reactive({ category: 'other', description: '', amount: '', expense_date: '' });
+const expenseForm = reactive({
+  category: 'other',
+  description: '',
+  amount: '',
+  expense_date: '',
+  supplier_id: null,
+  payment_method: 'payable',
+  invoice_number: '',
+  vat_amount: '',
+});
 const addExpense = () => {
   router.post(route('projects.projects.expenses.store', props.project.id), expenseForm, {
     preserveScroll: true,
-    onSuccess: () => { expenseForm.description = ''; expenseForm.amount = ''; expenseForm.expense_date = ''; },
+    onSuccess: () => {
+      expenseForm.description = '';
+      expenseForm.amount = '';
+      expenseForm.expense_date = '';
+      expenseForm.supplier_id = null;
+      expenseForm.invoice_number = '';
+      expenseForm.vat_amount = '';
+    },
   });
 };
 const removeExpense = (expenseId) => {
