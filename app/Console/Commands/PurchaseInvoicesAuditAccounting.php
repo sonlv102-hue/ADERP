@@ -193,8 +193,8 @@ class PurchaseInvoicesAuditAccounting extends Command
                         $sub2->select(DB::raw(1))
                             ->from('journal_entries as je')
                             ->join('journal_entry_lines as jel', 'jel.journal_entry_id', '=', 'je.id')
-                            ->whereColumn('je.source_id', 'se2.id')
-                            ->where('je.source_type', 'stock_entry')
+                            ->whereColumn('je.reference_id', 'se2.id')
+                            ->where('je.reference_type', 'stock_entry')
                             ->where('je.status', 'posted')
                             ->where('jel.account_code', 'like', '156%')
                             ->where('jel.debit', '>', 0);
@@ -218,7 +218,7 @@ class PurchaseInvoicesAuditAccounting extends Command
             $je1561 = DB::table('journal_entries as je')
                 ->join('journal_entry_lines as jel', 'jel.journal_entry_id', '=', 'je.id')
                 ->join('stock_entries as se', function ($join) use ($r) {
-                    $join->on('se.id', '=', 'je.source_id')
+                    $join->on('se.id', '=', 'je.reference_id')
                          ->whereExists(function ($sub) use ($r) {
                              $sub->select(DB::raw(1))
                                  ->from('purchase_orders as po')
@@ -227,7 +227,7 @@ class PurchaseInvoicesAuditAccounting extends Command
                                  ->where('pi.id', $r->id);
                          });
                 })
-                ->where('je.source_type', 'stock_entry')
+                ->where('je.reference_type', 'stock_entry')
                 ->where('je.status', 'posted')
                 ->where('jel.account_code', 'like', '156%')
                 ->where('jel.debit', '>', 0)
@@ -268,8 +268,8 @@ class PurchaseInvoicesAuditAccounting extends Command
                 $sub->select(DB::raw(1))
                     ->from('journal_entries as je')
                     ->join('journal_entry_lines as jel', 'jel.journal_entry_id', '=', 'je.id')
-                    ->where('je.source_type', 'purchase_invoice_payment')
-                    ->whereColumn('je.source_id', 'pip.id')
+                    ->where('je.reference_type', 'purchase_invoice_payment')
+                    ->whereColumn('je.reference_id', 'pip.id')
                     ->where('je.status', 'posted')
                     ->where(fn ($q) => $q->where('jel.account_code', 'like', '331%')->where('jel.debit', '>', 0));
             })
@@ -287,8 +287,8 @@ class PurchaseInvoicesAuditAccounting extends Command
         $issues = $rows->filter(function ($r) {
             $je331 = DB::table('journal_entries as je')
                 ->join('journal_entry_lines as jel', 'jel.journal_entry_id', '=', 'je.id')
-                ->where('je.source_type', 'purchase_invoice_payment')
-                ->where('je.source_id', $r->pip_id)
+                ->where('je.reference_type', 'purchase_invoice_payment')
+                ->where('je.reference_id', $r->pip_id)
                 ->where('je.status', 'posted')
                 ->where('jel.account_code', 'like', '331%')
                 ->where('jel.debit', '>', 0)

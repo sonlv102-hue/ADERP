@@ -244,7 +244,7 @@ class VatAudit extends Command
             })
             ->select([
                 'inv.code',
-                'inv.invoice_date',
+                'inv.issue_date',
                 'inv.subtotal',
                 'inv.tax_amount',
                 'inv.total',
@@ -281,11 +281,11 @@ class VatAudit extends Command
             ->whereIn('je.status', ['posted'])
             ->selectRaw('
                 inv.code as invoice_code,
-                inv.invoice_date,
+                inv.issue_date,
                 inv.tax_amount as invoice_vat,
                 SUM(jel.credit) as je_vat
             ')
-            ->groupBy('inv.code', 'inv.invoice_date', 'inv.tax_amount')
+            ->groupBy('inv.code', 'inv.issue_date', 'inv.tax_amount')
             ->havingRaw('ABS(SUM(jel.credit) - inv.tax_amount) > 1')
             ->limit($limit)
             ->get();
@@ -318,13 +318,13 @@ class VatAudit extends Command
             ->where('inv.tax_amount', '>', 0)
             ->selectRaw('
                 inv.code as invoice_code,
-                inv.invoice_date,
+                inv.issue_date,
                 inv.subtotal,
                 inv.tax_amount,
                 inv.total,
                 SUM(jel.credit) as je_revenue
             ')
-            ->groupBy('inv.code', 'inv.invoice_date', 'inv.subtotal', 'inv.tax_amount', 'inv.total')
+            ->groupBy('inv.code', 'inv.issue_date', 'inv.subtotal', 'inv.tax_amount', 'inv.total')
             // Cờ đỏ: JE doanh thu > subtotal + 1% dung sai (nghĩa là bao gồm cả VAT)
             ->havingRaw('SUM(jel.credit) > inv.subtotal * 1.01')
             ->limit($limit)
