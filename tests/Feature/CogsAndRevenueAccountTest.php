@@ -10,6 +10,7 @@ use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
 use App\Models\Order;
 use App\Models\Product;
+use App\Models\Service;
 use App\Models\User;
 use App\Services\InvoiceService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -35,12 +36,17 @@ class CogsAndRevenueAccountTest extends TestCase
         $this->actingAs($this->user);
         $this->invoiceService = app(InvoiceService::class);
 
+        \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'accounting.view', 'guard_name' => 'web']);
+        $this->user->givePermissionTo('accounting.view');
+
         foreach ([
             ['code' => '131',   'name' => 'Phải thu KH',      'type' => 'asset',     'normal_balance' => 'debit',  'is_detail' => false],
             ['code' => '1311',  'name' => 'Phải thu KH - DN', 'type' => 'asset',     'normal_balance' => 'debit',  'is_detail' => true],
             ['code' => '5111',  'name' => 'DT hàng hóa',      'type' => 'revenue',   'normal_balance' => 'credit', 'is_detail' => true],
             ['code' => '5113',  'name' => 'DT dịch vụ',       'type' => 'revenue',   'normal_balance' => 'credit', 'is_detail' => true],
             ['code' => '33311', 'name' => 'Thuế GTGT đầu ra', 'type' => 'liability', 'normal_balance' => 'credit', 'is_detail' => true],
+            ['code' => '632',   'name' => 'Giá vốn hàng bán', 'type' => 'expense',   'normal_balance' => 'debit',  'is_detail' => true],
+            ['code' => '1561',  'name' => 'Giá mua hàng hóa', 'type' => 'asset',     'normal_balance' => 'debit',  'is_detail' => true],
         ] as $ac) {
             AccountCode::firstOrCreate(['code' => $ac['code']], array_merge($ac, [
                 'level' => 3, 'parent_code' => null,
@@ -263,5 +269,159 @@ class CogsAndRevenueAccountTest extends TestCase
 
         $this->assertNotNull($jel, 'Fallback phải vào 5111');
         $this->assertEquals(3_000_000, (int) $jel->credit);
+    }
+
+    // ─── C: COGS status banner ───────────────────────────────────────────────
+
+    private static int $exitSeq = 0;
+    private static int $jeSeq   = 0;
+
+    private function makeWarehouse(): int
+    {
+        return DB::table('warehouses')->insertGetId([
+            'name' => 'Test Warehouse', 'is_active' => true,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+    }
+
+    private function makeConfirmedExit(int $orderId, int $warehouseId): int
+    {
+        self::$exitSeq++;
+        return DB::table('stock_exits')->insertGetId([
+            'code'          => 'XK-CTEST-' . self::$exitSeq,
+            'order_id'      => $orderId,
+            'warehouse_id'  => $warehouseId,
+            'exit_date'     => '2026-06-01',
+            'status'        => 'confirmed',
+            'issue_purpose' => 'sale_delivery',
+            'created_by'    => $this->user->id,
+            'created_at'    => now(), 'updated_at' => now(),
+        ]);
+    }
+
+    private function makeCogsJe(int $exitId): void
+    {
+        self::$jeSeq++;
+        $jeId = DB::table('journal_entries')->insertGetId([
+            'code'           => 'BT-CTEST-' . self::$jeSeq,
+            'description'    => 'Giá vốn test',
+            'entry_date'     => '2026-06-01',
+            'reference_type' => 'stock_exit',
+            'reference_id'   => $exitId,
+            'status'         => 'posted',
+            'created_by'     => $this->user->id,
+            'created_at'     => now(), 'updated_at' => now(),
+        ]);
+        DB::table('journal_entry_lines')->insert([
+            ['journal_entry_id' => $jeId, 'account_code' => '632',  'debit' => 4_000_000, 'credit' => 0,         'description' => 'COGS', 'created_at' => now(), 'updated_at' => now()],
+            ['journal_entry_id' => $jeId, 'account_code' => '1561', 'debit' => 0,         'credit' => 4_000_000, 'description' => 'Kho',  'created_at' => now(), 'updated_at' => now()],
+        ]);
+    }
+
+    /**
+     * C1: Invoice sent có order_id, order không có dòng sản phẩm tồn kho → not_applicable.
+     */
+    public function test_cogs_status_not_applicable_when_no_inventory_items(): void
+    {
+        $order   = $this->makeOrder();
+        $invoice = $this->makeInvoice($order->id, 5_000_000, 500_000, '5111');
+        $this->invoiceService->markSent($invoice);
+
+        $this->get(route('accounting.invoices.show', $invoice))
+            ->assertInertia(fn ($page) => $page
+                ->component('Accounting/Invoices/Show')
+                ->where('invoice.cogs_status', 'not_applicable')
+            );
+    }
+
+    /**
+     * C2: Invoice sent, order có sản phẩm tồn kho, có confirmed exit sale_delivery, chưa có COGS JE → cogs_missing.
+     */
+    public function test_cogs_status_missing_when_exit_confirmed_but_no_cogs_je(): void
+    {
+        $product     = $this->makeProduct(1_000_000, 10);
+        $order       = $this->makeOrder();
+        $this->insertOrderItem($order->id, 1_500_000, '5111', ['product_id' => $product->id]);
+        $invoice     = $this->makeInvoice($order->id, 5_000_000, 500_000, '5111');
+        $this->invoiceService->markSent($invoice);
+        $warehouseId = $this->makeWarehouse();
+        $this->makeConfirmedExit($order->id, $warehouseId);
+
+        $response = $this->get(route('accounting.invoices.show', $invoice));
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->component('Accounting/Invoices/Show')
+            ->where('invoice.cogs_status', 'cogs_missing')
+        );
+    }
+
+    /**
+     * C3: Invoice sent, order có sản phẩm tồn kho, confirmed exit, có posted JE Dr 632 → cogs_ok.
+     */
+    public function test_cogs_status_ok_when_cogs_je_posted(): void
+    {
+        $product     = $this->makeProduct(1_000_000, 10);
+        $order       = $this->makeOrder();
+        $this->insertOrderItem($order->id, 1_500_000, '5111', ['product_id' => $product->id]);
+        $invoice     = $this->makeInvoice($order->id, 5_000_000, 500_000, '5111');
+        $this->invoiceService->markSent($invoice);
+        $warehouseId = $this->makeWarehouse();
+        $exitId      = $this->makeConfirmedExit($order->id, $warehouseId);
+        $this->makeCogsJe($exitId);
+
+        $response = $this->get(route('accounting.invoices.show', $invoice));
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->component('Accounting/Invoices/Show')
+            ->where('invoice.cogs_status', 'cogs_ok')
+        );
+    }
+
+    /**
+     * C4: Order có dòng sản phẩm tồn kho + invoice sent + CHƯA tạo stock exit → cogs_missing (KHÔNG phải not_applicable).
+     * Đây là edge case quan trọng nhất: user xuất hóa đơn nhưng quên tạo phiếu xuất kho.
+     */
+    public function test_cogs_status_missing_when_inventory_items_exist_but_no_exit_yet(): void
+    {
+        $product = $this->makeProduct(1_000_000, 10);
+        $order   = $this->makeOrder();
+        $this->insertOrderItem($order->id, 1_500_000, '5111', ['product_id' => $product->id]);
+        $invoice = $this->makeInvoice($order->id, 1_500_000, 150_000, '5111');
+        $this->invoiceService->markSent($invoice);
+        // Không tạo stock exit
+
+        $response = $this->get(route('accounting.invoices.show', $invoice));
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->component('Accounting/Invoices/Show')
+            ->where('invoice.cogs_status', 'cogs_missing')
+        );
+    }
+
+    /**
+     * C5: Order chỉ có dòng dịch vụ (service_id, không có product_id) + invoice sent + không có exit → not_applicable.
+     * Hóa đơn dịch vụ thuần không cần COGS từ kho → không cảnh báo.
+     */
+    public function test_cogs_status_not_applicable_for_service_only_order(): void
+    {
+        $service = Service::create([
+            'code'      => 'DV-CTEST-01',
+            'name'      => 'Test Service',
+            'unit'      => 'lần',
+            'price'     => 2_000_000,
+            'is_active' => true,
+        ]);
+        $order   = $this->makeOrder();
+        $this->insertOrderItem($order->id, 2_000_000, '5113', ['service_id' => $service->id]);
+        $invoice = $this->makeInvoice($order->id, 2_000_000, 200_000, '5113');
+        $this->invoiceService->markSent($invoice);
+        // Không tạo stock exit
+
+        $response = $this->get(route('accounting.invoices.show', $invoice));
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->component('Accounting/Invoices/Show')
+            ->where('invoice.cogs_status', 'not_applicable')
+        );
     }
 }

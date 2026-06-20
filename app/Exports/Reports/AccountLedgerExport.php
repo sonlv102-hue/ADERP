@@ -28,14 +28,20 @@ class AccountLedgerExport implements FromCollection, WithHeadings, WithMapping, 
         $from     = $this->filters['date_from'] ?? "{$year}-01-01";
         $to       = $this->filters['date_to']   ?? "{$year}-12-31";
 
-        $normalBalance = DB::table('account_codes')
-            ->where('code', $account)->value('normal_balance') ?? 'debit';
+        $allAccountsRaw = DB::table('account_codes')
+            ->where('is_active', true)
+            ->select('code', 'parent_code', 'normal_balance')
+            ->get();
+
+        $normalBalance = $allAccountsRaw->firstWhere('code', $account)?->normal_balance ?? 'debit';
+
+        $accountCodes = $this->resolveDescendants($account, $allAccountsRaw);
 
         // Số dư đầu kỳ
         $openingData = DB::table('journal_entry_lines as jel')
             ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
             ->where('je.status', 'posted')
-            ->where('jel.account_code', $account)
+            ->whereIn('jel.account_code', $accountCodes)
             ->where('je.entry_date', '<', $from)
             ->selectRaw('SUM(jel.debit) as dr, SUM(jel.credit) as cr')
             ->first();
@@ -48,7 +54,7 @@ class AccountLedgerExport implements FromCollection, WithHeadings, WithMapping, 
         $lineRows = DB::table('journal_entry_lines as jel')
             ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
             ->where('je.status', 'posted')
-            ->where('jel.account_code', $account)
+            ->whereIn('jel.account_code', $accountCodes)
             ->whereBetween('je.entry_date', [$from, $to])
             ->orderBy('je.entry_date')
             ->orderBy('je.id')
@@ -115,4 +121,21 @@ class AccountLedgerExport implements FromCollection, WithHeadings, WithMapping, 
     }
 
     public function styles(Worksheet $sheet): array { return [1 => ['font' => ['bold' => true]]]; }
+
+    private function resolveDescendants(string $rootCode, \Illuminate\Support\Collection $allCodes): array
+    {
+        $result = [$rootCode];
+        $queue  = [$rootCode];
+        while (!empty($queue)) {
+            $parent   = array_shift($queue);
+            $children = $allCodes->where('parent_code', $parent)->pluck('code')->all();
+            foreach ($children as $child) {
+                if (!in_array($child, $result, true)) {
+                    $result[] = $child;
+                    $queue[]  = $child;
+                }
+            }
+        }
+        return $result;
+    }
 }

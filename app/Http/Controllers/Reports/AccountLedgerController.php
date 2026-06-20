@@ -20,24 +20,30 @@ class AccountLedgerController extends Controller
         $dateFrom = $request->input('date_from') ?: "{$year}-01-01";
         $dateTo   = $request->input('date_to')   ?: "{$year}-12-31";
 
-        // Tất cả tài khoản chi tiết cho dropdown
-        $allAccounts = DB::table('account_codes')
+        // Tất cả tài khoản cho dropdown + phân giải cây cha→con
+        $allAccountsRaw = DB::table('account_codes')
             ->where('is_active', true)
             ->orderBy('code')
-            ->pluck('name', 'code');
+            ->select('code', 'name', 'parent_code', 'normal_balance')
+            ->get();
+
+        $allAccounts = $allAccountsRaw->pluck('name', 'code');
 
         if (!$allAccounts->has($account)) {
             $account = $allAccounts->keys()->first() ?? '131';
         }
 
         $accountName   = $allAccounts->get($account, $account);
-        $normalBalance = DB::table('account_codes')->where('code', $account)->value('normal_balance') ?? 'debit';
+        $normalBalance = $allAccountsRaw->firstWhere('code', $account)?->normal_balance ?? 'debit';
+
+        // Resolve TK cha → tất cả TK con (bao gồm chính nó)
+        $accountCodes = $this->resolveDescendants($account, $allAccountsRaw);
 
         // Số dư đầu kỳ
         $openingData = DB::table('journal_entry_lines as jel')
             ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
             ->where('je.status', 'posted')
-            ->where('jel.account_code', $account)
+            ->whereIn('jel.account_code', $accountCodes)
             ->where('je.entry_date', '<', $dateFrom)
             ->selectRaw('SUM(jel.debit) as dr, SUM(jel.credit) as cr')
             ->first();
@@ -50,7 +56,7 @@ class AccountLedgerController extends Controller
         $lineRows = DB::table('journal_entry_lines as jel')
             ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
             ->where('je.status', 'posted')
-            ->where('jel.account_code', $account)
+            ->whereIn('jel.account_code', $accountCodes)
             ->whereBetween('je.entry_date', [$dateFrom, $dateTo])
             ->orderBy('je.entry_date')
             ->orderBy('je.id')
@@ -95,6 +101,23 @@ class AccountLedgerController extends Controller
             'filters'        => ['year' => $year, 'date_from' => $dateFrom, 'date_to' => $dateTo, 'account' => $account],
             'currentYear'    => $year,
         ]);
+    }
+
+    private function resolveDescendants(string $rootCode, \Illuminate\Support\Collection $allCodes): array
+    {
+        $result = [$rootCode];
+        $queue  = [$rootCode];
+        while (!empty($queue)) {
+            $parent   = array_shift($queue);
+            $children = $allCodes->where('parent_code', $parent)->pluck('code')->all();
+            foreach ($children as $child) {
+                if (!in_array($child, $result, true)) {
+                    $result[] = $child;
+                    $queue[]  = $child;
+                }
+            }
+        }
+        return $result;
     }
 
     public function export(Request $request): BinaryFileResponse

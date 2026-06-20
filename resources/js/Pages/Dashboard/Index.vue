@@ -24,6 +24,93 @@
         <KpiCard title="Dự án đang chạy"  :value="stats.active_projects"  color="bg-purple-500" />
       </div>
 
+      <!-- Financial KPI (chỉ hiển thị nếu có quyền accounting.view) -->
+      <div v-if="financialKpi" class="bg-white rounded-xl border border-gray-200">
+        <div class="px-5 py-3 border-b border-gray-100 flex items-center justify-between">
+          <h3 class="text-sm font-semibold text-gray-700">
+            Kết quả kinh doanh — tháng {{ financialKpi.period_label }}
+          </h3>
+          <a :href="`/reports/trial-balance?date_from=${financialKpi.date_from}&date_to=${financialKpi.date_to}`"
+            class="text-xs text-blue-600 hover:underline">
+            Xem Trial Balance →
+          </a>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 divide-y sm:divide-y-0 sm:divide-x divide-gray-100">
+          <!-- Doanh thu -->
+          <div class="px-5 py-4">
+            <p class="text-xs text-gray-500 mb-1">Doanh thu (TK 511x)</p>
+            <p class="text-2xl font-bold text-blue-700">
+              {{ fmtVnd(financialKpi.current.revenue) }}
+            </p>
+            <div class="mt-1.5 flex items-center gap-1.5 text-xs">
+              <template v-if="kpiDelta(financialKpi.current.revenue, financialKpi.previous.revenue) !== null">
+                <span :class="financialKpi.current.revenue >= financialKpi.previous.revenue ? 'text-green-600' : 'text-red-500'"
+                  class="flex items-center gap-0.5 font-medium">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      :d="financialKpi.current.revenue >= financialKpi.previous.revenue
+                        ? 'M5 10l7-7m0 0l7 7m-7-7v18'
+                        : 'M19 14l-7 7m0 0l-7-7m7 7V3'" />
+                  </svg>
+                  {{ Math.abs(kpiDelta(financialKpi.current.revenue, financialKpi.previous.revenue)).toFixed(1) }}%
+                </span>
+                <span class="text-gray-400">so tháng {{ financialKpi.prev_label }}</span>
+              </template>
+              <span v-else class="text-gray-400">Tháng {{ financialKpi.prev_label }}: 0</span>
+            </div>
+          </div>
+
+          <!-- Giá vốn -->
+          <div class="px-5 py-4">
+            <p class="text-xs text-gray-500 mb-1">Giá vốn (TK 632x)</p>
+            <p class="text-2xl font-bold text-orange-600">
+              {{ fmtVnd(financialKpi.current.cogs) }}
+            </p>
+            <div class="mt-1.5 flex items-center gap-1.5 text-xs">
+              <template v-if="kpiDelta(financialKpi.current.cogs, financialKpi.previous.cogs) !== null">
+                <span :class="financialKpi.current.cogs <= financialKpi.previous.cogs ? 'text-green-600' : 'text-red-500'"
+                  class="flex items-center gap-0.5 font-medium">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      :d="financialKpi.current.cogs <= financialKpi.previous.cogs
+                        ? 'M5 10l7-7m0 0l7 7m-7-7v18'
+                        : 'M19 14l-7 7m0 0l-7-7m7 7V3'" />
+                  </svg>
+                  {{ Math.abs(kpiDelta(financialKpi.current.cogs, financialKpi.previous.cogs)).toFixed(1) }}%
+                </span>
+                <span class="text-gray-400">so tháng {{ financialKpi.prev_label }}</span>
+              </template>
+              <span v-else class="text-gray-400">Tháng {{ financialKpi.prev_label }}: 0</span>
+            </div>
+          </div>
+
+          <!-- Lợi nhuận gộp -->
+          <div class="px-5 py-4">
+            <p class="text-xs text-gray-500 mb-1">Lợi nhuận gộp</p>
+            <p class="text-2xl font-bold"
+              :class="financialKpi.current.gross_profit >= 0 ? 'text-emerald-700' : 'text-red-600'">
+              {{ fmtVnd(financialKpi.current.gross_profit) }}
+            </p>
+            <div class="mt-1.5 flex items-center gap-1.5 text-xs">
+              <template v-if="kpiDelta(financialKpi.current.gross_profit, financialKpi.previous.gross_profit) !== null">
+                <span :class="financialKpi.current.gross_profit >= financialKpi.previous.gross_profit ? 'text-green-600' : 'text-red-500'"
+                  class="flex items-center gap-0.5 font-medium">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                      :d="financialKpi.current.gross_profit >= financialKpi.previous.gross_profit
+                        ? 'M5 10l7-7m0 0l7 7m-7-7v18'
+                        : 'M19 14l-7 7m0 0l-7-7m7 7V3'" />
+                  </svg>
+                  {{ Math.abs(kpiDelta(financialKpi.current.gross_profit, financialKpi.previous.gross_profit)).toFixed(1) }}%
+                </span>
+                <span class="text-gray-400">so tháng {{ financialKpi.prev_label }}</span>
+              </template>
+              <span v-else class="text-gray-400">Tháng {{ financialKpi.prev_label }}: 0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Charts row 1 -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
         <!-- Revenue bar chart -->
@@ -298,6 +385,7 @@ const props = defineProps({
   unfulfilledOrders:   { type: Array,  default: () => [] },
   overDeliveryAlerts:  { type: Array,  default: () => [] },
   accountingAlerts:    { type: Object, default: () => ({}) },
+  financialKpi:        { type: Object, default: null },
 });
 
 const isLowStock = (p) => p.min_stock > 0 && p.stock <= p.min_stock;
@@ -334,6 +422,12 @@ const KpiCard = {
     ]);
   },
 };
+
+// ----- Financial KPI helpers -----
+function kpiDelta(current, previous) {
+  if (!previous || previous === 0) return null;
+  return ((current - previous) / Math.abs(previous)) * 100;
+}
 
 // ----- Revenue chart -----
 const revenueChartData = computed(() => ({

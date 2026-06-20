@@ -35,6 +35,7 @@ class CashFlowExport implements FromCollection, WithHeadings, WithMapping, WithS
             ->join('purchase_invoices', 'purchase_invoices.id', '=', 'purchase_invoice_payments.purchase_invoice_id')
             ->join('suppliers', 'suppliers.id', '=', 'purchase_invoices.supplier_id')
             ->selectRaw("purchase_invoice_payments.payment_date as date, 'out' as type, purchase_invoices.code as ref_code, 'Trả HĐ ' || purchase_invoices.code || ' - ' || suppliers.name as description, purchase_invoice_payments.method, '' as fund_name, purchase_invoice_payments.amount")
+            ->where('purchase_invoice_payments.status', 'active')
             ->whereBetween('purchase_invoice_payments.payment_date', [$dateFrom, $dateTo])
             ->when($method, fn ($q) => $q->where('purchase_invoice_payments.method', $method))
             ->get()->map(fn ($r) => (array) $r);

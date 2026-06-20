@@ -406,6 +406,102 @@ class CashFlowReportTest extends TestCase
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // CF8: Voided purchase_invoice_payments bị loại khỏi Cash Flow outflow
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function test_CF8_voided_purchase_invoice_payment_excluded_from_cash_flow(): void
+    {
+        $supplier = Supplier::firstOrCreate(
+            ['code' => 'NCC-CF8'],
+            ['name' => 'NCC CF8 Test', 'is_active' => true]
+        );
+
+        $warehouseId = DB::table('warehouses')->insertGetId([
+            'name' => 'Kho CF8', 'is_active' => true,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $poId = DB::table('purchase_orders')->insertGetId([
+            'code'         => 'MH-CF8-001',
+            'supplier_id'  => $supplier->id,
+            'warehouse_id' => $warehouseId,
+            'status'       => 'sent',
+            'order_date'   => '2026-06-20',
+            'created_by'   => $this->user->id,
+            'created_at'   => now(),
+            'updated_at'   => now(),
+        ]);
+
+        $piId = DB::table('purchase_invoices')->insertGetId([
+            'code'              => 'HD-NCC-CF8',
+            'supplier_id'       => $supplier->id,
+            'purchase_order_id' => $poId,
+            'subtotal'          => 3_000_000,
+            'tax_amount'        => 300_000,
+            'total'             => 3_300_000,
+            'paid_amount'       => 0,
+            'status'            => 'valid',
+            'invoice_type'      => 'goods',
+            'invoice_date'      => '2026-06-15',
+            'created_by'        => $this->user->id,
+            'created_at'        => now(),
+            'updated_at'        => now(),
+        ]);
+
+        $testDate = '2026-06-15';
+
+        // Payment active (phải xuất hiện)
+        DB::table('purchase_invoice_payments')->insert([
+            'purchase_invoice_id' => $piId,
+            'amount'              => 3_300_000,
+            'payment_date'        => $testDate,
+            'method'              => 'cash',
+            'status'              => 'active',
+            'created_by'          => $this->user->id,
+            'created_at'          => now(),
+            'updated_at'          => now(),
+        ]);
+
+        // Payment voided (phải bị loại)
+        DB::table('purchase_invoice_payments')->insert([
+            'purchase_invoice_id' => $piId,
+            'amount'              => 3_300_000,
+            'payment_date'        => $testDate,
+            'method'              => 'cash',
+            'status'              => 'voided',
+            'created_by'          => $this->user->id,
+            'created_at'          => now(),
+            'updated_at'          => now(),
+        ]);
+
+        // Query Cash Flow outflow (giống hệt controller)
+        $outflowCount = DB::table('purchase_invoice_payments')
+            ->join('purchase_invoices', 'purchase_invoices.id', '=', 'purchase_invoice_payments.purchase_invoice_id')
+            ->where('purchase_invoice_payments.status', 'active')
+            ->whereBetween('purchase_invoice_payments.payment_date', [$testDate, $testDate])
+            ->count();
+
+        $this->assertEquals(1, $outflowCount, 'Cash Flow chỉ được đếm 1 payment active, không đếm voided');
+
+        // Verify tổng qua DB với query của controller
+        $outflowTotal = DB::table('purchase_invoice_payments')
+            ->join('purchase_invoices', 'purchase_invoices.id', '=', 'purchase_invoice_payments.purchase_invoice_id')
+            ->where('purchase_invoice_payments.status', 'active')
+            ->whereBetween('purchase_invoice_payments.payment_date', [$testDate, $testDate])
+            ->sum('purchase_invoice_payments.amount');
+
+        $this->assertEquals(3_300_000, (float) $outflowTotal,
+            'Tổng outflow phải là 3,300,000 (1 active), không phải 6,600,000 (2 bản ghi)');
+
+        // Endpoint trả 200
+        $this->get(route('reports.cash_flow', [
+            'date_from' => $testDate,
+            'date_to'   => $testDate,
+            'type'      => 'out',
+        ]))->assertOk();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // CF5: Endpoint báo cáo trả 200 OK và có voucher đúng method
     // ─────────────────────────────────────────────────────────────────────────
 

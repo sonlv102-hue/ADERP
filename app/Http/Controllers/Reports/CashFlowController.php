@@ -53,6 +53,7 @@ class CashFlowController extends Controller
                 'purchase_invoice_payments.amount',
                 DB::raw('0 as outflow'),
             ])
+            ->where('purchase_invoice_payments.status', 'active')
             ->whereBetween('purchase_invoice_payments.payment_date', [$dateFrom, $dateTo])
             ->when($method, fn ($q) => $q->where('purchase_invoice_payments.method', $method));
 

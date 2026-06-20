@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\JournalEntry;
 use App\Models\Setting;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -31,6 +32,9 @@ class HandleInertiaRequests extends Middleware
             ],
             'appName' => config('app.name'),
             'company' => Setting::getGroup('company'),
+            'draftJournalEntryCount' => $request->user()?->can('accounting.view')
+                ? JournalEntry::where('status', 'draft')->count()
+                : 0,
         ];
     }
 }

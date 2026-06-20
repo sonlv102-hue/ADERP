@@ -25,6 +25,8 @@ class DashboardController extends Controller
 {
     public function index(): Response
     {
+        $user = auth()->user();
+
         return Inertia::render('Dashboard/Index', [
             'stats'              => Cache::remember('dashboard.stats', 600, fn () => $this->stats()),
             'revenueChart'       => Cache::remember('dashboard.revenue_chart', 600, fn () => $this->revenueChart()),
@@ -34,6 +36,9 @@ class DashboardController extends Controller
             'unfulfilledOrders'  => Cache::remember('dashboard.unfulfilled_orders', 120, fn () => $this->unfulfilledOrders()),
             'overDeliveryAlerts' => $this->overDeliveryAlerts(),
             'accountingAlerts'   => Cache::remember('dashboard.accounting_alerts', 300, fn () => $this->accountingAlerts()),
+            'financialKpi'       => $user->can('accounting.view')
+                ? Cache::remember('dashboard.financial_kpi.' . now()->format('Y-m'), 300, fn () => $this->financialKpi())
+                : null,
         ]);
     }
 
@@ -224,6 +229,60 @@ class DashboardController extends Controller
             'color'  => $s->color(),
             'count'  => (int) ($counts[$s->value] ?? 0),
         ])->all();
+    }
+
+    private function financialKpi(): array
+    {
+        $now  = now();
+        $curr = ['from' => $now->copy()->startOfMonth()->toDateString(), 'to' => $now->copy()->endOfMonth()->toDateString()];
+        $prev = ['from' => $now->copy()->subMonth()->startOfMonth()->toDateString(), 'to' => $now->copy()->subMonth()->endOfMonth()->toDateString()];
+
+        $fetch = function (string $from, string $to): array {
+            $rows = DB::table('journal_entry_lines as jl')
+                ->join('journal_entries as je', 'je.id', '=', 'jl.journal_entry_id')
+                ->where('je.status', 'posted')
+                ->where('je.exclude_from_period_movement', false)
+                ->whereBetween('je.entry_date', [$from, $to])
+                ->whereRaw("(jl.account_code LIKE '511%' OR jl.account_code LIKE '632%')")
+                ->selectRaw("
+                    jl.account_code,
+                    SUM(jl.debit)  AS total_debit,
+                    SUM(jl.credit) AS total_credit
+                ")
+                ->groupBy('jl.account_code')
+                ->get();
+
+            $revenue = 0.0;
+            $cogs    = 0.0;
+
+            foreach ($rows as $row) {
+                if (str_starts_with($row->account_code, '511')) {
+                    // Revenue = net credit (credit-normal account)
+                    $revenue += (float) $row->total_credit - (float) $row->total_debit;
+                } elseif (str_starts_with($row->account_code, '632')) {
+                    // COGS = net debit (debit-normal account)
+                    $cogs += (float) $row->total_debit - (float) $row->total_credit;
+                }
+            }
+
+            return [
+                'revenue'       => $revenue,
+                'cogs'          => $cogs,
+                'gross_profit'  => $revenue - $cogs,
+            ];
+        };
+
+        $current  = $fetch($curr['from'], $curr['to']);
+        $previous = $fetch($prev['from'], $prev['to']);
+
+        return [
+            'current'       => $current,
+            'previous'      => $previous,
+            'period_label'  => $now->translatedFormat('m/Y'),
+            'prev_label'    => $now->copy()->subMonth()->translatedFormat('m/Y'),
+            'date_from'     => $curr['from'],
+            'date_to'       => $curr['to'],
+        ];
     }
 
     private function accountingAlerts(): array

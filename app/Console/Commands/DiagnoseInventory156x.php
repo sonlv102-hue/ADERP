@@ -29,6 +29,7 @@ class DiagnoseInventory156x extends Command
         $this->sectionB();
         $this->sectionC();
         $this->sectionD();
+        $this->sectionE();
 
         return self::SUCCESS;
     }
@@ -449,6 +450,122 @@ class DiagnoseInventory156x extends Command
             $this->line("    Tổng items value:  " . number_format($newItems));
             $this->line("    Lệch (lý tưởng=0): " . number_format($newJe - $newItems));
         }
+        $this->newLine();
+    }
+
+    // ─── E. Tìm nguồn thực sự của 253M còn lại trong GL 156x ─────────────────
+
+    private function sectionE(): void
+    {
+        $this->info('── E. GL 156x TỪ NGUỒN KHÁC (không phải stock_entry JEs) ───────────────');
+
+        // Tổng Dr 156x từ stock_entry JEs (đã tính ở A)
+        $allStockEntryIds = DB::table('stock_entries')
+            ->where('status', 'confirmed')
+            ->pluck('id');
+
+        $je156xFromStockEntries = (float) DB::table('journal_entry_lines as jl')
+            ->join('journal_entries as je', 'je.id', '=', 'jl.journal_entry_id')
+            ->where('je.status', 'posted')
+            ->where('je.reference_type', 'stock_entry')
+            ->whereIn('je.reference_id', $allStockEntryIds)
+            ->where('jl.account_code', 'LIKE', '156%')
+            ->where('jl.debit', '>', 0)
+            ->sum('jl.debit');
+
+        $glTotal = (float) DB::table('journal_entry_lines as jl')
+            ->join('journal_entries as je', 'je.id', '=', 'jl.journal_entry_id')
+            ->where('je.status', 'posted')
+            ->where('jl.account_code', 'LIKE', '156%')
+            ->selectRaw('SUM(jl.debit) - SUM(jl.credit) as balance')
+            ->value('balance');
+
+        $otherSources = $glTotal - $je156xFromStockEntries;
+
+        $this->table(['Chỉ tiêu', 'Giá trị (VND)'], [
+            ['GL 156x net (toàn bộ posted)',           number_format($glTotal)],
+            ['JE Dr 156x từ stock_entry (reference_type=stock_entry)', number_format($je156xFromStockEntries)],
+            ['Phần GL 156x TỪ NGUỒN KHÁC',            number_format($otherSources)],
+            ['Lệch G1 cần giải thích',                number_format(self::KNOWN_DIFF)],
+        ]);
+
+        $this->newLine();
+
+        // Liệt kê các JE Dr 156x KHÔNG phải stock_entry
+        $otherJes = DB::table('journal_entries as je')
+            ->join('journal_entry_lines as jl', function ($j) {
+                $j->on('jl.journal_entry_id', '=', 'je.id')
+                  ->where('jl.account_code', 'LIKE', '156%')
+                  ->where('jl.debit', '>', 0);
+            })
+            ->where('je.status', 'posted')
+            ->where(function ($q) {
+                $q->where('je.reference_type', '!=', 'stock_entry')
+                  ->orWhereNull('je.reference_type');
+            })
+            ->groupBy('je.id', 'je.reference_type', 'je.reference_id', 'je.description', 'je.entry_date', 'je.exclude_from_period_movement')
+            ->select(
+                'je.id',
+                'je.reference_type',
+                'je.reference_id',
+                'je.description',
+                'je.entry_date',
+                'je.exclude_from_period_movement',
+                DB::raw('SUM(jl.debit) as dr_156x')
+            )
+            ->orderByDesc(DB::raw('SUM(jl.debit)'))
+            ->get();
+
+        $this->line("  Các JE Dr 156x từ nguồn KHÁC stock_entry: {$otherJes->count()} bút toán");
+        $this->newLine();
+
+        if ($otherJes->isNotEmpty()) {
+            $this->table(
+                ['JE ID', 'reference_type', 'ref_id', 'Ngày', 'Dr 156x', 'Đầu kỳ?', 'Mô tả'],
+                $otherJes->map(fn ($r) => [
+                    $r->id,
+                    $r->reference_type ?? 'NULL',
+                    $r->reference_id ?? '—',
+                    $r->entry_date ?? '—',
+                    number_format($r->dr_156x),
+                    $r->exclude_from_period_movement ? 'ĐẦU KỲ' : 'không',
+                    mb_strimwidth($r->description ?? '', 0, 50, '…'),
+                ])->all()
+            );
+
+            $totalOther = $otherJes->sum('dr_156x');
+            $openingTotal = $otherJes->where('exclude_from_period_movement', true)->sum('dr_156x');
+            $nonOpeningTotal = $otherJes->where('exclude_from_period_movement', false)->sum('dr_156x');
+
+            $this->newLine();
+            $this->line("  Tổng Dr 156x từ nguồn khác:         " . number_format($totalOther));
+            $this->line("  Trong đó bút toán đầu kỳ (SDDK):   " . number_format($openingTotal));
+            $this->line("  Trong đó bút toán thường:           " . number_format($nonOpeningTotal));
+            $this->newLine();
+
+            if (abs($totalOther - $otherSources) < 1_000) {
+                $this->info("  → KẾT LUẬN E: 253M lệch = HOÀN TOÀN do " . $otherJes->count() . " bút toán 156x ngoài stock_entry.");
+                $this->info("    Đây là số dư đầu kỳ / bút toán thủ công — NOT A BUG trong tính toán.");
+                $this->info("    inventory:audit G1 SO SÁNH SAI: GL gồm đầu kỳ, nhưng movements chỉ gồm entries từ NK.");
+            } else {
+                $this->warn("  → KẾT LUẬN E: Chỉ giải thích được " . number_format($totalOther) . " / " . number_format($otherSources));
+            }
+        }
+
+        // Credit side: JE Cr 156x từ nguồn KHÁC stock_exit (để hiểu balance đầy đủ)
+        $creditNonExit = (float) DB::table('journal_entry_lines as jl')
+            ->join('journal_entries as je', 'je.id', '=', 'jl.journal_entry_id')
+            ->where('je.status', 'posted')
+            ->where('jl.account_code', 'LIKE', '156%')
+            ->where('jl.credit', '>', 0)
+            ->where(function ($q) {
+                $q->where('je.reference_type', '!=', 'stock_exit')
+                  ->orWhereNull('je.reference_type');
+            })
+            ->sum('jl.credit');
+
+        $this->newLine();
+        $this->line("  Cr 156x từ nguồn KHÁC stock_exit (điều chỉnh/đầu kỳ): " . number_format($creditNonExit));
         $this->newLine();
     }
 }
