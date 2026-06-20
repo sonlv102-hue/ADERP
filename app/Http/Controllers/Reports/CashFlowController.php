@@ -58,6 +58,7 @@ class CashFlowController extends Controller
 
         // Phiếu thu (CashVoucher type=receipt, status=confirmed)
         // method lấy từ funds.type: bank → bank_transfer, còn lại → cash
+        // Loại collect_customer/pay_supplier vì đã được tính qua payments/purchase_invoice_payments
         $voucherIn = DB::table('cash_vouchers')
             ->leftJoin('funds', 'funds.id', '=', 'cash_vouchers.fund_id')
             ->select([
@@ -73,6 +74,7 @@ class CashFlowController extends Controller
             ])
             ->where('cash_vouchers.type', 'receipt')
             ->where('cash_vouchers.status', 'confirmed')
+            ->whereNotIn('cash_vouchers.business_type', ['collect_customer', 'pay_supplier'])
             ->whereBetween('cash_vouchers.voucher_date', [$dateFrom, $dateTo])
             ->when($method, function ($q) use ($method) {
                 if ($method === 'bank_transfer') {
@@ -86,6 +88,7 @@ class CashFlowController extends Controller
 
         // Phiếu chi (CashVoucher type=payment, status=confirmed)
         // method lấy từ funds.type: bank → bank_transfer, còn lại → cash
+        // Loại collect_customer/pay_supplier vì đã được tính qua payments/purchase_invoice_payments
         $voucherOut = DB::table('cash_vouchers')
             ->leftJoin('funds', 'funds.id', '=', 'cash_vouchers.fund_id')
             ->select([
@@ -101,6 +104,7 @@ class CashFlowController extends Controller
             ])
             ->where('cash_vouchers.type', 'payment')
             ->where('cash_vouchers.status', 'confirmed')
+            ->whereNotIn('cash_vouchers.business_type', ['collect_customer', 'pay_supplier'])
             ->whereBetween('cash_vouchers.voucher_date', [$dateFrom, $dateTo])
             ->when($method, function ($q) use ($method) {
                 if ($method === 'bank_transfer') {

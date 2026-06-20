@@ -498,6 +498,9 @@ class StockService
                     ProductSerial::where('stock_exit_item_id', $item->id)
                         ->update(['stock_exit_item_id' => null]);
                 }
+                \App\Models\ProjectWipEntry::where('source_type', StockExit::class)
+                    ->where('source_id', $exit->id)
+                    ->delete();
                 $exit->update(['status' => StockExitStatus::Cancelled]);
             });
             return;

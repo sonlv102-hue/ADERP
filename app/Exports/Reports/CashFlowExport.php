@@ -44,6 +44,7 @@ class CashFlowExport implements FromCollection, WithHeadings, WithMapping, WithS
             ->selectRaw("cash_vouchers.voucher_date as date, 'in' as type, cash_vouchers.code as ref_code, '[PT] ' || COALESCE(cash_vouchers.description, cash_vouchers.code) as description, CASE WHEN funds.type = 'bank' THEN 'bank_transfer' ELSE 'cash' END as method, COALESCE(funds.name, '') as fund_name, cash_vouchers.amount")
             ->where('cash_vouchers.type', 'receipt')
             ->where('cash_vouchers.status', 'confirmed')
+            ->whereNotIn('cash_vouchers.business_type', ['collect_customer', 'pay_supplier'])
             ->whereBetween('cash_vouchers.voucher_date', [$dateFrom, $dateTo])
             ->when($method, function ($q) use ($method) {
                 if ($method === 'bank_transfer') {
@@ -61,6 +62,7 @@ class CashFlowExport implements FromCollection, WithHeadings, WithMapping, WithS
             ->selectRaw("cash_vouchers.voucher_date as date, 'out' as type, cash_vouchers.code as ref_code, '[PC] ' || COALESCE(cash_vouchers.description, cash_vouchers.code) as description, CASE WHEN funds.type = 'bank' THEN 'bank_transfer' ELSE 'cash' END as method, COALESCE(funds.name, '') as fund_name, cash_vouchers.amount")
             ->where('cash_vouchers.type', 'payment')
             ->where('cash_vouchers.status', 'confirmed')
+            ->whereNotIn('cash_vouchers.business_type', ['collect_customer', 'pay_supplier'])
             ->whereBetween('cash_vouchers.voucher_date', [$dateFrom, $dateTo])
             ->when($method, function ($q) use ($method) {
                 if ($method === 'bank_transfer') {

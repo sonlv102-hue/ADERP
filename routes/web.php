@@ -36,6 +36,7 @@ use App\Http\Controllers\Sales\CustomerAdvanceController;
 use App\Http\Controllers\Sales\SalesReturnController;
 use App\Http\Controllers\Projects\ProjectController;
 use App\Http\Controllers\Projects\ProjectDirectMaterialController;
+use App\Http\Controllers\Projects\ProjectWipCorrectionController;
 use App\Http\Controllers\Projects\TaskController;
 use App\Http\Controllers\Support\TicketController;
 use App\Http\Controllers\Support\WarrantyController;
@@ -324,6 +325,17 @@ Route::middleware('auth')->group(function () {
             ->name('projects.direct-materials.preview');
         Route::delete('projects/{project}/direct-materials/{directMaterial}', [ProjectDirectMaterialController::class, 'destroy'])
             ->name('projects.direct-materials.destroy');
+
+        // WIP Correction (hủy, chuyển dự án, điều chỉnh tài khoản)
+        Route::prefix('projects/{project}/wip/{wip}')->name('projects.wip.')->group(function () {
+            Route::get('history',           [ProjectWipCorrectionController::class, 'history'])->name('history');
+            Route::post('preview-cancel',   [ProjectWipCorrectionController::class, 'previewCancel'])->name('preview-cancel');
+            Route::post('cancel',           [ProjectWipCorrectionController::class, 'cancel'])->name('cancel');
+            Route::post('preview-transfer', [ProjectWipCorrectionController::class, 'previewTransfer'])->name('preview-transfer');
+            Route::post('transfer',         [ProjectWipCorrectionController::class, 'transfer'])->name('transfer');
+            Route::post('preview-reclass',  [ProjectWipCorrectionController::class, 'previewReclass'])->name('preview-reclass');
+            Route::post('reclass',          [ProjectWipCorrectionController::class, 'reclass'])->name('reclass');
+        });
     });
 
     // Accounting - kế toán

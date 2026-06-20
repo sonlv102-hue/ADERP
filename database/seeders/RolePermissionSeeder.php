@@ -26,6 +26,7 @@ class RolePermissionSeeder extends Seeder
             'orders.view', 'orders.create', 'orders.manage',
             // Projects
             'projects.view', 'projects.create', 'projects.manage', 'projects.delete',
+            'project.wip.adjust',
             // Tickets
             'tickets.view', 'tickets.create', 'tickets.assign', 'tickets.close',
             // Purchasing
@@ -126,6 +127,7 @@ class RolePermissionSeeder extends Seeder
                 'documents.view', 'documents.create', 'documents.manage',
                 'reports.view',
                 'ccdc.view', 'ccdc.manage', 'ccdc.allocate', 'ccdc.dispose', 'ccdc.cancel',
+                'project.wip.adjust',
             ],
             'cskh' => [
                 'customers.view', 'customers.create', 'customers.edit',

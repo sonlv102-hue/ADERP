@@ -657,4 +657,38 @@ class FinancialPositionReportTest extends TestCase
         $this->assertTrue((bool) $ac3311->is_detail,  '3311 phải là TK chi tiết');
         $this->assertTrue((bool) $ac331ut->is_detail, '331UT phải là TK chi tiết');
     }
+
+    // ─── Test TK 131UT lưỡng tính (P0.2 fix) ─────────────────────────────────
+
+    /**
+     * TC5: TK 131UT dư Có (KH ứng trước) → Mã 312 "Người mua trả tiền trước".
+     *      Fix: thêm '131UT' vào accounts của mã 312 trong config/accounting_reports_tt133.php.
+     */
+    public function test_tk131UT_credit_balance_appears_in_ma312(): void
+    {
+        // Seed accounts cần thiết
+        $this->seedAccount('1111', 'asset', 'debit');      // quỹ
+        $this->seedAccount('131UT', 'asset', 'debit', '131'); // ứng trước KH
+
+        $amount = 1_750_000_000; // khớp số dư thực trên VPS
+
+        // Dr 1111 / Cr 131UT — KH trả tiền trước (ứng trước)
+        $this->postEntry('2026-06-01', [
+            ['1111',  $amount, 0],
+            ['131UT', 0,       $amount],
+        ]);
+
+        $report = $this->build();
+
+        $row312 = $this->findRow($report, '312');
+        $this->assertNotNull($row312, 'Mã 312 phải xuất hiện trong báo cáo');
+        $this->assertEquals($amount, $row312['amount'],
+            'Dư Có 131UT phải được tính vào mã 312 (Người mua trả tiền trước)');
+
+        // 131UT không được xuất hiện ở phía tài sản (mã 131)
+        $row131 = $this->findRow($report, '131');
+        $asset131Amount = $row131 ? $row131['amount'] : 0;
+        $this->assertEquals(0, $asset131Amount,
+            '131UT dư Có không được đưa vào mã 131 tài sản');
+    }
 }

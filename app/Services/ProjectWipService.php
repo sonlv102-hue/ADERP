@@ -141,11 +141,12 @@ class ProjectWipService
     }
 
     /**
-     * Tổng hợp chi phí WIP theo loại chi phí cho một dự án.
+     * Tổng hợp chi phí WIP theo loại chi phí cho một dự án (chỉ active).
      */
     public function getWipSummary(int $projectId): array
     {
         $rows = ProjectWipEntry::where('project_id', $projectId)
+            ->where('status', 'active')
             ->selectRaw('cost_type, SUM(amount) as total')
             ->groupBy('cost_type')
             ->get()
@@ -165,25 +166,36 @@ class ProjectWipService
     }
 
     /**
-     * Lấy danh sách WIP entries của một dự án (cho bảng chi tiết).
+     * Lấy danh sách WIP entries của một dự án (cho bảng chi tiết, bao gồm cả không active).
      */
     public function getWipEntries(int $projectId): \Illuminate\Support\Collection
     {
         return ProjectWipEntry::where('project_id', $projectId)
-            ->with('journalEntry')
+            ->with(['journalEntry', 'source', 'cancelledByUser'])
             ->orderByDesc('entry_date')
             ->orderByDesc('id')
             ->get()
             ->map(fn (ProjectWipEntry $e) => [
-                'id'          => $e->id,
-                'cost_type'   => $e->cost_type,
-                'label'       => $e->costTypeLabel(),
-                'amount'      => $e->amount,
-                'description' => $e->description,
-                'entry_date'  => $e->entry_date->format('d/m/Y'),
-                'journal_code' => $e->journalEntry?->code,
-                'source_type' => class_basename($e->source_type),
-                'source_id'   => $e->source_id,
+                'id'               => $e->id,
+                'cost_type'        => $e->cost_type,
+                'label'            => $e->costTypeLabel(),
+                'amount'           => $e->amount,
+                'description'      => $e->description,
+                'entry_date'       => $e->entry_date->format('d/m/Y'),
+                'journal_code'     => $e->journalEntry?->code,
+                'journal_entry_id' => $e->journal_entry_id,
+                'has_je'           => !is_null($e->journal_entry_id),
+                'source_type'      => $e->source_type,
+                'source_type_short'=> class_basename($e->source_type ?? ''),
+                'source_id'        => $e->source_id,
+                'source_code'      => ($e->source_type === \App\Models\StockExit::class) ? ($e->source?->code ?? null) : null,
+                'status'           => $e->status ?? 'active',
+                'status_label'     => $e->statusLabel(),
+                'status_color'     => $e->statusColor(),
+                'cancel_reason'    => $e->cancel_reason,
+                'cancelled_at'     => $e->cancelled_at?->format('d/m/Y H:i'),
+                'cancelled_by_name'=> $e->cancelledByUser?->name,
+                'is_stock_exit'    => ($e->source_type === \App\Models\StockExit::class),
             ]);
     }
 

@@ -493,36 +493,241 @@
             </button>
           </div>
 
-          <table class="min-w-full text-sm">
-            <thead class="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th class="text-left px-4 py-2.5 font-semibold text-gray-600">Ngày</th>
-                <th class="text-left px-4 py-2.5 font-semibold text-gray-600">Loại CP</th>
-                <th class="text-left px-4 py-2.5 font-semibold text-gray-600">Mô tả</th>
-                <th class="text-left px-4 py-2.5 font-semibold text-gray-600">Nguồn</th>
-                <th class="text-right px-4 py-2.5 font-semibold text-gray-600">Số tiền</th>
-                <th class="text-left px-4 py-2.5 font-semibold text-gray-600">Bút toán</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-              <tr v-for="e in wipEntries" :key="e.id" class="hover:bg-gray-50">
-                <td class="px-4 py-2 text-gray-600">{{ e.entry_date }}</td>
-                <td class="px-4 py-2">
-                  <span class="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs font-medium">{{ e.label }}</span>
-                </td>
-                <td class="px-4 py-2 text-gray-800">{{ e.description }}</td>
-                <td class="px-4 py-2 text-xs text-gray-500">{{ wipSourceLabel(e.source_type) }}</td>
-                <td class="px-4 py-2 text-right font-medium text-gray-800">{{ formatVnd(e.amount) }}</td>
-                <td class="px-4 py-2 text-xs text-gray-500 font-mono">{{ e.journal_code ?? '—' }}</td>
-              </tr>
-              <tr v-if="!wipEntries.length">
-                <td colspan="6" class="px-4 py-10 text-center text-gray-400">
-                  Chưa có phiếu xuất kho nào cho dự án này.
-                  <br><span class="text-xs">Tạo phiếu xuất kho với mục đích "Xuất cho dự án" để tích lũy TK 154.</span>
-                </td>
-              </tr>
-            </tbody>
-          </table>
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th class="text-left px-4 py-2.5 font-semibold text-gray-600">Ngày</th>
+                  <th class="text-left px-4 py-2.5 font-semibold text-gray-600">Loại CP</th>
+                  <th class="text-left px-4 py-2.5 font-semibold text-gray-600">Mô tả</th>
+                  <th class="text-left px-4 py-2.5 font-semibold text-gray-600">Nguồn</th>
+                  <th class="text-right px-4 py-2.5 font-semibold text-gray-600">Số tiền</th>
+                  <th class="text-left px-4 py-2.5 font-semibold text-gray-600">Bút toán</th>
+                  <th class="text-left px-4 py-2.5 font-semibold text-gray-600">Trạng thái</th>
+                  <th class="text-left px-4 py-2.5 font-semibold text-gray-600 hidden md:table-cell">Người XL</th>
+                  <th v-if="can('project.wip.adjust')" class="px-4 py-2.5" />
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <tr v-for="e in wipEntries" :key="e.id"
+                  :class="['hover:bg-gray-50', e.status !== 'active' ? 'opacity-60' : '']">
+                  <td class="px-4 py-2 text-gray-600 whitespace-nowrap">{{ e.entry_date }}</td>
+                  <td class="px-4 py-2">
+                    <span class="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs font-medium">{{ e.label }}</span>
+                  </td>
+                  <td class="px-4 py-2 text-gray-800 max-w-xs truncate">
+                    {{ e.description }}
+                    <p v-if="e.cancel_reason" class="text-xs text-gray-400 truncate">{{ e.cancel_reason }}</p>
+                  </td>
+                  <td class="px-4 py-2 text-xs text-gray-500 whitespace-nowrap">
+                    {{ wipSourceLabel(e.source_type) }}
+                    <span v-if="e.source_code" class="ml-1 font-mono text-gray-400">{{ e.source_code }}</span>
+                  </td>
+                  <td class="px-4 py-2 text-right font-medium text-gray-800 whitespace-nowrap">{{ formatVnd(e.amount) }}</td>
+                  <td class="px-4 py-2 text-xs text-gray-500 font-mono whitespace-nowrap">{{ e.journal_code ?? '—' }}</td>
+                  <td class="px-4 py-2 whitespace-nowrap">
+                    <span :class="['text-xs px-2 py-0.5 rounded-full font-medium', wipStatusClass(e.status)]">
+                      {{ e.status_label }}
+                    </span>
+                  </td>
+                  <td class="px-4 py-2 text-xs text-gray-400 whitespace-nowrap hidden md:table-cell">
+                    <template v-if="e.cancelled_by_name">
+                      <p>{{ e.cancelled_by_name }}</p>
+                      <p class="text-gray-300">{{ e.cancelled_at }}</p>
+                    </template>
+                    <span v-else>—</span>
+                  </td>
+                  <td v-if="can('project.wip.adjust')" class="px-4 py-2 text-right whitespace-nowrap">
+                    <div v-if="e.status === 'active'" class="relative inline-block">
+                      <button @click="openWipMenu(e)"
+                        class="text-xs text-gray-500 hover:text-primary-600 border border-gray-200 hover:border-primary-300 px-2 py-1 rounded">
+                        Xử lý ▾
+                      </button>
+                    </div>
+                    <button v-else @click="viewWipHistory(e)"
+                      class="text-xs text-gray-400 hover:text-gray-600 underline">
+                      Lịch sử
+                    </button>
+                  </td>
+                </tr>
+                <tr v-if="!wipEntries.length">
+                  <td :colspan="can('project.wip.adjust') ? 9 : 8" class="px-4 py-10 text-center text-gray-400">
+                    Chưa có chi phí dở dang nào cho dự án này.
+                    <br><span class="text-xs">Tạo phiếu xuất kho với mục đích "Xuất cho dự án" để tích lũy TK 154.</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- WIP Action Menu (dropdown-style modal) -->
+        <div v-if="wipMenu.open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+          @click.self="wipMenu.open = false">
+          <div class="bg-white rounded-xl shadow-xl w-80 p-5 space-y-3">
+            <h3 class="font-semibold text-gray-800 text-sm">Xử lý chi phí dở dang</h3>
+            <p class="text-xs text-gray-500 truncate">{{ wipMenu.entry?.description }}</p>
+            <p class="text-sm font-bold text-gray-900">{{ formatVnd(wipMenu.entry?.amount) }}</p>
+            <div class="flex flex-col gap-2 pt-1">
+              <!-- Non-stock-exit: phân biệt có/không có bút toán -->
+              <template v-if="!wipMenu.entry?.is_stock_exit">
+                <button v-if="wipMenu.entry?.has_je"
+                  @click="openWipCorrection(wipMenu.entry, 'cancel')"
+                  class="text-left text-sm px-3 py-2 rounded-lg hover:bg-red-50 text-red-600 border border-red-100">
+                  Hủy chi phí / Tạo bút toán đảo
+                </button>
+                <button v-else
+                  @click="openWipCorrection(wipMenu.entry, 'cancel')"
+                  class="text-left text-sm px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-600 border border-gray-200">
+                  Xóa dòng chưa hạch toán
+                </button>
+              </template>
+              <!-- Stock-exit: link trực tiếp đến phiếu xuất kho -->
+              <template v-else>
+                <a v-if="wipMenu.entry?.source_id"
+                  :href="route('warehouse.stock-exits.show', wipMenu.entry.source_id)"
+                  class="text-left text-sm px-3 py-2 rounded-lg hover:bg-yellow-50 text-yellow-700 border border-yellow-200 block"
+                  @click="wipMenu.open = false">
+                  → Xem phiếu xuất kho {{ wipMenu.entry.source_code ?? '' }}
+                </a>
+                <p class="text-xs text-gray-400 px-3">Hủy phiếu xuất kho để đảo chi phí TK 154 và hoàn tồn kho.</p>
+              </template>
+              <button @click="openWipCorrection(wipMenu.entry, 'transfer')"
+                class="text-left text-sm px-3 py-2 rounded-lg hover:bg-blue-50 text-blue-600 border border-blue-100">
+                Chuyển sang dự án khác
+              </button>
+              <button @click="openWipCorrection(wipMenu.entry, 'reclass')"
+                class="text-left text-sm px-3 py-2 rounded-lg hover:bg-orange-50 text-orange-600 border border-orange-100">
+                Điều chỉnh sang tài khoản khác
+              </button>
+            </div>
+            <button @click="wipMenu.open = false" class="w-full text-xs text-gray-400 pt-1">Đóng</button>
+          </div>
+        </div>
+
+        <!-- WIP Correction Modal -->
+        <div v-if="wipCorrection.open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+          @click.self="wipCorrection.open = false">
+          <div class="bg-white rounded-xl shadow-xl w-full max-w-lg space-y-4 p-6">
+            <h3 class="font-semibold text-gray-900">{{ wipCorrectionTitle }}</h3>
+
+            <!-- Entry info -->
+            <div class="bg-gray-50 rounded-lg px-4 py-3 text-sm space-y-1">
+              <p class="text-gray-500">Dòng chi phí: <span class="text-gray-900 font-medium">{{ wipCorrection.entry?.description }}</span></p>
+              <p class="text-gray-500">Số tiền TK 154: <span class="text-gray-900 font-bold">{{ formatVnd(wipCorrection.entry?.amount) }}</span></p>
+              <p class="text-gray-500">Bút toán gốc: <span class="font-mono text-gray-700">{{ wipCorrection.entry?.journal_code ?? '—' }}</span></p>
+            </div>
+
+            <!-- Transfer: choose target project -->
+            <div v-if="wipCorrection.action === 'transfer'" class="space-y-1">
+              <label class="text-xs font-medium text-gray-600">Dự án đích</label>
+              <select v-model="wipCorrection.targetProjectId"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required>
+                <option value="">-- Chọn dự án --</option>
+                <option v-for="p in allActiveProjects" :key="p.id" :value="p.id">
+                  {{ p.code }} — {{ p.name }}
+                </option>
+              </select>
+            </div>
+
+            <!-- Reclass: choose target account -->
+            <div v-if="wipCorrection.action === 'reclass'" class="space-y-1">
+              <label class="text-xs font-medium text-gray-600">Tài khoản đích</label>
+              <input v-model="wipCorrection.targetAccountCode" type="text" placeholder="Vd: 6422, 632, 1561"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" />
+              <p class="text-xs text-gray-400">Chỉ dùng tài khoản chi tiết (is_detail=true). Vd: 6422, 632, 1561...</p>
+            </div>
+
+            <!-- Preview JE -->
+            <div v-if="wipCorrection.preview">
+              <p class="text-xs font-medium text-gray-600 mb-2">Bút toán sẽ tạo:</p>
+              <div class="bg-gray-50 rounded-lg overflow-hidden border border-gray-200">
+                <table class="min-w-full text-xs">
+                  <thead class="bg-gray-100">
+                    <tr>
+                      <th class="text-left px-3 py-1.5 font-semibold text-gray-600">TK</th>
+                      <th class="text-right px-3 py-1.5 font-semibold text-gray-600">Nợ</th>
+                      <th class="text-right px-3 py-1.5 font-semibold text-gray-600">Có</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100">
+                    <tr v-for="(line, i) in wipCorrection.preview.je_lines" :key="i">
+                      <td class="px-3 py-1.5 font-mono text-gray-700">
+                        {{ line.account_code }}
+                        <span v-if="line.project_id" class="text-gray-400"> [DA:{{ line.project_id }}]</span>
+                      </td>
+                      <td class="px-3 py-1.5 text-right text-gray-800">{{ line.debit > 0 ? formatVnd(line.debit) : '—' }}</td>
+                      <td class="px-3 py-1.5 text-right text-gray-800">{{ line.credit > 0 ? formatVnd(line.credit) : '—' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <p v-if="wipCorrection.preview.warning" class="text-xs text-yellow-600 mt-2">
+                ⚠ {{ wipCorrection.preview.warning }}
+              </p>
+              <p v-if="wipCorrection.preview.period_info?.is_locked" class="text-xs text-red-600 mt-2">
+                ⚠ Kỳ kế toán {{ wipCorrection.preview.period_info.period }} đã khóa. Bút toán điều chỉnh sẽ được ghi vào kỳ hiện tại.
+              </p>
+            </div>
+            <p v-else-if="wipCorrection.loadingPreview" class="text-xs text-gray-400">Đang tải preview...</p>
+
+            <!-- Reason -->
+            <div class="space-y-1">
+              <label class="text-xs font-medium text-gray-600">Lý do <span class="text-red-500">*</span></label>
+              <textarea v-model="wipCorrection.reason" rows="2" required
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none"
+                placeholder="Nhập lý do bắt buộc..." />
+            </div>
+
+            <!-- Error -->
+            <p v-if="wipCorrection.error" class="text-xs text-red-600">{{ wipCorrection.error }}</p>
+
+            <div class="flex gap-3 pt-1">
+              <button @click="submitWipCorrection" :disabled="!wipCorrection.reason.trim() || wipCorrection.submitting"
+                class="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                {{ wipCorrection.submitting ? 'Đang xử lý...' : 'Xác nhận' }}
+              </button>
+              <button @click="wipCorrection.open = false"
+                class="flex-1 border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium">
+                Hủy bỏ
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- WIP History Modal -->
+        <div v-if="wipHistory.open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/30 p-4"
+          @click.self="wipHistory.open = false">
+          <div class="bg-white rounded-xl shadow-xl w-full max-w-lg p-6 space-y-4">
+            <h3 class="font-semibold text-gray-900">Lịch sử xử lý chi phí</h3>
+            <p class="text-xs text-gray-500">{{ wipHistory.entry?.description }}</p>
+            <div v-if="wipHistory.loading" class="text-center text-gray-400 py-4">Đang tải...</div>
+            <table v-else-if="wipHistory.logs.length" class="min-w-full text-xs">
+              <thead class="bg-gray-50">
+                <tr>
+                  <th class="text-left px-3 py-2 font-semibold text-gray-600">Hành động</th>
+                  <th class="text-left px-3 py-2 font-semibold text-gray-600">Lý do</th>
+                  <th class="text-left px-3 py-2 font-semibold text-gray-600">Người thực hiện</th>
+                  <th class="text-left px-3 py-2 font-semibold text-gray-600">Thời gian</th>
+                  <th class="text-left px-3 py-2 font-semibold text-gray-600">Bút toán</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <tr v-for="log in wipHistory.logs" :key="log.id">
+                  <td class="px-3 py-2 font-medium text-gray-700">{{ log.action_label }}</td>
+                  <td class="px-3 py-2 text-gray-600 max-w-xs truncate">{{ log.reason }}</td>
+                  <td class="px-3 py-2 text-gray-600">{{ log.performed_by }}</td>
+                  <td class="px-3 py-2 text-gray-500 whitespace-nowrap">{{ log.performed_at }}</td>
+                  <td class="px-3 py-2 font-mono text-gray-500">{{ log.je_code ?? '—' }}</td>
+                </tr>
+              </tbody>
+            </table>
+            <p v-else class="text-center text-gray-400 py-4 text-xs">Chưa có lịch sử xử lý.</p>
+            <button @click="wipHistory.open = false"
+              class="w-full border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm">
+              Đóng
+            </button>
+          </div>
         </div>
 
         <!-- Tab: Đơn mua hàng -->
@@ -674,7 +879,7 @@
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue';
+import { ref, computed, reactive, watch } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
@@ -692,6 +897,7 @@ const props = defineProps({
   purchaseOrders:      { type: Array,  default: () => [] },
   purchaseInvoices:    { type: Array,  default: () => [] },
   allEmployees:        { type: Array,  default: () => [] },
+  allActiveProjects:   { type: Array,  default: () => [] },
   contract_value:      { type: Number, default: null },
   actual_cost_from_pi: { type: Number, default: 0 },
   stockExitItems:      { type: Array,  default: () => [] },
@@ -723,11 +929,141 @@ const purchaseInvoiceTotal = computed(() => props.purchaseInvoices.reduce((s, pi
 
 // WIP source label helper
 const WIP_SOURCE_LABELS = {
-  'App\\Models\\StockExit':           'Xuất kho',
-  'App\\Models\\ProjectExpense':      'Chi phí PS',
+  'App\\Models\\StockExit':             'Xuất kho',
+  'App\\Models\\ProjectExpense':        'Chi phí PS',
   'App\\Models\\ProjectDirectMaterial': 'Vật tư phát sinh',
 };
 const wipSourceLabel = (type) => WIP_SOURCE_LABELS[type] ?? type?.split('\\').pop() ?? '—';
+
+const wipStatusClass = (status) => {
+  if (status === 'active')      return 'bg-green-100 text-green-700';
+  if (status === 'cancelled')   return 'bg-red-100 text-red-600';
+  if (status === 'adjusted')    return 'bg-yellow-100 text-yellow-700';
+  if (status === 'transferred') return 'bg-blue-100 text-blue-700';
+  return 'bg-gray-100 text-gray-500';
+};
+
+// WIP action menu
+const wipMenu = reactive({ open: false, entry: null });
+const openWipMenu = (entry) => { wipMenu.entry = entry; wipMenu.open = true; };
+
+// WIP correction modal
+const wipCorrection = reactive({
+  open: false,
+  entry: null,
+  action: null,
+  targetProjectId: '',
+  targetAccountCode: '',
+  reason: '',
+  preview: null,
+  loadingPreview: false,
+  submitting: false,
+  error: '',
+});
+
+const wipCorrectionTitle = computed(() => ({
+  cancel:   'Hủy chi phí dở dang TK 154',
+  transfer: 'Chuyển chi phí sang dự án khác',
+  reclass:  'Điều chỉnh tài khoản chi phí',
+}[wipCorrection.action] ?? 'Xử lý chi phí dở dang'));
+
+const openWipCorrection = async (entry, action) => {
+  wipMenu.open = false;
+  Object.assign(wipCorrection, {
+    open: true, entry, action,
+    targetProjectId: '', targetAccountCode: '',
+    reason: '', preview: null, error: '',
+    loadingPreview: false, submitting: false,
+  });
+
+  if (action === 'cancel') {
+    await loadWipPreview();
+  }
+};
+
+const loadWipPreview = async () => {
+  if (!wipCorrection.entry) return;
+  wipCorrection.loadingPreview = true;
+  wipCorrection.preview = null;
+  wipCorrection.error = '';
+
+  const urlMap = {
+    cancel:   route('projects.projects.wip.preview-cancel',   [props.project.id, wipCorrection.entry.id]),
+    transfer: route('projects.projects.wip.preview-transfer', [props.project.id, wipCorrection.entry.id]),
+    reclass:  route('projects.projects.wip.preview-reclass',  [props.project.id, wipCorrection.entry.id]),
+  };
+
+  const body = {
+    ...(wipCorrection.action === 'transfer' ? { target_project_id: wipCorrection.targetProjectId } : {}),
+    ...(wipCorrection.action === 'reclass'  ? { target_account_code: wipCorrection.targetAccountCode } : {}),
+  };
+
+  try {
+    const res = await fetch(urlMap[wipCorrection.action], {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '',
+      },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json();
+    if (data.error) { wipCorrection.error = data.error; }
+    else { wipCorrection.preview = data; }
+  } catch {
+    wipCorrection.error = 'Không thể tải preview. Thử lại.';
+  } finally {
+    wipCorrection.loadingPreview = false;
+  }
+};
+
+const submitWipCorrection = () => {
+  if (!wipCorrection.reason.trim()) return;
+  wipCorrection.submitting = true;
+  wipCorrection.error = '';
+
+  const urlMap = {
+    cancel:   route('projects.projects.wip.cancel',   [props.project.id, wipCorrection.entry.id]),
+    transfer: route('projects.projects.wip.transfer', [props.project.id, wipCorrection.entry.id]),
+    reclass:  route('projects.projects.wip.reclass',  [props.project.id, wipCorrection.entry.id]),
+  };
+
+  const data = {
+    reason: wipCorrection.reason,
+    ...(wipCorrection.action === 'transfer' ? { target_project_id: wipCorrection.targetProjectId } : {}),
+    ...(wipCorrection.action === 'reclass'  ? { target_account_code: wipCorrection.targetAccountCode } : {}),
+  };
+
+  router.post(urlMap[wipCorrection.action], data, {
+    preserveScroll: true,
+    onSuccess: () => { wipCorrection.open = false; },
+    onError: (errors) => {
+      wipCorrection.error = Object.values(errors)[0] ?? 'Có lỗi xảy ra.';
+      wipCorrection.submitting = false;
+    },
+    onFinish: () => { wipCorrection.submitting = false; },
+  });
+};
+
+// WIP history modal
+const wipHistory = reactive({ open: false, entry: null, logs: [], loading: false });
+
+const viewWipHistory = async (entry) => {
+  wipHistory.entry = entry;
+  wipHistory.open = true;
+  wipHistory.loading = true;
+  wipHistory.logs = [];
+
+  try {
+    const res = await fetch(route('projects.projects.wip.history', [props.project.id, entry.id]));
+    const data = await res.json();
+    wipHistory.logs = data.logs ?? [];
+  } catch {
+    wipHistory.logs = [];
+  } finally {
+    wipHistory.loading = false;
+  }
+};
 
 // Task form
 const taskForm = reactive({ title: '', assigned_to: null, priority: 'medium', due_date: '' });
@@ -844,6 +1180,14 @@ const confirmDelete = () => {
   if (!confirm(`Xóa vĩnh viễn dự án ${props.project.code} — ${props.project.name}?\n\nTất cả tasks, thành viên, vật tư, chi phí sẽ bị xóa.\nHành động này không thể hoàn tác.`)) return;
   router.delete(route('projects.projects.destroy', props.project.id));
 };
+
+// Auto-load preview when target changes
+watch(() => wipCorrection.targetProjectId, (v) => {
+  if (wipCorrection.action === 'transfer' && v) loadWipPreview();
+});
+watch(() => wipCorrection.targetAccountCode, (v) => {
+  if (wipCorrection.action === 'reclass' && v && v.length >= 3) loadWipPreview();
+});
 
 // Style helpers
 const taskStatusClass = (status) => {

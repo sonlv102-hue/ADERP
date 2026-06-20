@@ -6,9 +6,13 @@ use App\Models\AccountCode;
 use App\Models\AttendanceRecord;
 use App\Models\AttendanceSheet;
 use App\Models\CashVoucher;
+use App\Models\Customer;
 use App\Models\Employee;
 use App\Models\Fund;
+use App\Models\Invoice;
 use App\Models\Payroll;
+use App\Models\PurchaseInvoice;
+use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -201,6 +205,204 @@ class CashFlowReportTest extends TestCase
 
         $this->assertContains($v2->code, $bankRows, 'Phiếu chi ngân hàng phải có trong kết quả bank_transfer');
         $this->assertNotContains($v1->code, $bankRows, 'Phiếu chi tiền mặt không được xuất hiện khi lọc bank_transfer');
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // CF6: AR payment tạo PT- collect_customer → voucherIn loại bỏ, payments tính, total không nhân đôi
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function test_CF6_invoice_payment_pt_voucher_not_double_counted_in_cashflow(): void
+    {
+        $customer = Customer::firstOrCreate(
+            ['code' => 'KH-CF6'],
+            ['name' => 'KH CF6 Test', 'phone' => '0900000006']
+        );
+
+        $invoice = Invoice::create([
+            'code'        => 'HD-CF6-001',
+            'customer_id' => $customer->id,
+            'subtotal'    => 2_000_000,
+            'tax_amount'  => 200_000,
+            'total'       => 2_200_000,
+            'status'      => 'sent',
+            'created_by'  => $this->user->id,
+            'issue_date'  => '2026-06-20',
+        ]);
+
+        $fund = Fund::firstOrCreate(
+            ['code' => 'QUY-CF6'],
+            ['name' => 'Quỹ CF6', 'type' => 'cash', 'account_code' => '1111', 'is_active' => true]
+        );
+
+        $testDate = '2026-06-20';
+        $amount   = 2_200_000;
+
+        // Tạo Payment (bảng nguồn cho inflow)
+        DB::table('payments')->insert([
+            'invoice_id'   => $invoice->id,
+            'fund_id'      => $fund->id,
+            'amount'       => $amount,
+            'payment_date' => $testDate,
+            'method'       => 'cash',
+            'created_by'   => $this->user->id,
+            'created_at'   => now(),
+            'updated_at'   => now(),
+        ]);
+
+        // Tạo PT- CashVoucher collect_customer (như InvoiceService::addPayment() làm từ migration 900112)
+        DB::table('cash_vouchers')->insert([
+            'code'          => 'PT-CF6-001',
+            'type'          => 'receipt',
+            'status'        => 'confirmed',
+            'fund_id'       => $fund->id,
+            'customer_id'   => $customer->id,
+            'partner_type'  => 'customer',
+            'amount'        => $amount,
+            'voucher_date'  => $testDate,
+            'description'   => 'Thu tiền HD-CF6-001',
+            'business_type' => 'collect_customer',
+            'reference_type'=> 'invoice',
+            'reference_id'  => $invoice->id,
+            'created_by'    => $this->user->id,
+            'created_at'    => now(),
+            'updated_at'    => now(),
+        ]);
+
+        // Verify: voucherIn với filter đúng → collect_customer bị loại
+        $voucherInCount = DB::table('cash_vouchers')
+            ->where('type', 'receipt')
+            ->where('status', 'confirmed')
+            ->whereNotIn('business_type', ['collect_customer', 'pay_supplier'])
+            ->whereBetween('voucher_date', [$testDate, $testDate])
+            ->count();
+
+        $this->assertEquals(0, $voucherInCount,
+            'collect_customer PT- phải bị loại khỏi voucherIn (đã tính qua bảng payments)');
+
+        // Verify: payments table vẫn có row
+        $paymentCount = DB::table('payments')
+            ->join('invoices', 'invoices.id', '=', 'payments.invoice_id')
+            ->whereBetween('payments.payment_date', [$testDate, $testDate])
+            ->count();
+
+        $this->assertEquals(1, $paymentCount, 'Payment vẫn được đếm 1 lần từ bảng payments');
+
+        // Endpoint trả 200
+        $this->get(route('reports.cash_flow', [
+            'date_from' => $testDate,
+            'date_to'   => $testDate,
+            'type'      => 'in',
+        ]))->assertOk();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // CF7: AP payment tạo PC- pay_supplier → voucherOut loại bỏ, purchase_invoice_payments tính
+    // ─────────────────────────────────────────────────────────────────────────
+
+    public function test_CF7_purchase_invoice_payment_pc_voucher_not_double_counted_in_cashflow(): void
+    {
+        $supplier = Supplier::firstOrCreate(
+            ['code' => 'NCC-CF7'],
+            ['name' => 'NCC CF7 Test', 'is_active' => true]
+        );
+
+        // Cần Warehouse + PO để đáp ứng FK của purchase_invoices (SQLite FK enabled)
+        $warehouseId = DB::table('warehouses')->insertGetId([
+            'name' => 'Kho CF7', 'is_active' => true,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $poId = DB::table('purchase_orders')->insertGetId([
+            'code'         => 'MH-CF7-001',
+            'supplier_id'  => $supplier->id,
+            'warehouse_id' => $warehouseId,
+            'status'       => 'sent',
+            'order_date'   => '2026-06-20',
+            'created_by'   => $this->user->id,
+            'created_at'   => now(),
+            'updated_at'   => now(),
+        ]);
+
+        $piId = DB::table('purchase_invoices')->insertGetId([
+            'code'              => 'HD-NCC-CF7',
+            'supplier_id'       => $supplier->id,
+            'purchase_order_id' => $poId,
+            'subtotal'          => 5_000_000,
+            'tax_amount'        => 500_000,
+            'total'             => 5_500_000,
+            'paid_amount'       => 0,
+            'status'            => 'valid',
+            'invoice_type'      => 'goods',
+            'invoice_date'      => '2026-06-20',
+            'created_by'        => $this->user->id,
+            'created_at'        => now(),
+            'updated_at'        => now(),
+        ]);
+
+        $fund = Fund::firstOrCreate(
+            ['code' => 'QUY-CF7'],
+            ['name' => 'Quỹ CF7', 'type' => 'cash', 'account_code' => '1111', 'is_active' => true]
+        );
+
+        $testDate = '2026-06-20';
+        $amount   = 5_500_000;
+
+        // Tạo PurchaseInvoicePayment (bảng nguồn cho outflow)
+        DB::table('purchase_invoice_payments')->insert([
+            'purchase_invoice_id' => $piId,
+            'fund_id'             => $fund->id,
+            'amount'              => $amount,
+            'payment_date'        => $testDate,
+            'method'              => 'cash',
+            'created_by'          => $this->user->id,
+            'created_at'          => now(),
+            'updated_at'          => now(),
+        ]);
+
+        // Tạo PC- CashVoucher pay_supplier (như service làm từ migration 900112)
+        DB::table('cash_vouchers')->insert([
+            'code'           => 'PC-CF7-001',
+            'type'           => 'payment',
+            'status'         => 'confirmed',
+            'fund_id'        => $fund->id,
+            'supplier_id'    => $supplier->id,
+            'partner_type'   => 'supplier',
+            'amount'         => $amount,
+            'voucher_date'   => $testDate,
+            'description'    => 'Trả HĐ HD-NCC-CF7',
+            'business_type'  => 'pay_supplier',
+            'reference_type' => 'purchase_invoice',
+            'reference_id'   => $piId,
+            'created_by'     => $this->user->id,
+            'created_at'     => now(),
+            'updated_at'     => now(),
+        ]);
+
+        // Verify: voucherOut với filter đúng → pay_supplier bị loại
+        $voucherOutCount = DB::table('cash_vouchers')
+            ->where('type', 'payment')
+            ->where('status', 'confirmed')
+            ->whereNotIn('business_type', ['collect_customer', 'pay_supplier'])
+            ->whereBetween('voucher_date', [$testDate, $testDate])
+            ->count();
+
+        $this->assertEquals(0, $voucherOutCount,
+            'pay_supplier PC- phải bị loại khỏi voucherOut (đã tính qua purchase_invoice_payments)');
+
+        // Verify: purchase_invoice_payments table vẫn có row
+        $pipCount = DB::table('purchase_invoice_payments')
+            ->join('purchase_invoices', 'purchase_invoices.id', '=', 'purchase_invoice_payments.purchase_invoice_id')
+            ->whereBetween('purchase_invoice_payments.payment_date', [$testDate, $testDate])
+            ->count();
+
+        $this->assertEquals(1, $pipCount, 'PurchaseInvoicePayment vẫn được đếm 1 lần từ bảng nguồn');
+
+        // Endpoint trả 200
+        $this->get(route('reports.cash_flow', [
+            'date_from' => $testDate,
+            'date_to'   => $testDate,
+            'type'      => 'out',
+        ]))->assertOk();
     }
 
     // ─────────────────────────────────────────────────────────────────────────

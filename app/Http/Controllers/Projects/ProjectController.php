@@ -230,12 +230,16 @@ class ProjectController extends Controller
                 ]),
                 'allowed_transitions' => $this->allowedTransitions($project),
             ],
+            'allActiveProjects' => Project::whereNotIn('status', ['cancelled', 'completed'])
+                ->where('id', '!=', $project->id)
+                ->orderBy('code')
+                ->get(['id', 'code', 'name']),
             'allEmployees' => Employee::whereIn('status', ['active', 'probation'])->orderBy('name')->get(['id', 'code', 'name', 'position', 'department']),
             'allProducts' => Product::where('is_active', true)->orderBy('name')->get(['id', 'name', 'unit', 'cost_price']),
             'expenseCategories' => collect(ExpenseCategory::cases())->map(fn ($c) => ['value' => $c->value, 'label' => $c->label()]),
             'wipSummary'     => $this->wip->getWipSummary($project->id),
             'wipEntries'     => $this->wip->getWipEntries($project->id),
-            'wipTotal'       => (int) \App\Models\ProjectWipEntry::where('project_id', $project->id)->sum('amount'),
+            'wipTotal'       => (int) \App\Models\ProjectWipEntry::where('project_id', $project->id)->where('status', 'active')->sum('amount'),
             'purchaseOrders' => PurchaseOrder::with(['supplier'])
                 ->where('project_id', $project->id)
                 ->orderByDesc('id')

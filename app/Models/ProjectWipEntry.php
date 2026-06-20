@@ -15,13 +15,15 @@ class ProjectWipEntry extends Model
         'cost_type', 'amount', 'description',
         'entry_date', 'journal_entry_id', 'created_by',
         'product_id', 'quantity', 'unit_cost', 'stock_exit_item_id',
+        'status', 'cancel_reason', 'cancelled_by', 'cancelled_at', 'correction_of_id',
     ];
 
     protected $casts = [
-        'entry_date' => 'date',
-        'amount'     => 'decimal:2',
-        'quantity'   => 'decimal:3',
-        'unit_cost'  => 'decimal:2',
+        'entry_date'   => 'date',
+        'amount'       => 'decimal:2',
+        'quantity'     => 'decimal:3',
+        'unit_cost'    => 'decimal:2',
+        'cancelled_at' => 'datetime',
     ];
 
     public static array $costTypeLabels = [
@@ -50,5 +52,49 @@ class ProjectWipEntry extends Model
     public function journalEntry(): BelongsTo
     {
         return $this->belongsTo(JournalEntry::class);
+    }
+
+    public function cancelledByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'cancelled_by');
+    }
+
+    public function correctionOf(): BelongsTo
+    {
+        return $this->belongsTo(ProjectWipEntry::class, 'correction_of_id');
+    }
+
+    public function correctionLogs(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ProjectWipCorrectionLog::class, 'wip_entry_id');
+    }
+
+    public function isActive(): bool
+    {
+        return ($this->status ?? 'active') === 'active';
+    }
+
+    public function statusLabel(): string
+    {
+        return match ($this->status ?? 'active') {
+            'active'      => 'Đang hiệu lực',
+            'cancelled'   => 'Đã hủy',
+            'adjusted'    => 'Đã điều chỉnh TK',
+            'transferred' => 'Đã chuyển dự án',
+            'reversed'    => 'Đã đảo',
+            default       => $this->status ?? 'active',
+        };
+    }
+
+    public function statusColor(): string
+    {
+        return match ($this->status ?? 'active') {
+            'active'      => 'green',
+            'cancelled'   => 'red',
+            'adjusted'    => 'yellow',
+            'transferred' => 'blue',
+            'reversed'    => 'gray',
+            default       => 'gray',
+        };
     }
 }

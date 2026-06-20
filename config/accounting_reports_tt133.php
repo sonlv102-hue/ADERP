@@ -234,10 +234,10 @@ return [
             'item_code'    => '312',
             'item_name'    => '2. Người mua trả tiền trước',
             'parent_code'  => '300',
-            'accounts'     => ['131', '1311', '1312', '1318'],
+            'accounts'     => ['131', '1311', '1312', '1318', '131UT'],
             'balance_side' => 'credit_detail',
             'negative'     => false,
-            'note'         => 'Dư Có chi tiết TK 131 = KH đã trả tiền trước.',
+            'note'         => 'Dư Có chi tiết TK 131/131UT = KH đã trả tiền trước.',
         ],
         [
             'item_code'    => '313',
