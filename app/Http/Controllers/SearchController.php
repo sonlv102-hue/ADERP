@@ -276,6 +276,10 @@ class SearchController extends Controller
                     3
                 );
 
+                // Tính giá vốn bình quân gia quyền từ các lô còn tồn
+                $totalCostValue = $productLots->sum(fn ($l) => ((float) $l->received_qty - (float) $l->issued_qty) * (float) ($l->unit_cost ?? 0));
+                $avgCostFromLots = $availableQty > 0 ? round($totalCostValue / $availableQty, 2) : null;
+
                 return [
                     'value'      => $product->id,
                     'label'      => $product->name,
@@ -283,7 +287,7 @@ class SearchController extends Controller
                     'meta'       => $product->unit ? "Tồn: {$availableQty} {$product->unit}" : "Tồn: {$availableQty}",
                     'unit'       => $product->unit,
                     'qty'        => $availableQty,
-                    'avg_cost'   => null,
+                    'avg_cost'   => $avgCostFromLots,
                     'sell_price' => (float) ($product->sell_price ?? 0),
                 ];
             })->filter()->values()->take(30);

@@ -171,7 +171,7 @@
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Tên sản phẩm</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Đơn vị</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">SL</th>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">Đơn giá</th>
+              <th class="text-left px-5 py-3 font-semibold text-gray-600">Giá vốn</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Thành tiền</th>
             </tr>
           </thead>
@@ -182,7 +182,10 @@
                 <td class="px-5 py-3 font-medium text-gray-900">{{ item.product_name }}</td>
                 <td class="px-5 py-3 text-gray-600">{{ item.unit }}</td>
                 <td class="px-5 py-3 text-gray-600">{{ item.quantity.toLocaleString('vi-VN') }}</td>
-                <td class="px-5 py-3 text-gray-600">{{ formatVnd(item.unit_price) }}</td>
+                <td class="px-5 py-3 text-gray-600">
+                  {{ formatVnd(item.source_cost ?? item.unit_price) }}
+                  <span v-if="item.cost_source" class="ml-1 text-xs text-gray-400 uppercase">({{ item.cost_source }})</span>
+                </td>
                 <td class="px-5 py-3 font-medium text-gray-900">{{ formatVnd(item.total) }}</td>
               </tr>
               <tr v-if="item.serials?.length" class="bg-blue-50">

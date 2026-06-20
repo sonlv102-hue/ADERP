@@ -311,7 +311,7 @@
                   <th class="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">Sản phẩm</th>
                   <th class="w-16 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">ĐVT</th>
                   <th class="w-20 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">SL</th>
-                  <th class="w-32 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">Đơn giá</th>
+                  <th class="w-32 px-3 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-400">Giá vốn</th>
                   <th class="w-32 px-3 py-3 text-right text-xs font-semibold uppercase tracking-wide text-gray-400">Thành tiền</th>
                   <th class="w-8 px-3 py-3" />
                 </tr>
@@ -599,16 +599,23 @@ const loadItemsFromLots = () => {
     : availablePurchaseOrders.value.map(po => po.id);
   form.purchase_order_ids = poIds;
 
-  const newItems = filteredLots.value.map(lot => ({
-    product_id:      lot.product_id,
-    order_item_id:   null,
-    quantity:        Math.max(1, Math.floor(lot.available_qty)),
-    unit_price:      0,
-    serial_ids:      [],
-    _productDisplay: lot.product_code ? `${lot.product_code} - ${lot.product_name}` : (lot.product_name ?? ''),
-    _unit:           lot.unit ?? '',
-    _qtyOnHand:      lot.available_qty,
-  }));
+  const newItems = filteredLots.value.map(lot => {
+    // Tính giá vốn bình quân gia quyền từ các lô sẵn có (FIFO weighted avg)
+    const totalAvailQty  = lot.lots.reduce((s, l) => s + l.available_qty, 0);
+    const totalCostValue = lot.lots.reduce((s, l) => s + l.available_qty * (l.unit_cost ?? 0), 0);
+    const avgUnitCost    = totalAvailQty > 0 ? totalCostValue / totalAvailQty : 0;
+
+    return {
+      product_id:      lot.product_id,
+      order_item_id:   null,
+      quantity:        Math.max(1, Math.floor(lot.available_qty)),
+      unit_price:      avgUnitCost,
+      serial_ids:      [],
+      _productDisplay: lot.product_code ? `${lot.product_code} - ${lot.product_name}` : (lot.product_name ?? ''),
+      _unit:           lot.unit ?? '',
+      _qtyOnHand:      lot.available_qty,
+    };
+  });
   if (newItems.length) form.items = newItems;
 };
 
@@ -670,7 +677,7 @@ const onCustomerChange = () => {
   }
 };
 
-const onOrderChange = () => {
+const onOrderChange = async () => {
   if (!form.order_id) return;
   const order = props.orders.find(o => o.id === form.order_id);
   if (!order) return;
@@ -681,13 +688,42 @@ const onOrderChange = () => {
       product_id:      i.product_id,
       order_item_id:   i.id,
       quantity:        i.remaining,
-      unit_price:      i.unit_price,
+      unit_price:      0, // sẽ được điền từ AVCO bên dưới
       serial_ids:      [],
       _productDisplay: i.product_name ?? '',
       _unit:           i.unit ?? '',
       _qtyOnHand:      null,
     }));
-  if (filled.length) form.items = filled;
+  if (filled.length) {
+    form.items = filled;
+    // Lấy giá vốn AVCO từ server để điền vào unit_price
+    if (form.warehouse_id) {
+      await fetchAndApplyAvcoCosts(filled.map(i => i.product_id));
+    }
+  }
+};
+
+// Gọi API lấy giá vốn AVCO cho danh sách sản phẩm tại kho đã chọn
+const fetchAndApplyAvcoCosts = async (productIds) => {
+  if (!form.warehouse_id || !productIds.length) return;
+  try {
+    const params = new URLSearchParams({ warehouse_id: form.warehouse_id });
+    productIds.forEach(id => params.append('product_ids[]', id));
+    const url = route('warehouse.stock-exits.avco-costs') + '?' + params.toString();
+    const res = await fetch(url, { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+    if (!res.ok) return;
+    const data = await res.json();
+    const costs = data.data ?? {};
+    form.items.forEach(item => {
+      const info = costs[item.product_id];
+      if (info) {
+        item.unit_price = info.avg_cost;
+        if (item._qtyOnHand === null) item._qtyOnHand = info.qty_on_hand;
+      }
+    });
+  } catch {
+    // silent fail — backend resolves at confirm time via AVCO
+  }
 };
 
 const addRow = () => {
@@ -716,15 +752,9 @@ const onProductSelect = (index, opt) => {
   }
   form.items[index]._productDisplay = opt.code ? `${opt.code} - ${opt.label}` : opt.label;
   form.items[index]._unit = opt.unit ?? '';
-  form.items[index]._qtyOnHand = opt.qty ?? null; // Lưu tồn kho từ warehouse-products endpoint
-
-  const order = form.order_id ? props.orders.find(o => o.id === form.order_id) : null;
-  const orderItem = order?.items?.find(i => i.product_id === opt.value);
-  if (orderItem) {
-    form.items[index].unit_price = orderItem.unit_price;
-  } else {
-    form.items[index].unit_price = Number(opt.sell_price ?? 0);
-  }
+  form.items[index]._qtyOnHand = opt.qty ?? null;
+  // Giá vốn bình quân (AVCO hoặc tính từ lô dự án) — không dùng giá bán
+  form.items[index].unit_price = Number(opt.avg_cost ?? 0);
   form.items[index].serial_ids = [];
 };
 

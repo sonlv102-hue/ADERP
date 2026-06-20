@@ -213,6 +213,7 @@ Route::middleware('auth')->group(function () {
         Route::post('stock-exits/{stockExit}/cancel', [StockExitController::class, 'cancel'])->name('stock-exits.cancel');
         Route::get('stock-exits/{stockExit}/pdf', [StockExitController::class, 'pdf'])->name('stock-exits.pdf');
         Route::get('stock-exits-available-lots', [StockExitController::class, 'availableLots'])->name('stock-exits.available-lots');
+        Route::get('stock-exits-avco-costs', [StockExitController::class, 'avcoCosts'])->name('stock-exits.avco-costs');
         Route::get('project-inventory', [ProjectInventoryController::class, 'index'])->name('project-inventory.index');
 
         Route::resource('stock-transfers', StockTransferController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);

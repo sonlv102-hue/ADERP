@@ -94,6 +94,35 @@ class StockExitController extends Controller
     }
 
     /**
+     * API: lấy giá vốn AVCO (avg_cost) cho danh sách sản phẩm tại kho.
+     * GET /warehouse/stock-exits-avco-costs?warehouse_id=X&product_ids[]=Y
+     */
+    public function avcoCosts(Request $request): JsonResponse
+    {
+        $request->validate([
+            'warehouse_id'  => ['required', 'exists:warehouses,id'],
+            'product_ids'   => ['required', 'array'],
+            'product_ids.*' => ['integer'],
+        ]);
+
+        $warehouseId = $request->integer('warehouse_id');
+        $productIds  = $request->input('product_ids');
+
+        $balances = InventoryBalance::where('warehouse_id', $warehouseId)
+            ->whereIn('product_id', $productIds)
+            ->get(['product_id', 'avg_cost', 'qty_on_hand']);
+
+        $result = $balances->mapWithKeys(fn ($b) => [
+            $b->product_id => [
+                'avg_cost'    => (float) $b->avg_cost,
+                'qty_on_hand' => (float) $b->qty_on_hand,
+            ],
+        ]);
+
+        return response()->json(['data' => $result]);
+    }
+
+    /**
      * API: lấy danh sách sản phẩm còn tồn theo project_inventory_lots.
      * GET /warehouse/stock-exits/available-lots?project_id=X&warehouse_id=Y
      */
@@ -423,7 +452,12 @@ class StockExitController extends Controller
                     'unit'         => $item->product->unit,
                     'quantity'     => $item->quantity,
                     'unit_price'   => $item->unit_price,
-                    'total'        => $item->quantity * $item->unit_price,
+                    'source_cost'  => $item->source_cost !== null ? (float) $item->source_cost : null,
+                    'total_cost'   => $item->total_cost !== null ? (float) $item->total_cost : null,
+                    'cost_source'  => $item->cost_source,
+                    'total'        => $item->total_cost !== null && (float) $item->total_cost > 0
+                                        ? (float) $item->total_cost
+                                        : (float) $item->quantity * (float) $item->unit_price,
                     'serials'      => $item->serials->map(fn ($s) => [
                         'id'           => $s->id,
                         'serial_number' => $s->serial_number,
