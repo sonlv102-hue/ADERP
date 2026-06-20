@@ -11,6 +11,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Contract;
 use App\Models\InventoryBalance;
 use App\Models\JournalEntry;
+use App\Models\StockEntryItem;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductSerial;
@@ -118,6 +119,30 @@ class StockExitController extends Controller
                 'qty_on_hand' => (float) $b->qty_on_hand,
             ],
         ]);
+
+        // Với các sản phẩm chưa có AVCO, fallback lấy avg từ lịch sử nhập kho
+        $foundIds   = $balances->pluck('product_id')->toArray();
+        $missingIds = array_values(array_diff($productIds, $foundIds));
+
+        if (! empty($missingIds)) {
+            $entryAvg = StockEntryItem::join('stock_entries', 'stock_entries.id', '=', 'stock_entry_items.stock_entry_id')
+                ->where('stock_entries.warehouse_id', $warehouseId)
+                ->whereIn('stock_entry_items.product_id', $missingIds)
+                ->where('stock_entries.status', 'confirmed')
+                ->select('stock_entry_items.product_id')
+                ->selectRaw(
+                    'SUM(stock_entry_items.quantity * stock_entry_items.unit_price) / NULLIF(SUM(stock_entry_items.quantity), 0) AS avg_cost'
+                )
+                ->groupBy('stock_entry_items.product_id')
+                ->get();
+
+            foreach ($entryAvg as $row) {
+                $result[$row->product_id] = [
+                    'avg_cost'    => round((float) $row->avg_cost, 2),
+                    'qty_on_hand' => null,
+                ];
+            }
+        }
 
         return response()->json(['data' => $result]);
     }

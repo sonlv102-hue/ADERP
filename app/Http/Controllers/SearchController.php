@@ -11,10 +11,12 @@ use App\Models\Project;
 use App\Models\ProjectInventoryLot;
 use App\Models\PurchaseOrder;
 use App\Models\Service;
+use App\Models\StockEntryItem;
 use App\Models\Supplier;
 use App\Models\Warehouse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class SearchController extends Controller
 {
@@ -296,7 +298,7 @@ class SearchController extends Controller
         }
 
         // Non-project: query từ inventory_balances (AVCO)
-        $items = InventoryBalance::with('product')
+        $balanceRows = InventoryBalance::with('product')
             ->where('warehouse_id', $warehouseId)
             ->where('qty_on_hand', '>', 0)
             ->whereHas('product', function ($q) use ($keyword) {
@@ -309,8 +311,10 @@ class SearchController extends Controller
                 }
             })
             ->limit(30)
-            ->get()
-            ->map(fn ($ib) => [
+            ->get();
+
+        if ($balanceRows->isNotEmpty()) {
+            $items = $balanceRows->map(fn ($ib) => [
                 'value'      => $ib->product_id,
                 'label'      => $ib->product->name,
                 'code'       => $ib->product->code,
@@ -322,6 +326,60 @@ class SearchController extends Controller
                 'avg_cost'   => (float) $ib->avg_cost,
                 'sell_price' => (float) ($ib->product->sell_price ?? 0),
             ]);
+            return response()->json(['data' => $items]);
+        }
+
+        // Fallback: inventory_balances chưa được khởi tạo → tính từ stock_movements + stock_entry_items
+        $movQty = DB::table('stock_movements')
+            ->where('warehouse_id', $warehouseId)
+            ->whereNull('project_id')
+            ->select('product_id', DB::raw('SUM(quantity) AS qty'))
+            ->groupBy('product_id')
+            ->having(DB::raw('SUM(quantity)'), '>', 0)
+            ->get()
+            ->keyBy('product_id');
+
+        if ($movQty->isEmpty()) {
+            return response()->json(['data' => []]);
+        }
+
+        $entryAvg = StockEntryItem::join('stock_entries', 'stock_entries.id', '=', 'stock_entry_items.stock_entry_id')
+            ->where('stock_entries.warehouse_id', $warehouseId)
+            ->whereIn('stock_entry_items.product_id', $movQty->keys()->toArray())
+            ->where('stock_entries.status', 'confirmed')
+            ->select('stock_entry_items.product_id')
+            ->selectRaw(
+                'SUM(stock_entry_items.quantity * stock_entry_items.unit_price) / NULLIF(SUM(stock_entry_items.quantity), 0) AS avg_cost'
+            )
+            ->groupBy('stock_entry_items.product_id')
+            ->get()
+            ->keyBy('product_id');
+
+        $products = Product::whereIn('id', $movQty->keys()->toArray())
+            ->where('is_active', true)
+            ->when($keyword, function ($q, $kw) {
+                $q->where(function ($b) use ($kw) {
+                    $b->whereRaw('LOWER(name) LIKE ?', ["%{$kw}%"])
+                      ->orWhereRaw('LOWER(code) LIKE ?', ["%{$kw}%"]);
+                });
+            })
+            ->limit(30)
+            ->get();
+
+        $items = $products->map(function ($p) use ($movQty, $entryAvg) {
+            $qty     = (float) ($movQty[$p->id]->qty ?? 0);
+            $avgCost = (float) ($entryAvg[$p->id]->avg_cost ?? 0);
+            return [
+                'value'      => $p->id,
+                'label'      => $p->name,
+                'code'       => $p->code,
+                'meta'       => $p->unit ? "Tồn: {$qty} {$p->unit}" : "Tồn: {$qty}",
+                'unit'       => $p->unit,
+                'qty'        => $qty,
+                'avg_cost'   => round($avgCost, 2),
+                'sell_price' => (float) ($p->sell_price ?? 0),
+            ];
+        })->values();
 
         return response()->json(['data' => $items]);
     }

@@ -3,6 +3,8 @@
 namespace App\Services;
 
 use App\Models\InventoryBalance;
+use App\Models\StockEntryItem;
+use App\Models\StockMovement;
 use RuntimeException;
 
 class AvcoService
@@ -73,10 +75,14 @@ class AvcoService
             ->first();
 
         if ($balance === null) {
-            throw new RuntimeException(
-                "Chưa có số dư tồn kho AVCO cho sản phẩm ID {$productId} / kho ID {$warehouseId}. " .
-                "Vui lòng vào Kho → Rà soát giá vốn → tab Khởi tạo AVCO để nhập tồn đầu kỳ."
-            );
+            // Thử auto-seed từ lịch sử nhập kho (an toàn khi chưa có exits nào)
+            $balance = $this->seedBalanceFromEntries($productId, $warehouseId);
+            if ($balance === null) {
+                throw new RuntimeException(
+                    "Chưa có số dư tồn kho AVCO cho sản phẩm ID {$productId} / kho ID {$warehouseId}. " .
+                    "Vui lòng vào Kho → Tồn kho đầu kỳ để nhập số dư ban đầu."
+                );
+            }
         }
 
         if ((float) $balance->avg_cost <= 0) {
@@ -95,6 +101,45 @@ class AvcoService
         ]);
 
         return $avgCost;
+    }
+
+    /**
+     * Auto-seed inventory_balances from confirmed stock_entry_items.
+     * Called when recordExit finds no existing balance (e.g., AVCO module was added after entries).
+     * Safe only when no prior exits exist for this product+warehouse (caller must ensure this).
+     */
+    private function seedBalanceFromEntries(int $productId, int $warehouseId): ?InventoryBalance
+    {
+        $entryData = StockEntryItem::join('stock_entries', 'stock_entries.id', '=', 'stock_entry_items.stock_entry_id')
+            ->where('stock_entries.warehouse_id', $warehouseId)
+            ->where('stock_entry_items.product_id', $productId)
+            ->where('stock_entries.status', 'confirmed')
+            ->selectRaw(
+                'SUM(stock_entry_items.quantity * stock_entry_items.unit_price) / NULLIF(SUM(stock_entry_items.quantity), 0) AS avg_cost'
+            )
+            ->first();
+
+        if (! $entryData || ! $entryData->avg_cost || (float) $entryData->avg_cost <= 0) {
+            return null;
+        }
+
+        $currentQty = (float) StockMovement::where('product_id', $productId)
+            ->where('warehouse_id', $warehouseId)
+            ->whereNull('project_id')
+            ->sum('quantity');
+
+        $avgCost   = round((float) $entryData->avg_cost, 2);
+        $qtyOnHand = max(0.0, $currentQty);
+
+        return InventoryBalance::create([
+            'product_id'       => $productId,
+            'warehouse_id'     => $warehouseId,
+            'qty_on_hand'      => $qtyOnHand,
+            'value_on_hand'    => round($qtyOnHand * $avgCost, 2),
+            'avg_cost'         => $avgCost,
+            'initialized_from' => 'auto_from_entries',
+            'initialized_at'   => now(),
+        ]);
     }
 
     /**
