@@ -241,6 +241,7 @@ class InventoryAuditCommand extends Command
         $glValue = DB::table('journal_entry_lines as jl')
             ->join('journal_entries as je', 'je.id', '=', 'jl.journal_entry_id')
             ->where('je.status', 'posted')
+            ->where('je.exclude_from_period_movement', false)
             ->where('jl.account_code', 'LIKE', '156%')
             ->selectRaw('SUM(jl.debit) - SUM(jl.credit) as balance')
             ->value('balance') ?? 0;
@@ -260,6 +261,7 @@ class InventoryAuditCommand extends Command
         $gl154    = DB::table('journal_entry_lines as jl')
             ->join('journal_entries as je', 'je.id', '=', 'jl.journal_entry_id')
             ->where('je.status', 'posted')
+            ->where('je.exclude_from_period_movement', false)
             ->where('jl.account_code', 'LIKE', '154%')
             ->selectRaw('SUM(jl.debit) - SUM(jl.credit) as balance')
             ->value('balance') ?? 0;
