@@ -130,14 +130,19 @@
               <span v-else class="font-medium text-gray-900">—</span>
             </div>
           </div>
-          <div v-if="exit.purchase_order || exit.project">
+          <div v-if="exit.purchase_orders?.length || exit.project">
             <span class="text-gray-500">Đơn mua liên kết</span>
             <div class="mt-0.5">
-              <template v-if="exit.purchase_order">
-                <Link :href="route('purchasing.purchase-orders.show', exit.purchase_order.id)"
-                  class="font-medium text-primary-600 hover:underline">{{ exit.purchase_order.code }}</Link>
+              <template v-if="exit.purchase_orders?.length">
+                <div class="flex flex-wrap gap-1.5">
+                  <Link
+                    v-for="po in exit.purchase_orders" :key="po.id"
+                    :href="route('purchasing.purchase-orders.show', po.id)"
+                    class="rounded-md border border-blue-200 bg-blue-50 px-2 py-0.5 text-xs font-medium text-primary-600 hover:underline"
+                  >{{ po.code }}</Link>
+                </div>
               </template>
-              <span v-else class="text-xs text-gray-400 italic">Nhiều đơn mua (xem theo lô)</span>
+              <span v-else class="text-xs text-gray-400 italic">— Không liên kết —</span>
             </div>
           </div>
           <div>

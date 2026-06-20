@@ -102,24 +102,8 @@
                 />
               </FormField>
 
-              <!-- Đơn mua liên kết (project_cost) hoặc Đơn hàng liên kết (sale_delivery) -->
-              <template v-if="form.issue_purpose === 'project_cost'">
-                <FormField label="Đơn mua liên kết" optional :error="form.errors.purchase_order_id">
-                  <RemoteSearchSelect
-                    v-model="form.purchase_order_id"
-                    :search-url="purchaseOrderSearchUrl"
-                    :extra-params="{ project_id: form.project_id }"
-                    :display-text="initialPurchaseOrderDisplay"
-                    :disabled="!form.project_id"
-                    :placeholder="form.project_id ? '— Tìm đơn mua —' : '— Chọn dự án trước —'"
-                    :has-error="!!form.errors.purchase_order_id"
-                  />
-                  <p v-if="!form.project_id" class="mt-1 text-xs text-amber-600">
-                    Chọn dự án để tải danh sách đơn mua liên quan.
-                  </p>
-                </FormField>
-              </template>
-              <template v-else>
+              <!-- Đơn hàng liên kết (sale_delivery) -->
+              <template v-if="form.issue_purpose !== 'project_cost'">
                 <FormField label="Đơn hàng liên kết" optional :error="form.errors.order_id">
                   <select
                     v-model="form.order_id"
@@ -154,30 +138,69 @@
                 />
               </FormField>
 
-              <!-- Available lots panel -->
+              <!-- Available lots panel (project_cost) với filter PO + nạp hàng -->
               <template v-if="form.issue_purpose === 'project_cost' && form.project_id && form.warehouse_id">
                 <div class="sm:col-span-2">
                   <div v-if="lotsLoading" class="text-xs italic text-gray-400">Đang tải lô hàng...</div>
-                  <div v-else-if="availableLots.length"
-                    class="space-y-2 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
-                    <p class="text-xs font-semibold text-emerald-700">Lô hàng sẵn có (FIFO):</p>
-                    <div v-for="lot in availableLots" :key="lot.product_id">
-                      <div class="flex items-center justify-between text-xs">
-                        <span class="font-medium text-gray-700">{{ lot.product_code }} — {{ lot.product_name }}</span>
-                        <span class="font-semibold text-emerald-700">Sẵn có: {{ lot.available_qty }} {{ lot.unit }}</span>
-                      </div>
-                      <div class="mt-1 flex flex-wrap gap-1">
-                        <span v-for="l in lot.lots" :key="l.id"
-                          class="rounded-md border border-emerald-200 bg-white px-1.5 py-0.5 text-xs text-gray-600">
-                          <span v-if="l.purchase_order_code" class="font-medium text-blue-700">{{ l.purchase_order_code }}</span>
-                          <span v-if="l.purchase_order_code"> / </span>
-                          {{ l.stock_entry_code }}: {{ l.available_qty }}
-                        </span>
+                  <div v-else-if="availableLots.length" class="space-y-3 rounded-xl border border-emerald-100 bg-emerald-50/50 p-3">
+
+                    <!-- Lọc theo đơn mua -->
+                    <div v-if="availablePurchaseOrders.length > 1">
+                      <p class="mb-1.5 text-xs font-semibold text-emerald-700">Lọc theo đơn mua:</p>
+                      <div class="flex flex-wrap gap-1.5">
+                        <label
+                          v-for="po in availablePurchaseOrders" :key="po.id"
+                          class="flex cursor-pointer items-center gap-1 rounded-lg border px-2 py-1 text-xs font-medium transition select-none"
+                          :class="selectedPoIds.length === 0 || selectedPoIds.includes(po.id)
+                            ? 'border-blue-500 bg-blue-500 text-white'
+                            : 'border-gray-200 bg-white text-gray-500 hover:border-blue-300'"
+                        >
+                          <input type="checkbox" :value="po.id" v-model="selectedPoIds" class="hidden" />
+                          {{ po.code }}
+                        </label>
+                        <button v-if="selectedPoIds.length" type="button"
+                          @click="selectedPoIds = []"
+                          class="rounded-lg border border-gray-200 bg-white px-2 py-1 text-xs text-gray-500 hover:border-red-300 hover:text-red-500">
+                          Tất cả
+                        </button>
                       </div>
                     </div>
+
+                    <!-- Danh sách lô theo sản phẩm (đã lọc) -->
+                    <div>
+                      <p class="mb-1.5 text-xs font-semibold text-emerald-700">Lô hàng sẵn có (FIFO):</p>
+                      <div v-for="lot in filteredLots" :key="lot.product_id" class="mb-2 last:mb-0">
+                        <div class="flex items-center justify-between text-xs">
+                          <span class="font-medium text-gray-700">{{ lot.product_code }} — {{ lot.product_name }}</span>
+                          <span class="font-semibold text-emerald-700">Sẵn có: {{ lot.available_qty }} {{ lot.unit }}</span>
+                        </div>
+                        <div class="mt-1 flex flex-wrap gap-1">
+                          <span v-for="l in lot.lots" :key="l.id"
+                            class="rounded-md border border-emerald-200 bg-white px-1.5 py-0.5 text-xs text-gray-600">
+                            <span v-if="l.purchase_order_code" class="font-medium text-blue-700">{{ l.purchase_order_code }}</span>
+                            <span v-if="l.purchase_order_code"> / </span>
+                            {{ l.stock_entry_code }}: {{ l.available_qty }}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <!-- Nút nạp hàng -->
+                    <div class="border-t border-emerald-100 pt-2.5">
+                      <button
+                        type="button"
+                        @click="loadItemsFromLots"
+                        class="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-emerald-700 active:scale-95"
+                      >
+                        <svg class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                        Nạp hàng từ lô{{ selectedPoIds.length ? ` (${availablePurchaseOrders.filter(p => selectedPoIds.includes(p.id)).map(p => p.code).join(', ')})` : '' }}
+                      </button>
+                      <p class="mt-1 text-xs text-gray-400">Tự động điền danh sách hàng xuất từ lô FIFO sẵn có.</p>
+                    </div>
                   </div>
-                  <div v-else
-                    class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-2.5 text-xs text-amber-700">
+                  <div v-else class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-2.5 text-xs text-amber-700">
                     Chưa có lô hàng nào trong kho cho dự án này.
                   </div>
                 </div>
@@ -478,26 +501,24 @@ const initialProjectDisplay = computed(() =>
     ? `${props.exit.project_code} - ${props.exit.project_name}`
     : (props.exit?.project_name ?? '')
 );
-const initialPurchaseOrderDisplay = computed(() =>
-  props.exit?.purchase_order_code ?? ''
-);
 
 const today = new Date().toISOString().slice(0, 10);
 
 const form = useForm({
-  code:              props.exit?.code              ?? props.nextCode ?? '',
-  exit_date:         props.exit?.exit_date         ?? today,
-  warehouse_id:      props.exit?.warehouse_id      ?? '',
-  customer_id:       props.exit?.customer_id       ?? null,
-  order_id:          props.exit?.order_id          ?? null,
-  purchase_order_id: props.exit?.purchase_order_id ?? null,
-  item_usage_type:   props.exit?.item_usage_type   ?? 'commercial',
-  issue_purpose:     props.exit?.issue_purpose     ?? (props.exit?.item_usage_type === 'project' ? 'project_cost' : ''),
-  project_id:        props.exit?.project_id        ?? null,
-  reason:            props.exit?.reason            ?? '',
-  notes:             props.exit?.notes             ?? '',
+  code:                props.exit?.code              ?? props.nextCode ?? '',
+  exit_date:           props.exit?.exit_date         ?? today,
+  warehouse_id:        props.exit?.warehouse_id      ?? '',
+  customer_id:         props.exit?.customer_id       ?? null,
+  order_id:            props.exit?.order_id          ?? null,
+  purchase_order_ids:  props.exit?.purchase_order_ids ?? [],
+  item_usage_type:     props.exit?.item_usage_type   ?? 'commercial',
+  issue_purpose:       props.exit?.issue_purpose     ?? (props.exit?.item_usage_type === 'project' ? 'project_cost' : ''),
+  project_id:          props.exit?.project_id        ?? null,
+  reason:              props.exit?.reason            ?? '',
+  notes:               props.exit?.notes             ?? '',
   items: props.exit?.items?.map(item => ({
     product_id:      item.product_id,
+    order_item_id:   item.order_item_id ?? null,
     quantity:        item.quantity,
     unit_price:      item.unit_price,
     serial_ids:      item.serial_ids ?? [],
@@ -514,8 +535,8 @@ const productSearchUrl = computed(() =>
     : window.route('search.products')
 );
 
-// URL search đơn mua theo dự án
-const purchaseOrderSearchUrl = computed(() => window.route('search.project-purchase-orders'));
+// PO IDs được chọn để lọc lô hàng (multi-PO filter)
+const selectedPoIds = ref(Array.isArray(props.exit?.purchase_order_ids) ? [...props.exit.purchase_order_ids] : []);
 
 // Extra params cho ProductSearch: luôn gửi warehouse_id khi có
 const productSearchParams = computed(() => {
@@ -543,6 +564,53 @@ const selectedOrderItems = computed(() => selectedOrder.value?.items ?? []);
 const hasOrderContract = computed(() =>
   !form.order_id || (selectedOrder.value?.has_contract ?? true)
 );
+
+// POs duy nhất có sẵn trong các lô dự án (dùng để hiển thị bộ lọc)
+const availablePurchaseOrders = computed(() => {
+  const seen = new Set();
+  const result = [];
+  for (const lotGroup of availableLots.value) {
+    for (const l of lotGroup.lots) {
+      if (l.purchase_order_id && !seen.has(l.purchase_order_id)) {
+        seen.add(l.purchase_order_id);
+        result.push({ id: l.purchase_order_id, code: l.purchase_order_code });
+      }
+    }
+  }
+  return result;
+});
+
+// Lô hàng sau khi lọc theo PO được chọn
+const filteredLots = computed(() => {
+  if (!selectedPoIds.value.length) return availableLots.value;
+  return availableLots.value
+    .map(lot => {
+      const lots = lot.lots.filter(l => !l.purchase_order_id || selectedPoIds.value.includes(l.purchase_order_id));
+      const available_qty = lots.reduce((s, l) => s + l.available_qty, 0);
+      return { ...lot, lots, available_qty };
+    })
+    .filter(lot => lot.available_qty > 0);
+});
+
+// Nạp hàng từ lô FIFO vào bảng hàng xuất
+const loadItemsFromLots = () => {
+  const poIds = selectedPoIds.value.length > 0
+    ? selectedPoIds.value
+    : availablePurchaseOrders.value.map(po => po.id);
+  form.purchase_order_ids = poIds;
+
+  const newItems = filteredLots.value.map(lot => ({
+    product_id:      lot.product_id,
+    order_item_id:   null,
+    quantity:        Math.max(1, Math.floor(lot.available_qty)),
+    unit_price:      0,
+    serial_ids:      [],
+    _productDisplay: lot.product_code ? `${lot.product_code} - ${lot.product_name}` : (lot.product_name ?? ''),
+    _unit:           lot.unit ?? '',
+    _qtyOnHand:      lot.available_qty,
+  }));
+  if (newItems.length) form.items = newItems;
+};
 
 const onUsageTypeChange = () => {
   if (form.item_usage_type !== 'project') {
@@ -586,10 +654,10 @@ const onIssuePurposeChange = () => {
   form.item_usage_type = form.issue_purpose === 'project_cost' ? 'project' : 'commercial';
   if (form.issue_purpose !== 'project_cost') {
     form.project_id = null;
-    form.purchase_order_id = null;
+    form.purchase_order_ids = [];
+    selectedPoIds.value = [];
     availableLots.value = [];
   } else {
-    // Khi chuyển sang project_cost: reset sales order, vì không liên quan
     form.order_id = null;
   }
   form.items.forEach(item => { item._qtyOnHand = null; });
@@ -609,12 +677,21 @@ const onOrderChange = () => {
   form.customer_id = order.customer_id;
   const filled = order.items
     .filter(i => i.remaining > 0)
-    .map(i => ({ product_id: i.product_id, quantity: i.remaining, unit_price: i.unit_price, serial_ids: [] }));
-  if (filled.length) form.items = filled.map(i => ({ ...i, _productDisplay: i.product_name ?? '', _unit: '', _qtyOnHand: null }));
+    .map(i => ({
+      product_id:      i.product_id,
+      order_item_id:   i.id,
+      quantity:        i.remaining,
+      unit_price:      i.unit_price,
+      serial_ids:      [],
+      _productDisplay: i.product_name ?? '',
+      _unit:           i.unit ?? '',
+      _qtyOnHand:      null,
+    }));
+  if (filled.length) form.items = filled;
 };
 
 const addRow = () => {
-  form.items.push({ product_id: null, quantity: 1, unit_price: 0, serial_ids: [], _productDisplay: '', _unit: '', _qtyOnHand: null });
+  form.items.push({ product_id: null, order_item_id: null, quantity: 1, unit_price: 0, serial_ids: [], _productDisplay: '', _unit: '', _qtyOnHand: null });
 };
 
 const removeRow = (index) => {

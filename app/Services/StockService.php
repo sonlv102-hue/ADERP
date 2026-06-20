@@ -32,6 +32,7 @@ class StockService
         private AccountingService $accounting,
         private ProjectWipService $wip,
         private AvcoService $avco,
+        private OrderService $orderService,
     ) {}
     public function confirmEntry(StockEntry $entry): void
     {
@@ -594,6 +595,11 @@ class StockService
             \App\Models\ProjectWipEntry::where('source_type', StockExit::class)
                 ->where('source_id', $exit->id)
                 ->delete();
+
+            // Khôi phục delivered_quantity trên order khi hủy phiếu xuất bán
+            if ($exit->order_id) {
+                $this->orderService->reverseDelivery($exit);
+            }
 
             $exit->update(['status' => StockExitStatus::Cancelled]);
         });

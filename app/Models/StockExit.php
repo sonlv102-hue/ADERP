@@ -7,6 +7,7 @@ use App\Enums\StockExitStatus;
 use App\Models\Concerns\GeneratesCode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Spatie\Activitylog\LogOptions;
 use Spatie\Activitylog\Traits\LogsActivity;
@@ -66,6 +67,17 @@ class StockExit extends Model
     public function purchaseOrder(): BelongsTo
     {
         return $this->belongsTo(\App\Models\PurchaseOrder::class);
+    }
+
+    /** Tất cả đơn mua liên kết (multi-PO cho project_cost) */
+    public function purchaseOrders(): BelongsToMany
+    {
+        return $this->belongsToMany(
+            \App\Models\PurchaseOrder::class,
+            'stock_exit_purchase_orders',
+            'stock_exit_id',
+            'purchase_order_id'
+        )->withTimestamps();
     }
 
     public function creator(): BelongsTo

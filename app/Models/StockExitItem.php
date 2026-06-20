@@ -10,7 +10,8 @@ class StockExitItem extends Model
 {
     protected $fillable = [
         'stock_exit_id', 'project_id',
-        'product_id', 'quantity', 'unit_price', 'source_cost', 'total_cost', 'cost_source',
+        'product_id', 'order_item_id',
+        'quantity', 'unit_price', 'source_cost', 'total_cost', 'cost_source',
     ];
 
     protected function casts(): array
@@ -31,6 +32,11 @@ class StockExitItem extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    public function orderItem(): BelongsTo
+    {
+        return $this->belongsTo(\App\Models\OrderItem::class);
     }
 
     public function project(): BelongsTo

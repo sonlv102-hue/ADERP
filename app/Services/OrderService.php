@@ -7,6 +7,7 @@ use App\Models\Order;
 use App\Models\OrderOverDelivery;
 use App\Models\StockExit;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class OrderService
 {
@@ -77,6 +78,42 @@ class OrderService
         });
 
         return $warnings;
+    }
+
+    /**
+     * Khôi phục delivered_quantity khi hủy phiếu xuất bán.
+     * Gọi trong cancelExit() sau khi transaction kho đã xong.
+     */
+    public function reverseDelivery(StockExit $exit): void
+    {
+        if (! $exit->order_id) {
+            return;
+        }
+
+        $exit->load('items');
+        $order = Order::with('items')->find($exit->order_id);
+        if (! $order) {
+            return;
+        }
+
+        DB::transaction(function () use ($exit, $order) {
+            $orderItemsByProduct = $order->items
+                ->whereNotNull('product_id')
+                ->keyBy('product_id');
+
+            foreach ($exit->items as $exitItem) {
+                $orderItem = $orderItemsByProduct[$exitItem->product_id] ?? null;
+                if (! $orderItem) {
+                    continue;
+                }
+                $newDelivered = max(0.0, (float) $orderItem->delivered_quantity - (float) $exitItem->quantity);
+                $orderItem->update(['delivered_quantity' => $newDelivered]);
+
+                Log::info("reverseDelivery: order_item #{$orderItem->id} {$exitItem->quantity} → delivered back to {$newDelivered}");
+            }
+
+            $this->syncOrderStatus($order->id);
+        });
     }
 
     private function recordOverDelivery(int $orderId, int $productId, string $productName, float $over): void
