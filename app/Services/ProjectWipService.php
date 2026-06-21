@@ -229,6 +229,16 @@ class ProjectWipService
             return AccountingSettings::get('bank_account', '1121');
         }
 
+        if ($method === 'advance') {
+            return '141';
+        }
+        if ($method === 'salary') {
+            return AccountingSettings::get('salary_payable_account', '3341');
+        }
+        if ($method === 'misc') {
+            return '3388';
+        }
+
         // payable: dùng TK phải trả của NCC nếu có
         if ($expense->supplier_id) {
             $expense->loadMissing('supplier');

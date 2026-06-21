@@ -258,7 +258,7 @@ class ProjectExpenseAccountingPha1Test extends TestCase
         $cat = \App\Enums\ExpenseCategory::Equipment;
         $this->assertEquals('equipment', $cat->value);
         $this->assertEquals('Máy thi công', $cat->label());
-        $this->assertEquals('6237', $cat->defaultDebitAccount());
+        $this->assertEquals('154', $cat->defaultDebitAccount()); // changed 2026-06-21: default is now 154 (direct WIP)
         $this->assertEquals('overhead', $cat->wipCostType());
     }
 }

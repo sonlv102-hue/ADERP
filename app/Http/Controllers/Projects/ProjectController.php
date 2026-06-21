@@ -254,7 +254,8 @@ class ProjectController extends Controller
                 'expenses'          => $project->expenses->map(function ($e) use ($wipByExpenseId, $transfersByExpenseId, $jeByExpenseId) {
                     $debitAcct        = $e->debit_account;
                     $isDirectTo154    = $debitAcct && str_starts_with($debitAcct, '154');
-                    $directWip        = $wipByExpenseId->get($e->id);    // WIP trực tiếp (legacy hoặc 154)
+                    $isCancelled      = ($e->status ?? 'posted') === 'cancelled';
+                    $directWip        = $wipByExpenseId->get($e->id);
                     $transfers        = $transfersByExpenseId->get($e->id, collect());
                     $postedTransfers  = $transfers->where('status', 'posted');
                     $transferredAmt   = (int) $postedTransfers->sum('amount');
@@ -266,12 +267,21 @@ class ProjectController extends Controller
                     $jeCode = $directWip?->journalEntry?->code
                         ?? ($jeId ? \App\Models\JournalEntry::find($jeId)?->code : null);
 
-                    // WIP "legacy" chỉ khi expense hạch toán TRỰC TIẾP vào 154 (đã vào 154 rồi, không cần KC nữa).
-                    // WIP entry do code cũ tạo cho expense TK 6xxx không phải legacy thực sự.
+                    // WIP "legacy": expense TK 154, có WIP entry, chưa có transfer record.
                     $isLegacyWip = $isDirectTo154 && (bool) $directWip && $transfers->isEmpty();
+
+                    // Phát hiện lỗi dữ liệu WIP:
+                    // - TK 154 nhưng không có WIP entry và expense đã posted
+                    // - Không phải TK 154 nhưng có WIP entry (code cũ tạo nhầm)
+                    $isWipError = !$isCancelled && (
+                        ($isDirectTo154 && !$directWip && $jeId !== null)
+                        || (!$isDirectTo154 && (bool) $directWip && $postedTransfers->isEmpty())
+                    );
 
                     // Trạng thái kết chuyển
                     $transferStatus = match (true) {
+                        $isCancelled             => 'cancelled',
+                        $isWipError              => 'data_error',
                         $isDirectTo154           => 'direct_154',
                         $isLegacyWip             => 'legacy',
                         $transferredAmt === 0    => 'none',
@@ -279,8 +289,9 @@ class ProjectController extends Controller
                         default                  => 'partial',
                     };
 
-                    // Có thể kết chuyển nếu: có JE, TK Nợ không phải 154, không phải legacy WIP, còn tiền
-                    $canTransfer = !$isDirectTo154
+                    // Có thể kết chuyển nếu: có JE, TK Nợ không phải 154, không phải legacy/cancelled, còn tiền
+                    $canTransfer = !$isCancelled
+                        && !$isDirectTo154
                         && !$isLegacyWip
                         && $jeId !== null
                         && $remainingAmt > 0;
@@ -529,7 +540,7 @@ class ProjectController extends Controller
             ],
             'employee_id'         => ['nullable', 'integer', 'exists:employees,id'],
             'invoice_number'      => ['nullable', 'string', 'max:100'],
-            'payment_method'      => ['nullable', 'string', 'in:cash,bank,payable'],
+            'payment_method'      => ['nullable', 'string', 'in:cash,bank,payable,advance,salary,misc'],
             'vat_rate'            => ['nullable', 'numeric', 'min:0', 'max:100'],
             'vat_amount'          => ['nullable', 'integer', 'min:0'],
             'purchase_invoice_id' => ['nullable', 'integer'],
