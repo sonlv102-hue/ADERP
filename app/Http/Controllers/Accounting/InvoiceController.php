@@ -105,9 +105,10 @@ class InvoiceController extends Controller
                 $existingTotal = Invoice::where('order_id', $data['order_id'])
                     ->where('status', '!=', InvoiceStatus::Cancelled->value)
                     ->sum('total');
-                if ($existingTotal + $total > (float) $order->total * 1.001) {
+                $orderTotal = $order->total();
+                if ($existingTotal + $total > $orderTotal * 1.001) {
                     return back()
-                        ->withErrors(['items' => "Tổng hóa đơn (" . number_format($existingTotal + $total, 0, ',', '.') . " ₫) vượt quá giá trị đơn hàng {$order->code} (" . number_format((float) $order->total, 0, ',', '.') . " ₫)."])
+                        ->withErrors(['items' => "Tổng hóa đơn (" . number_format($existingTotal + $total, 0, ',', '.') . " ₫) vượt quá giá trị đơn hàng {$order->code} (" . number_format($orderTotal, 0, ',', '.') . " ₫)."])
                         ->withInput();
                 }
             }
