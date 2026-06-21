@@ -11,7 +11,7 @@ class ProjectExtraCostTransfer extends Model
         'project_id', 'project_expense_id',
         'transfer_date', 'debit_account', 'credit_account',
         'amount', 'description', 'status',
-        'journal_entry_id', 'reversal_journal_entry_id',
+        'journal_entry_id', 'transfer_from_entry_id', 'reversal_journal_entry_id',
         'project_wip_entry_id',
         'created_by', 'cancelled_by', 'cancelled_at', 'cancel_reason',
     ];
@@ -38,6 +38,11 @@ class ProjectExtraCostTransfer extends Model
     public function journalEntry(): BelongsTo
     {
         return $this->belongsTo(JournalEntry::class);
+    }
+
+    public function transferFromEntry(): BelongsTo
+    {
+        return $this->belongsTo(JournalEntry::class, 'transfer_from_entry_id');
     }
 
     public function reversalJournalEntry(): BelongsTo

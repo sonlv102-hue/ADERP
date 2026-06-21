@@ -431,13 +431,25 @@
               <div class="sm:col-span-2 flex gap-2">
                 <div class="flex-1">
                   <label class="block text-xs text-gray-500 mb-0.5">TK Nợ</label>
-                  <input v-model="expenseForm.debit_account" type="text" placeholder="vd: 6422, 154"
-                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" />
+                  <RemoteSearchSelect
+                    v-model="expenseForm.debit_account"
+                    :display-text="expenseForm.debit_account_name"
+                    :search-url="route('search.account-codes') + '?detail_only=true'"
+                    placeholder="Tìm TK Nợ (vd: 154, 642)"
+                    @change="(opt) => { expenseForm.debit_account_name = opt ? opt.code + ' - ' + opt.label : '' }"
+                  />
                 </div>
                 <div class="flex-1">
                   <label class="block text-xs text-gray-500 mb-0.5">TK Có</label>
-                  <input v-model="expenseForm.credit_account" type="text" placeholder="vd: 3311, 1111"
-                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" />
+                  <RemoteSearchSelect
+                    v-model="expenseForm.credit_account"
+                    :display-text="expenseForm.credit_account_name"
+                    :search-url="route('search.account-codes') + '?detail_only=true'"
+                    placeholder="Tìm TK Có"
+                    @change="(opt) => { expenseForm.credit_account_name = opt ? opt.code + ' - ' + opt.label : '' }"
+                  />
+                  <p v-if="expenseForm.credit_account && !['3311','1111','1121'].includes(expenseForm.credit_account)"
+                     class="text-xs text-amber-600 mt-0.5">TK Có không thông thường — kiểm tra lại</p>
                 </div>
               </div>
               <div class="sm:col-span-2">
@@ -467,6 +479,7 @@
             </div>
             <p class="text-xs text-gray-400">
               TK Nợ bắt đầu bằng 154 → vào TK 154 ngay. TK Nợ khác (6421, 6422, 242...) → cần kết chuyển sang 154 thủ công.
+              TK Có tự điền theo hình thức thanh toán; có thể sửa nếu cần.
             </p>
           </form>
 
@@ -1499,7 +1512,21 @@ const expenseForm = reactive({
   invoice_number: '',
   vat_amount: '',
   debit_account: '',
+  debit_account_name: '',
   credit_account: '',
+  credit_account_name: '',
+});
+
+// Auto-fill TK Có khi đổi hình thức thanh toán
+const CREDIT_ACCOUNT_DEFAULTS = { payable: '3311', cash: '1111', bank: '1121' };
+watch(() => expenseForm.payment_method, (method) => {
+  const defaultAcct = CREDIT_ACCOUNT_DEFAULTS[method] ?? '';
+  // Chỉ auto-fill nếu TK Có đang trống hoặc đang là một trong 3 giá trị mặc định
+  const currentIsDefault = Object.values(CREDIT_ACCOUNT_DEFAULTS).includes(expenseForm.credit_account);
+  if (!expenseForm.credit_account || currentIsDefault) {
+    expenseForm.credit_account = defaultAcct;
+    expenseForm.credit_account_name = '';
+  }
 });
 const addExpense = () => {
   if (expenseForm.credit_account === '3311' && !expenseForm.supplier_id) {
@@ -1517,7 +1544,9 @@ const addExpense = () => {
       expenseForm.invoice_number = '';
       expenseForm.vat_amount = '';
       expenseForm.debit_account = '';
+      expenseForm.debit_account_name = '';
       expenseForm.credit_account = '';
+      expenseForm.credit_account_name = '';
     },
   });
 };

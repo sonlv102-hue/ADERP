@@ -21,6 +21,8 @@ use App\Models\PurchaseInvoice;
 use App\Models\PurchaseOrder;
 use App\Models\StockExit;
 use App\Models\User;
+use App\Services\AccountingService;
+use App\Services\ProjectExtraCostTransferService;
 use App\Services\ProjectService;
 use App\Services\ProjectWipService;
 use Illuminate\Http\RedirectResponse;
@@ -32,8 +34,10 @@ use Inertia\Response;
 class ProjectController extends Controller
 {
     public function __construct(
-        private ProjectService    $service,
-        private ProjectWipService $wip,
+        private ProjectService                   $service,
+        private ProjectWipService                $wip,
+        private AccountingService                $accounting,
+        private ProjectExtraCostTransferService  $transferService,
     ) {}
 
     public function index(): Response
@@ -527,9 +531,30 @@ class ProjectController extends Controller
     public function removeExpense(Project $project, ProjectExpense $expense): RedirectResponse
     {
         abort_unless($expense->project_id === $project->id, 404);
-        $expense->delete();
 
-        return back()->with('success', 'Đã xóa chi phí.');
+        try {
+            DB::transaction(function () use ($expense) {
+                // 1. Cancel mọi kết chuyển đang posted (tạo JE đảo Nợ TK_chi_phí / Có 154)
+                foreach ($expense->transfers()->where('status', 'posted')->get() as $transfer) {
+                    $this->transferService->cancelTransfer($transfer, 'Hủy khi xóa chi phí gốc');
+                }
+
+                // 2. Reverse hoặc xóa JE gốc của chi phí
+                $this->accounting->reverseOrDelete(
+                    ProjectExpense::class,
+                    $expense->id,
+                    'Hủy chi phí dự án: ' . $expense->description
+                );
+
+                // 3. Xóa expense
+                $expense->delete();
+            });
+        } catch (\Throwable $e) {
+            \Log::error("removeExpense failed project#{$project->id} expense#{$expense->id}: {$e->getMessage()}");
+            return back()->with('error', 'Không thể xóa chi phí: ' . $e->getMessage());
+        }
+
+        return back()->with('success', 'Đã xóa chi phí và đảo bút toán liên quan.');
     }
 
     public function recognizeCost(Request $request, Project $project): RedirectResponse

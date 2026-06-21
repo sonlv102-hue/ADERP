@@ -63,6 +63,13 @@ class ProjectExtraCostTransferService
         $this->assertAllowedSourceAccount($creditAcct);
 
         return DB::transaction(function () use ($expense, $amount, $transferDate, $description, $debitAcct, $creditAcct) {
+            // Tìm JE gốc của chi phí để lưu liên kết cho reverse tự động
+            $originalJe = JournalEntry::where('reference_type', ProjectExpense::class)
+                ->where('reference_id', $expense->id)
+                ->where('status', 'posted')
+                ->whereRaw("description NOT LIKE 'Đảo:%'")
+                ->first();
+
             // Tạo JE: Nợ [154] / Có [original_debit]
             $je = $this->accounting->post(
                 $description,
@@ -103,17 +110,18 @@ class ProjectExtraCostTransferService
 
             // Tạo bản ghi transfer
             $transfer = ProjectExtraCostTransfer::create([
-                'project_id'         => $expense->project_id,
-                'project_expense_id' => $expense->id,
-                'transfer_date'      => $transferDate,
-                'debit_account'      => $debitAcct,
-                'credit_account'     => $creditAcct,
-                'amount'             => $amount,
-                'description'        => $description,
-                'status'             => 'posted',
-                'journal_entry_id'   => $je->id,
-                'project_wip_entry_id' => $wip->id,
-                'created_by'         => auth()->id(),
+                'project_id'             => $expense->project_id,
+                'project_expense_id'     => $expense->id,
+                'transfer_date'          => $transferDate,
+                'debit_account'          => $debitAcct,
+                'credit_account'         => $creditAcct,
+                'amount'                 => $amount,
+                'description'            => $description,
+                'status'                 => 'posted',
+                'journal_entry_id'       => $je->id,
+                'transfer_from_entry_id' => $originalJe?->id,
+                'project_wip_entry_id'   => $wip->id,
+                'created_by'             => auth()->id(),
             ]);
 
             // Cập nhật source_id trên WIP và reference_id trên JE
