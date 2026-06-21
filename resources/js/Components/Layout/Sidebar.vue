@@ -160,7 +160,7 @@
             <NavItem v-if="can('documents.view')" :href="route('documents.documents.index')" icon="document-text" sub>Tất cả chứng từ</NavItem>
           </NavGroup>
 
-          <NavGroup label="Báo cáo" icon="chart-bar" prefix="acct-reports">
+          <NavGroup label="Báo cáo" icon="chart-bar" prefix="/reports">
             <NavItem :href="route('reports.cash_flow_statement')" icon="banknotes" sub>LCTT B03-DNN</NavItem>
             <NavItem :href="route('reports.cash_flow')" icon="banknotes" sub>Sổ thu chi theo ngày</NavItem>
             <NavItem :href="route('reports.income_statement')" icon="chart-bar" sub>Kết quả HĐKD</NavItem>
