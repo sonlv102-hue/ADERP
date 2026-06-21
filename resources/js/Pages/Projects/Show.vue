@@ -413,73 +413,182 @@
 
         <!-- Expenses tab -->
         <div v-if="activeTab === 'expenses'" class="p-5 space-y-4">
-          <form v-if="can('projects.manage')" @submit.prevent="addExpense" class="space-y-2">
+
+          <!-- Cảnh báo trùng số hóa đơn -->
+          <div v-if="$page.props.flash?.warning_duplicate"
+            class="flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-lg px-4 py-3">
+            <svg class="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+              <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
+            </svg>
+            <div class="flex-1 text-sm text-amber-800">
+              {{ $page.props.flash.warning_duplicate }}
+            </div>
+            <button @click="submitExpenseForce"
+              class="text-xs bg-amber-600 hover:bg-amber-700 text-white px-3 py-1.5 rounded font-medium whitespace-nowrap">
+              Vẫn ghi nhận
+            </button>
+          </div>
+
+          <form v-if="can('projects.manage')" @submit.prevent="addExpense"
+            class="bg-gray-50 border border-gray-200 rounded-xl p-4 space-y-3">
+            <h3 class="text-sm font-semibold text-gray-700">Thêm chi phí phát sinh</h3>
+
             <!-- Row 1: thông tin bắt buộc -->
             <div class="grid grid-cols-1 sm:grid-cols-5 gap-3">
-              <select v-model="expenseForm.category" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
+              <select v-model="expenseForm.category" class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white">
                 <option v-for="c in expenseCategories" :key="c.value" :value="c.value">{{ c.label }}</option>
               </select>
               <input v-model="expenseForm.description" type="text" placeholder="Mô tả chi phí"
-                class="col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
+                class="col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" required />
               <input v-model="expenseForm.amount" type="number" min="0" step="any" placeholder="Số tiền (trước VAT)"
-                class="border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
+                class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" required />
               <input v-model="expenseForm.expense_date" type="date"
-                class="border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
+                class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" required />
             </div>
-            <!-- Row 2: tài khoản + NCC -->
-            <div class="grid grid-cols-1 sm:grid-cols-6 gap-3 items-end">
-              <div class="sm:col-span-2 flex gap-2">
-                <div class="flex-1">
-                  <label class="block text-xs text-gray-500 mb-0.5">TK Nợ</label>
-                  <RemoteSearchSelect
-                    v-model="expenseForm.debit_account"
-                    :display-text="expenseForm.debit_account_name"
-                    :search-url="route('search.account-codes') + '?detail_only=true'"
-                    placeholder="Tìm TK Nợ (vd: 154, 642)"
-                    @change="(opt) => { expenseForm.debit_account_name = opt ? opt.code + ' - ' + opt.label : '' }"
-                  />
-                </div>
-                <div class="flex-1">
-                  <label class="block text-xs text-gray-500 mb-0.5">TK Có</label>
-                  <RemoteSearchSelect
-                    v-model="expenseForm.credit_account"
-                    :display-text="expenseForm.credit_account_name"
-                    :search-url="route('search.account-codes') + '?detail_only=true'"
-                    placeholder="Tìm TK Có"
-                    @change="(opt) => { expenseForm.credit_account_name = opt ? opt.code + ' - ' + opt.label : '' }"
-                  />
-                  <p v-if="expenseForm.credit_account && !['3311','1111','1121'].includes(expenseForm.credit_account)"
-                     class="text-xs text-amber-600 mt-0.5">TK Có không thông thường — kiểm tra lại</p>
-                </div>
+
+            <!-- Row 2: TK Nợ / TK Có -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-0.5">TK Nợ <span class="text-gray-400">(mặc định: 154)</span></label>
+                <RemoteSearchSelect
+                  v-model="expenseForm.debit_account"
+                  :display-text="expenseForm.debit_account_name"
+                  :search-url="route('search.account-codes') + '?detail_only=true'"
+                  placeholder="Tìm TK Nợ (vd: 154, 6271, 6278...)"
+                  @change="(opt) => { expenseForm.debit_account_name = opt ? opt.code + ' - ' + opt.label : '' }"
+                />
+                <p v-if="expenseForm.debit_account && /^15[26]/.test(expenseForm.debit_account)"
+                   class="text-xs text-red-500 mt-0.5">
+                  TK {{ expenseForm.debit_account }} là vật tư/hàng hóa — phải dùng phiếu xuất kho, không dùng Chi phí PS.
+                </p>
+                <p v-else-if="expenseForm.debit_account && !expenseForm.debit_account.startsWith('154')"
+                   class="text-xs text-amber-600 mt-0.5">
+                  TK Nợ không phải 154 → chi phí sẽ cần kết chuyển sang 154 thủ công.
+                </p>
               </div>
-              <div class="sm:col-span-2">
+              <div>
+                <label class="block text-xs text-gray-500 mb-0.5">TK Có</label>
+                <RemoteSearchSelect
+                  v-model="expenseForm.credit_account"
+                  :display-text="expenseForm.credit_account_name"
+                  :search-url="route('search.account-codes') + '?detail_only=true'"
+                  placeholder="Tìm TK Có (3311, 1111, 1121, 3341, 141...)"
+                  @change="(opt) => { expenseForm.credit_account_name = opt ? opt.code + ' - ' + opt.label : '' }"
+                />
+                <p v-if="expenseForm.credit_account && !COMMON_CREDIT_ACCOUNTS.includes(expenseForm.credit_account)"
+                   class="text-xs text-amber-600 mt-0.5">TK Có không thông thường — kiểm tra lại</p>
+              </div>
+            </div>
+
+            <!-- Row 3: trường phụ theo TK Có -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <!-- NCC — bắt buộc khi TK Có = 3311 -->
+              <div v-if="expenseShowSupplier" class="lg:col-span-2">
+                <label class="block text-xs text-gray-500 mb-0.5">
+                  Nhà cung cấp
+                  <span v-if="expenseForm.credit_account === '3311'" class="text-red-500">*</span>
+                </label>
                 <RemoteSearchSelect
                   v-model="expenseForm.supplier_id"
                   :display-text="expenseForm.supplier_name"
                   :search-url="route('search.suppliers')"
-                  :placeholder="expenseForm.credit_account === '3311' ? 'NCC (bắt buộc khi TK Có = 3311)' : 'NCC (tuỳ chọn)'"
+                  placeholder="Tìm NCC..."
                   :has-error="expenseForm.credit_account === '3311' && !expenseForm.supplier_id"
                   @change="(opt) => { expenseForm.supplier_name = opt ? (opt.code ? opt.code + ' - ' + opt.label : opt.label) : '' }"
                 />
                 <p v-if="expenseForm.credit_account === '3311' && !expenseForm.supplier_id"
-                   class="text-xs text-red-500 mt-0.5">Cần chọn NCC khi TK Có là 3311</p>
+                   class="text-xs text-red-500 mt-0.5">Bắt buộc chọn NCC khi TK Có là 3311</p>
               </div>
-              <select v-model="expenseForm.payment_method" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
-                <option value="payable">Ghi công nợ NCC</option>
-                <option value="cash">Tiền mặt</option>
-                <option value="bank">Chuyển khoản</option>
-              </select>
+
+              <!-- Quỹ tiền mặt — bắt buộc khi TK Có = 1111 -->
+              <div v-if="expenseForm.credit_account === '1111'">
+                <label class="block text-xs text-gray-500 mb-0.5">Quỹ tiền mặt <span class="text-red-500">*</span></label>
+                <select v-model="expenseForm.fund_id"
+                  :class="['border rounded-lg px-3 py-2 text-sm w-full bg-white', !expenseForm.fund_id ? 'border-red-400' : 'border-gray-300']">
+                  <option value="">-- Chọn quỹ --</option>
+                  <option v-for="f in funds.filter(f => f.type === 'cash')" :key="f.id" :value="f.id">
+                    {{ f.name }} ({{ f.account_code }})
+                  </option>
+                </select>
+                <p v-if="!expenseForm.fund_id" class="text-xs text-red-500 mt-0.5">Bắt buộc chọn quỹ khi TK Có là 1111</p>
+              </div>
+
+              <!-- TK ngân hàng — bắt buộc khi TK Có = 1121 -->
+              <div v-if="expenseForm.credit_account === '1121'">
+                <label class="block text-xs text-gray-500 mb-0.5">Tài khoản ngân hàng <span class="text-red-500">*</span></label>
+                <select v-model="expenseForm.bank_account_id"
+                  :class="['border rounded-lg px-3 py-2 text-sm w-full bg-white', !expenseForm.bank_account_id ? 'border-red-400' : 'border-gray-300']">
+                  <option value="">-- Chọn TK ngân hàng --</option>
+                  <option v-for="b in bankAccounts" :key="b.id" :value="b.id">
+                    {{ b.bank_name }} - {{ b.account_number }} ({{ b.account_code }})
+                  </option>
+                </select>
+                <p v-if="!expenseForm.bank_account_id" class="text-xs text-red-500 mt-0.5">Bắt buộc chọn TK ngân hàng khi TK Có là 1121</p>
+              </div>
+
+              <!-- Nhân viên — khi TK Có = 3341 hoặc 141 -->
+              <div v-if="expenseShowEmployee" class="lg:col-span-2">
+                <label class="block text-xs text-gray-500 mb-0.5">
+                  Nhân viên
+                  <span v-if="expenseForm.credit_account === '141'" class="text-red-500">* (tạm ứng)</span>
+                </label>
+                <select v-model="expenseForm.employee_id" class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full bg-white">
+                  <option value="">-- Chọn nhân viên --</option>
+                  <option v-for="emp in allEmployees" :key="emp.id" :value="emp.id">
+                    {{ emp.code }} - {{ emp.name }}
+                  </option>
+                </select>
+                <p v-if="expenseForm.credit_account === '141' && !expenseForm.employee_id"
+                   class="text-xs text-red-500 mt-0.5">Bắt buộc chọn nhân viên tạm ứng</p>
+              </div>
+            </div>
+
+            <!-- Row 4: thông tin bổ sung + nút submit -->
+            <div class="grid grid-cols-1 sm:grid-cols-4 gap-3 items-end">
+              <input v-model="expenseForm.invoice_number" type="text" placeholder="Số hóa đơn (tuỳ chọn)"
+                class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" />
               <div class="flex gap-2">
-                <input v-model="expenseForm.vat_amount" type="number" min="0" placeholder="VAT"
-                  class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
-                <button type="submit" class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium whitespace-nowrap">
-                  Thêm
+                <div class="flex-1">
+                  <label class="block text-xs text-gray-500 mb-0.5">VAT (số tiền)</label>
+                  <input v-model="expenseForm.vat_amount" type="number" min="0" placeholder="0"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" />
+                </div>
+                <div class="flex-1">
+                  <label class="block text-xs text-gray-500 mb-0.5">VAT %</label>
+                  <input v-model="expenseForm.vat_rate" type="number" min="0" max="100" placeholder="10"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" />
+                </div>
+              </div>
+              <div class="text-xs text-gray-500 space-y-0.5 self-end pb-2">
+                <div v-if="expenseForm.debit_account" class="font-mono text-blue-700">
+                  Nợ {{ expenseForm.debit_account || '154' }}
+                  {{ expenseForm.amount ? formatVnd(Number(expenseForm.amount)) : '' }}
+                </div>
+                <div v-if="expenseForm.vat_amount > 0" class="font-mono text-blue-700">
+                  Nợ 1331 {{ formatVnd(Number(expenseForm.vat_amount)) }}
+                </div>
+                <div v-if="expenseForm.credit_account" class="font-mono text-red-600">
+                  Có {{ expenseForm.credit_account }}
+                  {{ expenseForm.amount ? formatVnd(Number(expenseForm.amount) + Number(expenseForm.vat_amount || 0)) : '' }}
+                </div>
+              </div>
+              <div class="flex gap-2 justify-end">
+                <button type="button" @click="resetExpenseForm"
+                  class="px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-600 hover:bg-gray-100">
+                  Xóa trắng
+                </button>
+                <button type="submit"
+                  :disabled="expenseSubmitBlocked"
+                  class="bg-primary-600 hover:bg-primary-700 disabled:bg-gray-300 text-white px-5 py-2 rounded-lg text-sm font-medium whitespace-nowrap">
+                  Thêm chi phí
                 </button>
               </div>
             </div>
+
             <p class="text-xs text-gray-400">
-              TK Nợ bắt đầu bằng 154 → vào TK 154 ngay. TK Nợ khác (6421, 6422, 242...) → cần kết chuyển sang 154 thủ công.
-              TK Có tự điền theo hình thức thanh toán; có thể sửa nếu cần.
+              TK Nợ 154 → vào WIP TK 154 ngay. TK Nợ khác (6271, 6272, 6278...) → cần kết chuyển sang 154 thủ công.
+              Không được dùng TK 152/156 (vật tư phải đi qua phiếu xuất kho).
+              VAT khấu trừ → thêm dòng Nợ 1331 tự động (chỉ khi có hóa đơn VAT hợp lệ).
             </p>
           </form>
 
@@ -541,7 +650,12 @@
                       <div class="truncate">{{ e.description }}</div>
                       <div v-if="e.invoice_number" class="text-xs text-gray-400">HĐ: {{ e.invoice_number }}</div>
                       <div v-if="e.supplier_name" class="text-xs text-gray-400">NCC: {{ e.supplier_name }}</div>
+                      <div v-if="e.employee_name" class="text-xs text-gray-400">NV: {{ e.employee_name }}</div>
+                      <div v-if="e.fund_name" class="text-xs text-gray-400">Quỹ: {{ e.fund_name }}</div>
+                      <div v-if="e.bank_account_name" class="text-xs text-gray-400">NH: {{ e.bank_account_name }}</div>
                       <div v-if="e.expense_date" class="text-xs text-gray-400">{{ e.expense_date }}</div>
+                      <span v-if="e.status === 'cancelled'"
+                        class="text-xs bg-red-100 text-red-600 px-1 rounded">Đã hủy</span>
                     </td>
                     <td class="px-3 py-2.5 hidden md:table-cell">
                       <div v-if="e.debit_account" class="font-mono text-xs text-blue-700">Nợ {{ e.debit_account }}</div>
@@ -1308,6 +1422,8 @@ const props = defineProps({
   stockExitTotal:      { type: Number, default: 0 },
   directMaterials:     { type: Array,  default: () => [] },
   directMaterialTotal: { type: Number, default: 0 },
+  funds:               { type: Array,  default: () => [] },
+  bankAccounts:        { type: Array,  default: () => [] },
 });
 
 const { hasPermission } = usePermission();
@@ -1501,57 +1617,105 @@ const removeMember = (memberId) => {
 };
 
 // Expense form
+const COMMON_CREDIT_ACCOUNTS = ['3311', '1111', '1121', '3341', '3388', '141', '331UT'];
+
 const expenseForm = reactive({
   category: 'other',
   description: '',
   amount: '',
   expense_date: '',
-  supplier_id: null,
-  supplier_name: '',
-  payment_method: 'payable',
-  invoice_number: '',
-  vat_amount: '',
   debit_account: '',
   debit_account_name: '',
   credit_account: '',
   credit_account_name: '',
+  // Conditional fields
+  supplier_id: null,
+  supplier_name: '',
+  fund_id: '',
+  bank_account_id: '',
+  employee_id: '',
+  // Extra
+  payment_method: 'payable',
+  invoice_number: '',
+  vat_amount: '',
+  vat_rate: '',
+  force_duplicate: false,
+});
+
+// Computed helpers for conditional field visibility
+const expenseShowSupplier = computed(() => {
+  const ca = expenseForm.credit_account;
+  return !ca || ca === '3311' || ca === '331UT';
+});
+const expenseShowEmployee = computed(() => {
+  const ca = expenseForm.credit_account;
+  return ca === '3341' || ca === '141';
+});
+
+// Block submit when required fields missing based on TK Có
+const expenseSubmitBlocked = computed(() => {
+  const ca = expenseForm.credit_account;
+  if (!expenseForm.debit_account && false) return false; // TK Nợ optional (defaults to 154)
+  if (/^15[26]/.test(expenseForm.debit_account)) return true;
+  if (ca === '3311' && !expenseForm.supplier_id) return true;
+  if (ca === '1111' && !expenseForm.fund_id) return true;
+  if (ca === '1121' && !expenseForm.bank_account_id) return true;
+  if (ca === '141' && !expenseForm.employee_id) return true;
+  return false;
 });
 
 // Auto-fill TK Có khi đổi hình thức thanh toán
 const CREDIT_ACCOUNT_DEFAULTS = { payable: '3311', cash: '1111', bank: '1121' };
 watch(() => expenseForm.payment_method, (method) => {
   const defaultAcct = CREDIT_ACCOUNT_DEFAULTS[method] ?? '';
-  // Chỉ auto-fill nếu TK Có đang trống hoặc đang là một trong 3 giá trị mặc định
   const currentIsDefault = Object.values(CREDIT_ACCOUNT_DEFAULTS).includes(expenseForm.credit_account);
   if (!expenseForm.credit_account || currentIsDefault) {
     expenseForm.credit_account = defaultAcct;
     expenseForm.credit_account_name = '';
   }
 });
-const addExpense = () => {
-  if (expenseForm.credit_account === '3311' && !expenseForm.supplier_id) {
-    alert('Vui lòng chọn nhà cung cấp khi TK Có là 3311.');
-    return;
+
+// Clear conditional fields when TK Có changes
+watch(() => expenseForm.credit_account, (newVal) => {
+  if (newVal !== '3311' && newVal !== '331UT') {
+    expenseForm.supplier_id = null;
+    expenseForm.supplier_name = '';
   }
+  if (newVal !== '1111') expenseForm.fund_id = '';
+  if (newVal !== '1121') expenseForm.bank_account_id = '';
+  if (newVal !== '3341' && newVal !== '141') expenseForm.employee_id = '';
+});
+
+function resetExpenseForm() {
+  Object.assign(expenseForm, {
+    category: 'other', description: '', amount: '', expense_date: '',
+    debit_account: '', debit_account_name: '', credit_account: '', credit_account_name: '',
+    supplier_id: null, supplier_name: '', fund_id: '', bank_account_id: '', employee_id: '',
+    payment_method: 'payable', invoice_number: '', vat_amount: '', vat_rate: '',
+    force_duplicate: false,
+  });
+}
+
+const addExpense = () => {
+  if (expenseSubmitBlocked.value) return;
+  expenseForm.force_duplicate = false;
   router.post(route('projects.projects.expenses.store', props.project.id), expenseForm, {
     preserveScroll: true,
-    onSuccess: () => {
-      expenseForm.description = '';
-      expenseForm.amount = '';
-      expenseForm.expense_date = '';
-      expenseForm.supplier_id = null;
-      expenseForm.supplier_name = '';
-      expenseForm.invoice_number = '';
-      expenseForm.vat_amount = '';
-      expenseForm.debit_account = '';
-      expenseForm.debit_account_name = '';
-      expenseForm.credit_account = '';
-      expenseForm.credit_account_name = '';
-    },
+    onSuccess: () => resetExpenseForm(),
   });
 };
+
+// Ghi nhận bất chấp cảnh báo trùng hóa đơn
+const submitExpenseForce = () => {
+  expenseForm.force_duplicate = true;
+  router.post(route('projects.projects.expenses.store', props.project.id), expenseForm, {
+    preserveScroll: true,
+    onSuccess: () => resetExpenseForm(),
+  });
+};
+
 const removeExpense = (expenseId) => {
-  if (!confirm('Xóa chi phí này?')) return;
+  if (!confirm('Xóa chi phí này? Bút toán kế toán và WIP TK 154 sẽ bị đảo.')) return;
   router.delete(route('projects.projects.expenses.destroy', [props.project.id, expenseId]), { preserveScroll: true });
 };
 

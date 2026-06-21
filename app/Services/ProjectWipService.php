@@ -119,6 +119,7 @@ class ProjectWipService
      * Ghi nhận chi phí phát sinh dự án theo Thông tư 133.
      * Nợ [expense TK theo category] + Nợ 1331 (nếu có VAT) / Có [payment TK].
      * Debit/credit TK có thể override qua expense.debit_account / credit_account.
+     * Sau khi post: lưu journal_entry_id (và project_wip_entry_id nếu 154) vào expense.
      */
     public function createFromExpense(ProjectExpense $expense): void
     {
@@ -130,7 +131,13 @@ class ProjectWipService
         $creditTk    = $expense->credit_account ?? $this->resolveCreditAccount($expense);
         $projectCode = $expense->project?->code ?? $expense->project_id;
 
-        // Xác định liệu có vào TK 154 trực tiếp không
+        // TK 152/156 không được dùng ở đây — vật tư phải đi qua phiếu xuất kho
+        if (preg_match('/^15[26]/', $debitTk)) {
+            throw new \InvalidArgumentException(
+                "TK {$debitTk} (vật tư/hàng hóa) không được dùng trong Chi phí PS. Sử dụng phiếu xuất kho."
+            );
+        }
+
         $isDirectTo154 = str_starts_with($debitTk, '154');
 
         DB::transaction(function () use ($expense, $amount, $vatAmount, $debitTk, $creditTk, $projectCode, $isDirectTo154) {
@@ -155,11 +162,13 @@ class ProjectWipService
                 ProjectExpense::class, $expense->id, true
             );
 
+            $wipId = null;
+
             // Chỉ tạo WIP ngay khi hạch toán trực tiếp vào TK 154.
             // Nếu hạch toán vào tài khoản khác (6421, 6422, 242...), WIP sẽ được tạo
             // sau khi người dùng bấm "Kết chuyển sang 154".
             if ($isDirectTo154) {
-                ProjectWipEntry::create([
+                $wip = ProjectWipEntry::create([
                     'project_id'       => $expense->project_id,
                     'source_type'      => ProjectExpense::class,
                     'source_id'        => $expense->id,
@@ -170,7 +179,15 @@ class ProjectWipService
                     'journal_entry_id' => $je->id,
                     'created_by'       => auth()->id(),
                 ]);
+                $wipId = $wip->id;
             }
+
+            // Lưu journal_entry_id + project_wip_entry_id + status vào expense
+            $expense->updateQuietly([
+                'journal_entry_id'    => $je->id,
+                'project_wip_entry_id' => $wipId,
+                'status'              => 'posted',
+            ]);
         });
     }
 
@@ -189,19 +206,30 @@ class ProjectWipService
 
     private function resolveCreditAccount(ProjectExpense $expense): string
     {
+        // credit_account được set trực tiếp từ form → ưu tiên tuyệt đối
+        if ($expense->credit_account) {
+            return $expense->credit_account;
+        }
+
         $method = $expense->payment_method ?? 'payable';
 
         if ($method === 'cash') {
+            // Nếu có fund_id thì lấy TK quỹ; fallback về 1111
+            if ($expense->fund_id) {
+                $expense->loadMissing('fund');
+                return $expense->fund?->account_code ?? AccountingSettings::get('cash_account', '1111');
+            }
             return AccountingSettings::get('cash_account', '1111');
         }
         if ($method === 'bank') {
+            if ($expense->bank_account_id) {
+                $expense->loadMissing('bankAccount');
+                return $expense->bankAccount?->account_code ?? AccountingSettings::get('bank_account', '1121');
+            }
             return AccountingSettings::get('bank_account', '1121');
         }
 
         // payable: dùng TK phải trả của NCC nếu có
-        if ($expense->supplier_id && $expense->relationLoaded('supplier') && $expense->supplier) {
-            return $expense->supplier->payable_account_code ?? '3311';
-        }
         if ($expense->supplier_id) {
             $expense->loadMissing('supplier');
             return $expense->supplier?->payable_account_code ?? '3311';

@@ -7,7 +7,9 @@ use App\Enums\ProjectStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Contract;
 use App\Models\Customer;
+use App\Models\BankAccount;
 use App\Models\Employee;
+use App\Models\Fund;
 use App\Models\JournalEntry;
 use App\Models\Product;
 use App\Models\Project;
@@ -108,6 +110,9 @@ class ProjectController extends Controller
             'materials.product',
             'expenses.creator',
             'expenses.supplier',
+            'expenses.employee',
+            'expenses.fund',
+            'expenses.bankAccount',
         ]);
 
         // Phiếu xuất kho thực tế cho dự án (confirmed + cancelled để truy vết)
@@ -289,14 +294,22 @@ class ProjectController extends Controller
                         'vat_amount'          => $e->vat_amount ?? 0,
                         'expense_date'        => $e->expense_date->format('d/m/Y'),
                         'creator'             => $e->creator?->name,
+                        'status'              => $e->status ?? 'posted',
                         'supplier_id'         => $e->supplier_id,
                         'supplier_name'       => $e->supplier?->name,
+                        'employee_id'         => $e->employee_id,
+                        'employee_name'       => $e->employee?->name,
+                        'fund_id'             => $e->fund_id,
+                        'fund_name'           => $e->fund?->name,
+                        'bank_account_id'     => $e->bank_account_id,
+                        'bank_account_name'   => $e->bankAccount ? ($e->bankAccount->bank_name . ' - ' . $e->bankAccount->account_number) : null,
                         'invoice_number'      => $e->invoice_number,
                         'payment_method'      => $e->payment_method ?? 'payable',
+                        'vat_rate'            => $e->vat_rate,
                         'debit_account'       => $debitAcct,
                         'credit_account'      => $e->credit_account,
-                        'je_code'             => $jeCode,
-                        'je_id'               => $jeId,
+                        'je_code'             => $e->journal_entry_id ? (\App\Models\JournalEntry::find($e->journal_entry_id)?->code ?? $jeCode) : $jeCode,
+                        'je_id'               => $e->journal_entry_id ?? $jeId,
                         // Kết chuyển 154
                         'transfer_status'     => $transferStatus,
                         'transferred_amount'  => $transferredAmt,
@@ -324,6 +337,8 @@ class ProjectController extends Controller
             'allEmployees' => Employee::whereIn('status', ['active', 'probation'])->orderBy('name')->get(['id', 'code', 'name', 'position', 'department']),
             'allProducts' => Product::where('is_active', true)->orderBy('name')->get(['id', 'name', 'unit', 'cost_price']),
             'expenseCategories' => collect(ExpenseCategory::cases())->map(fn ($c) => ['value' => $c->value, 'label' => $c->label()]),
+            'funds' => Fund::orderBy('name')->get(['id', 'name', 'account_code', 'type']),
+            'bankAccounts' => BankAccount::orderBy('bank_name')->get(['id', 'bank_name', 'account_number', 'account_code']),
             'wipSummary'     => $this->wip->getWipSummary($project->id),
             'wipEntries'     => $this->wip->getWipEntries($project->id),
             'wipTotal'       => (int) \App\Models\ProjectWipEntry::where('project_id', $project->id)->where('status', 'active')->sum('amount'),
@@ -490,33 +505,75 @@ class ProjectController extends Controller
     // Expenses
     public function addExpense(Request $request, Project $project): RedirectResponse
     {
+        $creditAccount = $request->input('credit_account', '');
+
         $data = $request->validate([
-            'category'            => ['required', 'string'],
-            'description'         => ['required', 'string', 'max:255'],
-            'amount'              => ['required', 'numeric', 'min:0'],
-            'expense_date'        => ['required', 'date'],
-            'supplier_id'         => [
-                \Illuminate\Validation\Rule::requiredIf(fn () => $request->input('credit_account') === '3311'),
+            'category'       => ['required', 'string'],
+            'description'    => ['required', 'string', 'max:255'],
+            'amount'         => ['required', 'numeric', 'min:0'],
+            'expense_date'   => ['required', 'date'],
+            'debit_account'  => ['nullable', 'string', 'max:20'],
+            'credit_account' => ['nullable', 'string', 'max:20'],
+            // Conditional required based on TK Có
+            'supplier_id' => [
+                \Illuminate\Validation\Rule::requiredIf($creditAccount === '3311'),
                 'nullable', 'integer', 'exists:suppliers,id',
             ],
-            'purchase_invoice_id' => ['nullable', 'integer'],
+            'fund_id' => [
+                \Illuminate\Validation\Rule::requiredIf($creditAccount === '1111'),
+                'nullable', 'integer', 'exists:funds,id',
+            ],
+            'bank_account_id' => [
+                \Illuminate\Validation\Rule::requiredIf($creditAccount === '1121'),
+                'nullable', 'integer', 'exists:bank_accounts,id',
+            ],
+            'employee_id'         => ['nullable', 'integer', 'exists:employees,id'],
             'invoice_number'      => ['nullable', 'string', 'max:100'],
             'payment_method'      => ['nullable', 'string', 'in:cash,bank,payable'],
-            'vat_rate'            => ['nullable', 'numeric', 'min:0'],
+            'vat_rate'            => ['nullable', 'numeric', 'min:0', 'max:100'],
             'vat_amount'          => ['nullable', 'integer', 'min:0'],
-            'debit_account'       => ['nullable', 'string', 'max:20'],
-            'credit_account'      => ['nullable', 'string', 'max:20'],
+            'purchase_invoice_id' => ['nullable', 'integer'],
         ]);
+
+        // Chặn TK 152/156 ở TK Nợ (vật tư phải đi qua phiếu xuất kho)
+        $debitAccount = $data['debit_account'] ?? '';
+        if ($debitAccount && preg_match('/^15[26]/', $debitAccount)) {
+            return back()->withInput()->with(
+                'error',
+                "TK {$debitAccount} (vật tư/hàng hóa) không được dùng trong Chi phí PS. Sử dụng phiếu xuất kho."
+            );
+        }
+
+        // Cảnh báo trùng số hóa đơn (không chặn, chỉ flash warning nếu force=0)
+        $invoiceNumber = $data['invoice_number'] ?? null;
+        $supplierId    = $data['supplier_id'] ?? null;
+        if ($invoiceNumber && $supplierId && !$request->boolean('force_duplicate')) {
+            $existsPI = \App\Models\PurchaseInvoice::where('supplier_id', $supplierId)
+                ->where('invoice_number', $invoiceNumber)
+                ->exists();
+            $existsPE = ProjectExpense::where('project_id', $project->id)
+                ->where('supplier_id', $supplierId)
+                ->where('invoice_number', $invoiceNumber)
+                ->where('status', '!=', 'cancelled')
+                ->exists();
+            if ($existsPI || $existsPE) {
+                return back()->withInput()->with(
+                    'warning_duplicate',
+                    "Số hóa đơn {$invoiceNumber} đã tồn tại với NCC này. Nhấn Thêm lần nữa để vẫn ghi nhận."
+                );
+            }
+        }
 
         try {
             DB::transaction(function () use ($data, $project) {
                 $expense = $project->expenses()->create([
                     ...$data,
                     'created_by' => auth()->id(),
+                    'status'     => 'draft',
                 ]);
 
                 if ((float) $expense->amount > 0) {
-                    $expense->loadMissing('project');
+                    $expense->loadMissing('project', 'supplier', 'fund', 'bankAccount');
                     $this->wip->createFromExpense($expense);
                 }
             });
@@ -539,14 +596,28 @@ class ProjectController extends Controller
                     $this->transferService->cancelTransfer($transfer, 'Hủy khi xóa chi phí gốc');
                 }
 
-                // 2. Reverse hoặc xóa JE gốc của chi phí
+                // 2. Cancel WIP entry trực tiếp (nếu TK Nợ là 154 và có wip entry).
+                // Phải null journal_entry_id TRƯỚC khi gọi reverseOrDelete,
+                // vì draft JE sẽ bị hard-delete và WIP có FK reference tới nó.
+                if ($expense->project_wip_entry_id) {
+                    ProjectWipEntry::where('id', $expense->project_wip_entry_id)
+                        ->update([
+                            'status'           => 'cancelled',
+                            'cancel_reason'    => 'Hủy theo chi phí PS #' . $expense->id,
+                            'cancelled_at'     => now(),
+                            'cancelled_by'     => auth()->id(),
+                            'journal_entry_id' => null,
+                        ]);
+                }
+
+                // 3. Reverse hoặc xóa JE gốc của chi phí
                 $this->accounting->reverseOrDelete(
                     ProjectExpense::class,
                     $expense->id,
                     'Hủy chi phí dự án: ' . $expense->description
                 );
 
-                // 3. Xóa expense
+                // 4. Xóa expense
                 $expense->delete();
             });
         } catch (\Throwable $e) {
