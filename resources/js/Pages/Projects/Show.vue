@@ -454,16 +454,19 @@
                   v-model="expenseForm.debit_account"
                   :display-text="expenseForm.debit_account_name"
                   :search-url="route('search.account-codes') + '?detail_only=true'"
-                  placeholder="Tìm TK Nợ (vd: 154, 6271, 6278...)"
+                  placeholder="Tìm TK Nợ (6271, 6272, 6237...)"
                   @change="(opt) => { expenseForm.debit_account_name = opt ? opt.code + ' - ' + opt.label : '' }"
                 />
                 <p v-if="expenseForm.debit_account && /^15[26]/.test(expenseForm.debit_account)"
                    class="text-xs text-red-500 mt-0.5">
-                  TK {{ expenseForm.debit_account }} là vật tư/hàng hóa — phải dùng phiếu xuất kho, không dùng Chi phí PS.
+                  TK {{ expenseForm.debit_account }} là vật tư/hàng hóa — dùng phiếu xuất kho.
                 </p>
-                <p v-else-if="expenseForm.debit_account && !expenseForm.debit_account.startsWith('154')"
-                   class="text-xs text-amber-600 mt-0.5">
-                  TK Nợ không phải 154 → chi phí sẽ cần kết chuyển sang 154 thủ công.
+                <p v-else-if="expenseForm.debit_account && expenseForm.debit_account.startsWith('154')"
+                   class="text-xs text-blue-500 mt-0.5">
+                  Hạch toán thẳng vào WIP 154 (bỏ qua bước kết chuyển).
+                </p>
+                <p v-else-if="expenseForm.debit_account" class="text-xs text-green-600 mt-0.5">
+                  TT133: cần kết chuyển sang 154 sau khi hoàn thành hạng mục.
                 </p>
               </div>
               <div>
@@ -592,21 +595,24 @@
             </p>
           </form>
 
-          <!-- Bulk action bar -->
-          <div v-if="can('projects.manage') && selectedExpenseIds.length > 0"
+          <!-- Kết chuyển 154 — hiển thị khi có expenses chờ KC (không cần tick trước) -->
+          <div v-if="can('projects.manage') && selectableExpenses.length > 0"
             class="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-lg px-4 py-2.5">
-            <span class="text-sm text-purple-700 font-medium">
-              Đã chọn {{ selectedExpenseIds.length }} dòng · Tổng:
-              <strong>{{ formatVnd(selectedExpensesTotal) }}</strong>
+            <span class="text-sm text-purple-700">
+              <span class="font-medium">{{ selectableExpenses.length }} khoản chi phí</span>
+              chờ kết chuyển sang TK 154
+              <span v-if="selectedExpenseIds.length > 0" class="ml-2 text-purple-500">
+                (đã chọn {{ selectedExpenseIds.length }} · {{ formatVnd(selectedExpensesTotal) }})
+              </span>
             </span>
             <div class="flex items-center gap-2">
-              <button @click="selectedExpenseIds = []"
+              <button v-if="selectedExpenseIds.length > 0" @click="selectedExpenseIds = []"
                 class="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 border border-gray-300 rounded">
                 Bỏ chọn
               </button>
-              <button @click="openBatchTransferModal"
+              <button @click="selectAllAndTransfer"
                 class="text-xs bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded font-medium">
-                Kết chuyển sang TK 154 ({{ selectedExpenseIds.length }})
+                {{ selectedExpenseIds.length > 0 ? `Kết chuyển ${selectedExpenseIds.length} mục →154` : 'Chọn tất cả và kết chuyển →154' }}
               </button>
             </div>
           </div>
@@ -1619,8 +1625,17 @@ const removeMember = (memberId) => {
 // Expense form
 const COMMON_CREDIT_ACCOUNTS = ['3311', '1111', '1121', '3341', '3388', '141', '331UT'];
 
+// TK Nợ mặc định theo TT133 cho từng danh mục chi phí dự án
+const TT133_DEBIT = {
+  labor:     { code: '6271', name: 'Chi phí nhân công TT' },
+  equipment: { code: '6237', name: 'Chi phí sử dụng máy' },
+  material:  { code: '6272', name: 'Chi phí vật liệu TT' },
+  transport: { code: '6278', name: 'Chi phí vận chuyển' },
+  other:     { code: '6279', name: 'Chi phí khác' },
+};
+
 const expenseForm = reactive({
-  category: 'other',
+  category: 'labor',
   description: '',
   amount: '',
   expense_date: '',
@@ -1652,10 +1667,22 @@ const expenseShowEmployee = computed(() => {
   return ca === '3341' || ca === '141';
 });
 
+// Auto-fill TK Nợ khi đổi danh mục (theo TT133); không override nếu user đã tự nhập
+watch(() => expenseForm.category, (newCat, oldCat) => {
+  const prev = TT133_DEBIT[oldCat];
+  const next = TT133_DEBIT[newCat];
+  if (!next) return;
+  // Chỉ auto-fill nếu TK Nợ đang trống HOẶC đang là default của danh mục cũ
+  if (!expenseForm.debit_account || expenseForm.debit_account === prev?.code) {
+    expenseForm.debit_account = next.code;
+    expenseForm.debit_account_name = `${next.code} - ${next.name}`;
+  }
+}, { immediate: true });
+
 // Block submit when required fields missing based on TK Có
 const expenseSubmitBlocked = computed(() => {
   const ca = expenseForm.credit_account;
-  if (!expenseForm.debit_account && false) return false; // TK Nợ optional (defaults to 154)
+  if (!expenseForm.debit_account) return false; // TK Nợ optional — backend sẽ resolve từ category
   if (/^15[26]/.test(expenseForm.debit_account)) return true;
   if (ca === '3311' && !expenseForm.supplier_id) return true;
   if (ca === '1111' && !expenseForm.fund_id) return true;
@@ -1687,9 +1714,13 @@ watch(() => expenseForm.credit_account, (newVal) => {
 });
 
 function resetExpenseForm() {
+  const defaultCat = 'labor';
+  const defaultDebit = TT133_DEBIT[defaultCat];
   Object.assign(expenseForm, {
-    category: 'other', description: '', amount: '', expense_date: '',
-    debit_account: '', debit_account_name: '', credit_account: '', credit_account_name: '',
+    category: defaultCat, description: '', amount: '', expense_date: '',
+    debit_account: defaultDebit.code,
+    debit_account_name: `${defaultDebit.code} - ${defaultDebit.name}`,
+    credit_account: '', credit_account_name: '',
     supplier_id: null, supplier_name: '', fund_id: '', bank_account_id: '', employee_id: '',
     payment_method: 'payable', invoice_number: '', vat_amount: '', vat_rate: '',
     force_duplicate: false,
@@ -1749,6 +1780,14 @@ function toggleSelectAll() {
   } else {
     selectedExpenseIds.value = selectableExpenses.value.map(e => e.id);
   }
+}
+
+function selectAllAndTransfer() {
+  if (selectedExpenseIds.value.length === 0) {
+    // Chưa có gì được chọn → chọn tất cả rồi mở modal
+    selectedExpenseIds.value = selectableExpenses.value.map(e => e.id);
+  }
+  openBatchTransferModal();
 }
 
 // ─── Batch transfer modal ──────────────────────────────────────────────────
