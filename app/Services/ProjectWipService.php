@@ -90,6 +90,32 @@ class ProjectWipService
     }
 
     /**
+     * Tạo WIP entry từ dòng của PurchaseInvoice (ví dụ: chi phí hạch toán trực tiếp TK154).
+     */
+    public function createFromPurchaseInvoiceItem(\App\Models\PurchaseInvoice $invoice, \App\Models\PurchaseInvoiceItem $item, int $journalEntryId): void
+    {
+        $projectId = $item->project_id ?? $invoice->project_id;
+        if (!$projectId) return;
+
+        $amount = (int) round((float) $item->amount);
+        if ($amount <= 0) return;
+
+        ProjectWipEntry::create([
+            'project_id'       => $projectId,
+            'source_type'      => \App\Models\PurchaseInvoice::class,
+            'source_id'        => $invoice->id,
+            'source_item_id'   => $item->id,
+            'cost_type'        => 'overhead',
+            'amount'           => $amount,
+            'vat_amount'       => $item->tax_amount ?? 0,
+            'description'      => $item->description ?: "Hóa đơn mua {$invoice->code}",
+            'entry_date'       => $invoice->invoice_date ?? now(),
+            'journal_entry_id' => $journalEntryId,
+            'created_by'       => auth()->id(),
+        ]);
+    }
+
+    /**
      * Ghi nhận chi phí phát sinh dự án theo Thông tư 133.
      * Nợ [expense TK theo category] + Nợ 1331 (nếu có VAT) / Có [payment TK].
      * Debit/credit TK có thể override qua expense.debit_account / credit_account.

@@ -24,6 +24,7 @@ class PurchaseInvoiceService
     public function __construct(
         private AccountingService $accounting,
         private CashVoucherService $cashVoucherService,
+        private ProjectWipService $wipService,
     ) {}
 
     private const TRANSITIONS = [
@@ -366,12 +367,15 @@ class PurchaseInvoiceService
             $amt = (int) round((float) $item->amount);
             if ($amt <= 0) continue;
 
+            // fallback project_id from invoice header when item.project_id missing
+            $projId = $item->project_id ?? $invoice->project_id ?? null;
+
             $lines[] = [
                 'account'     => $item->account_code,
                 'debit'       => $amt,
                 'credit'      => 0,
                 'description' => $item->description ?: "Chi phí {$invoice->code}",
-                'project_id'  => $item->project_id,
+                'project_id'  => $projId,
             ];
 
             $totalVat += (int) round((float) $item->tax_amount);
@@ -400,7 +404,7 @@ class PurchaseInvoiceService
         ];
 
         $label = $type ? $type->label() : 'Chi phí';
-        $this->accounting->tryPost(
+        $je = $this->accounting->tryPost(
             "{$label} {$invoice->code}",
             Carbon::parse($invoice->invoice_date ?? now()),
             $lines,
@@ -408,6 +412,25 @@ class PurchaseInvoiceService
             $invoice->id,
             'ap'
         );
+
+        // If posted JE exists, create/sync Project WIP entries for TK154 lines
+        if ($je) {
+            foreach ($invoice->items as $item) {
+                $acct = (string) ($item->account_code ?? '');
+                if (!str_starts_with($acct, '154')) continue;
+
+                $projId = $item->project_id ?? $invoice->project_id ?? null;
+                if (!$projId) continue;
+
+                // Create or sync WIP entry for this invoice item
+                try {
+                    $this->wipService->createFromPurchaseInvoiceItem($invoice, $item, $je->id);
+                } catch (\Throwable $e) {
+                    // don't break posting flow; log and continue
+                    Log::warning("Failed to create WIP entry for PI item {$item->id}: {$e->getMessage()}");
+                }
+            }
+        }
     }
 
     /**
