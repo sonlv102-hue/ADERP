@@ -41,6 +41,11 @@ class ProjectExpense extends Model
         return $this->belongsTo(Supplier::class);
     }
 
+    public function transfers(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ProjectExtraCostTransfer::class);
+    }
+
     /** Tổng tiền bao gồm VAT */
     public function totalWithVat(): int
     {

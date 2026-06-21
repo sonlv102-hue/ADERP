@@ -421,26 +421,42 @@
               </select>
               <input v-model="expenseForm.description" type="text" placeholder="Mô tả chi phí"
                 class="col-span-2 border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
-              <input v-model="expenseForm.amount" type="number" min="0" step="any" placeholder="Số tiền"
+              <input v-model="expenseForm.amount" type="number" min="0" step="any" placeholder="Số tiền (trước VAT)"
                 class="border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
               <input v-model="expenseForm.expense_date" type="date"
                 class="border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
             </div>
-            <!-- Row 2: thông tin kế toán (tuỳ chọn) -->
-            <div class="grid grid-cols-1 sm:grid-cols-5 gap-3 items-end">
-              <RemoteSearchSelect
-                v-model="expenseForm.supplier_id"
-                search-url="/search/suppliers"
-                placeholder="NCC (tuỳ chọn)"
-                class="sm:col-span-2"
-              />
+            <!-- Row 2: tài khoản + NCC -->
+            <div class="grid grid-cols-1 sm:grid-cols-6 gap-3 items-end">
+              <div class="sm:col-span-2 flex gap-2">
+                <div class="flex-1">
+                  <label class="block text-xs text-gray-500 mb-0.5">TK Nợ</label>
+                  <input v-model="expenseForm.debit_account" type="text" placeholder="vd: 6422, 154"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" />
+                </div>
+                <div class="flex-1">
+                  <label class="block text-xs text-gray-500 mb-0.5">TK Có</label>
+                  <input v-model="expenseForm.credit_account" type="text" placeholder="vd: 3311, 1111"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" />
+                </div>
+              </div>
+              <div class="sm:col-span-2">
+                <RemoteSearchSelect
+                  v-model="expenseForm.supplier_id"
+                  :display-text="expenseForm.supplier_name"
+                  :search-url="route('search.suppliers')"
+                  :placeholder="expenseForm.credit_account === '3311' ? 'NCC (bắt buộc khi TK Có = 3311)' : 'NCC (tuỳ chọn)'"
+                  :has-error="expenseForm.credit_account === '3311' && !expenseForm.supplier_id"
+                  @change="(opt) => { expenseForm.supplier_name = opt ? (opt.code ? opt.code + ' - ' + opt.label : opt.label) : '' }"
+                />
+                <p v-if="expenseForm.credit_account === '3311' && !expenseForm.supplier_id"
+                   class="text-xs text-red-500 mt-0.5">Cần chọn NCC khi TK Có là 3311</p>
+              </div>
               <select v-model="expenseForm.payment_method" class="border border-gray-300 rounded-lg px-3 py-2 text-sm">
                 <option value="payable">Ghi công nợ NCC</option>
                 <option value="cash">Tiền mặt</option>
                 <option value="bank">Chuyển khoản</option>
               </select>
-              <input v-model="expenseForm.invoice_number" type="text" placeholder="Số hóa đơn (tuỳ chọn)"
-                class="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
               <div class="flex gap-2">
                 <input v-model="expenseForm.vat_amount" type="number" min="0" placeholder="VAT"
                   class="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm" />
@@ -449,61 +465,399 @@
                 </button>
               </div>
             </div>
+            <p class="text-xs text-gray-400">
+              TK Nợ bắt đầu bằng 154 → vào TK 154 ngay. TK Nợ khác (6421, 6422, 242...) → cần kết chuyển sang 154 thủ công.
+            </p>
           </form>
 
-          <table class="min-w-full text-sm">
-            <thead class="bg-gray-50 border border-gray-200">
-              <tr>
-                <th class="text-left px-4 py-2 font-semibold text-gray-600">Danh mục</th>
-                <th class="text-left px-4 py-2 font-semibold text-gray-600">Mô tả</th>
-                <th class="text-left px-4 py-2 font-semibold text-gray-600">NCC</th>
-                <th class="text-right px-4 py-2 font-semibold text-gray-600">Số tiền</th>
-                <th class="text-left px-4 py-2 font-semibold text-gray-600">Ngày</th>
-                <th class="text-left px-4 py-2 font-semibold text-gray-600">Bút toán</th>
-                <th class="px-4 py-2" />
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-100">
-              <tr v-for="e in project.expenses" :key="e.id" class="hover:bg-gray-50">
-                <td class="px-4 py-2">
-                  <span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-xs">{{ e.category_label }}</span>
-                </td>
-                <td class="px-4 py-2 text-gray-800">
-                  <div>{{ e.description }}</div>
-                  <div v-if="e.invoice_number" class="text-xs text-gray-400">HĐ: {{ e.invoice_number }}</div>
-                </td>
-                <td class="px-4 py-2 text-gray-600 text-xs">{{ e.supplier_name ?? '—' }}</td>
-                <td class="px-4 py-2 text-right font-medium text-gray-800">
-                  {{ formatVnd(e.amount) }}
-                  <div v-if="e.vat_amount > 0" class="text-xs text-gray-400">VAT: {{ formatVnd(e.vat_amount) }}</div>
-                </td>
-                <td class="px-4 py-2 text-gray-600">{{ e.expense_date }}</td>
-                <td class="px-4 py-2">
-                  <Link v-if="e.je_id"
-                    :href="route('accounting.journal-entries.show', e.je_id)"
-                    class="text-xs text-blue-600 hover:underline font-mono">
-                    {{ e.je_code }}
-                  </Link>
-                  <span v-else class="text-xs text-amber-500">Chưa có BT</span>
-                </td>
-                <td class="px-4 py-2 text-right">
-                  <button v-if="can('projects.manage')" @click="removeExpense(e.id)" class="text-gray-400 hover:text-red-500">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </td>
-              </tr>
-              <tr v-if="!project.expenses.length">
-                <td colspan="7" class="px-4 py-8 text-center text-gray-400">Chưa có chi phí nào</td>
-              </tr>
-              <tr v-if="project.expenses.length" class="bg-gray-50 font-semibold">
-                <td colspan="3" class="px-4 py-2 text-right text-gray-700">Tổng chi phí phát sinh:</td>
-                <td class="px-4 py-2 text-right text-gray-900">{{ formatVnd(project.total_expenses) }}</td>
-                <td colspan="3" />
-              </tr>
-            </tbody>
-          </table>
+          <!-- Bulk action bar -->
+          <div v-if="can('projects.manage') && selectedExpenseIds.length > 0"
+            class="flex items-center justify-between bg-purple-50 border border-purple-200 rounded-lg px-4 py-2.5">
+            <span class="text-sm text-purple-700 font-medium">
+              Đã chọn {{ selectedExpenseIds.length }} dòng · Tổng:
+              <strong>{{ formatVnd(selectedExpensesTotal) }}</strong>
+            </span>
+            <div class="flex items-center gap-2">
+              <button @click="selectedExpenseIds = []"
+                class="text-xs text-gray-500 hover:text-gray-700 px-2 py-1 border border-gray-300 rounded">
+                Bỏ chọn
+              </button>
+              <button @click="openBatchTransferModal"
+                class="text-xs bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded font-medium">
+                Kết chuyển sang TK 154 ({{ selectedExpenseIds.length }})
+              </button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 border border-gray-200">
+                <tr>
+                  <th v-if="can('projects.manage')" class="px-3 py-2 w-8">
+                    <input type="checkbox" :checked="allSelectableChecked"
+                      :indeterminate="selectedExpenseIds.length > 0 && !allSelectableChecked"
+                      @change="toggleSelectAll"
+                      class="rounded border-gray-300 text-purple-600 cursor-pointer" />
+                  </th>
+                  <th class="text-left px-3 py-2 font-semibold text-gray-600">Danh mục</th>
+                  <th class="text-left px-3 py-2 font-semibold text-gray-600">Mô tả</th>
+                  <th class="text-left px-3 py-2 font-semibold text-gray-600 hidden md:table-cell">TK Nợ / Có</th>
+                  <th class="text-right px-3 py-2 font-semibold text-gray-600">Số tiền</th>
+                  <th class="text-right px-3 py-2 font-semibold text-gray-600 hidden lg:table-cell">Đã KC 154</th>
+                  <th class="text-right px-3 py-2 font-semibold text-gray-600 hidden lg:table-cell">Còn lại</th>
+                  <th class="text-left px-3 py-2 font-semibold text-gray-600">Bút toán</th>
+                  <th class="text-left px-3 py-2 font-semibold text-gray-600">Trạng thái KC</th>
+                  <th class="px-3 py-2" />
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <template v-for="e in project.expenses" :key="e.id">
+                  <!-- Dòng chi phí chính -->
+                  <tr :class="['hover:bg-gray-50', selectedExpenseIds.includes(e.id) ? 'bg-purple-50' : '']">
+                    <td v-if="can('projects.manage')" class="px-3 py-2.5">
+                      <input v-if="e.can_transfer" type="checkbox"
+                        :checked="selectedExpenseIds.includes(e.id)"
+                        @change="toggleExpenseSelection(e.id)"
+                        class="rounded border-gray-300 text-purple-600 cursor-pointer" />
+                      <span v-else class="block w-4 h-4" />
+                    </td>
+                    <td class="px-3 py-2.5">
+                      <span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-xs">{{ e.category_label }}</span>
+                    </td>
+                    <td class="px-3 py-2.5 text-gray-800 max-w-[200px]">
+                      <div class="truncate">{{ e.description }}</div>
+                      <div v-if="e.invoice_number" class="text-xs text-gray-400">HĐ: {{ e.invoice_number }}</div>
+                      <div v-if="e.supplier_name" class="text-xs text-gray-400">NCC: {{ e.supplier_name }}</div>
+                      <div v-if="e.expense_date" class="text-xs text-gray-400">{{ e.expense_date }}</div>
+                    </td>
+                    <td class="px-3 py-2.5 hidden md:table-cell">
+                      <div v-if="e.debit_account" class="font-mono text-xs text-blue-700">Nợ {{ e.debit_account }}</div>
+                      <div v-if="e.credit_account" class="font-mono text-xs text-red-600">Có {{ e.credit_account }}</div>
+                      <span v-if="!e.debit_account && !e.credit_account" class="text-xs text-gray-400">—</span>
+                    </td>
+                    <td class="px-3 py-2.5 text-right font-medium text-gray-800 whitespace-nowrap">
+                      {{ formatVnd(e.amount) }}
+                      <div v-if="e.vat_amount > 0" class="text-xs text-gray-400">VAT: {{ formatVnd(e.vat_amount) }}</div>
+                    </td>
+                    <td class="px-3 py-2.5 text-right hidden lg:table-cell">
+                      <span v-if="e.transfer_status === 'direct_154' || e.transfer_status === 'legacy'" class="text-xs text-gray-400">—</span>
+                      <span v-else class="font-medium" :class="e.transferred_amount > 0 ? 'text-green-700' : 'text-gray-400'">
+                        {{ formatVnd(e.transferred_amount) }}
+                      </span>
+                    </td>
+                    <td class="px-3 py-2.5 text-right hidden lg:table-cell">
+                      <span v-if="e.transfer_status === 'direct_154' || e.transfer_status === 'legacy'" class="text-xs text-gray-400">—</span>
+                      <span v-else class="font-medium" :class="e.remaining_amount > 0 ? 'text-amber-600' : 'text-green-700'">
+                        {{ formatVnd(e.remaining_amount) }}
+                      </span>
+                    </td>
+                    <td class="px-3 py-2.5">
+                      <Link v-if="e.je_id"
+                        :href="route('accounting.journal-entries.show', e.je_id)"
+                        class="text-xs text-blue-600 hover:underline font-mono">
+                        {{ e.je_code }}
+                      </Link>
+                      <span v-else class="text-xs text-amber-500">Chưa có BT</span>
+                    </td>
+                    <td class="px-3 py-2.5">
+                      <span :class="['text-xs px-1.5 py-0.5 rounded font-medium', transferStatusClass(e.transfer_status)]">
+                        {{ transferStatusLabel(e.transfer_status) }}
+                      </span>
+                    </td>
+                    <td class="px-3 py-2.5 text-right whitespace-nowrap">
+                      <div class="flex items-center justify-end gap-1">
+                        <button v-if="can('projects.manage') && e.can_transfer"
+                          @click="openTransferModal(e)"
+                          class="text-xs bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 rounded font-medium whitespace-nowrap">
+                          →154
+                        </button>
+                        <button v-if="can('projects.manage')" @click="removeExpense(e.id)" class="text-gray-400 hover:text-red-500 ml-1">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                  <!-- Dòng kết chuyển (sub-rows) -->
+                  <tr v-for="t in e.transfers" :key="'t' + t.id"
+                    class="bg-purple-50 border-l-2 border-purple-300 text-xs">
+                    <td v-if="can('projects.manage')" class="px-3 py-1.5" />
+                    <td class="pl-6 pr-3 py-1.5 text-purple-600 font-medium" colspan="2">
+                      KC →154 ngày {{ t.transfer_date }}
+                    </td>
+                    <td class="px-3 py-1.5 hidden md:table-cell">
+                      <span class="font-mono text-blue-700">Nợ {{ t.debit_account }}</span>
+                      <span class="font-mono text-red-600 ml-2">Có {{ t.credit_account }}</span>
+                    </td>
+                    <td class="px-3 py-1.5 text-right font-semibold text-purple-700">{{ formatVnd(t.amount) }}</td>
+                    <td class="px-3 py-1.5 hidden lg:table-cell" />
+                    <td class="px-3 py-1.5 hidden lg:table-cell" />
+                    <td class="px-3 py-1.5">
+                      <Link v-if="t.je_id" :href="route('accounting.journal-entries.show', t.je_id)"
+                        class="font-mono text-blue-600 hover:underline">{{ t.je_code }}</Link>
+                      <span v-else class="text-gray-400">—</span>
+                    </td>
+                    <td class="px-3 py-1.5">
+                      <span class="bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">Đã kết chuyển</span>
+                    </td>
+                    <td class="px-3 py-1.5 text-right">
+                      <button v-if="can('projects.manage')"
+                        @click="openCancelTransfer(e, t)"
+                        class="text-red-500 hover:underline">
+                        Hủy
+                      </button>
+                    </td>
+                  </tr>
+                </template>
+                <tr v-if="!project.expenses.length">
+                  <td :colspan="can('projects.manage') ? 10 : 9" class="px-4 py-8 text-center text-gray-400">Chưa có chi phí nào</td>
+                </tr>
+                <tr v-if="project.expenses.length" class="bg-gray-50 font-semibold">
+                  <td v-if="can('projects.manage')" />
+                  <td colspan="3" class="px-3 py-2 text-right text-gray-700">Tổng chi phí phát sinh:</td>
+                  <td class="px-3 py-2 text-right text-gray-900">{{ formatVnd(project.total_expenses) }}</td>
+                  <td colspan="5" />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Modal kết chuyển sang TK 154 -->
+        <div v-if="transferModal.open" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4"
+          @click.self="transferModal.open = false">
+          <div class="bg-white rounded-xl shadow-xl w-full max-w-md flex-shrink-0 space-y-4 p-6">
+            <h3 class="font-semibold text-gray-900">Kết chuyển chi phí sang TK 154</h3>
+
+            <!-- Thông tin chi phí gốc -->
+            <div class="bg-gray-50 rounded-lg p-3 text-sm space-y-1.5">
+              <div class="flex justify-between">
+                <span class="text-gray-500">Chi phí:</span>
+                <span class="font-medium text-gray-800 text-right max-w-[200px] truncate">{{ transferModal.expense?.description }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-500">TK Nợ gốc:</span>
+                <span class="font-mono text-blue-700">{{ transferModal.expense?.debit_account ?? '(theo danh mục)' }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-500">Số tiền gốc:</span>
+                <span class="font-semibold text-gray-900">{{ formatVnd(transferModal.expense?.amount) }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-500">Đã kết chuyển:</span>
+                <span :class="transferModal.expense?.transferred_amount > 0 ? 'text-green-700 font-medium' : 'text-gray-400'">
+                  {{ formatVnd(transferModal.expense?.transferred_amount) }}
+                </span>
+              </div>
+              <div class="flex justify-between border-t border-gray-200 pt-1.5">
+                <span class="text-gray-500 font-medium">Còn lại có thể KC:</span>
+                <span class="font-bold text-amber-600">{{ formatVnd(transferModal.expense?.remaining_amount) }}</span>
+              </div>
+            </div>
+
+            <!-- Bút toán sẽ tạo -->
+            <div class="bg-purple-50 border border-purple-200 rounded-lg p-3 text-xs">
+              <p class="font-semibold text-purple-700 mb-1">Bút toán sẽ tạo:</p>
+              <div class="flex justify-between">
+                <span class="font-mono text-blue-700">Nợ {{ transferModal.form.debit_account || '154' }}</span>
+                <span class="text-gray-600">{{ formatVnd(Number(transferModal.form.amount) || 0) }}</span>
+              </div>
+              <div class="flex justify-between mt-0.5">
+                <span class="font-mono text-red-600">Có {{ transferModal.expense?.debit_account ?? '(TK Nợ gốc)' }}</span>
+                <span class="text-gray-600">{{ formatVnd(Number(transferModal.form.amount) || 0) }}</span>
+              </div>
+            </div>
+
+            <!-- Form -->
+            <div class="space-y-3">
+              <div class="grid grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">TK Nợ (kết chuyển) <span class="text-red-500">*</span></label>
+                  <input v-model="transferModal.form.debit_account" type="text" placeholder="154"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" />
+                  <p class="text-xs text-gray-400 mt-0.5">Mặc định: 154</p>
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Ngày kết chuyển <span class="text-red-500">*</span></label>
+                  <input v-model="transferModal.form.transfer_date" type="date"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">
+                  Số tiền kết chuyển <span class="text-red-500">*</span>
+                  <span class="text-gray-400 font-normal ml-1">(tối đa {{ formatVnd(transferModal.expense?.remaining_amount) }})</span>
+                </label>
+                <input v-model="transferModal.form.amount" type="number" min="1" step="1"
+                  :max="transferModal.expense?.remaining_amount"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Diễn giải</label>
+                <input v-model="transferModal.form.description" type="text"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                  :placeholder="`Kết chuyển chi phí: ${transferModal.expense?.description ?? ''}`" />
+              </div>
+            </div>
+
+            <p v-if="transferModal.error" class="text-xs text-red-600">{{ transferModal.error }}</p>
+
+            <div class="flex gap-3 pt-1">
+              <button @click="submitTransfer"
+                :disabled="!transferModal.form.amount || !transferModal.form.transfer_date || transferModal.submitting"
+                class="flex-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                {{ transferModal.submitting ? 'Đang xử lý...' : 'Kết chuyển sang TK 154' }}
+              </button>
+              <button @click="transferModal.open = false"
+                class="flex-1 border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm">
+                Hủy bỏ
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal hủy kết chuyển -->
+        <div v-if="cancelTransferModal.open" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4"
+          @click.self="cancelTransferModal.open = false">
+          <div class="bg-white rounded-xl shadow-xl w-full max-w-sm flex-shrink-0 p-6 space-y-4">
+            <h3 class="font-semibold text-gray-900">Hủy kết chuyển TK 154</h3>
+            <div class="bg-gray-50 rounded-lg p-3 text-sm space-y-1">
+              <div class="flex justify-between">
+                <span class="text-gray-500">Ngày KC:</span>
+                <span>{{ cancelTransferModal.transfer?.transfer_date }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-500">Số tiền:</span>
+                <span class="font-semibold">{{ formatVnd(cancelTransferModal.transfer?.amount) }}</span>
+              </div>
+              <div class="flex justify-between">
+                <span class="text-gray-500">Bút toán:</span>
+                <span class="font-mono text-blue-600">{{ cancelTransferModal.transfer?.je_code ?? '—' }}</span>
+              </div>
+            </div>
+            <p class="text-xs text-gray-500">Tạo bút toán đảo: Nợ {{ cancelTransferModal.transfer?.credit_account }} / Có {{ cancelTransferModal.transfer?.debit_account }}. WIP entry sẽ chuyển sang hủy.</p>
+            <div>
+              <label class="block text-xs font-medium text-gray-600 mb-1">Lý do hủy <span class="text-red-500">*</span></label>
+              <textarea v-model="cancelTransferModal.reason" rows="2" required
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none"
+                placeholder="Nhập lý do bắt buộc..." />
+            </div>
+            <p v-if="cancelTransferModal.error" class="text-xs text-red-600">{{ cancelTransferModal.error }}</p>
+            <div class="flex gap-3">
+              <button @click="submitCancelTransfer"
+                :disabled="!cancelTransferModal.reason.trim() || cancelTransferModal.submitting"
+                class="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                {{ cancelTransferModal.submitting ? 'Đang xử lý...' : 'Xác nhận hủy' }}
+              </button>
+              <button @click="cancelTransferModal.open = false"
+                class="flex-1 border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm">
+                Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal kết chuyển nhiều chi phí (batch) -->
+        <div v-if="batchTransferModal.open" class="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4"
+          @click.self="batchTransferModal.open = false">
+          <div class="bg-white rounded-xl shadow-xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+            <div class="p-5 border-b border-gray-200 flex-shrink-0">
+              <h3 class="font-semibold text-gray-900">Kết chuyển {{ batchTransferModal.rows.length }} chi phí sang TK 154</h3>
+            </div>
+
+            <div class="overflow-y-auto flex-1 p-5 space-y-4">
+              <!-- Tổng / ngày / diễn giải -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Ngày kết chuyển <span class="text-red-500">*</span></label>
+                  <input v-model="batchTransferModal.transfer_date" type="date"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" required />
+                </div>
+                <div>
+                  <label class="block text-xs font-medium text-gray-600 mb-1">Diễn giải</label>
+                  <input v-model="batchTransferModal.description" type="text"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
+                    :placeholder="`Kết chuyển chi phí dự án ${project.code} sang TK 154`" />
+                </div>
+              </div>
+
+              <!-- Danh sách chi phí được chọn -->
+              <div class="border border-gray-200 rounded-lg overflow-hidden">
+                <table class="min-w-full text-sm">
+                  <thead class="bg-gray-50">
+                    <tr>
+                      <th class="text-left px-3 py-2 font-medium text-gray-600">Mô tả</th>
+                      <th class="text-left px-3 py-2 font-medium text-gray-600 hidden sm:table-cell">TK Có</th>
+                      <th class="text-right px-3 py-2 font-medium text-gray-600">Còn lại</th>
+                      <th class="text-right px-3 py-2 font-medium text-gray-600">Kết chuyển</th>
+                    </tr>
+                  </thead>
+                  <tbody class="divide-y divide-gray-100">
+                    <tr v-for="row in batchTransferModal.rows" :key="row.expense_id"
+                      :class="row.error ? 'bg-red-50' : ''">
+                      <td class="px-3 py-2 text-gray-800 max-w-[200px]">
+                        <div class="truncate text-xs">{{ row.description }}</div>
+                        <div v-if="row.error" class="text-xs text-red-500 mt-0.5">{{ row.error }}</div>
+                      </td>
+                      <td class="px-3 py-2 hidden sm:table-cell">
+                        <span v-if="row.credit_account" class="font-mono text-xs text-red-600">{{ row.credit_account }}</span>
+                        <span v-else class="text-xs text-gray-400">—</span>
+                      </td>
+                      <td class="px-3 py-2 text-right text-xs text-gray-600">
+                        {{ row.remaining != null ? formatVnd(row.remaining) : '—' }}
+                      </td>
+                      <td class="px-3 py-2 text-right">
+                        <input v-if="!row.error && row.remaining > 0"
+                          v-model.number="batchTransferModal.amounts[row.expense_id]"
+                          type="number" min="1" :max="row.remaining" step="1"
+                          class="w-28 border border-gray-300 rounded px-2 py-1 text-xs text-right font-mono" />
+                        <span v-else class="text-xs text-gray-400">—</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                  <tfoot class="bg-gray-50 border-t border-gray-200">
+                    <tr>
+                      <td colspan="3" class="px-3 py-2 text-right text-xs font-semibold text-gray-700">Tổng kết chuyển:</td>
+                      <td class="px-3 py-2 text-right text-sm font-bold text-purple-700">
+                        {{ formatVnd(batchComputedTotal) }}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              <!-- Preview bút toán -->
+              <div v-if="batchComputedTotal > 0" class="bg-purple-50 border border-purple-200 rounded-lg p-3 text-xs">
+                <p class="font-semibold text-purple-700 mb-1.5">Bút toán sẽ tạo (mỗi chi phí một bút toán riêng):</p>
+                <div class="space-y-0.5">
+                  <div class="flex justify-between">
+                    <span class="font-mono text-blue-700">Nợ 154 (tổng)</span>
+                    <span class="font-medium">{{ formatVnd(batchComputedTotal) }}</span>
+                  </div>
+                  <div v-for="(amt, acct) in batchCreditGroups" :key="acct" class="flex justify-between">
+                    <span class="font-mono text-red-600 pl-2">Có {{ acct }}</span>
+                    <span>{{ formatVnd(amt) }}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="p-5 border-t border-gray-200 flex-shrink-0">
+              <p v-if="batchTransferModal.error" class="text-xs text-red-600 mb-2">{{ batchTransferModal.error }}</p>
+              <div class="flex gap-3">
+                <button @click="submitBatchTransfer"
+                  :disabled="batchComputedTotal <= 0 || !batchTransferModal.transfer_date || batchTransferModal.submitting"
+                  class="flex-1 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white px-4 py-2 rounded-lg text-sm font-medium">
+                  {{ batchTransferModal.submitting ? 'Đang xử lý...' : `Kết chuyển ${formatVnd(batchComputedTotal)} → TK 154` }}
+                </button>
+                <button @click="batchTransferModal.open = false"
+                  class="flex-1 border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm">
+                  Hủy bỏ
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
 
         <!-- WIP tab -->
@@ -1140,11 +1494,18 @@ const expenseForm = reactive({
   amount: '',
   expense_date: '',
   supplier_id: null,
+  supplier_name: '',
   payment_method: 'payable',
   invoice_number: '',
   vat_amount: '',
+  debit_account: '',
+  credit_account: '',
 });
 const addExpense = () => {
+  if (expenseForm.credit_account === '3311' && !expenseForm.supplier_id) {
+    alert('Vui lòng chọn nhà cung cấp khi TK Có là 3311.');
+    return;
+  }
   router.post(route('projects.projects.expenses.store', props.project.id), expenseForm, {
     preserveScroll: true,
     onSuccess: () => {
@@ -1152,14 +1513,245 @@ const addExpense = () => {
       expenseForm.amount = '';
       expenseForm.expense_date = '';
       expenseForm.supplier_id = null;
+      expenseForm.supplier_name = '';
       expenseForm.invoice_number = '';
       expenseForm.vat_amount = '';
+      expenseForm.debit_account = '';
+      expenseForm.credit_account = '';
     },
   });
 };
 const removeExpense = (expenseId) => {
   if (!confirm('Xóa chi phí này?')) return;
   router.delete(route('projects.projects.expenses.destroy', [props.project.id, expenseId]), { preserveScroll: true });
+};
+
+// ─── Multi-select checkboxes ───────────────────────────────────────────────
+const selectedExpenseIds = ref([]);
+
+const selectableExpenses = computed(() =>
+  props.project.expenses.filter(e => e.can_transfer)
+);
+
+const allSelectableChecked = computed(() =>
+  selectableExpenses.value.length > 0 &&
+  selectableExpenses.value.every(e => selectedExpenseIds.value.includes(e.id))
+);
+
+const selectedExpensesTotal = computed(() =>
+  props.project.expenses
+    .filter(e => selectedExpenseIds.value.includes(e.id))
+    .reduce((sum, e) => sum + (e.remaining_amount ?? 0), 0)
+);
+
+function toggleExpenseSelection(id) {
+  const idx = selectedExpenseIds.value.indexOf(id);
+  if (idx >= 0) selectedExpenseIds.value.splice(idx, 1);
+  else selectedExpenseIds.value.push(id);
+}
+
+function toggleSelectAll() {
+  if (allSelectableChecked.value) {
+    selectedExpenseIds.value = [];
+  } else {
+    selectedExpenseIds.value = selectableExpenses.value.map(e => e.id);
+  }
+}
+
+// ─── Batch transfer modal ──────────────────────────────────────────────────
+const batchTransferModal = reactive({
+  open: false,
+  rows: [],
+  amounts: {},
+  transfer_date: new Date().toISOString().slice(0, 10),
+  description: '',
+  submitting: false,
+  error: '',
+});
+
+const batchCreditGroups = computed(() => {
+  const groups = {};
+  for (const row of batchTransferModal.rows) {
+    if (row.error || !row.credit_account) continue;
+    const amt = Number(batchTransferModal.amounts[row.expense_id] ?? row.remaining ?? 0);
+    if (amt > 0) {
+      groups[row.credit_account] = (groups[row.credit_account] ?? 0) + amt;
+    }
+  }
+  return groups;
+});
+
+const batchComputedTotal = computed(() =>
+  Object.values(batchCreditGroups.value).reduce((s, v) => s + v, 0)
+);
+
+function openBatchTransferModal() {
+  const rows = props.project.expenses
+    .filter(e => selectedExpenseIds.value.includes(e.id) && e.can_transfer)
+    .map(e => ({
+      expense_id:     e.id,
+      description:    e.description,
+      credit_account: e.debit_account ?? null,
+      remaining:      e.remaining_amount ?? 0,
+      amount:         e.remaining_amount ?? 0,
+      error:          null,
+    }));
+
+  const amounts = {};
+  for (const row of rows) {
+    amounts[row.expense_id] = row.remaining;
+  }
+
+  Object.assign(batchTransferModal, {
+    open: true,
+    rows,
+    amounts,
+    transfer_date: new Date().toISOString().slice(0, 10),
+    description: `Kết chuyển chi phí dự án ${props.project.code} sang TK 154`,
+    submitting: false,
+    error: '',
+  });
+}
+
+function submitBatchTransfer() {
+  if (batchComputedTotal.value <= 0 || !batchTransferModal.transfer_date) return;
+  batchTransferModal.submitting = true;
+  batchTransferModal.error = '';
+
+  const payload = {
+    expense_ids:   batchTransferModal.rows.filter(r => !r.error).map(r => r.expense_id),
+    amounts:       { ...batchTransferModal.amounts },
+    transfer_date: batchTransferModal.transfer_date,
+    description:   batchTransferModal.description || undefined,
+  };
+
+  router.post(
+    route('projects.projects.expense-transfers-batch.store', props.project.id),
+    payload,
+    {
+      preserveScroll: true,
+      onSuccess: () => {
+        batchTransferModal.open = false;
+        selectedExpenseIds.value = [];
+      },
+      onError: (errors) => {
+        batchTransferModal.error = Object.values(errors)[0] ?? 'Có lỗi xảy ra.';
+        batchTransferModal.submitting = false;
+      },
+      onFinish: () => { batchTransferModal.submitting = false; },
+    }
+  );
+}
+
+// Transfer status helpers
+const transferStatusLabel = (status) => ({
+  direct_154: 'Vào 154 trực tiếp',
+  legacy:     'WIP (cũ)',
+  none:       'Chưa kết chuyển',
+  partial:    'KC một phần',
+  full:       'Đã KC đủ',
+}[status] ?? status);
+
+const transferStatusClass = (status) => ({
+  direct_154: 'bg-blue-100 text-blue-700',
+  legacy:     'bg-gray-100 text-gray-600',
+  none:       'bg-amber-100 text-amber-700',
+  partial:    'bg-orange-100 text-orange-700',
+  full:       'bg-green-100 text-green-700',
+}[status] ?? 'bg-gray-100 text-gray-500');
+
+// Modal kết chuyển
+const transferModal = reactive({
+  open: false,
+  expense: null,
+  submitting: false,
+  error: '',
+  form: {
+    transfer_date: new Date().toISOString().slice(0, 10),
+    amount: '',
+    debit_account: '154',
+    description: '',
+  },
+});
+
+const openTransferModal = (expense) => {
+  Object.assign(transferModal, {
+    open: true,
+    expense,
+    submitting: false,
+    error: '',
+  });
+  Object.assign(transferModal.form, {
+    transfer_date: new Date().toISOString().slice(0, 10),
+    amount: expense.remaining_amount ?? expense.amount,
+    debit_account: '154',
+    description: `Kết chuyển chi phí: ${expense.description}`,
+  });
+};
+
+const submitTransfer = () => {
+  if (!transferModal.form.amount || !transferModal.form.transfer_date) return;
+  transferModal.submitting = true;
+  transferModal.error = '';
+
+  router.post(
+    route('projects.projects.expense-transfers.store', [props.project.id, transferModal.expense.id]),
+    { ...transferModal.form },
+    {
+      preserveScroll: true,
+      onSuccess: () => { transferModal.open = false; },
+      onError: (errors) => {
+        transferModal.error = Object.values(errors)[0] ?? 'Có lỗi xảy ra.';
+        transferModal.submitting = false;
+      },
+      onFinish: () => { transferModal.submitting = false; },
+    }
+  );
+};
+
+// Modal hủy kết chuyển
+const cancelTransferModal = reactive({
+  open: false,
+  expense: null,
+  transfer: null,
+  reason: '',
+  submitting: false,
+  error: '',
+});
+
+const openCancelTransfer = (expense, transfer) => {
+  Object.assign(cancelTransferModal, {
+    open: true,
+    expense,
+    transfer,
+    reason: '',
+    submitting: false,
+    error: '',
+  });
+};
+
+const submitCancelTransfer = () => {
+  if (!cancelTransferModal.reason.trim()) return;
+  cancelTransferModal.submitting = true;
+  cancelTransferModal.error = '';
+
+  router.delete(
+    route('projects.projects.expense-transfers.destroy', [
+      props.project.id,
+      cancelTransferModal.expense.id,
+      cancelTransferModal.transfer.id,
+    ]),
+    {
+      data: { cancel_reason: cancelTransferModal.reason },
+      preserveScroll: true,
+      onSuccess: () => { cancelTransferModal.open = false; },
+      onError: (errors) => {
+        cancelTransferModal.error = Object.values(errors)[0] ?? 'Có lỗi xảy ra.';
+        cancelTransferModal.submitting = false;
+      },
+      onFinish: () => { cancelTransferModal.submitting = false; },
+    }
+  );
 };
 
 // Direct material form

@@ -131,11 +131,10 @@ class ProjectExpenseAccountingPha1Test extends TestCase
         $this->assertNotNull($cr3311, 'Phải có dòng Cr 3311');
         $this->assertEquals(1100000, $cr3311->credit);
 
-        // WipEntry vẫn được tạo
+        // WipEntry KHÔNG được tạo ngay khi TK Nợ là 6237 (non-154).
+        // WIP sẽ được tạo sau khi kết chuyển sang TK154 thủ công.
         $wip = ProjectWipEntry::where('source_type', ProjectExpense::class)->first();
-        $this->assertNotNull($wip);
-        $this->assertEquals('overhead', $wip->cost_type);
-        $this->assertEquals(1000000, $wip->amount);
+        $this->assertNull($wip, 'WIP không được tạo ngay khi TK Nợ là 6237');
     }
 
     /** TC2: labor + cash → Dr 6271 / Cr 1111, không có VAT line */

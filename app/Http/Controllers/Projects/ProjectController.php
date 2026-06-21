@@ -8,9 +8,11 @@ use App\Http\Controllers\Controller;
 use App\Models\Contract;
 use App\Models\Customer;
 use App\Models\Employee;
+use App\Models\JournalEntry;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\ProjectDirectMaterial;
+use App\Models\ProjectExtraCostTransfer;
 use App\Models\ProjectExpense;
 use App\Models\ProjectMaterial;
 use App\Models\ProjectMember;
@@ -123,6 +125,20 @@ class ProjectController extends Controller
             ->get()
             ->keyBy('source_id');
 
+        // Kết chuyển 154 theo từng chi phí PS
+        $transfersByExpenseId = ProjectExtraCostTransfer::where('project_id', $project->id)
+            ->with('journalEntry')
+            ->orderBy('transfer_date')
+            ->get()
+            ->groupBy('project_expense_id');
+
+        // JE gốc của chi phí PS (cho các chi phí non-154, không tạo WIP trực tiếp)
+        $expenseIds = $project->expenses->pluck('id');
+        $jeByExpenseId = JournalEntry::where('reference_type', ProjectExpense::class)
+            ->whereIn('reference_id', $expenseIds)
+            ->whereIn('status', ['draft', 'posted'])
+            ->pluck('id', 'reference_id');
+
         $stockExitItems = $stockExits->flatMap(fn ($exit) =>
             $exit->items->map(fn ($item) => [
                 'exit_id'      => $exit->id,
@@ -226,23 +242,75 @@ class ProjectController extends Controller
                     'notes'        => $m->notes,
                     'stock_exit_id'=> $m->stock_exit_id,
                 ]),
-                'expenses'          => $project->expenses->map(fn ($e) => [
-                    'id'             => $e->id,
-                    'category'       => $e->category->value,
-                    'category_label' => $e->category->label(),
-                    'description'    => $e->description,
-                    'amount'         => $e->amount,
-                    'expense_date'   => $e->expense_date->format('d/m/Y'),
-                    'creator'        => $e->creator?->name,
-                    'supplier_id'    => $e->supplier_id,
-                    'supplier_name'  => $e->supplier?->name,
-                    'invoice_number' => $e->invoice_number,
-                    'payment_method' => $e->payment_method ?? 'payable',
-                    'vat_amount'     => $e->vat_amount ?? 0,
-                    'debit_account'  => $e->debit_account,
-                    'je_code'        => $wipByExpenseId->get($e->id)?->journalEntry?->code,
-                    'je_id'          => $wipByExpenseId->get($e->id)?->journal_entry_id,
-                ]),
+                'expenses'          => $project->expenses->map(function ($e) use ($wipByExpenseId, $transfersByExpenseId, $jeByExpenseId) {
+                    $debitAcct        = $e->debit_account;
+                    $isDirectTo154    = $debitAcct && str_starts_with($debitAcct, '154');
+                    $directWip        = $wipByExpenseId->get($e->id);    // WIP trực tiếp (legacy hoặc 154)
+                    $transfers        = $transfersByExpenseId->get($e->id, collect());
+                    $postedTransfers  = $transfers->where('status', 'posted');
+                    $transferredAmt   = (int) $postedTransfers->sum('amount');
+                    $expenseAmt       = (int) round((float) $e->amount);
+                    $remainingAmt     = max(0, $expenseAmt - $transferredAmt);
+
+                    // JE gốc: ưu tiên từ WIP entry, fallback về query JE trực tiếp
+                    $jeId   = $directWip?->journal_entry_id ?? $jeByExpenseId->get($e->id);
+                    $jeCode = $directWip?->journalEntry?->code
+                        ?? ($jeId ? \App\Models\JournalEntry::find($jeId)?->code : null);
+
+                    // WIP "legacy" chỉ khi expense hạch toán TRỰC TIẾP vào 154 (đã vào 154 rồi, không cần KC nữa).
+                    // WIP entry do code cũ tạo cho expense TK 6xxx không phải legacy thực sự.
+                    $isLegacyWip = $isDirectTo154 && (bool) $directWip && $transfers->isEmpty();
+
+                    // Trạng thái kết chuyển
+                    $transferStatus = match (true) {
+                        $isDirectTo154           => 'direct_154',
+                        $isLegacyWip             => 'legacy',
+                        $transferredAmt === 0    => 'none',
+                        $transferredAmt >= $expenseAmt => 'full',
+                        default                  => 'partial',
+                    };
+
+                    // Có thể kết chuyển nếu: có JE, TK Nợ không phải 154, không phải legacy WIP, còn tiền
+                    $canTransfer = !$isDirectTo154
+                        && !$isLegacyWip
+                        && $jeId !== null
+                        && $remainingAmt > 0;
+
+                    return [
+                        'id'                  => $e->id,
+                        'category'            => $e->category->value,
+                        'category_label'      => $e->category->label(),
+                        'description'         => $e->description,
+                        'amount'              => $expenseAmt,
+                        'vat_amount'          => $e->vat_amount ?? 0,
+                        'expense_date'        => $e->expense_date->format('d/m/Y'),
+                        'creator'             => $e->creator?->name,
+                        'supplier_id'         => $e->supplier_id,
+                        'supplier_name'       => $e->supplier?->name,
+                        'invoice_number'      => $e->invoice_number,
+                        'payment_method'      => $e->payment_method ?? 'payable',
+                        'debit_account'       => $debitAcct,
+                        'credit_account'      => $e->credit_account,
+                        'je_code'             => $jeCode,
+                        'je_id'               => $jeId,
+                        // Kết chuyển 154
+                        'transfer_status'     => $transferStatus,
+                        'transferred_amount'  => $transferredAmt,
+                        'remaining_amount'    => $remainingAmt,
+                        'can_transfer'        => $canTransfer,
+                        'transfers'           => $postedTransfers->values()->map(fn ($t) => [
+                            'id'              => $t->id,
+                            'transfer_date'   => $t->transfer_date->format('d/m/Y'),
+                            'amount'          => $t->amount,
+                            'debit_account'   => $t->debit_account,
+                            'credit_account'  => $t->credit_account,
+                            'description'     => $t->description,
+                            'status'          => $t->status,
+                            'je_code'         => $t->journalEntry?->code,
+                            'je_id'           => $t->journal_entry_id,
+                        ])->toArray(),
+                    ];
+                }),
                 'allowed_transitions' => $this->allowedTransitions($project),
             ],
             'allActiveProjects' => Project::whereNotIn('status', ['cancelled', 'completed'])
@@ -423,7 +491,10 @@ class ProjectController extends Controller
             'description'         => ['required', 'string', 'max:255'],
             'amount'              => ['required', 'numeric', 'min:0'],
             'expense_date'        => ['required', 'date'],
-            'supplier_id'         => ['nullable', 'integer', 'exists:suppliers,id'],
+            'supplier_id'         => [
+                \Illuminate\Validation\Rule::requiredIf(fn () => $request->input('credit_account') === '3311'),
+                'nullable', 'integer', 'exists:suppliers,id',
+            ],
             'purchase_invoice_id' => ['nullable', 'integer'],
             'invoice_number'      => ['nullable', 'string', 'max:100'],
             'payment_method'      => ['nullable', 'string', 'in:cash,bank,payable'],

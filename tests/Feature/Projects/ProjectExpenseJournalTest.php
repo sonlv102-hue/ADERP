@@ -106,14 +106,12 @@ class ProjectExpenseJournalTest extends TestCase
         $this->assertEquals(5000000, $lines->firstWhere('account_code', '6279')->debit);
         $this->assertEquals(5000000, $lines->firstWhere('account_code', '3311')->credit);
 
-        // TC3: WipEntry source trỏ đúng
+        // TC3: Không tạo WIP ngay khi TK Nợ là 6279 (non-154).
+        // WIP sẽ được tạo sau khi kết chuyển sang TK154 thủ công.
         $wip = ProjectWipEntry::where('source_type', ProjectExpense::class)
             ->where('source_id', $expense->id)
             ->first();
-        $this->assertNotNull($wip, 'ProjectWipEntry phải được tạo');
-        $this->assertEquals($expense->id, $wip->source_id);
-        $this->assertEquals($je->id, $wip->journal_entry_id);
-        $this->assertEquals('overhead', $wip->cost_type);
+        $this->assertNull($wip, 'ProjectWipEntry KHÔNG được tạo ngay khi TK Nợ không phải 154');
     }
 
     /** TC4: Nếu validateLines fail → rollback toàn bộ transaction */

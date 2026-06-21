@@ -130,7 +130,10 @@ class ProjectWipService
         $creditTk    = $expense->credit_account ?? $this->resolveCreditAccount($expense);
         $projectCode = $expense->project?->code ?? $expense->project_id;
 
-        DB::transaction(function () use ($expense, $amount, $vatAmount, $debitTk, $creditTk, $projectCode) {
+        // Xác định liệu có vào TK 154 trực tiếp không
+        $isDirectTo154 = str_starts_with($debitTk, '154');
+
+        DB::transaction(function () use ($expense, $amount, $vatAmount, $debitTk, $creditTk, $projectCode, $isDirectTo154) {
             $lines = [
                 ['account' => $debitTk, 'debit' => $amount, 'credit' => 0,
                  'description' => $expense->description, 'project_id' => $expense->project_id],
@@ -152,17 +155,22 @@ class ProjectWipService
                 ProjectExpense::class, $expense->id, true
             );
 
-            ProjectWipEntry::create([
-                'project_id'       => $expense->project_id,
-                'source_type'      => ProjectExpense::class,
-                'source_id'        => $expense->id,
-                'cost_type'        => $expense->category->wipCostType(),
-                'amount'           => $amount,
-                'description'      => $expense->description,
-                'entry_date'       => $expense->expense_date,
-                'journal_entry_id' => $je->id,
-                'created_by'       => auth()->id(),
-            ]);
+            // Chỉ tạo WIP ngay khi hạch toán trực tiếp vào TK 154.
+            // Nếu hạch toán vào tài khoản khác (6421, 6422, 242...), WIP sẽ được tạo
+            // sau khi người dùng bấm "Kết chuyển sang 154".
+            if ($isDirectTo154) {
+                ProjectWipEntry::create([
+                    'project_id'       => $expense->project_id,
+                    'source_type'      => ProjectExpense::class,
+                    'source_id'        => $expense->id,
+                    'cost_type'        => $expense->category->wipCostType(),
+                    'amount'           => $amount,
+                    'description'      => $expense->description,
+                    'entry_date'       => $expense->expense_date,
+                    'journal_entry_id' => $je->id,
+                    'created_by'       => auth()->id(),
+                ]);
+            }
         });
     }
 

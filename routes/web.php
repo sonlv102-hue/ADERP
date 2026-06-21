@@ -36,6 +36,7 @@ use App\Http\Controllers\Sales\CustomerAdvanceController;
 use App\Http\Controllers\Sales\SalesReturnController;
 use App\Http\Controllers\Projects\ProjectController;
 use App\Http\Controllers\Projects\ProjectDirectMaterialController;
+use App\Http\Controllers\Projects\ProjectExtraCostTransferController;
 use App\Http\Controllers\Projects\ProjectWipCorrectionController;
 use App\Http\Controllers\Projects\TaskController;
 use App\Http\Controllers\Support\TicketController;
@@ -310,6 +311,19 @@ Route::middleware('auth')->group(function () {
 
         Route::post('projects/{project}/expenses', [ProjectController::class, 'addExpense'])->name('projects.expenses.store');
         Route::delete('projects/{project}/expenses/{expense}', [ProjectController::class, 'removeExpense'])->name('projects.expenses.destroy');
+
+        // Kết chuyển chi phí PS sang TK 154 (đơn lẻ)
+        Route::prefix('projects/{project}/expenses/{expense}/transfers')->name('projects.expense-transfers.')->group(function () {
+            Route::get('preview', [ProjectExtraCostTransferController::class, 'preview'])->name('preview');
+            Route::post('', [ProjectExtraCostTransferController::class, 'store'])->name('store');
+            Route::delete('{transfer}', [ProjectExtraCostTransferController::class, 'destroy'])->name('destroy');
+        });
+
+        // Kết chuyển nhiều chi phí PS (batch)
+        Route::prefix('projects/{project}/expense-transfers-batch')->name('projects.expense-transfers-batch.')->group(function () {
+            Route::post('preview', [ProjectExtraCostTransferController::class, 'previewBatch'])->name('preview');
+            Route::post('', [ProjectExtraCostTransferController::class, 'storeBatch'])->name('store');
+        });
 
         Route::post('projects/{project}/tasks', [TaskController::class, 'store'])->name('projects.tasks.store');
         Route::put('projects/{project}/tasks/{task}', [TaskController::class, 'update'])->name('projects.tasks.update');
