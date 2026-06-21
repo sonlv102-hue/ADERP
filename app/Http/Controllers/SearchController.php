@@ -127,16 +127,16 @@ class SearchController extends Controller
         $items = AccountCode::query()
             ->when($q, fn ($b) => $b->where(fn ($b2) =>
                 $b2->whereRaw('LOWER(name) LIKE ?', ["%{$q}%"])
-                   ->orWhereRaw('CAST(id AS TEXT) LIKE ?', ["%{$q}%"])
+                   ->orWhereRaw('LOWER(code) LIKE ?', ["%{$q}%"])
             ))
             ->when($detailOnly, fn ($b) => $b->where('is_detail', true))
-            ->orderBy('id')
+            ->orderBy('code')
             ->limit(40)
-            ->get(['id', 'name', 'is_detail'])
+            ->get(['code', 'name', 'is_detail'])
             ->map(fn ($a) => [
-                'value' => $a->id,
+                'value' => $a->code,
                 'label' => $a->name,
-                'code'  => (string) $a->id,
+                'code'  => $a->code,
                 'meta'  => $a->is_detail ? null : 'Tổng hợp',
             ]);
         return response()->json(['data' => $items]);
