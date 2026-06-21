@@ -56,8 +56,12 @@ class BalanceSheetController extends Controller
         $mode = $request->input('mode', 'management');
         $data = $this->reportSvc->build($asOf, $mode);
 
+        // Cột Đầu năm: lấy số dư tại ngày 01/01 của năm hiện tại
+        $startOfYear = substr($asOf, 0, 4) . '-01-01';
+        $priorData   = $this->reportSvc->build($startOfYear, $mode);
+
         return Excel::download(
-            new BalanceSheetExport($data),
+            new BalanceSheetExport($data, $priorData),
             'bcttc-b01a-dnn-' . $asOf . '.xlsx'
         );
     }

@@ -161,7 +161,8 @@
           </NavGroup>
 
           <NavGroup label="Báo cáo" icon="chart-bar" prefix="acct-reports">
-            <NavItem :href="route('reports.cash_flow')" icon="banknotes" sub>Lưu chuyển tiền tệ</NavItem>
+            <NavItem :href="route('reports.cash_flow_statement')" icon="banknotes" sub>LCTT B03-DNN</NavItem>
+            <NavItem :href="route('reports.cash_flow')" icon="banknotes" sub>Sổ thu chi theo ngày</NavItem>
             <NavItem :href="route('reports.income_statement')" icon="chart-bar" sub>Kết quả HĐKD</NavItem>
             <NavItem :href="route('reports.balance_sheet')" icon="document" sub>Cân đối kế toán</NavItem>
             <NavItem :href="route('reports.trial_balance')" icon="document-text" sub>Cân đối phát sinh</NavItem>

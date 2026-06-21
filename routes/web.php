@@ -29,6 +29,7 @@ use App\Http\Controllers\Reports\APAgingController;
 use App\Http\Controllers\Reports\VatReportController;
 use App\Http\Controllers\Reports\InventoryReportController;
 use App\Http\Controllers\Reports\CashFlowController;
+use App\Http\Controllers\Reports\CashFlowStatementController;
 use App\Http\Controllers\Reports\IncomeStatementController;
 use App\Http\Controllers\Sales\CommissionController;
 use App\Http\Controllers\Sales\ContractController;
@@ -676,9 +677,11 @@ Route::middleware('auth')->group(function () {
         Route::get('inventory',               [InventoryReportController::class, 'index'])->name('inventory');
         Route::get('inventory/export',        [InventoryReportController::class, 'export'])->name('inventory.export');
         Route::get('stock-card',              [InventoryReportController::class, 'stockCard'])->name('stock_card');
-        Route::get('cash-flow',               [CashFlowController::class,        'index'])->name('cash_flow');
-        Route::get('cash-flow/export',        [CashFlowController::class,        'export'])->name('cash_flow.export');
-        Route::get('income-statement',        [IncomeStatementController::class, 'index'])->name('income_statement');
+        Route::get('cash-flow',                  [CashFlowController::class,          'index'])->name('cash_flow');
+        Route::get('cash-flow/export',           [CashFlowController::class,          'export'])->name('cash_flow.export');
+        Route::get('cash-flow-statement',        [CashFlowStatementController::class, 'index'])->name('cash_flow_statement');
+        Route::get('cash-flow-statement/export', [CashFlowStatementController::class, 'export'])->name('cash_flow_statement.export');
+        Route::get('income-statement',           [IncomeStatementController::class,   'index'])->name('income_statement');
         Route::get('income-statement/export', [IncomeStatementController::class, 'export'])->name('income_statement.export');
 
         Route::get('balance-sheet',            [BalanceSheetController::class,    'index'])->name('balance_sheet');

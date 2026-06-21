@@ -360,9 +360,63 @@ class IncomeStatementController extends Controller
 
     public function export(Request $request): BinaryFileResponse
     {
+        $year     = (int) $request->input('year', now()->year);
+        $dateFrom = $request->input('date_from') ?: "{$year}-01-01";
+        $dateTo   = $request->input('date_to')   ?: "{$year}-12-31";
+        $priorYear = $year - 1;
+
+        $currentBal = $this->periodBalances($dateFrom, $dateTo);
+        $priorBal   = $this->periodBalances("{$priorYear}-01-01", "{$priorYear}-12-31");
+
+        $current = $this->buildStatementFromBal($currentBal);
+        $prior   = $this->buildStatementFromBal($priorBal);
+
         return Excel::download(
-            new IncomeStatementExport($request->all()),
-            'income-statement-' . $request->input('year', now()->year) . '.xlsx'
+            new IncomeStatementExport($current, $prior, $dateFrom, $dateTo),
+            "b02-dnn-{$year}.xlsx"
         );
+    }
+
+    private function buildStatementFromBal(array $bal): array
+    {
+        $b = fn(string $prefix) => $this->sumPrefix($bal, $prefix);
+
+        $revenue          = $b('511');
+        $salesReturn      = $b('521');
+        $netRevenue       = $revenue - $salesReturn;
+        $cogs             = $b('632');
+        $grossProfit      = $netRevenue - $cogs;
+        $financialIncome  = $b('515');
+        $financialExpense = $b('635');
+        $sellingExpense   = $b('6421');
+        $adminOnlyExpense = $b('6422');
+        $totalMgmtExpense = $b('642');
+        $otherIncome      = $b('711');
+        $otherExpense     = $b('811');
+        $netOpProfit      = $grossProfit + $financialIncome - $financialExpense - $totalMgmtExpense;
+        $ebt              = $netOpProfit + $otherIncome - $otherExpense;
+        $cit              = $b('821');
+        $netProfit        = $ebt - $cit;
+
+        return [
+            ['code' => '01', 'label' => 'Doanh thu bán hàng và CCDV',        'amount' => $revenue,           'bold' => false],
+            ['code' => '',   'label' => '  TK 5111 — Thương mại',            'amount' => $b('5111'),         'bold' => false],
+            ['code' => '',   'label' => '  TK 5113 — Dịch vụ/Dự án',        'amount' => $b('5113'),         'bold' => false],
+            ['code' => '02', 'label' => 'Các khoản giảm trừ doanh thu',      'amount' => -$salesReturn,      'bold' => false],
+            ['code' => '10', 'label' => 'Doanh thu thuần (10 = 01 - 02)',     'amount' => $netRevenue,        'bold' => true],
+            ['code' => '11', 'label' => 'Giá vốn hàng bán',                  'amount' => -$cogs,             'bold' => false],
+            ['code' => '20', 'label' => 'Lợi nhuận gộp (20 = 10 - 11)',      'amount' => $grossProfit,       'bold' => true],
+            ['code' => '21', 'label' => 'Doanh thu tài chính',               'amount' => $financialIncome,   'bold' => false],
+            ['code' => '22', 'label' => 'Chi phí tài chính',                 'amount' => -$financialExpense, 'bold' => false],
+            ['code' => '24', 'label' => 'Chi phí quản lý kinh doanh',        'amount' => -$totalMgmtExpense, 'bold' => false],
+            ['code' => '',   'label' => '  Chi phí bán hàng (6421)',         'amount' => -$sellingExpense,   'bold' => false],
+            ['code' => '',   'label' => '  Chi phí QLDN (6422)',             'amount' => -$adminOnlyExpense, 'bold' => false],
+            ['code' => '30', 'label' => 'Lợi nhuận thuần từ HĐKD (30)',      'amount' => $netOpProfit,       'bold' => true],
+            ['code' => '31', 'label' => 'Thu nhập khác',                     'amount' => $otherIncome,       'bold' => false],
+            ['code' => '32', 'label' => 'Chi phí khác',                      'amount' => -$otherExpense,     'bold' => false],
+            ['code' => '50', 'label' => 'Lợi nhuận trước thuế (50)',         'amount' => $ebt,               'bold' => true],
+            ['code' => '51', 'label' => 'Thuế TNDN',                         'amount' => -$cit,              'bold' => false],
+            ['code' => '60', 'label' => 'Lợi nhuận sau thuế (60)',           'amount' => $netProfit,         'bold' => true],
+        ];
     }
 }

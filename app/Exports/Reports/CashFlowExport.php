@@ -14,7 +14,7 @@ class CashFlowExport implements FromCollection, WithHeadings, WithMapping, WithS
 {
     public function __construct(private array $filters = []) {}
 
-    public function title(): string { return 'Thu Chi'; }
+    public function title(): string { return 'Sổ thu chi theo ngày'; }
 
     public function collection()
     {

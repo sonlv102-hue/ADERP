@@ -11,11 +11,16 @@ use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
+/**
+ * S01-DNN — Sổ nhật ký chung.
+ * Mỗi dòng journal_entry_line xuất thành 1 hàng riêng.
+ * Ngày, Số CT chỉ hiển thị trên dòng đầu tiên của mỗi bút toán.
+ */
 class GeneralJournalExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithTitle
 {
     public function __construct(private array $filters = []) {}
 
-    public function title(): string { return 'Nhật ký chung'; }
+    public function title(): string { return 'S01-DNN'; }
 
     public function collection(): Collection
     {
@@ -41,27 +46,37 @@ class GeneralJournalExport implements FromCollection, WithHeadings, WithMapping,
             ->whereIn('jel.journal_entry_id', $entryIds)
             ->orderBy('jel.journal_entry_id')
             ->orderBy('jel.sort_order')
-            ->select('jel.journal_entry_id', 'jel.account_code', 'jel.debit', 'jel.credit')
-            ->get()->groupBy('journal_entry_id');
+            ->select(
+                'jel.journal_entry_id',
+                'jel.account_code',
+                'jel.description as line_desc',
+                'jel.debit',
+                'jel.credit'
+            )
+            ->get()
+            ->groupBy('journal_entry_id');
 
         $result = [];
-        $seq    = 1;
+        $jeSeq  = 1;
 
         foreach ($journalEntries as $e) {
-            $entryLines  = $lines->get($e->id, collect());
-            $debitCodes  = $entryLines->where('debit', '>', 0)->pluck('account_code')->join(' / ');
-            $creditCodes = $entryLines->where('credit', '>', 0)->pluck('account_code')->join(' / ');
-            $totalDebit  = (float) $entryLines->sum('debit');
+            $entryLines = $lines->get($e->id, collect());
+            $isFirst    = true;
 
-            $result[] = (object) [
-                'seq'         => $seq++,
-                'date'        => $e->entry_date,
-                'ref'         => $e->code,
-                'description' => $e->description,
-                'debit_tk'    => $debitCodes ?: '—',
-                'credit_tk'   => $creditCodes ?: '—',
-                'amount'      => $totalDebit,
-            ];
+            foreach ($entryLines as $line) {
+                $result[] = (object) [
+                    'seq'         => $isFirst ? $jeSeq : '',
+                    'date'        => $isFirst ? $e->entry_date : '',
+                    'ref'         => $isFirst ? $e->code : '',
+                    'description' => $line->line_desc ?: $e->description,
+                    'account'     => $line->account_code,
+                    'debit'       => (float) $line->debit,
+                    'credit'      => (float) $line->credit,
+                ];
+                $isFirst = false;
+            }
+
+            $jeSeq++;
         }
 
         return collect($result);
@@ -69,7 +84,7 @@ class GeneralJournalExport implements FromCollection, WithHeadings, WithMapping,
 
     public function headings(): array
     {
-        return ['STT', 'Ngày', 'Số chứng từ', 'Diễn giải', 'TK Nợ', 'TK Có', 'Số tiền (VND)'];
+        return ['STT', 'Ngày', 'Số CT', 'Diễn giải', 'TK', 'Nợ (VND)', 'Có (VND)'];
     }
 
     public function map($row): array
@@ -79,11 +94,24 @@ class GeneralJournalExport implements FromCollection, WithHeadings, WithMapping,
             $row->date,
             $row->ref,
             $row->description,
-            $row->debit_tk,
-            $row->credit_tk,
-            $row->amount,
+            $row->account,
+            $row->debit  > 0 ? $row->debit  : '',
+            $row->credit > 0 ? $row->credit : '',
         ];
     }
 
-    public function styles(Worksheet $sheet): array { return [1 => ['font' => ['bold' => true]]]; }
+    public function styles(Worksheet $sheet): array
+    {
+        $highestRow = $sheet->getHighestRow();
+        $sheet->getColumnDimension('A')->setWidth(6);
+        $sheet->getColumnDimension('B')->setWidth(12);
+        $sheet->getColumnDimension('C')->setWidth(14);
+        $sheet->getColumnDimension('D')->setWidth(50);
+        $sheet->getColumnDimension('E')->setWidth(10);
+        $sheet->getColumnDimension('F')->setWidth(18);
+        $sheet->getColumnDimension('G')->setWidth(18);
+        $sheet->getStyle("F2:G{$highestRow}")->getNumberFormat()->setFormatCode('#,##0');
+
+        return [1 => ['font' => ['bold' => true]]];
+    }
 }

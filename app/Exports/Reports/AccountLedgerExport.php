@@ -11,6 +11,10 @@ use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
+/**
+ * S02a/S03a-DNN — Sổ cái / Sổ chi tiết tài khoản.
+ * Có cột TK đối ứng (theo yêu cầu TT133).
+ */
 class AccountLedgerExport implements FromCollection, WithHeadings, WithMapping, WithStyles, WithTitle
 {
     public function __construct(private array $filters = []) {}
@@ -18,7 +22,7 @@ class AccountLedgerExport implements FromCollection, WithHeadings, WithMapping, 
     public function title(): string
     {
         $account = $this->filters['account'] ?? '';
-        return $account ? "Sổ chi tiết TK {$account}" : 'Sổ chi tiết tài khoản';
+        return $account ? "S02a TK {$account}" : 'Sổ chi tiết tài khoản';
     }
 
     public function collection(): Collection
@@ -34,8 +38,7 @@ class AccountLedgerExport implements FromCollection, WithHeadings, WithMapping, 
             ->get();
 
         $normalBalance = $allAccountsRaw->firstWhere('code', $account)?->normal_balance ?? 'debit';
-
-        $accountCodes = $this->resolveDescendants($account, $allAccountsRaw);
+        $accountCodes  = $this->resolveDescendants($account, $allAccountsRaw);
 
         // Số dư đầu kỳ
         $openingData = DB::table('journal_entry_lines as jel')
@@ -50,7 +53,7 @@ class AccountLedgerExport implements FromCollection, WithHeadings, WithMapping, 
             ? (float)($openingData?->dr ?? 0) - (float)($openingData?->cr ?? 0)
             : (float)($openingData?->cr ?? 0) - (float)($openingData?->dr ?? 0);
 
-        // Phát sinh trong kỳ
+        // Phát sinh trong kỳ — thêm je.id để tra TK đối ứng
         $lineRows = DB::table('journal_entry_lines as jel')
             ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
             ->where('je.status', 'posted')
@@ -59,18 +62,40 @@ class AccountLedgerExport implements FromCollection, WithHeadings, WithMapping, 
             ->orderBy('je.entry_date')
             ->orderBy('je.id')
             ->orderBy('jel.sort_order')
-            ->select('je.entry_date as date', 'je.code as ref',
-                'je.description as entry_desc', 'jel.description as line_desc',
-                'jel.debit', 'jel.credit')
+            ->select(
+                'je.id as je_id',
+                'je.entry_date as date',
+                'je.code as ref',
+                'je.description as entry_desc',
+                'jel.description as line_desc',
+                'jel.debit',
+                'jel.credit'
+            )
             ->get();
+
+        // Tra TK đối ứng: 1 query bổ sung cho tất cả JE IDs
+        $counterpartMap = collect();
+        if ($lineRows->isNotEmpty()) {
+            $jeIds = $lineRows->pluck('je_id')->unique()->values();
+            $counterpartMap = DB::table('journal_entry_lines')
+                ->whereIn('journal_entry_id', $jeIds)
+                ->whereNotIn('account_code', $accountCodes)
+                ->select(
+                    'journal_entry_id',
+                    DB::raw("STRING_AGG(DISTINCT account_code, '/' ORDER BY account_code) as codes")
+                )
+                ->groupBy('journal_entry_id')
+                ->pluck('codes', 'journal_entry_id');
+        }
 
         $result  = [];
         $balance = $openingBalance;
 
-        $result[] = (object)[
+        $result[] = (object) [
             'date'        => '',
             'ref'         => '',
             'description' => 'Số dư đầu kỳ',
+            'counterpart' => '',
             'debit'       => 0,
             'credit'      => 0,
             'balance'     => $openingBalance,
@@ -78,23 +103,25 @@ class AccountLedgerExport implements FromCollection, WithHeadings, WithMapping, 
 
         foreach ($lineRows as $l) {
             $balance += $normalBalance === 'debit'
-                ? ((float)$l->debit - (float)$l->credit)
-                : ((float)$l->credit - (float)$l->debit);
+                ? ((float) $l->debit - (float) $l->credit)
+                : ((float) $l->credit - (float) $l->debit);
 
-            $result[] = (object)[
+            $result[] = (object) [
                 'date'        => $l->date,
                 'ref'         => $l->ref,
                 'description' => $l->line_desc ?? $l->entry_desc,
+                'counterpart' => $counterpartMap[$l->je_id] ?? '',
                 'debit'       => (float) $l->debit,
                 'credit'      => (float) $l->credit,
                 'balance'     => $balance,
             ];
         }
 
-        $result[] = (object)[
+        $result[] = (object) [
             'date'        => '',
             'ref'         => '',
             'description' => 'Số dư cuối kỳ',
+            'counterpart' => '',
             'debit'       => 0,
             'credit'      => 0,
             'balance'     => $balance,
@@ -105,7 +132,7 @@ class AccountLedgerExport implements FromCollection, WithHeadings, WithMapping, 
 
     public function headings(): array
     {
-        return ['Ngày', 'Số CT', 'Diễn giải', 'Nợ (VND)', 'Có (VND)', 'Số dư (VND)'];
+        return ['Ngày', 'Số CT', 'Diễn giải', 'TK đối ứng', 'Nợ (VND)', 'Có (VND)', 'Số dư (VND)'];
     }
 
     public function map($row): array
@@ -114,13 +141,27 @@ class AccountLedgerExport implements FromCollection, WithHeadings, WithMapping, 
             $row->date,
             $row->ref,
             $row->description,
+            $row->counterpart,
             $row->debit  > 0 ? $row->debit  : '',
             $row->credit > 0 ? $row->credit : '',
             $row->balance,
         ];
     }
 
-    public function styles(Worksheet $sheet): array { return [1 => ['font' => ['bold' => true]]]; }
+    public function styles(Worksheet $sheet): array
+    {
+        $highestRow = $sheet->getHighestRow();
+        $sheet->getColumnDimension('A')->setWidth(12);
+        $sheet->getColumnDimension('B')->setWidth(14);
+        $sheet->getColumnDimension('C')->setWidth(50);
+        $sheet->getColumnDimension('D')->setWidth(16);
+        $sheet->getColumnDimension('E')->setWidth(18);
+        $sheet->getColumnDimension('F')->setWidth(18);
+        $sheet->getColumnDimension('G')->setWidth(18);
+        $sheet->getStyle("E2:G{$highestRow}")->getNumberFormat()->setFormatCode('#,##0');
+
+        return [1 => ['font' => ['bold' => true]]];
+    }
 
     private function resolveDescendants(string $rootCode, \Illuminate\Support\Collection $allCodes): array
     {
