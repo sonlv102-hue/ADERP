@@ -36,7 +36,7 @@
             class="px-4 py-2 border border-orange-300 text-orange-700 rounded-lg text-sm font-medium hover:bg-orange-50">
             Hủy phiếu
           </button>
-          <button v-if="['draft','cancelled'].includes(exit.status)" @click="showDeleteModal = true"
+          <button v-if="['draft','cancelled'].includes(exit.status) || isAdmin" @click="showDeleteModal = true"
             class="px-4 py-2 border border-red-400 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50">
             Xóa
           </button>
@@ -50,6 +50,9 @@
             <p class="text-sm text-gray-600 mb-5">
               Bạn có chắc muốn <strong class="text-red-600">xóa vĩnh viễn</strong> phiếu
               <strong>{{ exit.code }}</strong>? Thao tác này không thể hoàn tác.
+            </p>
+            <p v-if="isAdmin && exit.status === 'confirmed'" class="text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded p-2 mb-4">
+              Phiếu đang ở trạng thái <strong>Đã xác nhận</strong>. Hệ thống sẽ tự động hủy phiếu (đảo tồn kho + bút toán), lưu dấu vết vào lịch sử, rồi xóa.
             </p>
             <div class="flex justify-end gap-2">
               <button @click="showDeleteModal = false"
@@ -225,7 +228,7 @@
 
 <script setup>
 import { computed, ref } from 'vue';
-import { Link, router } from '@inertiajs/vue3';
+import { Link, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import { useCurrency } from '@/composables/useCurrency';
@@ -236,6 +239,8 @@ const props = defineProps({
 });
 
 const { formatVnd } = useCurrency();
+const page    = usePage();
+const isAdmin = computed(() => page.props.auth?.roles?.includes('admin') ?? false);
 const showDeleteModal  = ref(false);
 const showConfirmModal = ref(false);
 

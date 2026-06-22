@@ -486,7 +486,7 @@ class StockService
         }
     }
 
-    public function cancelExit(StockExit $exit): void
+    public function cancelExit(StockExit $exit, bool $adminForce = false): void
     {
         if ($exit->status === StockExitStatus::Cancelled) {
             throw new RuntimeException('Phiếu đã bị hủy trước đó.');
@@ -507,8 +507,8 @@ class StockService
             return;
         }
 
-        // Confirmed: kiểm tra đơn hàng liên kết có hóa đơn chưa hủy không
-        if ($exit->order_id) {
+        // Confirmed: kiểm tra đơn hàng liên kết có hóa đơn chưa hủy không (bỏ qua khi admin force)
+        if (!$adminForce && $exit->order_id) {
             $hasActiveInvoice = \App\Models\Invoice::where('order_id', $exit->order_id)
                 ->whereIn('status', ['sent', 'paid', 'overdue'])
                 ->exists();
@@ -519,8 +519,9 @@ class StockService
             }
         }
 
-        // Confirmed: kiểm tra serial chưa bị chuyển trạng thái thêm
+        // Confirmed: kiểm tra serial chưa bị chuyển trạng thái thêm (bỏ qua khi admin force)
         $exit->load('items.serials');
+        if (!$adminForce) {
         foreach ($exit->items as $item) {
             foreach ($item->serials as $serial) {
                 if ($serial->status !== SerialStatus::Sold) {
@@ -530,6 +531,7 @@ class StockService
                 }
             }
         }
+        } // end !$adminForce guard
 
         DB::transaction(function () use ($exit) {
             // Null out WIP journal_entry_id references before reversing JE (FK constraint)

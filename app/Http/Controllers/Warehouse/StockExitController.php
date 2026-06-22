@@ -701,8 +701,37 @@ class StockExitController extends Controller
 
     public function destroy(StockExit $stockExit): RedirectResponse
     {
-        if (! in_array($stockExit->status, [StockExitStatus::Draft, StockExitStatus::Cancelled])) {
+        $isAdmin = auth()->user()->hasRole('admin');
+
+        if (! $isAdmin && ! in_array($stockExit->status, [StockExitStatus::Draft, StockExitStatus::Cancelled])) {
             return back()->with('error', 'Chỉ có thể xóa phiếu ở trạng thái nháp hoặc đã hủy.');
+        }
+
+        // Admin force-delete phiếu Confirmed: log snapshot đầy đủ, sau đó cancel trước
+        if ($stockExit->status === StockExitStatus::Confirmed) {
+            $stockExit->load('items');
+            activity('admin_force_delete')
+                ->performedOn($stockExit)
+                ->causedBy(auth()->user())
+                ->withProperties([
+                    'code'        => $stockExit->code,
+                    'status'      => $stockExit->status->value,
+                    'exit_date'   => (string) $stockExit->exit_date,
+                    'warehouse_id' => $stockExit->warehouse_id,
+                    'project_id'  => $stockExit->project_id,
+                    'order_id'    => $stockExit->order_id,
+                    'items'       => $stockExit->items->map(fn ($i) => [
+                        'product_id' => $i->product_id,
+                        'quantity'   => $i->quantity,
+                    ])->toArray(),
+                ])
+                ->log("Admin xóa cưỡng chế phiếu xuất kho {$stockExit->code}");
+
+            try {
+                $this->stock->cancelExit($stockExit, adminForce: true);
+            } catch (\Exception $e) {
+                return back()->with('error', 'Không thể hủy phiếu trước khi xóa: ' . $e->getMessage());
+            }
         }
 
         // Đảo journal chưa reversed (e.g. sau cancel nhưng reversal thất bại)
