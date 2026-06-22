@@ -514,12 +514,17 @@
                       </span>
                     </td>
                     <td class="px-3 py-2.5">
-                      <Link v-if="e.je_id"
-                        :href="route('accounting.journal-entries.show', e.je_id)"
-                        class="text-xs text-blue-600 hover:underline font-mono">
-                        {{ e.je_code }}
-                      </Link>
-                      <span v-else class="text-xs text-amber-500">Chưa có BT</span>
+                      <div class="flex flex-col gap-0.5">
+                        <Link v-if="e.je_id"
+                          :href="route('accounting.journal-entries.show', e.je_id)"
+                          class="text-xs text-blue-600 hover:underline font-mono">
+                          {{ e.je_code }}
+                        </Link>
+                        <span v-else class="text-xs text-amber-500">Chưa có BT</span>
+                        <span v-if="e.cash_voucher_code" class="text-xs font-mono text-emerald-600">
+                          {{ e.cash_voucher_code }}
+                        </span>
+                      </div>
                     </td>
                     <td class="px-3 py-2.5">
                       <span :class="['text-xs px-1.5 py-0.5 rounded font-medium', transferStatusClass(e.transfer_status)]">
@@ -533,6 +538,11 @@
                           class="text-xs bg-purple-600 hover:bg-purple-700 text-white px-2 py-1 rounded font-medium whitespace-nowrap">
                           →154
                         </button>
+                        <Link v-if="can('projects.manage') && e.status !== 'cancelled'"
+                          :href="route('projects.projects.expenses.edit', [project.id, e.id])"
+                          class="text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 rounded font-medium whitespace-nowrap">
+                          Sửa
+                        </Link>
                         <button v-if="can('projects.manage')" @click="removeExpense(e.id)" class="text-gray-400 hover:text-red-500 ml-1">
                           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
@@ -1584,6 +1594,7 @@ function submitBatchTransfer() {
 
 // Transfer status helpers
 const transferStatusLabel = (status) => ({
+  not_posted: 'Nháp — Chưa ghi nhận',
   direct_154: 'Không cần KC',
   legacy:     'Vào 154 (cũ)',
   none:       'Chưa kết chuyển',
@@ -1594,6 +1605,7 @@ const transferStatusLabel = (status) => ({
 }[status] ?? status);
 
 const transferStatusClass = (status) => ({
+  not_posted: 'bg-gray-100 text-gray-500',
   direct_154: 'bg-blue-100 text-blue-700',
   legacy:     'bg-gray-100 text-gray-600',
   none:       'bg-amber-100 text-amber-700',

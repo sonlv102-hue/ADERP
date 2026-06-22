@@ -22,7 +22,7 @@ class PersonalLoanController extends Controller
     public function index(Request $request): Response
     {
         $query = PersonalLoan::with('employee', 'shareholder', 'creator')
-            ->orderByDesc('loan_date')->orderByDesc('id');
+            ->orderByDesc('id');
 
         if ($s = $request->input('status')) {
             $query->where('status', $s);

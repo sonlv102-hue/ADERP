@@ -313,6 +313,8 @@ Route::middleware('auth')->group(function () {
         Route::get('projects/{project}/expenses/create', [ProjectController::class, 'expenseCreate'])->name('projects.expenses.create');
         Route::post('projects/{project}/expenses/batch', [ProjectController::class, 'expenseBatchStore'])->name('projects.expenses.batch');
         Route::post('projects/{project}/expenses', [ProjectController::class, 'addExpense'])->name('projects.expenses.store');
+        Route::get('projects/{project}/expenses/{expense}/edit', [ProjectController::class, 'expenseEdit'])->name('projects.expenses.edit');
+        Route::patch('projects/{project}/expenses/{expense}', [ProjectController::class, 'expenseUpdate'])->name('projects.expenses.update');
         Route::delete('projects/{project}/expenses/{expense}', [ProjectController::class, 'removeExpense'])->name('projects.expenses.destroy');
 
         // Kết chuyển chi phí PS sang TK 154 (đơn lẻ)

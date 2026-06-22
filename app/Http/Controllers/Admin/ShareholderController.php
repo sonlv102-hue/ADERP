@@ -13,7 +13,7 @@ class ShareholderController extends Controller
 {
     public function index(Request $request): Response
     {
-        $query = Shareholder::withTrashed()->orderBy('code');
+        $query = Shareholder::withTrashed()->orderByDesc('id');
 
         if ($s = $request->input('search')) {
             $query->where(fn ($q) => $q->where('name', 'ilike', "%{$s}%")

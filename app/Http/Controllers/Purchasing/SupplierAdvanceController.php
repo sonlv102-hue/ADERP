@@ -38,7 +38,6 @@ class SupplierAdvanceController extends Controller
             ->when($request->status, fn ($q) => $q->where('status', $request->status))
             ->when($request->advance_type, fn ($q) => $q->where('advance_type', $request->advance_type))
             ->when($request->fiscal_year, fn ($q) => $q->where('fiscal_year', $request->fiscal_year))
-            ->orderByDesc('opening_date')
             ->orderByDesc('id')
             ->paginate(30)
             ->withQueryString();

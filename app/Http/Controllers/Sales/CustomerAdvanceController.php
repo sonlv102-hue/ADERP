@@ -37,7 +37,6 @@ class CustomerAdvanceController extends Controller
             ->when($request->customer_id, fn ($q) => $q->where('customer_id', $request->customer_id))
             ->when($request->status, fn ($q) => $q->where('status', $request->status))
             ->when($request->advance_type, fn ($q) => $q->where('advance_type', $request->advance_type))
-            ->orderByDesc('advance_date')
             ->orderByDesc('id')
             ->paginate(30)
             ->withQueryString();

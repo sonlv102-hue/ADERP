@@ -12,11 +12,13 @@ class ProjectExpense extends Model
     protected $fillable = [
         'project_id', 'category', 'labor_type', 'description', 'amount', 'expense_date', 'created_by',
         'supplier_id', 'purchase_invoice_id', 'invoice_number',
-        'payment_method', 'vat_rate', 'vat_amount',
+        'payment_method', 'vat_rate', 'vat_amount', 'has_vat_invoice',
         'pit_withholding_enabled', 'pit_rate', 'pit_amount', 'net_payment_amount',
+        'contractor_name', 'contractor_representative', 'contractor_phone',
+        'contractor_id_number', 'contract_number',
         'debit_account', 'credit_account',
         'status', 'journal_entry_id', 'project_wip_entry_id',
-        'employee_id', 'fund_id', 'bank_account_id',
+        'employee_id', 'fund_id', 'bank_account_id', 'cash_voucher_id',
     ];
 
     protected function casts(): array
@@ -28,7 +30,8 @@ class ProjectExpense extends Model
             'amount'                => 'decimal:2',
             'vat_rate'              => 'decimal:2',
             'vat_amount'            => 'integer',
-            'pit_withholding_enabled' => 'boolean',
+            'has_vat_invoice'         => 'boolean',
+        'pit_withholding_enabled' => 'boolean',
             'pit_rate'              => 'decimal:2',
             'pit_amount'            => 'integer',
             'net_payment_amount'    => 'integer',
@@ -63,6 +66,11 @@ class ProjectExpense extends Model
     public function bankAccount(): BelongsTo
     {
         return $this->belongsTo(BankAccount::class);
+    }
+
+    public function cashVoucher(): BelongsTo
+    {
+        return $this->belongsTo(CashVoucher::class);
     }
 
     public function journalEntry(): BelongsTo

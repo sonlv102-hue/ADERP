@@ -23,7 +23,7 @@ class PersonalExpenseController extends Controller
     public function index(Request $request): Response
     {
         $query = PersonalExpenseReport::with('employee', 'shareholder', 'creator')
-            ->orderByDesc('expense_date')->orderByDesc('id');
+            ->orderByDesc('id');
 
         if ($s = $request->input('status')) {
             $query->where('status', $s);

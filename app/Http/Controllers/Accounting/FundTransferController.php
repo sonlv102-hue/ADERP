@@ -21,7 +21,6 @@ class FundTransferController extends Controller
     public function index(Request $request): Response
     {
         $query = FundTransfer::with('fromFund', 'toFund', 'creator')
-            ->orderByDesc('transfer_date')
             ->orderByDesc('id');
 
         if ($s = $request->input('status')) {

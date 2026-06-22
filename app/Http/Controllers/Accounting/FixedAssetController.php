@@ -34,7 +34,7 @@ class FixedAssetController extends Controller
                 $q->where(fn ($q2) => $q2->where('code', 'ilike', "%{$s}%")
                     ->orWhere('name', 'ilike', "%{$s}%"));
             })
-            ->orderBy('code');
+            ->orderByDesc('id');
 
         $assets = $query->paginate(50)->through(fn (FixedAsset $fa) => [
             'id'                       => $fa->id,

@@ -24,7 +24,6 @@ class JournalEntryController extends Controller
         $query = JournalEntry::with('creator')
             ->withSum('lines as total_debit', 'debit')
             ->withSum('lines as total_credit', 'credit')
-            ->orderByDesc('entry_date')
             ->orderByDesc('id');
 
         if ($request->filled('search')) {

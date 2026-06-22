@@ -25,7 +25,6 @@ class CashVoucherController extends Controller
     public function index(Request $request): Response
     {
         $query = CashVoucher::with('fund', 'creator')
-            ->orderByDesc('voucher_date')
             ->orderByDesc('id');
 
         if ($type = $request->input('type')) {

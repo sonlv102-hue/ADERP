@@ -154,6 +154,47 @@
             TK Có: <span class="font-mono text-blue-700">3388 — Phải trả khác</span>
           </div>
         </template>
+
+        <!-- Thông tin đội/người nhận khoán (freelance_contractor) -->
+        <div v-if="hasFreelanceContractors && form.payment_method !== 'payable'"
+          class="mt-3 border border-amber-200 rounded-lg bg-amber-50 p-4 space-y-3">
+          <p class="text-xs font-semibold text-amber-700">Thông tin đội/người nhận khoán
+            <span class="font-normal text-amber-600">(không bắt buộc)</span>
+          </p>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">Tên đội/người nhận khoán</label>
+              <input v-model="form.contractor_name" type="text" placeholder="Đội thợ Nguyễn Văn A..."
+                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">Người đại diện</label>
+              <input v-model="form.contractor_representative" type="text"
+                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">Số điện thoại</label>
+              <input v-model="form.contractor_phone" type="text"
+                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">CCCD/MST cá nhân</label>
+              <input v-model="form.contractor_id_number" type="text"
+                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500" />
+            </div>
+            <div>
+              <label class="block text-xs text-gray-600 mb-1">Số hợp đồng khoán</label>
+              <input v-model="form.contract_number" type="text"
+                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Cảnh báo: subcontractor_invoice mà không dùng payable -->
+        <div v-if="hasSubcontractorLines && form.payment_method !== 'payable'"
+          class="mt-3 border border-orange-200 rounded-lg bg-orange-50 px-4 py-2.5 text-xs text-orange-700">
+          ⚠ Có dòng "Nhà thầu phụ có hóa đơn" — nên chọn hình thức <strong>Ghi công nợ NCC</strong> và chọn nhà cung cấp.
+        </div>
       </div>
 
       <!-- Section 3: Bảng dòng chi phí -->
@@ -228,14 +269,20 @@
                 </td>
                 <!-- VAT % -->
                 <td class="px-3 py-2">
-                  <input v-model="line.vat_rate" type="number" min="0" max="100" step="1" placeholder="0"
-                    class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-primary-500"
+                  <input v-model="line.vat_rate" type="number" min="0" max="100" step="1"
+                    :placeholder="isVatDisabled(line) ? 'N/A' : '0'"
+                    :disabled="isVatDisabled(line)"
+                    :class="['w-full border rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-primary-500',
+                      isVatDisabled(line) ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' : 'border-gray-300']"
                     @input="computeLineVat(line)" />
                 </td>
                 <!-- Tiền VAT -->
                 <td class="px-3 py-2">
-                  <input v-model="line.vat_amount" type="number" min="0" step="1" placeholder="0"
-                    class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs text-right font-mono focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                  <input v-model="line.vat_amount" type="number" min="0" step="1"
+                    :placeholder="isVatDisabled(line) ? 'N/A' : '0'"
+                    :disabled="isVatDisabled(line)"
+                    :class="['w-full border rounded px-2 py-1.5 text-xs text-right font-mono focus:outline-none focus:ring-1 focus:ring-primary-500',
+                      isVatDisabled(line) ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed' : 'border-gray-300']" />
                 </td>
                 <!-- Tổng cộng -->
                 <td class="px-3 py-2 text-right font-mono text-sm font-medium text-gray-800 whitespace-nowrap">
@@ -262,23 +309,36 @@
           </table>
         </div>
 
-        <!-- PIT section — dành cho freelance_contractor -->
-        <div v-if="hasPitLines" class="border-t border-amber-200 bg-amber-50 px-4 py-3">
-          <p class="text-xs font-semibold text-amber-700 mb-2">Khấu trừ thuế TNCN (cho dòng "Thuê khoán")</p>
-          <div v-for="(line, idx) in freelanceLines" :key="idx" class="grid grid-cols-1 sm:grid-cols-4 gap-3 mb-2">
-            <div class="sm:col-span-1 text-xs text-gray-600 self-center truncate">{{ line.description || 'Dòng ' + (form.lines.indexOf(line) + 1) }}</div>
-            <div>
+        <!-- Freelance section — has_vat_invoice + PIT (cho dòng "Thuê khoán") -->
+        <div v-if="hasFreelanceContractors" class="border-t border-amber-200 bg-amber-50 px-4 py-3">
+          <p class="text-xs font-semibold text-amber-700 mb-2">Chi tiết dòng "Thuê khoán cá nhân/đội nhóm"</p>
+          <div v-for="(line, idx) in freelanceLines" :key="idx"
+            class="grid grid-cols-1 sm:grid-cols-5 gap-3 mb-2 pb-2 border-b border-amber-100 last:border-0 last:mb-0 last:pb-0">
+            <div class="sm:col-span-1 text-xs text-gray-600 self-center truncate font-medium">
+              {{ line.description || 'Dòng ' + (form.lines.indexOf(line) + 1) }}
+            </div>
+            <div class="self-center">
               <label class="flex items-center gap-1.5 text-xs cursor-pointer select-none">
-                <input type="checkbox" v-model="line.pit_withholding_enabled" class="rounded border-gray-300 text-amber-600" />
+                <input type="checkbox" v-model="line.has_vat_invoice" @change="onHasVatChange(line)"
+                  class="rounded border-gray-300 text-blue-600" />
+                Có hóa đơn VAT
+              </label>
+            </div>
+            <div v-if="['cash', 'bank'].includes(form.payment_method)" class="self-center">
+              <label class="flex items-center gap-1.5 text-xs cursor-pointer select-none">
+                <input type="checkbox" v-model="line.pit_withholding_enabled"
+                  class="rounded border-gray-300 text-amber-600" />
                 Khấu trừ TNCN
               </label>
             </div>
-            <div v-if="line.pit_withholding_enabled" class="flex items-center gap-2">
+            <div v-if="line.pit_withholding_enabled && ['cash', 'bank'].includes(form.payment_method)"
+              class="flex items-center gap-2">
               <input v-model="line.pit_rate" type="number" min="0" max="100" step="0.1"
                 class="w-20 border border-gray-300 rounded px-2 py-1 text-xs" placeholder="10" />
               <span class="text-xs text-gray-500">%</span>
             </div>
-            <div v-if="line.pit_withholding_enabled" class="text-xs space-y-0.5">
+            <div v-if="line.pit_withholding_enabled && ['cash', 'bank'].includes(form.payment_method)"
+              class="text-xs space-y-0.5 self-center">
               <div class="text-red-600">Thuế: <strong>{{ formatVnd(computePit(line)) }}</strong></div>
               <div class="text-green-700">Thực trả: <strong>{{ formatVnd(computeNet(line)) }}</strong></div>
             </div>
@@ -410,6 +470,12 @@ const form = useForm({
   fund_id:        '',
   bank_account_id: '',
   employee_id:    '',
+  // Contractor info (header-level, shared across all lines)
+  contractor_name:           '',
+  contractor_representative: '',
+  contractor_phone:          '',
+  contractor_id_number:      '',
+  contract_number:           '',
   post_immediately: true,
   lines: [],
 });
@@ -418,14 +484,16 @@ const form = useForm({
 addLine();
 
 function makeLine() {
+  const defaultCat = props.expenseCategories.find(c => c.value === 'labor');
   return {
     category:              'labor',
     description:           '',
-    debit_account:         '',
+    debit_account:         defaultCat?.defaultDebitAccount ?? '154',
     labor_type:            '',
     amount:                '',
     vat_rate:              '',
     vat_amount:            '',
+    has_vat_invoice:       false,
     pit_withholding_enabled: false,
     pit_rate:              10,
   };
@@ -440,7 +508,6 @@ function removeLine(idx) {
 }
 
 function onCategoryChange(line) {
-  // Khi category thay đổi, auto-fill debit_account từ category default (chỉ nếu user chưa thay)
   const cat = props.expenseCategories.find(c => c.value === line.category);
   if (cat && (!line.debit_account || line.debit_account === '154')) {
     line.debit_account = cat.defaultDebitAccount;
@@ -448,7 +515,19 @@ function onCategoryChange(line) {
   if (line.category !== 'labor') {
     line.labor_type = '';
     line.pit_withholding_enabled = false;
+    line.has_vat_invoice = false;
   }
+}
+
+function onHasVatChange(line) {
+  if (!line.has_vat_invoice) {
+    line.vat_rate = '';
+    line.vat_amount = '';
+  }
+}
+
+function isVatDisabled(line) {
+  return line.labor_type === 'freelance_contractor' && !line.has_vat_invoice;
 }
 
 function onPaymentMethodChange() {
@@ -488,8 +567,9 @@ function computeNet(line) {
 const freelanceLines = computed(() =>
   form.lines.filter(l => l.labor_type === 'freelance_contractor')
 );
-const hasPitLines = computed(() =>
-  freelanceLines.value.length > 0 && ['cash', 'bank'].includes(form.payment_method)
+const hasFreelanceContractors = computed(() => freelanceLines.value.length > 0);
+const hasSubcontractorLines   = computed(() =>
+  form.lines.some(l => l.labor_type === 'subcontractor_invoice')
 );
 
 // Totals
@@ -557,12 +637,13 @@ function submit(postImmediately) {
   // Normalize lines before submit
   const cleanLines = form.lines.map(l => ({
     ...l,
-    amount:     Math.round(parseFloat(l.amount) || 0),
-    vat_amount: Math.round(parseFloat(l.vat_amount) || 0),
-    vat_rate:   parseFloat(l.vat_rate) || 0,
-    pit_rate:   parseFloat(l.pit_rate) || 0,
-    debit_account: l.debit_account || null,
-    labor_type: l.labor_type || null,
+    amount:          Math.round(parseFloat(l.amount) || 0),
+    vat_amount:      isVatDisabled(l) ? 0 : Math.round(parseFloat(l.vat_amount) || 0),
+    vat_rate:        isVatDisabled(l) ? 0 : (parseFloat(l.vat_rate) || 0),
+    pit_rate:        parseFloat(l.pit_rate) || 0,
+    debit_account:   l.debit_account || null,
+    labor_type:      l.labor_type || null,
+    has_vat_invoice: !!l.has_vat_invoice,
   }));
 
   form.transform(data => ({ ...data, lines: cleanLines }))

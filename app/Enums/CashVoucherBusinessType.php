@@ -18,6 +18,7 @@ enum CashVoucherBusinessType: string
     case SalaryPayment              = 'salary_payment';              // Chi lương → Dr 3341
     case SupplierPrepayment         = 'supplier_prepayment';         // Trả trước NCC → Dr 331UT
     case CustomerAdvance            = 'customer_advance';            // Nhận ứng trước KH → Cr 131UT
+    case ProjectExpensePayment      = 'project_expense_payment';     // Chi phí phát sinh dự án (TK154)
 
     public function label(): string
     {
@@ -34,6 +35,7 @@ enum CashVoucherBusinessType: string
             self::SalaryPayment             => 'Thanh toán lương',
             self::SupplierPrepayment        => 'Trả trước nhà cung cấp',
             self::CustomerAdvance           => 'Nhận ứng trước khách hàng',
+            self::ProjectExpensePayment     => 'Chi phí phát sinh dự án',
         };
     }
 
@@ -42,7 +44,8 @@ enum CashVoucherBusinessType: string
     {
         return match ($this) {
             self::AdvancePayment, self::PayOffset, self::PaySupplier,
-            self::ExpensePayment, self::SalaryPayment, self::SupplierPrepayment           => 'payment',
+            self::ExpensePayment, self::SalaryPayment, self::SupplierPrepayment,
+            self::ProjectExpensePayment                                                    => 'payment',
             self::AdvanceReturn, self::CollectOffset, self::CollectCustomer,
             self::EquityContribution, self::CollectPersonalReceivable, self::CustomerAdvance => 'receipt',
         };
@@ -71,6 +74,7 @@ enum CashVoucherBusinessType: string
             self::SalaryPayment                          => AccountingSettings::get('salary_payable_account', '3341'),
             self::SupplierPrepayment                     => AccountingSettings::get('supplier_advance_account', '331UT'),
             self::CustomerAdvance                        => AccountingSettings::get('customer_advance_account', '131UT'),
+            self::ProjectExpensePayment                  => '154',
         };
     }
 

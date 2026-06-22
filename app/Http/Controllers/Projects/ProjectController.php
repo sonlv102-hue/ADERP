@@ -24,6 +24,7 @@ use App\Models\PurchaseOrder;
 use App\Models\StockExit;
 use App\Models\User;
 use App\Services\AccountingService;
+use App\Services\AccountingSettings;
 use App\Services\ProjectExtraCostTransferService;
 use App\Services\ProjectService;
 use App\Services\ProjectWipService;
@@ -113,6 +114,7 @@ class ProjectController extends Controller
             'expenses.employee',
             'expenses.fund',
             'expenses.bankAccount',
+            'expenses.cashVoucher',
         ]);
 
         // Phiếu xuất kho thực tế cho dự án (confirmed + cancelled để truy vết)
@@ -278,22 +280,26 @@ class ProjectController extends Controller
                         || (!$isDirectTo154 && (bool) $directWip && $postedTransfers->isEmpty())
                     );
 
+                    // JE thực tế: gộp cả direct FK và computed (từ WIP/reference)
+                    $effectiveJeId = $e->journal_entry_id ?? $jeId;
+
                     // Trạng thái kết chuyển
                     $transferStatus = match (true) {
-                        $isCancelled             => 'cancelled',
-                        $isWipError              => 'data_error',
-                        $isDirectTo154           => 'direct_154',
-                        $isLegacyWip             => 'legacy',
-                        $transferredAmt === 0    => 'none',
-                        $transferredAmt >= $expenseAmt => 'full',
-                        default                  => 'partial',
+                        $isCancelled                                     => 'cancelled',
+                        $effectiveJeId === null                          => 'not_posted',
+                        $isWipError                                      => 'data_error',
+                        $isDirectTo154                                   => 'direct_154',
+                        $isLegacyWip                                     => 'legacy',
+                        $transferredAmt === 0                            => 'none',
+                        $transferredAmt >= $expenseAmt                   => 'full',
+                        default                                          => 'partial',
                     };
 
                     // Có thể kết chuyển nếu: có JE, TK Nợ không phải 154, không phải legacy/cancelled, còn tiền
                     $canTransfer = !$isCancelled
                         && !$isDirectTo154
                         && !$isLegacyWip
-                        && $jeId !== null
+                        && $effectiveJeId !== null
                         && $remainingAmt > 0;
 
                     return [
@@ -326,6 +332,8 @@ class ProjectController extends Controller
                         'credit_account'          => $e->credit_account,
                         'je_code'             => $e->journal_entry_id ? (\App\Models\JournalEntry::find($e->journal_entry_id)?->code ?? $jeCode) : $jeCode,
                         'je_id'               => $e->journal_entry_id ?? $jeId,
+                        'cash_voucher_id'     => $e->cash_voucher_id,
+                        'cash_voucher_code'   => $e->cashVoucher?->code,
                         // Kết chuyển 154
                         'transfer_status'     => $transferStatus,
                         'transferred_amount'  => $transferredAmt,
@@ -522,6 +530,10 @@ class ProjectController extends Controller
     public function addExpense(Request $request, Project $project): RedirectResponse
     {
         $creditAccount = $request->input('credit_account', '');
+        $laborType     = $request->input('labor_type', '');
+
+        // supplier_id required when: credit_account = 3311 OR labor_type = subcontractor_invoice
+        $supplierRequired = $creditAccount === '3311' || $laborType === 'subcontractor_invoice';
 
         $data = $request->validate([
             'category'       => ['required', 'string'],
@@ -531,9 +543,9 @@ class ProjectController extends Controller
             'expense_date'   => ['required', 'date'],
             'debit_account'  => ['nullable', 'string', 'max:20'],
             'credit_account' => ['nullable', 'string', 'max:20'],
-            // Conditional required based on TK Có
+            // Conditional required based on TK Có / labor_type
             'supplier_id' => [
-                \Illuminate\Validation\Rule::requiredIf($creditAccount === '3311'),
+                \Illuminate\Validation\Rule::requiredIf($supplierRequired),
                 'nullable', 'integer', 'exists:suppliers,id',
             ],
             'fund_id' => [
@@ -549,13 +561,26 @@ class ProjectController extends Controller
             'payment_method'          => ['nullable', 'string', 'in:cash,bank,payable,advance,salary,misc'],
             'vat_rate'                => ['nullable', 'numeric', 'min:0', 'max:100'],
             'vat_amount'              => ['nullable', 'integer', 'min:0'],
+            'has_vat_invoice'         => ['nullable', 'boolean'],
             'purchase_invoice_id'     => ['nullable', 'integer'],
             'pit_withholding_enabled' => ['nullable', 'boolean'],
             'pit_rate'                => ['nullable', 'numeric', 'min:0', 'max:100'],
+            // Contractor info (freelance_contractor)
+            'contractor_name'           => ['nullable', 'string', 'max:255'],
+            'contractor_representative' => ['nullable', 'string', 'max:100'],
+            'contractor_phone'          => ['nullable', 'string', 'max:50'],
+            'contractor_id_number'      => ['nullable', 'string', 'max:50'],
+            'contract_number'           => ['nullable', 'string', 'max:100'],
         ]);
 
         // Ensure vat_amount defaults to 0 (nullable in validation but NOT NULL in DB)
         $data['vat_amount'] = (int) ($data['vat_amount'] ?? 0);
+
+        // freelance_contractor không có hóa đơn VAT → clear VAT
+        if (($data['labor_type'] ?? '') === 'freelance_contractor' && empty($data['has_vat_invoice'])) {
+            $data['vat_amount'] = 0;
+            $data['vat_rate']   = null;
+        }
 
         // Compute PIT amounts server-side (không trust frontend)
         $grossAmount = (int) round((float) ($data['amount'] ?? 0));
@@ -663,6 +688,164 @@ class ProjectController extends Controller
         return back()->with('success', 'Đã xóa chi phí và đảo bút toán liên quan.');
     }
 
+    public function expenseEdit(Project $project, ProjectExpense $expense): Response
+    {
+        abort_unless($expense->project_id === $project->id, 404);
+        $expense->load('supplier', 'fund', 'bankAccount');
+
+        return Inertia::render('Projects/Expenses/Edit', [
+            'project' => [
+                'id'   => $project->id,
+                'code' => $project->code,
+                'name' => $project->name,
+            ],
+            'expense' => [
+                'id'                        => $expense->id,
+                'category'                  => $expense->category->value,
+                'labor_type'                => $expense->labor_type?->value,
+                'description'               => $expense->description,
+                'amount'                    => (int) round((float) $expense->amount),
+                'expense_date'              => $expense->expense_date->format('Y-m-d'),
+                'debit_account'             => $expense->debit_account,
+                'credit_account'            => $expense->credit_account,
+                'payment_method'            => $expense->payment_method ?? 'payable',
+                'supplier_id'               => $expense->supplier_id,
+                'supplier_name'             => $expense->supplier?->name,
+                'fund_id'                   => $expense->fund_id,
+                'bank_account_id'           => $expense->bank_account_id,
+                'employee_id'               => $expense->employee_id,
+                'invoice_number'            => $expense->invoice_number,
+                'vat_rate'                  => $expense->vat_rate,
+                'vat_amount'                => $expense->vat_amount ?? 0,
+                'has_vat_invoice'           => (bool) $expense->has_vat_invoice,
+                'pit_withholding_enabled'   => (bool) $expense->pit_withholding_enabled,
+                'pit_rate'                  => $expense->pit_rate,
+                'pit_amount'                => $expense->pit_amount ?? 0,
+                'contractor_name'           => $expense->contractor_name,
+                'contractor_representative' => $expense->contractor_representative,
+                'contractor_phone'          => $expense->contractor_phone,
+                'contractor_id_number'      => $expense->contractor_id_number,
+                'contract_number'           => $expense->contract_number,
+                'status'                    => $expense->status ?? 'draft',
+                'journal_entry_id'          => $expense->journal_entry_id,
+                'has_posted_transfers'      => $expense->transfers()->where('status', 'posted')->exists(),
+            ],
+            'expenseCategories' => collect(ExpenseCategory::cases())->map(fn ($c) => [
+                'value'               => $c->value,
+                'label'               => $c->label(),
+                'defaultDebitAccount' => $c->defaultDebitAccount(),
+            ]),
+            'funds'        => Fund::where('type', 'cash')->orderBy('name')->get(['id', 'name', 'account_code']),
+            'bankAccounts' => BankAccount::orderBy('bank_name')->get(['id', 'bank_name', 'account_number', 'account_code']),
+            'employees'    => Employee::whereIn('status', ['active', 'probation'])->orderBy('name')->get(['id', 'code', 'name']),
+        ]);
+    }
+
+    public function expenseUpdate(Request $request, Project $project, ProjectExpense $expense): RedirectResponse
+    {
+        abort_unless($expense->project_id === $project->id, 404);
+
+        if ($expense->transfers()->where('status', 'posted')->exists()) {
+            return back()->with('error', 'Không thể sửa chi phí đã có kết chuyển sang TK 154. Hủy kết chuyển trước.');
+        }
+
+        $hasJe = $expense->journal_entry_id !== null;
+
+        if ($hasJe) {
+            // Chỉ cho sửa non-financial fields khi đã có bút toán
+            $data = $request->validate([
+                'description'               => ['required', 'string', 'max:255'],
+                'invoice_number'            => ['nullable', 'string', 'max:100'],
+                'contractor_name'           => ['nullable', 'string', 'max:255'],
+                'contractor_representative' => ['nullable', 'string', 'max:100'],
+                'contractor_phone'          => ['nullable', 'string', 'max:50'],
+                'contractor_id_number'      => ['nullable', 'string', 'max:50'],
+                'contract_number'           => ['nullable', 'string', 'max:100'],
+            ]);
+            $expense->update($data);
+            return redirect()->route('projects.projects.show', $project)->with('success', 'Đã cập nhật thông tin chi phí.');
+        }
+
+        // Chưa có JE: full edit
+        $creditAccount = $request->input('credit_account', '');
+        $laborType     = $request->input('labor_type', '');
+        $supplierRequired = $creditAccount === '3311' || $laborType === 'subcontractor_invoice';
+
+        $data = $request->validate([
+            'category'                  => ['required', 'string'],
+            'labor_type'                => ['nullable', 'string', 'in:internal_employee,freelance_contractor,subcontractor_invoice,insurance_allocation'],
+            'description'               => ['required', 'string', 'max:255'],
+            'amount'                    => ['required', 'numeric', 'min:0'],
+            'expense_date'              => ['required', 'date'],
+            'debit_account'             => ['nullable', 'string', 'max:20'],
+            'credit_account'            => ['nullable', 'string', 'max:20'],
+            'supplier_id' => [
+                \Illuminate\Validation\Rule::requiredIf($supplierRequired),
+                'nullable', 'integer', 'exists:suppliers,id',
+            ],
+            'fund_id'                   => ['nullable', 'integer', 'exists:funds,id'],
+            'bank_account_id'           => ['nullable', 'integer', 'exists:bank_accounts,id'],
+            'employee_id'               => ['nullable', 'integer', 'exists:employees,id'],
+            'invoice_number'            => ['nullable', 'string', 'max:100'],
+            'payment_method'            => ['nullable', 'string', 'in:cash,bank,payable,advance,salary,misc'],
+            'vat_rate'                  => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'vat_amount'                => ['nullable', 'integer', 'min:0'],
+            'has_vat_invoice'           => ['nullable', 'boolean'],
+            'pit_withholding_enabled'   => ['nullable', 'boolean'],
+            'pit_rate'                  => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'contractor_name'           => ['nullable', 'string', 'max:255'],
+            'contractor_representative' => ['nullable', 'string', 'max:100'],
+            'contractor_phone'          => ['nullable', 'string', 'max:50'],
+            'contractor_id_number'      => ['nullable', 'string', 'max:50'],
+            'contract_number'           => ['nullable', 'string', 'max:100'],
+            'post_immediately'          => ['nullable', 'boolean'],
+        ]);
+
+        $data['vat_amount'] = (int) ($data['vat_amount'] ?? 0);
+
+        if (($data['labor_type'] ?? '') === 'freelance_contractor' && empty($data['has_vat_invoice'])) {
+            $data['vat_amount'] = 0;
+            $data['vat_rate']   = null;
+        }
+
+        $grossAmount = (int) round((float) ($data['amount'] ?? 0));
+        $pitEnabled  = !empty($data['pit_withholding_enabled'])
+                       && in_array($data['payment_method'] ?? '', ['cash', 'bank']);
+        if ($pitEnabled && !empty($data['pit_rate'])) {
+            $data['pit_amount']              = (int) round($grossAmount * (float) $data['pit_rate'] / 100);
+            $data['net_payment_amount']      = $grossAmount - $data['pit_amount'];
+        } else {
+            $data['pit_withholding_enabled'] = false;
+            $data['pit_amount']              = 0;
+            $data['net_payment_amount']      = 0;
+        }
+
+        $debitAccount = $data['debit_account'] ?? '';
+        if ($debitAccount && preg_match('/^15[26]/', $debitAccount)) {
+            return back()->withInput()->with('error', "TK {$debitAccount} (vật tư/hàng hóa) không được dùng trong Chi phí PS.");
+        }
+
+        $shouldPost = (bool) ($data['post_immediately'] ?? false);
+        unset($data['post_immediately']);
+
+        try {
+            DB::transaction(function () use ($data, $expense, $shouldPost) {
+                $expense->update($data);
+
+                if ($shouldPost && (float) $expense->amount > 0) {
+                    $expense->refresh()->loadMissing('project', 'supplier', 'fund', 'bankAccount');
+                    $this->wip->createFromExpense($expense);
+                }
+            });
+        } catch (\Throwable $e) {
+            \Log::error("expenseUpdate failed expense#{$expense->id}: {$e->getMessage()}");
+            return back()->with('error', 'Không thể cập nhật chi phí: ' . $e->getMessage())->withInput();
+        }
+
+        $msg = $shouldPost ? 'Đã cập nhật và ghi nhận chi phí.' : 'Đã lưu nháp chi phí.';
+        return redirect()->route('projects.projects.show', $project)->with('success', $msg);
+    }
+
     public function recognizeCost(Request $request, Project $project): RedirectResponse
     {
         $data = $request->validate(['notes' => ['nullable', 'string', 'max:500']]);
@@ -718,29 +901,42 @@ class ProjectController extends Controller
                 'nullable', 'integer', 'exists:bank_accounts,id',
             ],
             'employee_id' => ['nullable', 'integer', 'exists:employees,id'],
+            // Contractor info — header-level (shared across all lines in batch)
+            'contractor_name'           => ['nullable', 'string', 'max:255'],
+            'contractor_representative' => ['nullable', 'string', 'max:100'],
+            'contractor_phone'          => ['nullable', 'string', 'max:50'],
+            'contractor_id_number'      => ['nullable', 'string', 'max:50'],
+            'contract_number'           => ['nullable', 'string', 'max:100'],
             'lines'       => ['required', 'array', 'min:1'],
-            'lines.*.category'      => ['required', 'string'],
-            'lines.*.description'   => ['required', 'string', 'max:255'],
-            'lines.*.amount'        => ['required', 'numeric', 'min:0'],
-            'lines.*.debit_account' => ['nullable', 'string', 'max:20'],
-            'lines.*.vat_rate'      => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'lines.*.vat_amount'    => ['nullable', 'integer', 'min:0'],
-            'lines.*.labor_type'    => ['nullable', 'string', 'in:internal_employee,freelance_contractor,subcontractor_invoice,insurance_allocation'],
-            'lines.*.notes'         => ['nullable', 'string', 'max:500'],
+            'lines.*.category'           => ['required', 'string'],
+            'lines.*.description'        => ['required', 'string', 'max:255'],
+            'lines.*.amount'             => ['required', 'numeric', 'min:0'],
+            'lines.*.debit_account'      => ['nullable', 'string', 'max:20'],
+            'lines.*.vat_rate'           => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'lines.*.vat_amount'         => ['nullable', 'integer', 'min:0'],
+            'lines.*.has_vat_invoice'    => ['nullable', 'boolean'],
+            'lines.*.labor_type'         => ['nullable', 'string', 'in:internal_employee,freelance_contractor,subcontractor_invoice,insurance_allocation'],
+            'lines.*.notes'              => ['nullable', 'string', 'max:500'],
             'lines.*.pit_withholding_enabled' => ['nullable', 'boolean'],
             'lines.*.pit_rate'               => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
         $shouldPost = (bool) ($data['post_immediately'] ?? true);
 
+        // Resolve credit_account once per batch (header-level: same payment method for all lines)
+        $creditAcct = $this->resolveExpenseCreditAccount($data);
+
         try {
-            DB::transaction(function () use ($data, $project, $shouldPost) {
+            DB::transaction(function () use ($data, $project, $shouldPost, $creditAcct) {
                 foreach ($data['lines'] as $line) {
                     $grossAmount = (int) round((float) $line['amount']);
-                    $debitAcct   = $line['debit_account'] ?? null;
+
+                    // Always resolve debit_account from category when not provided
+                    $debitAcct = $line['debit_account']
+                        ?: ExpenseCategory::from($line['category'])->defaultDebitAccount();
 
                     // Chặn TK 152/156
-                    if ($debitAcct && preg_match('/^15[26]/', $debitAcct)) {
+                    if (preg_match('/^15[26]/', $debitAcct)) {
                         throw new \InvalidArgumentException(
                             "TK {$debitAcct} (vật tư/hàng hóa) không được dùng trong Chi phí PS. Sử dụng phiếu xuất kho."
                         );
@@ -751,21 +947,35 @@ class ProjectController extends Controller
                                   && !empty($line['pit_rate']);
                     $pitAmount  = $pitEnabled ? (int) round($grossAmount * (float) $line['pit_rate'] / 100) : 0;
 
+                    // freelance_contractor không có HĐ VAT → clear VAT
+                    $lineLaborType   = $line['labor_type'] ?? null;
+                    $lineHasVat      = !empty($line['has_vat_invoice']);
+                    $isFreelanceNoVat = $lineLaborType === 'freelance_contractor' && !$lineHasVat;
+                    $vatRate   = $isFreelanceNoVat ? null : ($line['vat_rate'] ?? null);
+                    $vatAmount = $isFreelanceNoVat ? 0   : (int) ($line['vat_amount'] ?? 0);
+
                     $expense = $project->expenses()->create([
                         'category'                => $line['category'],
-                        'labor_type'              => $line['labor_type'] ?? null,
+                        'labor_type'              => $lineLaborType,
                         'description'             => $line['description'],
                         'amount'                  => $grossAmount,
                         'expense_date'            => $data['expense_date'],
                         'debit_account'           => $debitAcct,
-                        'vat_rate'                => $line['vat_rate'] ?? null,
-                        'vat_amount'              => (int) ($line['vat_amount'] ?? 0),
+                        'credit_account'          => $creditAcct,
+                        'vat_rate'                => $vatRate,
+                        'vat_amount'              => $vatAmount,
+                        'has_vat_invoice'         => $lineHasVat,
                         'payment_method'          => $data['payment_method'],
                         'supplier_id'             => $data['supplier_id'] ?? null,
                         'fund_id'                 => $data['fund_id'] ?? null,
                         'bank_account_id'         => $data['bank_account_id'] ?? null,
                         'employee_id'             => $data['employee_id'] ?? null,
                         'invoice_number'          => $data['invoice_number'] ?? null,
+                        'contractor_name'           => $data['contractor_name'] ?? null,
+                        'contractor_representative' => $data['contractor_representative'] ?? null,
+                        'contractor_phone'          => $data['contractor_phone'] ?? null,
+                        'contractor_id_number'      => $data['contractor_id_number'] ?? null,
+                        'contract_number'           => $data['contract_number'] ?? null,
                         'pit_withholding_enabled' => $pitEnabled,
                         'pit_rate'                => $pitEnabled ? ($line['pit_rate'] ?? 0) : 0,
                         'pit_amount'              => $pitAmount,
@@ -776,7 +986,7 @@ class ProjectController extends Controller
 
                     if ($shouldPost && $grossAmount > 0) {
                         $expense->loadMissing('project', 'supplier', 'fund', 'bankAccount');
-                        $this->wip->createFromExpense($expense);
+                        $this->wip->createFromExpense($expense, useCashVoucher: true);
                     }
                 }
             });
@@ -792,6 +1002,36 @@ class ProjectController extends Controller
 
         return redirect()->route('projects.projects.show', $project)
             ->with('success', $msg);
+    }
+
+    /** Xác định TK Có cho chi phí PS từ dữ liệu header (không cần model đã save). */
+    private function resolveExpenseCreditAccount(array $data): string
+    {
+        $method = $data['payment_method'] ?? 'payable';
+
+        if ($method === 'cash') {
+            if (!empty($data['fund_id'])) {
+                return \App\Models\Fund::find($data['fund_id'])?->account_code
+                    ?? AccountingSettings::get('cash_account', '1111');
+            }
+            return AccountingSettings::get('cash_account', '1111');
+        }
+        if ($method === 'bank') {
+            if (!empty($data['bank_account_id'])) {
+                return \App\Models\BankAccount::find($data['bank_account_id'])?->account_code
+                    ?? AccountingSettings::get('bank_account', '1121');
+            }
+            return AccountingSettings::get('bank_account', '1121');
+        }
+        if ($method === 'advance') return '141';
+        if ($method === 'salary')  return AccountingSettings::get('salary_payable_account', '3341');
+        if ($method === 'misc')    return '3388';
+
+        // payable (default)
+        if (!empty($data['supplier_id'])) {
+            return \App\Models\Supplier::find($data['supplier_id'])?->payable_account_code ?? '3311';
+        }
+        return '3311';
     }
 
     private function allowedTransitions(Project $project): array

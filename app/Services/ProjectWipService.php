@@ -2,7 +2,12 @@
 
 namespace App\Services;
 
+use App\Enums\CashVoucherBusinessType;
+use App\Enums\CashVoucherType;
 use App\Enums\ExpenseCategory;
+use App\Models\CashVoucher;
+use App\Models\CashVoucherLine;
+use App\Models\JournalEntry;
 use App\Models\Project;
 use App\Models\ProjectExpense;
 use App\Models\ProjectWipEntry;
@@ -14,7 +19,10 @@ use Illuminate\Support\Facades\DB;
 
 class ProjectWipService
 {
-    public function __construct(private AccountingService $accounting) {}
+    public function __construct(
+        private AccountingService $accounting,
+        private CashVoucherService $cashVoucherSvc,
+    ) {}
 
     /**
      * Tạo WIP entry từ phiếu xuất kho dự án.
@@ -116,22 +124,22 @@ class ProjectWipService
     }
 
     /**
-     * Ghi nhận chi phí phát sinh dự án theo Thông tư 133.
-     * Nợ [expense TK theo category] + Nợ 1331 (nếu có VAT) / Có [payment TK].
-     * Debit/credit TK có thể override qua expense.debit_account / credit_account.
-     * Sau khi post: lưu journal_entry_id (và project_wip_entry_id nếu 154) vào expense.
+     * Ghi nhận chi phí phát sinh dự án.
+     *
+     * @param bool $useCashVoucher  Khi true (chỉ expenseBatchStore), cash payment tạo CashVoucher (PC-)
+     *                              làm nguồn JE duy nhất, chống double-post và cập nhật số dư quỹ.
+     *                              Khi false (addExpense legacy), tạo JE trực tiếp như cũ.
      */
-    public function createFromExpense(ProjectExpense $expense): void
+    public function createFromExpense(ProjectExpense $expense, bool $useCashVoucher = false): void
     {
         $amount = (int) round((float) $expense->amount);
         if ($amount <= 0 || !$expense->project_id) return;
 
         $vatAmount   = (int) ($expense->vat_amount ?? 0);
-        $debitTk     = $expense->debit_account  ?? $this->resolveDebitAccount($expense);
-        $creditLines = $this->buildCreditLines($expense, $amount, $vatAmount);
+        $debitTk     = $expense->debit_account ?? $this->resolveDebitAccount($expense);
+        $method      = $expense->payment_method ?? 'payable';
         $projectCode = $expense->project?->code ?? $expense->project_id;
 
-        // TK 152/156 không được dùng ở đây — vật tư phải đi qua phiếu xuất kho
         if (preg_match('/^15[26]/', $debitTk)) {
             throw new \InvalidArgumentException(
                 "TK {$debitTk} (vật tư/hàng hóa) không được dùng trong Chi phí PS. Sử dụng phiếu xuất kho."
@@ -140,34 +148,37 @@ class ProjectWipService
 
         $isDirectTo154 = str_starts_with($debitTk, '154');
 
-        DB::transaction(function () use ($expense, $amount, $vatAmount, $debitTk, $creditLines, $projectCode, $isDirectTo154) {
-            $lines = [
-                ['account' => $debitTk, 'debit' => $amount, 'credit' => 0,
-                 'description' => $expense->description, 'project_id' => $expense->project_id],
-            ];
+        DB::transaction(function () use ($expense, $amount, $vatAmount, $debitTk, $method, $projectCode, $isDirectTo154, $useCashVoucher) {
+            $cashVoucherId = null;
 
-            if ($vatAmount > 0) {
-                $lines[] = ['account' => '1331', 'debit' => $vatAmount, 'credit' => 0,
-                    'description' => 'Thuế GTGT — ' . $expense->description,
-                    'project_id'  => $expense->project_id];
+            if ($useCashVoucher && $method === 'cash' && $expense->fund_id) {
+                // Tạo CashVoucher (PC-) → CashVoucherService::confirm() tạo JE duy nhất.
+                // Cập nhật số dư quỹ, tránh double-post.
+                [$je, $cashVoucherId] = $this->createExpenseCashVoucher($expense, $debitTk, $amount, $vatAmount);
+            } else {
+                // Legacy path: tạo JE trực tiếp (addExpense cũ, hoặc non-cash, hoặc cash không có fund_id)
+                $creditLines = $this->buildCreditLines($expense, $amount, $vatAmount);
+                $lines = [
+                    ['account' => $debitTk, 'debit' => $amount, 'credit' => 0,
+                     'description' => $expense->description, 'project_id' => $expense->project_id],
+                ];
+                if ($vatAmount > 0) {
+                    $lines[] = ['account' => '1331', 'debit' => $vatAmount, 'credit' => 0,
+                        'description' => 'Thuế GTGT — ' . $expense->description,
+                        'project_id'  => $expense->project_id];
+                }
+                foreach ($creditLines as $cl) {
+                    $lines[] = $cl;
+                }
+                $je = $this->accounting->post(
+                    "Chi phí phát sinh dự án {$projectCode}",
+                    Carbon::parse($expense->expense_date),
+                    $lines,
+                    ProjectExpense::class, $expense->id, true
+                );
             }
-
-            foreach ($creditLines as $cl) {
-                $lines[] = $cl;
-            }
-
-            $je = $this->accounting->post(
-                "Chi phí phát sinh dự án {$projectCode}",
-                Carbon::parse($expense->expense_date),
-                $lines,
-                ProjectExpense::class, $expense->id, true
-            );
 
             $wipId = null;
-
-            // Chỉ tạo WIP ngay khi hạch toán trực tiếp vào TK 154.
-            // Nếu hạch toán vào tài khoản khác (6421, 6422, 242...), WIP sẽ được tạo
-            // sau khi người dùng bấm "Kết chuyển sang 154".
             if ($isDirectTo154) {
                 $wip = ProjectWipEntry::create([
                     'project_id'       => $expense->project_id,
@@ -183,13 +194,92 @@ class ProjectWipService
                 $wipId = $wip->id;
             }
 
-            // Lưu journal_entry_id + project_wip_entry_id + status vào expense
             $expense->updateQuietly([
-                'journal_entry_id'    => $je->id,
+                'journal_entry_id'     => $je->id,
                 'project_wip_entry_id' => $wipId,
-                'status'              => 'posted',
+                'cash_voucher_id'      => $cashVoucherId,
+                'status'               => 'posted',
             ]);
         });
+    }
+
+    /**
+     * Tạo CashVoucher (PC-) cho khoản chi phí PS bằng tiền mặt.
+     * Các dòng bút toán được tạo thủ công để hỗ trợ PIT split và VAT.
+     * CashVoucherService::confirm() tạo JE duy nhất — không tạo thêm JE trong ProjectExpense.
+     *
+     * @return array{0: JournalEntry, 1: int}  [je, cash_voucher_id]
+     */
+    private function createExpenseCashVoucher(
+        ProjectExpense $expense,
+        string $debitTk,
+        int $amount,
+        int $vatAmount
+    ): array {
+        $expense->loadMissing('fund');
+        $fundAccount = $expense->fund?->account_code
+            ?? AccountingSettings::get('cash_account', '1111');
+
+        $pitEnabled = (bool) ($expense->pit_withholding_enabled ?? false);
+        $pitAmount  = (int) ($expense->pit_amount ?? 0);
+
+        // Số tiền thực chi (tiền mặt ra khỏi quỹ)
+        $cashAmount = $pitEnabled && $pitAmount > 0
+            ? max(0, $amount - $pitAmount)   // không bao gồm tiền khấu trừ
+            : ($amount + $vatAmount);         // bao gồm VAT
+
+        $voucher = CashVoucher::create([
+            'code'           => CashVoucher::generateCode(CashVoucherType::Payment),
+            'type'           => CashVoucherType::Payment->value,
+            'status'         => 'draft',
+            'fund_id'        => $expense->fund_id,
+            'amount'         => $cashAmount,
+            'voucher_date'   => $expense->expense_date,
+            'description'    => "Chi CPPS dự án: {$expense->description}",
+            'reference_type' => 'project_expense',
+            'reference_id'   => $expense->id,
+            'business_type'  => CashVoucherBusinessType::ProjectExpensePayment->value,
+            'created_by'     => auth()->id(),
+        ]);
+
+        // Tạo CashVoucherLines thủ công — mỗi line là 1 cặp Dr/Cr
+        $lines = [];
+        if ($pitEnabled && $pitAmount > 0) {
+            // PIT split: Nợ debit_tk (thực trả) / Có quỹ + Nợ debit_tk (PIT) / Có 3335
+            $netAmount = max(0, $amount - $pitAmount);
+            $lines[] = ['debit_account' => $debitTk, 'credit_account' => $fundAccount,
+                        'amount' => $netAmount,
+                        'description' => $expense->description . ' (thực trả)'];
+            $lines[] = ['debit_account' => $debitTk, 'credit_account' => '3335',
+                        'amount' => $pitAmount,
+                        'description' => 'Thuế TNCN khấu trừ — ' . $expense->description];
+        } else {
+            $lines[] = ['debit_account' => $debitTk, 'credit_account' => $fundAccount,
+                        'amount' => $amount,
+                        'description' => $expense->description];
+            if ($vatAmount > 0) {
+                $lines[] = ['debit_account' => '1331', 'credit_account' => $fundAccount,
+                            'amount' => $vatAmount,
+                            'description' => 'Thuế GTGT — ' . $expense->description];
+            }
+        }
+
+        foreach ($lines as $i => $line) {
+            CashVoucherLine::create(array_merge($line, [
+                'cash_voucher_id' => $voucher->id,
+                'sort_order'      => $i,
+            ]));
+        }
+
+        // confirm() validates lines và tạo JE (reference_type='cash_voucher')
+        $this->cashVoucherSvc->confirm($voucher);
+
+        $je = JournalEntry::where('reference_type', 'cash_voucher')
+            ->where('reference_id', $voucher->id)
+            ->where('status', 'posted')
+            ->firstOrFail();
+
+        return [$je, $voucher->id];
     }
 
     private function resolveDebitAccount(ProjectExpense $expense): string

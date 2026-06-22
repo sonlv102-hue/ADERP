@@ -121,7 +121,6 @@ class ProjectExtraCostsAuditJournals extends Command
         $isDirectTo154 = str_starts_with($debitAcct, '154');
         $directWip = ProjectWipEntry::where('source_type', ProjectExpense::class)
             ->where('source_id', $expense->id)
-            ->whereNull('transfer_from_entry_id')  // không phải từ kết chuyển
             ->first();
 
         $postedTransfers = ProjectExtraCostTransfer::where('project_expense_id', $expense->id)
