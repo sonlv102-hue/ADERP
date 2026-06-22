@@ -38,6 +38,7 @@ class PurchaseInvoiceWipTest extends TestCase
         AccountingPeriod::create(['year' => 2026, 'month' => 6, 'status' => 'open']);
 
         $this->seedAccount('3311', 'liability', 'credit', true, '331');
+        $this->seedAccount('3312', 'liability', 'credit', true, '331');
         $this->seedAccount('1331', 'asset', 'debit', true, '133');
         $this->seedAccount('154', 'asset', 'debit', true);
 
@@ -104,13 +105,13 @@ class PurchaseInvoiceWipTest extends TestCase
         }
 
         $je->load('lines');
-        $debit154 = $je->lines->where('account_code', '154')->sum('debit');
-        $debit1331 = $je->lines->where('account_code', '1331')->sum('debit');
-        $credit3311 = $je->lines->where('credit', '>', 0)->sum('credit');
+        $debit154   = $je->lines->where('account_code', '154')->sum('debit');
+        $debit1331  = $je->lines->where('account_code', '1331')->sum('debit');
+        $credit3312 = $je->lines->where('account_code', '3312')->sum('credit');
 
         $this->assertEquals(500000, $debit154);
         $this->assertEquals(40000, $debit1331);
-        $this->assertEquals(540000, $credit3311);
+        $this->assertEquals(540000, $credit3312, 'TK 154 (dịch vụ dự án) phải Có 3312');
 
         // JE line 154 must have project_id
         $line154 = $je->lines->where('account_code', '154')->first();

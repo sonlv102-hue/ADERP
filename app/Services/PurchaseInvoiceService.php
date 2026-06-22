@@ -237,7 +237,8 @@ class PurchaseInvoiceService
 
             if ($subtotal <= 0 && $tax <= 0) return;
 
-            $payableAccount = $invoice->supplier->getPayableAccount();
+            // TK Có: dùng defaultCreditAccount() theo loại (3311 hàng hóa / 3312 dịch vụ)
+            $payableAccount = $type->defaultCreditAccount();
 
             $debitAccount = $invoice->expense_account_code ?? $type->defaultDebitAccount();
             $vatAccount   = $type->vatInputAccount();
@@ -346,8 +347,10 @@ class PurchaseInvoiceService
     /**
      * Post JE per-line từ purchase_invoice_items.
      * Mỗi item = một debit line với project_id riêng.
-     * VAT gom lại thành một dòng Nợ 1331.
-     * Cr 3311 = tổng tất cả debit.
+     * VAT gom thành một dòng Nợ 1331 (nếu > 0).
+     * Cr phân nhóm theo credit_account_code của từng item:
+     *   - 3311 nếu hàng hóa/vật tư; 3312 nếu dịch vụ/chi phí.
+     *   - Mỗi nhóm = một dòng Có riêng.
      */
     private function postFromItems(PurchaseInvoice $invoice): void
     {
@@ -359,30 +362,36 @@ class PurchaseInvoiceService
             return;
         }
 
-        $payableAccount = $invoice->supplier->getPayableAccount();
-        $lines          = [];
-        $totalVat       = 0;
+        $lines         = [];
+        $creditBuckets = []; // credit_account_code => total (item.amount + item.tax_amount)
 
         foreach ($invoice->items as $item) {
             $amt = (int) round((float) $item->amount);
-            if ($amt <= 0) continue;
+            $vat = (int) round((float) $item->tax_amount);
+            if ($amt <= 0 && $vat <= 0) continue;
 
             // fallback project_id from invoice header when item.project_id missing
             $projId = $item->project_id ?? $invoice->project_id ?? null;
 
-            $lines[] = [
-                'account'     => $item->account_code,
-                'debit'       => $amt,
-                'credit'      => 0,
-                'description' => $item->description ?: "Chi phí {$invoice->code}",
-                'project_id'  => $projId,
-            ];
+            if ($amt > 0) {
+                $lines[] = [
+                    'account'     => $item->account_code,
+                    'debit'       => $amt,
+                    'credit'      => 0,
+                    'description' => $item->description ?: "Chi phí {$invoice->code}",
+                    'project_id'  => $projId,
+                ];
+            }
 
-            $totalVat += (int) round((float) $item->tax_amount);
+            // Mỗi dòng item quyết định TK Có cho cả phần tiền + VAT của nó
+            $creditAcct = $this->resolveItemCreditAccount($item, $invoice);
+            $creditBuckets[$creditAcct] = ($creditBuckets[$creditAcct] ?? 0) + $amt + $vat;
         }
 
-        if (empty($lines)) return;
+        if (empty($lines) && empty($creditBuckets)) return;
 
+        // Gom VAT thành một dòng Nợ duy nhất
+        $totalVat = array_sum(array_map(fn ($item) => (int) round((float) $item->tax_amount), $invoice->items->all()));
         if ($totalVat > 0) {
             $lines[] = [
                 'account'     => $vatAccount,
@@ -392,16 +401,20 @@ class PurchaseInvoiceService
             ];
         }
 
-        $totalCredit = array_sum(array_column($lines, 'debit'));
+        // Tạo dòng Có theo từng nhóm TK
+        foreach ($creditBuckets as $creditAcct => $totalCredit) {
+            if ($totalCredit <= 0) continue;
+            $lines[] = [
+                'account'      => $creditAcct,
+                'debit'        => 0,
+                'credit'       => $totalCredit,
+                'description'  => "Phải trả NCC ({$creditAcct}) - {$invoice->code}",
+                'partner_type' => 'supplier',
+                'partner_id'   => $invoice->supplier_id,
+            ];
+        }
 
-        $lines[] = [
-            'account'      => $payableAccount,
-            'debit'        => 0,
-            'credit'       => $totalCredit,
-            'description'  => "Phải trả NCC - {$invoice->code}",
-            'partner_type' => 'supplier',
-            'partner_id'   => $invoice->supplier_id,
-        ];
+        if (empty($lines)) return;
 
         $label = $type ? $type->label() : 'Chi phí';
         $je = $this->accounting->tryPost(
@@ -431,6 +444,37 @@ class PurchaseInvoiceService
                 }
             }
         }
+    }
+
+    /**
+     * Xác định TK Có cho một dòng item trong postFromItems.
+     *
+     * Ưu tiên:
+     *   1. item.credit_account_code (người dùng chọn rõ)
+     *   2. invoice.invoice_type → defaultCreditAccount()
+     *   3. Suy ra từ TK Nợ: 152/153/156/211/213 → 3311; 154/641/642/811/241/242 → 3312
+     *   4. Fallback về supplier.payable_account_code
+     */
+    private function resolveItemCreditAccount(\App\Models\PurchaseInvoiceItem $item, PurchaseInvoice $invoice): string
+    {
+        if ($item->credit_account_code) {
+            return $item->credit_account_code;
+        }
+
+        if ($invoice->invoice_type) {
+            return $invoice->invoice_type->defaultCreditAccount();
+        }
+
+        $code = ltrim((string) $item->account_code, '0');
+        if (preg_match('/^(152|153|156|211|213)/', $code)) {
+            return '3311';
+        }
+        if (preg_match('/^(154|64[0-9]|81[0-9]|241|242)/', $code)) {
+            return '3312';
+        }
+
+        // Legacy fallback: dùng TK NCC đã cấu hình
+        return $invoice->supplier->getPayableAccount();
     }
 
     /**

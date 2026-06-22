@@ -9,6 +9,7 @@ use App\Models\AccountCode;
 use App\Models\CashVoucher;
 use App\Models\CashVoucherLine;
 use App\Models\JournalEntry;
+use App\Models\JournalEntryLine;
 use App\Services\AccountingSettings;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
@@ -282,6 +283,23 @@ class CashVoucherService
 
     private function getSupplierPayable(CashVoucher $voucher): string
     {
+        // Khi thanh toán HĐ đầu vào, dùng TK Có từ JE của HĐ (3311/3312/3318...)
+        // để đảm bảo bút toán thanh toán khớp với bút toán ghi nhận công nợ.
+        if ($voucher->reference_type === 'purchase_invoice' && $voucher->reference_id) {
+            $crAccount = \App\Models\JournalEntryLine::select('journal_entry_lines.account_code')
+                ->join('journal_entries', 'journal_entries.id', '=', 'journal_entry_lines.journal_entry_id')
+                ->where('journal_entries.reference_type', 'purchase_invoice')
+                ->where('journal_entries.reference_id', $voucher->reference_id)
+                ->whereIn('journal_entries.status', ['draft', 'posted'])
+                ->where('journal_entry_lines.credit', '>', 0)
+                ->where('journal_entry_lines.account_code', 'like', '33%')
+                ->where('journal_entry_lines.account_code', '!=', '331UT')
+                ->orderByDesc('journal_entry_lines.credit') // ưu tiên dòng lớn nhất nếu có nhiều
+                ->value('journal_entry_lines.account_code');
+
+            if ($crAccount) return $crAccount;
+        }
+
         if ($voucher->supplier_id) {
             $voucher->loadMissing('supplier');
             return $voucher->supplier->getPayableAccount();

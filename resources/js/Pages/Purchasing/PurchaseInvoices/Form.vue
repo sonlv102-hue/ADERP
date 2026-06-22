@@ -121,9 +121,10 @@
             <table class="min-w-full text-sm divide-y divide-gray-100">
               <thead class="bg-gray-50 text-xs text-gray-500 uppercase">
                 <tr>
-                  <th class="px-3 py-2 text-left w-48">Diễn giải</th>
-                  <th class="px-3 py-2 text-left w-32">Tài khoản <span class="text-red-500">*</span></th>
-                  <th class="px-3 py-2 text-left w-44">Dự án</th>
+                  <th class="px-3 py-2 text-left w-44">Diễn giải</th>
+                  <th class="px-3 py-2 text-left w-28">TK Nợ <span class="text-red-500">*</span></th>
+                  <th class="px-3 py-2 text-left w-28">TK Có</th>
+                  <th class="px-3 py-2 text-left w-36">Dự án</th>
                   <th class="px-3 py-2 text-right w-28">Trước thuế <span class="text-red-500">*</span></th>
                   <th class="px-3 py-2 text-right w-20">VAT %</th>
                   <th class="px-3 py-2 text-right w-28">Tiền thuế</th>
@@ -144,6 +145,13 @@
                       <option v-for="a in expenseAccountOptions" :key="a.value" :value="a.value">{{ a.value }}</option>
                     </select>
                     <p v-if="needs154Project(idx)" class="text-red-500 text-xs mt-0.5">Phải chọn dự án</p>
+                  </td>
+                  <td class="px-3 py-2">
+                    <select v-model="item.credit_account_code"
+                      class="w-full border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500">
+                      <option value="">-- Tự động --</option>
+                      <option v-for="a in creditAccountOptions" :key="a.value" :value="a.value">{{ a.value }}</option>
+                    </select>
                   </td>
                   <td class="px-3 py-2">
                     <select v-model="item.project_id"
@@ -172,7 +180,7 @@
               </tbody>
               <tfoot class="bg-gray-50 text-sm font-medium">
                 <tr>
-                  <td colspan="3" class="px-3 py-2 text-right text-gray-500">Tổng</td>
+                  <td colspan="4" class="px-3 py-2 text-right text-gray-500">Tổng</td>
                   <td class="px-3 py-2 text-right">{{ formatVnd(itemsSubtotal) }}</td>
                   <td class="px-3 py-2"></td>
                   <td class="px-3 py-2 text-right">{{ formatVnd(itemsTax) }}</td>
@@ -255,6 +263,7 @@ const props = defineProps({
   purchaseOrders:       Array,
   projects:             { type: Array, default: () => [] },
   expenseAccounts:      Array,
+  creditAccounts:       { type: Array, default: () => [] },
   invoiceTypes:         Array,
   selectedOrderId:      [Number, String],
   initialSupplierName:  String,
@@ -273,6 +282,10 @@ const expenseAccountOptions = computed(() =>
   (props.expenseAccounts ?? []).map(a => ({ value: a.code, code: a.code, label: a.name }))
 );
 
+const creditAccountOptions = computed(() =>
+  (props.creditAccounts ?? []).map(a => ({ value: a.code, label: a.name }))
+);
+
 const form = useForm({
   code:                 props.invoice?.code              ?? props.nextCode,
   purchase_order_id:    props.invoice?.purchase_order_id ?? props.selectedOrderId ?? '',
@@ -289,12 +302,13 @@ const form = useForm({
   expense_account_code: props.invoice?.expense_account_code ?? '',
   invoice_type:         props.invoice?.invoice_type      ?? '',
   items: (props.invoice?.items ?? []).map(it => ({
-    description:  it.description  ?? '',
-    account_code: it.account_code ?? '',
-    project_id:   it.project_id   ?? '',
-    amount:       it.amount       ?? 0,
-    vat_rate:     it.vat_rate     ?? 0,
-    tax_amount:   it.tax_amount   ?? 0,
+    description:         it.description         ?? '',
+    account_code:        it.account_code        ?? '',
+    credit_account_code: it.credit_account_code ?? '',
+    project_id:          it.project_id          ?? '',
+    amount:              it.amount              ?? 0,
+    vat_rate:            it.vat_rate            ?? 0,
+    tax_amount:          it.tax_amount          ?? 0,
   })),
 });
 
@@ -331,12 +345,12 @@ const journalPreview = computed(() => {
     case 'resale_goods':         return 'Nợ 1561 + Nợ 1331 / Có 3311 — tạo khi xác nhận phiếu nhập kho';
     case 'raw_material':         return 'Nợ 1521 + Nợ 1331 / Có 3311 — tạo khi xác nhận phiếu nhập kho';
     case 'tools_equipment':      return 'Nợ 1531 + Nợ 1331 / Có 3311 — tạo khi xác nhận phiếu nhập kho';
-    case 'project_construction': return 'Nợ 154 + Nợ 1331 / Có 3311 — tạo khi hóa đơn hợp lệ';
-    case 'external_service':     return `Nợ ${form.expense_account_code || '6422'} + Nợ 1331 / Có 3311`;
-    case 'selling_expense':      return 'Nợ 6421 + Nợ 1331 / Có 3311';
-    case 'management_expense':   return 'Nợ 6422 + Nợ 1331 / Có 3311';
-    case 'fixed_asset':          return 'Nợ 2111/2113 + Nợ 1332 / Có 3311 — tạo khi ghi nhận TSCĐ';
-    case 'prepaid_expense':      return 'Nợ 242 + Nợ 1331 / Có 3311 — tạo khi hóa đơn hợp lệ';
+    case 'project_construction': return 'Nợ 154 + Nợ 1331 / Có 3312 — tạo khi hóa đơn hợp lệ';
+    case 'external_service':     return `Nợ ${form.expense_account_code || '6422'} + Nợ 1331 / Có 3312`;
+    case 'selling_expense':      return 'Nợ 6421 + Nợ 1331 / Có 3312';
+    case 'management_expense':   return 'Nợ 6422 + Nợ 1331 / Có 3312';
+    case 'fixed_asset':          return 'Nợ 2111/2113 + Nợ 1332 / Có 3312 — tạo khi ghi nhận TSCĐ';
+    case 'prepaid_expense':      return 'Nợ 242 + Nợ 1331 / Có 3312 — tạo khi hóa đơn hợp lệ';
     default:                     return '';
   }
 });
@@ -394,14 +408,29 @@ function needs154Project(idx) {
   return item && String(item.account_code).startsWith('154') && !item.project_id;
 }
 
+// TK Có mặc định theo TK Nợ: hàng hóa/vật tư → 3311, dịch vụ/chi phí → 3312
+function defaultCreditFor(accountCode) {
+  const code = String(accountCode || '');
+  if (/^(152|153|156|211|213)/.test(code)) return '3311';
+  if (/^(154|64|81|241|242)/.test(code)) return '3312';
+  // Nếu đã chọn loại hóa đơn, dùng default theo type
+  const typeMap = {
+    resale_goods: '3311', raw_material: '3311', tools_equipment: '3311',
+    project_construction: '3312', external_service: '3312',
+    selling_expense: '3312', management_expense: '3312', prepaid_expense: '3312',
+  };
+  return typeMap[form.invoice_type] || '3312';
+}
+
 function addItem() {
   form.items.push({
-    description:  '',
-    account_code: '',
-    project_id:   form.project_id || '',
-    amount:       0,
-    vat_rate:     10,
-    tax_amount:   0,
+    description:         '',
+    account_code:        '',
+    credit_account_code: defaultCreditFor(''),
+    project_id:          form.project_id || '',
+    amount:              0,
+    vat_rate:            10,
+    tax_amount:          0,
   });
 }
 
@@ -411,9 +440,15 @@ function removeItem(idx) {
 
 function onItemAccountChange(idx) {
   const item = form.items[idx];
+  if (!item) return;
   // Auto-fill project from header when TK 154 selected
-  if (item && String(item.account_code).startsWith('154') && !item.project_id && form.project_id) {
+  if (String(item.account_code).startsWith('154') && !item.project_id && form.project_id) {
     item.project_id = form.project_id;
+  }
+  // Auto-set credit account nếu chưa có hoặc đang là default
+  const newCredit = defaultCreditFor(item.account_code);
+  if (!item.credit_account_code || item.credit_account_code === defaultCreditFor('')) {
+    item.credit_account_code = newCredit;
   }
 }
 

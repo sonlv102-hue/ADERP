@@ -74,6 +74,22 @@ enum PurchaseInvoiceType: string
     }
 
     /**
+     * TK Có mặc định khi post JE.
+     * 3311 = phải trả NCC hàng hóa; 3312 = phải trả NCC dịch vụ.
+     * Inventory-backed và fixed-asset-backed loại không gọi method này
+     * (JE do StockService / FixedAssetService xử lý).
+     */
+    public function defaultCreditAccount(): string
+    {
+        return match($this) {
+            self::ResaleGoods,
+            self::RawMaterial,
+            self::ToolsEquipment => '3311',
+            default              => '3312',
+        };
+    }
+
+    /**
      * Mapping từ PurchaseOrderItem.line_type → invoice_type mặc định.
      */
     public static function fromLineType(string $lineType): ?self

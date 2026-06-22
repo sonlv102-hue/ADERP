@@ -83,9 +83,10 @@ class PurchaseInvoiceController extends Controller
     public function create(Request $request): Response
     {
         return Inertia::render('Purchasing/PurchaseInvoices/Form', [
-            'nextCode'       => PurchaseInvoice::generateCode(),
-            'projects'       => $this->projectList(),
-            'purchaseOrders' => PurchaseOrder::with(['supplier', 'items.product'])
+            'nextCode'        => PurchaseInvoice::generateCode(),
+            'projects'        => $this->projectList(),
+            'creditAccounts'  => $this->creditAccountList(),
+            'purchaseOrders'  => PurchaseOrder::with(['supplier', 'items.product'])
                 ->whereIn('status', ['sent', 'received'])
                 ->orderByDesc('id')
                 ->get()
@@ -127,13 +128,14 @@ class PurchaseInvoiceController extends Controller
             'notes'                => ['nullable', 'string'],
             'expense_account_code' => ['nullable', 'string', 'max:20'],
             'invoice_type'         => ['nullable', 'string', 'in:' . implode(',', array_column(PurchaseInvoiceType::cases(), 'value'))],
-            'items'                        => ['nullable', 'array'],
-            'items.*.description'          => ['nullable', 'string', 'max:255'],
-            'items.*.account_code'         => ['required_with:items', 'string', 'max:20', 'exists:account_codes,code'],
-            'items.*.project_id'           => ['nullable', 'exists:projects,id'],
-            'items.*.amount'               => ['required_with:items', 'numeric', 'min:0'],
-            'items.*.vat_rate'             => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'items.*.tax_amount'           => ['nullable', 'numeric', 'min:0'],
+            'items'                             => ['nullable', 'array'],
+            'items.*.description'               => ['nullable', 'string', 'max:255'],
+            'items.*.account_code'              => ['required_with:items', 'string', 'max:20', 'exists:account_codes,code'],
+            'items.*.credit_account_code'       => ['nullable', 'string', 'max:20', 'exists:account_codes,code'],
+            'items.*.project_id'                => ['nullable', 'exists:projects,id'],
+            'items.*.amount'                    => ['required_with:items', 'numeric', 'min:0'],
+            'items.*.vat_rate'                  => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'items.*.tax_amount'                => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $this->validateItemProjectLinks($data['items'] ?? []);
@@ -202,14 +204,15 @@ class PurchaseInvoiceController extends Controller
                     ? (function ($pj) { return ['id' => $pj->id, 'code' => $pj->code, 'name' => $pj->name]; })($purchaseInvoice->project ?? $purchaseInvoice->purchaseOrder->project)
                     : null,
                 'items'             => $purchaseInvoice->items->map(fn ($item) => [
-                    'id'           => $item->id,
-                    'description'  => $item->description,
-                    'account_code' => $item->account_code,
-                    'project_id'   => $item->project_id,
-                    'project'      => $item->project ? ['id' => $item->project->id, 'code' => $item->project->code, 'name' => $item->project->name] : null,
-                    'amount'       => (float) $item->amount,
-                    'vat_rate'     => (float) $item->vat_rate,
-                    'tax_amount'   => (float) $item->tax_amount,
+                    'id'                  => $item->id,
+                    'description'         => $item->description,
+                    'account_code'        => $item->account_code,
+                    'credit_account_code' => $item->credit_account_code,
+                    'project_id'          => $item->project_id,
+                    'project'             => $item->project ? ['id' => $item->project->id, 'code' => $item->project->code, 'name' => $item->project->name] : null,
+                    'amount'              => (float) $item->amount,
+                    'vat_rate'            => (float) $item->vat_rate,
+                    'tax_amount'          => (float) $item->tax_amount,
                 ]),
                 'subtotal'          => $purchaseInvoice->subtotal,
                 'tax_amount'        => $purchaseInvoice->tax_amount,
@@ -311,20 +314,22 @@ class PurchaseInvoiceController extends Controller
         return Inertia::render('Purchasing/PurchaseInvoices/Form', [
             'invoice'             => array_merge($purchaseInvoice->toArray(), [
                 'items' => $purchaseInvoice->items->map(fn ($item) => [
-                    'id'           => $item->id,
-                    'description'  => $item->description,
-                    'account_code' => $item->account_code,
-                    'project_id'   => $item->project_id,
-                    'project_name' => $item->project ? "{$item->project->code} — {$item->project->name}" : null,
-                    'amount'       => (float) $item->amount,
-                    'vat_rate'     => (float) $item->vat_rate,
-                    'tax_amount'   => (float) $item->tax_amount,
-                    'sort_order'   => $item->sort_order,
+                    'id'                  => $item->id,
+                    'description'         => $item->description,
+                    'account_code'        => $item->account_code,
+                    'credit_account_code' => $item->credit_account_code,
+                    'project_id'          => $item->project_id,
+                    'project_name'        => $item->project ? "{$item->project->code} — {$item->project->name}" : null,
+                    'amount'              => (float) $item->amount,
+                    'vat_rate'            => (float) $item->vat_rate,
+                    'tax_amount'          => (float) $item->tax_amount,
+                    'sort_order'          => $item->sort_order,
                 ])->toArray(),
             ]),
             'initialSupplierName' => $purchaseInvoice->supplier?->name ?? '',
             'initialSupplierCode' => $purchaseInvoice->supplier?->code ?? '',
-            'projects'       => $this->projectList(),
+            'projects'        => $this->projectList(),
+            'creditAccounts'  => $this->creditAccountList(),
             'purchaseOrders' => PurchaseOrder::with(['supplier', 'items'])
                 ->where(fn ($q) => $q->whereIn('status', ['sent', 'received'])
                     ->orWhere('id', $purchaseInvoice->purchase_order_id))
@@ -356,13 +361,14 @@ class PurchaseInvoiceController extends Controller
             'notes'                => ['nullable', 'string'],
             'expense_account_code' => ['nullable', 'string', 'max:20'],
             'invoice_type'         => ['nullable', 'string', 'in:' . implode(',', array_column(PurchaseInvoiceType::cases(), 'value'))],
-            'items'                        => ['nullable', 'array'],
-            'items.*.description'          => ['nullable', 'string', 'max:255'],
-            'items.*.account_code'         => ['required_with:items', 'string', 'max:20', 'exists:account_codes,code'],
-            'items.*.project_id'           => ['nullable', 'exists:projects,id'],
-            'items.*.amount'               => ['required_with:items', 'numeric', 'min:0'],
-            'items.*.vat_rate'             => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'items.*.tax_amount'           => ['nullable', 'numeric', 'min:0'],
+            'items'                             => ['nullable', 'array'],
+            'items.*.description'               => ['nullable', 'string', 'max:255'],
+            'items.*.account_code'              => ['required_with:items', 'string', 'max:20', 'exists:account_codes,code'],
+            'items.*.credit_account_code'       => ['nullable', 'string', 'max:20', 'exists:account_codes,code'],
+            'items.*.project_id'                => ['nullable', 'exists:projects,id'],
+            'items.*.amount'                    => ['required_with:items', 'numeric', 'min:0'],
+            'items.*.vat_rate'                  => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'items.*.tax_amount'                => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $this->validateItemProjectLinks($data['items'] ?? []);
@@ -486,13 +492,14 @@ class PurchaseInvoiceController extends Controller
 
         foreach ($items as $index => $item) {
             $invoice->items()->create([
-                'description'  => $item['description'] ?? null,
-                'account_code' => $item['account_code'],
-                'project_id'   => $item['project_id'] ?? null,
-                'amount'       => $item['amount'] ?? 0,
-                'vat_rate'     => $item['vat_rate'] ?? 0,
-                'tax_amount'   => $item['tax_amount'] ?? 0,
-                'sort_order'   => $index,
+                'description'         => $item['description'] ?? null,
+                'account_code'        => $item['account_code'],
+                'credit_account_code' => $item['credit_account_code'] ?? null,
+                'project_id'          => $item['project_id'] ?? null,
+                'amount'              => $item['amount'] ?? 0,
+                'vat_rate'            => $item['vat_rate'] ?? 0,
+                'tax_amount'          => $item['tax_amount'] ?? 0,
+                'sort_order'          => $index,
             ]);
         }
     }
@@ -503,6 +510,20 @@ class PurchaseInvoiceController extends Controller
             ->orderBy('code')
             ->get(['id', 'code', 'name'])
             ->map(fn ($p) => ['id' => $p->id, 'code' => $p->code, 'name' => $p->name, 'label' => "{$p->code} — {$p->name}"])
+            ->toArray();
+    }
+
+    private function creditAccountList(): array
+    {
+        // TK Có cho dòng chi phí: 3311/3312/3318 (công nợ NCC) + 1111/1121 (trả tiền mặt/ck)
+        $codes = ['3311', '3312', '3318', '1111', '1121'];
+
+        return AccountCode::whereIn('code', $codes)
+            ->where('is_detail', true)
+            ->where('is_active', true)
+            ->orderBy('code')
+            ->get(['code', 'name'])
+            ->map(fn ($a) => ['code' => $a->code, 'name' => "{$a->code} — {$a->name}"])
             ->toArray();
     }
 

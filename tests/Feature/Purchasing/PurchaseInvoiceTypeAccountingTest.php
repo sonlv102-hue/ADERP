@@ -20,10 +20,10 @@ use Tests\TestCase;
 /**
  * Kiểm tra routing kế toán theo invoice_type (TT133).
  *
- * TC1: management_expense → Dr 6422 + Dr 1331 / Cr 3311
- * TC2: selling_expense     → Dr 6421 + Dr 1331 / Cr 3311
- * TC3: project_construction→ Dr 154  + Dr 1331 / Cr 3311
- * TC4: prepaid_expense     → Dr 242  + Dr 1331 / Cr 3311
+ * TC1: management_expense → Dr 6422 + Dr 1331 / Cr 3312 (dịch vụ)
+ * TC2: selling_expense     → Dr 6421 + Dr 1331 / Cr 3312 (dịch vụ)
+ * TC3: project_construction→ Dr 154  + Dr 1331 / Cr 3312 (dịch vụ)
+ * TC4: prepaid_expense     → Dr 242  + Dr 1331 / Cr 3312 (dịch vụ)
  * TC5: resale_goods (không có NK) → KHÔNG tạo JE
  * TC6: fixed_asset         → KHÔNG tạo JE (FixedAssetService xử lý)
  */
@@ -54,6 +54,7 @@ class PurchaseInvoiceTypeAccountingTest extends TestCase
         // Seed tài khoản
         $this->seedAccount('331',  'liability', 'credit', false);
         $this->seedAccount('3311', 'liability', 'credit', true,  '331');
+        $this->seedAccount('3312', 'liability', 'credit', true,  '331');
         $this->seedAccount('133',  'asset',     'debit',  false);
         $this->seedAccount('1331', 'asset',     'debit',  true,  '133');
         $this->seedAccount('642',  'expense',   'debit',  false);
@@ -141,65 +142,65 @@ class PurchaseInvoiceTypeAccountingTest extends TestCase
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // TC1: invoice_type = management_expense → Dr 6422 + Dr 1331 / Cr 3311
+    // TC1: invoice_type = management_expense → Dr 6422 + Dr 1331 / Cr 3312
     // ─────────────────────────────────────────────────────────────────────────
 
-    public function test_management_expense_posts_dr6422_dr1331_cr3311(): void
+    public function test_management_expense_posts_dr6422_dr1331_cr3312(): void
     {
         $po = $this->makePo();
         $pi = $this->makePi($po, PurchaseInvoiceType::ManagementExpense);
 
         $this->service->transition($pi, PurchaseInvoiceStatus::Valid);
 
-        $this->assertJeLines($pi, ['6422', '1331'], ['3311']);
+        $this->assertJeLines($pi, ['6422', '1331'], ['3312']);
 
         $je = JournalEntry::where('reference_type', 'purchase_invoice')
             ->where('reference_id', $pi->id)->first();
         $this->assertEquals(10_000_000, $je->lines->where('account_code', '6422')->sum('debit'));
         $this->assertEquals(1_000_000,  $je->lines->where('account_code', '1331')->sum('debit'));
-        $this->assertEquals(11_000_000, $je->lines->where('account_code', '3311')->sum('credit'));
+        $this->assertEquals(11_000_000, $je->lines->where('account_code', '3312')->sum('credit'));
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // TC2: invoice_type = selling_expense → Dr 6421 + Dr 1331 / Cr 3311
+    // TC2: invoice_type = selling_expense → Dr 6421 + Dr 1331 / Cr 3312
     // ─────────────────────────────────────────────────────────────────────────
 
-    public function test_selling_expense_posts_dr6421_dr1331_cr3311(): void
+    public function test_selling_expense_posts_dr6421_dr1331_cr3312(): void
     {
         $po = $this->makePo();
         $pi = $this->makePi($po, PurchaseInvoiceType::SellingExpense);
 
         $this->service->transition($pi, PurchaseInvoiceStatus::Valid);
 
-        $this->assertJeLines($pi, ['6421', '1331'], ['3311']);
+        $this->assertJeLines($pi, ['6421', '1331'], ['3312']);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // TC3: invoice_type = project_construction → Dr 154 + Dr 1331 / Cr 3311
+    // TC3: invoice_type = project_construction → Dr 154 + Dr 1331 / Cr 3312
     // ─────────────────────────────────────────────────────────────────────────
 
-    public function test_project_construction_posts_dr154_dr1331_cr3311(): void
+    public function test_project_construction_posts_dr154_dr1331_cr3312(): void
     {
         $po = $this->makePo();
         $pi = $this->makePi($po, PurchaseInvoiceType::ProjectConstruction);
 
         $this->service->transition($pi, PurchaseInvoiceStatus::Valid);
 
-        $this->assertJeLines($pi, ['154', '1331'], ['3311']);
+        $this->assertJeLines($pi, ['154', '1331'], ['3312']);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // TC4: invoice_type = prepaid_expense → Dr 242 + Dr 1331 / Cr 3311
+    // TC4: invoice_type = prepaid_expense → Dr 242 + Dr 1331 / Cr 3312
     // ─────────────────────────────────────────────────────────────────────────
 
-    public function test_prepaid_expense_posts_dr242_dr1331_cr3311(): void
+    public function test_prepaid_expense_posts_dr242_dr1331_cr3312(): void
     {
         $po = $this->makePo();
         $pi = $this->makePi($po, PurchaseInvoiceType::PrepaidExpense);
 
         $this->service->transition($pi, PurchaseInvoiceStatus::Valid);
 
-        $this->assertJeLines($pi, ['242', '1331'], ['3311']);
+        $this->assertJeLines($pi, ['242', '1331'], ['3312']);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -240,7 +241,7 @@ class PurchaseInvoiceTypeAccountingTest extends TestCase
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // TC7: expense_account_code override dùng đúng tài khoản
+    // TC7: expense_account_code override dùng đúng TK Nợ; TK Có vẫn là 3312
     // (external_service với expense_account_code = '6421')
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -257,6 +258,9 @@ class PurchaseInvoiceTypeAccountingTest extends TestCase
 
         $dr = $je->lines()->where('account_code', '6421')->sum('debit');
         $this->assertEquals(10_000_000, $dr, 'Phải dùng 6421 theo expense_account_code override');
+
+        $cr = $je->lines()->where('account_code', '3312')->sum('credit');
+        $this->assertEquals(11_000_000, $cr, 'TK Có phải là 3312 cho external_service');
     }
 
     // ─────────────────────────────────────────────────────────────────────────

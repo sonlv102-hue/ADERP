@@ -11,6 +11,7 @@ class PurchaseInvoiceItem extends Model
         'purchase_invoice_id',
         'description',
         'account_code',
+        'credit_account_code',
         'project_id',
         'amount',
         'vat_rate',
