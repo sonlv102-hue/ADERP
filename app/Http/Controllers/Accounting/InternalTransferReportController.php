@@ -17,7 +17,11 @@ class InternalTransferReportController extends Controller
     {
         $this->authorize('accounting.view');
 
-        $month = $request->input('month', now()->format('Y-m'));
+        $periodType = $request->input('period_type', 'month');
+        $month      = $request->input('month', now()->format('Y-m'));
+        $year       = $request->input('year', now()->format('Y'));
+        $fromDate   = $request->input('from_date');
+        $toDate     = $request->input('to_date');
 
         // Multi-select: internal_account_ids[] (new) hoặc internal_account_id (backward compat)
         $internalAccountIds = $request->input('internal_account_ids', []);
@@ -38,15 +42,41 @@ class InternalTransferReportController extends Controller
             ]);
         }
 
-        [$year, $mon] = explode('-', $month);
-        $from = Carbon::create($year, $mon, 1)->startOfMonth();
-        $to   = $from->copy()->endOfMonth();
+        // Compute date range based on period_type
+        $from = null;
+        $to   = null;
+        switch ($periodType) {
+            case 'year':
+                $from = Carbon::create((int) $year, 1, 1)->startOfDay();
+                $to   = Carbon::create((int) $year, 12, 31)->endOfDay();
+                break;
+            case 'custom':
+                $request->validate([
+                    'from_date' => ['required', 'date'],
+                    'to_date'   => ['required', 'date', 'after_or_equal:from_date'],
+                ], [
+                    'to_date.after_or_equal' => 'Đến ngày phải lớn hơn hoặc bằng Từ ngày.',
+                ]);
+                $from = Carbon::parse($fromDate)->startOfDay();
+                $to   = Carbon::parse($toDate)->endOfDay();
+                break;
+            case 'all':
+                break;
+            default: // month
+                [$y, $mon] = explode('-', $month);
+                $from = Carbon::create((int) $y, (int) $mon, 1)->startOfMonth();
+                $to   = $from->copy()->endOfMonth();
+                break;
+        }
 
         $query = BankTransaction::where('tx_type', 'internal_transfer')
-            ->whereBetween('transaction_date', [$from, $to])
             ->with('bankAccount:id,name,bank_name,account_number', 'internalAccount:id,name,account_number,bank_name')
             ->orderBy('transaction_date')
             ->orderBy('id');
+
+        if ($from && $to) {
+            $query->whereBetween('transaction_date', [$from, $to]);
+        }
 
         if (!empty($internalAccountIds)) {
             $query->whereIn('internal_account_id', $internalAccountIds);
@@ -73,14 +103,35 @@ class InternalTransferReportController extends Controller
             'needs_return'  => (int) $txs->where('internal_status', 'needs_return')->sum('return_amount'),
         ];
 
+        $monthExpr = \DB::getDriverName() === 'pgsql'
+            ? "to_char(transaction_date, 'YYYY-MM')"
+            : "strftime('%Y-%m', transaction_date)";
+
         $availableMonths = BankTransaction::where('tx_type', 'internal_transfer')
-            ->selectRaw("to_char(transaction_date, 'YYYY-MM') as month")
-            ->groupByRaw("to_char(transaction_date, 'YYYY-MM')")
-            ->orderByRaw("to_char(transaction_date, 'YYYY-MM') desc")
+            ->selectRaw("{$monthExpr} as month")
+            ->groupByRaw($monthExpr)
+            ->orderByRaw("{$monthExpr} desc")
             ->pluck('month');
 
+        $periodLabel = match ($periodType) {
+            'year'   => "Năm {$year}",
+            'custom' => $fromDate && $toDate
+                ? 'Từ ' . Carbon::parse($fromDate)->format('d/m/Y') . ' đến ' . Carbon::parse($toDate)->format('d/m/Y')
+                : 'Khoảng thời gian',
+            'all'    => 'Tất cả',
+            default  => (function () use ($month) {
+                [$y, $mon] = explode('-', $month);
+                return 'Tháng ' . (int) $mon . '/' . $y;
+            })(),
+        };
+
         return Inertia::render('Accounting/InternalTransferReport/Index', [
+            'periodType'          => $periodType,
             'month'               => $month,
+            'year'                => $year,
+            'fromDate'            => $fromDate,
+            'toDate'              => $toDate,
+            'periodLabel'         => $periodLabel,
             'availableMonths'     => $availableMonths,
             'internalAccountIds'  => $internalAccountIds,
             'allInternalAccounts' => $allInternalAccounts,

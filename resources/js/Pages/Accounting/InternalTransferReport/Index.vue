@@ -64,16 +64,41 @@
             </div>
           </div>
 
-          <!-- Filter tháng -->
-          <select v-model="selectedMonth" @change="applyFilters"
+          <!-- Period type selector -->
+          <select v-model="selectedPeriodType" @change="onPeriodTypeChange" class="erp-input text-sm">
+            <option value="month">Theo tháng</option>
+            <option value="year">Theo năm</option>
+            <option value="custom">Khoảng thời gian</option>
+            <option value="all">Tất cả</option>
+          </select>
+
+          <!-- Month picker -->
+          <select v-if="selectedPeriodType === 'month'" v-model="selectedMonth" @change="applyFilters"
             class="erp-input w-40 text-sm">
             <option v-for="m in availableMonths" :key="m" :value="m">{{ formatMonth(m) }}</option>
             <option v-if="!availableMonths.includes(currentMonth)" :value="currentMonth">
               {{ formatMonth(currentMonth) }}
             </option>
           </select>
+
+          <!-- Year picker -->
+          <select v-if="selectedPeriodType === 'year'" v-model="selectedYear" @change="applyFilters"
+            class="erp-input w-32 text-sm">
+            <option v-for="y in availableYears" :key="y" :value="y">Năm {{ y }}</option>
+          </select>
+
+          <!-- Custom date range -->
+          <template v-if="selectedPeriodType === 'custom'">
+            <input type="date" v-model="selectedFromDate" class="erp-input text-sm" />
+            <span class="text-xs text-slate-400 self-center">đến</span>
+            <input type="date" v-model="selectedToDate" class="erp-input text-sm" />
+            <button @click="applyCustomFilter" class="erp-btn-primary text-sm px-3">Áp dụng</button>
+          </template>
         </div>
       </div>
+
+      <!-- Date range error -->
+      <p v-if="dateError" class="text-sm text-red-600 font-medium -mt-2">{{ dateError }}</p>
 
       <!-- Active filter chips -->
       <div v-if="selectedAccounts.length > 0" class="flex flex-wrap items-center gap-2">
@@ -119,7 +144,7 @@
       <!-- Transactions table -->
       <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
         <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
-          <h2 class="text-sm font-semibold text-slate-700">Chi tiết giao dịch — {{ formatMonth(month) }}</h2>
+          <h2 class="text-sm font-semibold text-slate-700">Chi tiết giao dịch — {{ periodLabel || formatMonth(month) }}</h2>
           <div class="flex gap-2">
             <button v-for="s in statusFilters" :key="s.value"
               @click="filterStatus = filterStatus === s.value ? '' : s.value"
@@ -194,7 +219,7 @@
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
                     d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
-                Không có giao dịch nào trong tháng này
+                Không có giao dịch nào trong kỳ này
               </td>
             </tr>
           </tbody>
@@ -263,7 +288,12 @@ const { hasPermission: can } = usePermission();
 const { formatVnd } = useCurrency();
 
 const props = defineProps({
+  periodType:          { type: String, default: 'month' },
   month:               String,
+  year:                String,
+  fromDate:            { type: String, default: null },
+  toDate:              { type: String, default: null },
+  periodLabel:         { type: String, default: '' },
   availableMonths:     Array,
   internalAccountIds:  { type: Array, default: () => [] },
   allInternalAccounts: { type: Array, default: () => [] },
@@ -271,12 +301,23 @@ const props = defineProps({
   transactions:        Array,
 });
 
-const selectedMonth    = ref(props.month);
-const selectedAccounts = ref([...props.internalAccountIds]);
-const currentMonth     = new Date().toISOString().slice(0, 7);
-const filterStatus     = ref('');
-const updateTarget     = ref(null);
-const updateForm       = ref({ internal_status: 'pending', internal_note: '', return_amount: null });
+const selectedMonth      = ref(props.month);
+const selectedAccounts   = ref([...props.internalAccountIds]);
+const currentMonth       = new Date().toISOString().slice(0, 7);
+const filterStatus       = ref('');
+const updateTarget       = ref(null);
+const updateForm         = ref({ internal_status: 'pending', internal_note: '', return_amount: null });
+const selectedPeriodType = ref(props.periodType);
+const selectedYear       = ref(props.year || new Date().getFullYear().toString());
+const selectedFromDate   = ref(props.fromDate || '');
+const selectedToDate     = ref(props.toDate || '');
+const dateError          = ref('');
+
+const availableYears = computed(() => {
+  const years = new Set((props.availableMonths ?? []).map(m => m.slice(0, 4)));
+  years.add(new Date().getFullYear().toString());
+  return [...years].sort().reverse();
+});
 
 // Multi-select dropdown
 const accountDropdownRef  = ref(null);
@@ -326,11 +367,37 @@ function formatMonth(m) {
 }
 
 function applyFilters() {
-  const params = { month: selectedMonth.value };
+  const params = { period_type: selectedPeriodType.value };
   if (selectedAccounts.value.length > 0) {
     params.internal_account_ids = selectedAccounts.value;
   }
+  if (selectedPeriodType.value === 'month') {
+    params.month = selectedMonth.value;
+  } else if (selectedPeriodType.value === 'year') {
+    params.year = selectedYear.value;
+  } else if (selectedPeriodType.value === 'custom') {
+    params.from_date = selectedFromDate.value;
+    params.to_date   = selectedToDate.value;
+  }
   router.get(route('accounting.internal-transfers.index'), params, { preserveState: false });
+}
+
+function onPeriodTypeChange() {
+  dateError.value = '';
+  if (selectedPeriodType.value === 'all') applyFilters();
+}
+
+function applyCustomFilter() {
+  dateError.value = '';
+  if (!selectedFromDate.value || !selectedToDate.value) {
+    dateError.value = 'Vui lòng chọn đầy đủ Từ ngày và Đến ngày.';
+    return;
+  }
+  if (selectedFromDate.value > selectedToDate.value) {
+    dateError.value = 'Từ ngày phải nhỏ hơn hoặc bằng Đến ngày.';
+    return;
+  }
+  applyFilters();
 }
 
 function clearAndApply() {
