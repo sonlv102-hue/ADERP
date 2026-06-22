@@ -49,6 +49,8 @@ class ArCollectionController extends Controller
                 'status_label'      => $item['status_label'],
                 'status_color'      => $item['status_color'],
             ])
+            // sắp xếp theo ngày chứng từ (mới nhất trước). Nếu không có ngày, dùng id làm fallback
+            ->sortByDesc(fn($i) => $i['issue_date'] !== '—' ? strtotime(str_replace('/', '-', $i['issue_date'])) : $i['id'])
             ->values();
 
         return Inertia::render('Accounting/ArCollections/Index', [
