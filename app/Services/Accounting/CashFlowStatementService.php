@@ -2,86 +2,282 @@
 
 namespace App\Services\Accounting;
 
+use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * B03-DNN — Báo cáo lưu chuyển tiền tệ (phương pháp trực tiếp).
- * Phân loại các giao dịch tiền mặt/TGNH theo TK đối ứng.
+ * B03-DNN — Báo cáo lưu chuyển tiền tệ (phương pháp trực tiếp, TT133/2016).
+ * Nguồn dữ liệu: posted journal_entries chạm TK 111/112.
+ * cash_flow_code trên cash_vouchers là override thủ công khi auto-classify sai.
  */
 class CashFlowStatementService
 {
-    // TK tiền: 111x (tiền mặt) + 112x (tiền gửi ngân hàng)
     private const CASH_PREFIXES = ['111', '112'];
 
-    /**
-     * Mapping [direction => [tk_prefix => [section, line_code, label]]].
-     * direction: 'in' = Dr cash, 'out' = Cr cash.
-     */
+    // direction(in|out) => account_prefix => cash_flow_code
     private const MAP = [
         'in' => [
-            '131'  => ['operating', '01', 'Thu tiền từ bán hàng và CCDV'],
-            '5111' => ['operating', '01', 'Thu tiền từ bán hàng và CCDV'],
-            '5113' => ['operating', '01', 'Thu tiền từ bán hàng và CCDV'],
-            '511'  => ['operating', '01', 'Thu tiền từ bán hàng và CCDV'],
-            '521'  => ['operating', '06', 'Thu tiền khác từ HĐKD'],
-            '515'  => ['operating', '06', 'Thu tiền khác từ HĐKD'],
-            '711'  => ['operating', '06', 'Thu tiền khác từ HĐKD'],
-            '133'  => ['operating', '06', 'Thu tiền khác từ HĐKD'],
-            '311'  => ['financing', '33', 'Tiền vay ngắn hạn, dài hạn nhận được'],
-            '341'  => ['financing', '33', 'Tiền vay ngắn hạn, dài hạn nhận được'],
-            '342'  => ['financing', '33', 'Tiền vay ngắn hạn, dài hạn nhận được'],
-            '411'  => ['financing', '31', 'Tiền thu từ phát hành CP, nhận vốn góp CSH'],
+            '131'  => '01', '511'  => '01', '5111' => '01', '5113' => '01',
+            '521'  => '01', // chiết khấu thương mại (giảm trừ doanh thu)
+            '515'  => '06', // lãi tiền gửi → khác HĐKD (nếu không phân biệt)
+            '711'  => '06', // thu nhập khác
+            '133'  => '06', // hoàn thuế GTGT
+            '211'  => '22', '213' => '22', '217' => '22', // thanh lý TSCĐ
+            '128'  => '24', '228' => '24', '136' => '24', // thu hồi cho vay
+            '121'  => '25', // cổ tức nhận được
+            '311'  => '33', '341' => '33', '342' => '33', // vay tiền
+            '411'  => '31', // nhận vốn góp
         ],
         'out' => [
-            '331'  => ['operating', '02', 'Tiền chi trả người cung cấp hàng hóa, dịch vụ'],
-            '156'  => ['operating', '02', 'Tiền chi trả người cung cấp hàng hóa, dịch vụ'],
-            '334'  => ['operating', '03', 'Tiền chi trả cho người lao động'],
-            '3341' => ['operating', '03', 'Tiền chi trả cho người lao động'],
-            '333'  => ['operating', '05', 'Tiền nộp thuế và các khoản nộp khác vào NSNN'],
-            '3331' => ['operating', '05', 'Tiền nộp thuế và các khoản nộp khác vào NSNN'],
-            '3334' => ['operating', '05', 'Tiền nộp thuế và các khoản nộp khác vào NSNN'],
-            '3335' => ['operating', '05', 'Tiền nộp thuế và các khoản nộp khác vào NSNN'],
-            '338'  => ['operating', '05', 'Tiền nộp thuế và các khoản nộp khác vào NSNN'],
-            '635'  => ['operating', '04', 'Tiền chi trả lãi vay'],
-            '642'  => ['operating', '07', 'Tiền chi khác cho HĐKD'],
-            '6421' => ['operating', '07', 'Tiền chi khác cho HĐKD'],
-            '6422' => ['operating', '07', 'Tiền chi khác cho HĐKD'],
-            '811'  => ['operating', '07', 'Tiền chi khác cho HĐKD'],
-            '211'  => ['investing', '21', 'Tiền chi mua sắm, xây dựng TSCĐ và ĐT dài hạn'],
-            '213'  => ['investing', '21', 'Tiền chi mua sắm, xây dựng TSCĐ và ĐT dài hạn'],
-            '217'  => ['investing', '21', 'Tiền chi mua sắm, xây dựng TSCĐ và ĐT dài hạn'],
-            '241'  => ['investing', '21', 'Tiền chi mua sắm, xây dựng TSCĐ và ĐT dài hạn'],
-            '311'  => ['financing', '34', 'Tiền chi trả nợ gốc vay'],
-            '341'  => ['financing', '34', 'Tiền chi trả nợ gốc vay'],
-            '342'  => ['financing', '34', 'Tiền chi trả nợ gốc vay'],
-            '421'  => ['financing', '36', 'Cổ tức, lợi nhuận đã trả cho CSH'],
-            '4211' => ['financing', '36', 'Cổ tức, lợi nhuận đã trả cho CSH'],
-            '4212' => ['financing', '36', 'Cổ tức, lợi nhuận đã trả cho CSH'],
-            '411'  => ['financing', '32', 'Tiền chi trả vốn góp cho CSH, mua lại CP'],
+            '331'  => '02', '3311' => '02', '3312' => '02', '156' => '02',
+            '334'  => '03', '3341' => '03', // trả lương
+            '635'  => '04', // lãi vay
+            '333'  => '05', '3334' => '05', '3335' => '05', // thuế TNDN
+            '642'  => '07', '6421' => '07', '6422' => '07', '811' => '07',
+            '338'  => '07', '33821' => '07', // chi phí khác
+            '211'  => '21', '213' => '21', '217' => '21', '241' => '21',
+            '128'  => '23', '228' => '23', '136' => '23', // cho vay, đầu tư
+            '311'  => '34', '341' => '34', '342' => '34', // trả nợ gốc
+            '421'  => '35', '4211' => '35', '4212' => '35', // trả cổ tức
+            '411'  => '32', // trả lại vốn góp
         ],
     ];
 
-    public function build(string $from, string $to): array
+    // B03-DNN line structure (code => [label, section, isSummary, sumOf])
+    public const LINES = [
+        '01' => ['Tiền thu từ bán hàng, cung cấp dịch vụ và doanh thu khác',         'I',   false, null],
+        '02' => ['Tiền chi trả cho người cung cấp hàng hóa, dịch vụ',                  'I',   false, null],
+        '03' => ['Tiền chi trả cho người lao động',                                     'I',   false, null],
+        '04' => ['Tiền lãi vay đã trả',                                                 'I',   false, null],
+        '05' => ['Thuế thu nhập doanh nghiệp đã nộp',                                   'I',   false, null],
+        '06' => ['Tiền thu khác từ hoạt động kinh doanh',                               'I',   false, null],
+        '07' => ['Tiền chi khác cho hoạt động kinh doanh',                              'I',   false, null],
+        '20' => ['Lưu chuyển tiền thuần từ hoạt động kinh doanh (20=01+02+03+04+05+06+07)', 'I', true, ['01','02','03','04','05','06','07']],
+        '21' => ['Tiền chi để mua sắm, xây dựng TSCĐ, BĐSĐT và các tài sản dài hạn khác', 'II', false, null],
+        '22' => ['Tiền thu từ thanh lý, nhượng bán TSCĐ, BĐSĐT và các tài sản dài hạn khác', 'II', false, null],
+        '23' => ['Tiền chi cho vay, mua các công cụ nợ của đơn vị khác',                'II',  false, null],
+        '24' => ['Tiền thu hồi cho vay, bán lại các công cụ nợ của đơn vị khác',        'II',  false, null],
+        '25' => ['Tiền thu lãi cho vay, cổ tức và lợi nhuận được chia',                 'II',  false, null],
+        '30' => ['Lưu chuyển tiền thuần từ hoạt động đầu tư (30=21+22+23+24+25)',       'II',  true, ['21','22','23','24','25']],
+        '31' => ['Tiền thu từ phát hành cổ phiếu, nhận vốn góp của chủ sở hữu',        'III', false, null],
+        '32' => ['Tiền chi trả vốn góp cho các chủ sở hữu, mua lại cổ phiếu đã phát hành', 'III', false, null],
+        '33' => ['Tiền vay ngắn hạn, dài hạn nhận được',                                'III', false, null],
+        '34' => ['Tiền chi trả nợ gốc vay và nợ thuê tài chính',                        'III', false, null],
+        '35' => ['Cổ tức, lợi nhuận đã trả cho chủ sở hữu',                            'III', false, null],
+        '40' => ['Lưu chuyển tiền thuần từ hoạt động tài chính (40=31+32+33+34+35)',    'III', true, ['31','32','33','34','35']],
+        '50' => ['Lưu chuyển tiền thuần trong kỳ (50=20+30+40)',                         null,  true, ['20','30','40']],
+        '60' => ['Tiền và tương đương tiền đầu kỳ',                                      null,  true, null],
+        '61' => ['Ảnh hưởng của thay đổi tỷ giá hối đoái quy đổi ngoại tệ',             null,  false, null],
+        '70' => ['Tiền và tương đương tiền cuối kỳ (70=50+60+61)',                       null,  true, ['50','60','61']],
+    ];
+
+    public function getReport(int $year, string $unit = 'dong'): array
+    {
+        $divisor = match ($unit) {
+            'nghin_dong'  => 1000,
+            'trieu_dong'  => 1000000,
+            default       => 1,
+        };
+
+        $currFrom = Carbon::create($year, 1, 1)->startOfDay();
+        $currTo   = Carbon::create($year, 12, 31)->endOfDay();
+        $prevFrom = Carbon::create($year - 1, 1, 1)->startOfDay();
+        $prevTo   = Carbon::create($year - 1, 12, 31)->endOfDay();
+
+        $currAmounts = $this->computeAllLines($currFrom, $currTo);
+        $prevAmounts = $this->computeAllLines($prevFrom, $prevTo);
+
+        $currBeg = $this->getBeginningCashBalance($year);
+        $prevBeg = $this->getBeginningCashBalance($year - 1);
+
+        $currAmounts['60'] = $currBeg;
+        $prevAmounts['60'] = $prevBeg;
+        $currAmounts['61'] = 0.0; // tỷ giá chưa quản lý
+        $prevAmounts['61'] = 0.0;
+
+        // Compute summary lines
+        foreach (self::LINES as $code => $def) {
+            if ($def[2] && $def[3]) { // isSummary && has sumOf
+                $currAmounts[$code] = array_sum(array_map(fn ($c) => $currAmounts[$c] ?? 0.0, $def[3]));
+                $prevAmounts[$code] = array_sum(array_map(fn ($c) => $prevAmounts[$c] ?? 0.0, $def[3]));
+            }
+        }
+
+        $currEnding = $this->getEndingCashBalance($year);
+        $prevEnding = $this->getEndingCashBalance($year - 1);
+
+        $rows = [];
+        foreach (self::LINES as $code => $def) {
+            $curr = ($currAmounts[$code] ?? 0.0) / $divisor;
+            $prev = ($prevAmounts[$code] ?? 0.0) / $divisor;
+            $rows[] = [
+                'code'       => $code,
+                'label'      => $def[0],
+                'section'    => $def[1],
+                'is_summary' => $def[2],
+                'curr'       => round($curr),
+                'prev'       => round($prev),
+                'note'       => null, // Thuyết minh — để kế toán điền
+            ];
+        }
+
+        $reconciliation = $this->validateReconciliation($year, $currAmounts['70'] ?? 0.0);
+
+        return [
+            'year'           => $year,
+            'unit'           => $unit,
+            'rows'           => $rows,
+            'curr_ending'    => round($currEnding / $divisor),
+            'prev_ending'    => round($prevEnding / $divisor),
+            'reconciliation' => $reconciliation,
+        ];
+    }
+
+    public function getLineAmount(string $code, Carbon $from, Carbon $to): float
     {
         $cashAccounts = $this->resolveCashAccounts();
+        if (empty($cashAccounts)) {
+            return 0.0;
+        }
 
-        $openingCash = $this->cashBalance($cashAccounts, $from);
-        $movements   = $this->getCashMovements($cashAccounts, $from, $to);
+        $movements = $this->getCashMovements($cashAccounts, $from, $to);
         $counterpartsByJe = $this->getCounterparts($movements->pluck('je_id')->unique(), $cashAccounts);
 
-        $totals = $this->initTotals();
+        $total = 0.0;
         foreach ($movements as $line) {
-            $amount    = (float) $line->debit - (float) $line->credit; // positive=in, negative=out
+            $amount    = (float) $line->debit - (float) $line->credit;
+            $direction = $amount >= 0 ? 'in' : 'out';
+            $counterparts = $counterpartsByJe[$line->je_id] ?? collect();
+            $classified = $this->classify($direction, $counterparts);
+            if ($classified === $code) {
+                $total += $amount;
+            }
+        }
+        return $total;
+    }
+
+    public function getBeginningCashBalance(int $year): float
+    {
+        $cashAccounts = $this->resolveCashAccounts();
+        if (empty($cashAccounts)) {
+            return 0.0;
+        }
+        $before = Carbon::create($year, 1, 1)->startOfDay()->toDateTimeString();
+        $result = DB::table('journal_entry_lines as jel')
+            ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
+            ->where('je.status', 'posted')
+            ->where('je.entry_date', '<', $before)
+            ->whereIn('jel.account_code', $cashAccounts)
+            ->selectRaw('COALESCE(SUM(jel.debit),0) as dr, COALESCE(SUM(jel.credit),0) as cr')
+            ->first();
+        return (float)($result?->dr ?? 0) - (float)($result?->cr ?? 0);
+    }
+
+    public function getEndingCashBalance(int $year): float
+    {
+        $cashAccounts = $this->resolveCashAccounts();
+        if (empty($cashAccounts)) {
+            return 0.0;
+        }
+        $through = Carbon::create($year, 12, 31)->endOfDay()->toDateTimeString();
+        $result = DB::table('journal_entry_lines as jel')
+            ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
+            ->where('je.status', 'posted')
+            ->where('je.entry_date', '<=', $through)
+            ->whereIn('jel.account_code', $cashAccounts)
+            ->selectRaw('COALESCE(SUM(jel.debit),0) as dr, COALESCE(SUM(jel.credit),0) as cr')
+            ->first();
+        return (float)($result?->dr ?? 0) - (float)($result?->cr ?? 0);
+    }
+
+    public function getUnclassifiedCashVouchers(int $year): Collection
+    {
+        return DB::table('cash_vouchers as cv')
+            ->leftJoin('funds as f', 'f.id', '=', 'cv.fund_id')
+            ->whereNull('cv.cash_flow_code')
+            ->where('cv.status', 'confirmed')
+            ->whereYear('cv.voucher_date', $year)
+            ->select(
+                'cv.id', 'cv.code', 'cv.type', 'cv.voucher_date',
+                'cv.amount', 'cv.description', 'cv.counterparty', 'cv.business_type',
+                'f.name as fund_name'
+            )
+            ->orderBy('cv.voucher_date')
+            ->get();
+    }
+
+    public function validateReconciliation(int $year, float $reportedClosing): array
+    {
+        $actualClosing = $this->getEndingCashBalance($year);
+        $diff          = $reportedClosing - $actualClosing;
+        return [
+            'reported_closing' => round($reportedClosing),
+            'actual_closing'   => round($actualClosing),
+            'difference'       => round($diff),
+            'ok'               => abs($diff) < 1, // tolerance 1 đồng
+        ];
+    }
+
+    public function getLineDetail(string $code, int $year): Collection
+    {
+        $cashAccounts = $this->resolveCashAccounts();
+        if (empty($cashAccounts)) {
+            return collect();
+        }
+        $from = Carbon::create($year, 1, 1)->startOfDay();
+        $to   = Carbon::create($year, 12, 31)->endOfDay();
+
+        $movements    = $this->getCashMovements($cashAccounts, $from, $to);
+        $jeIds        = $movements->pluck('je_id')->unique();
+        $counterpartsByJe = $this->getCounterparts($jeIds, $cashAccounts);
+
+        $matchedJeIds = [];
+        foreach ($movements as $line) {
+            $amount    = (float) $line->debit - (float) $line->credit;
+            $direction = $amount >= 0 ? 'in' : 'out';
+            $counterparts = $counterpartsByJe[$line->je_id] ?? collect();
+            if ($this->classify($direction, $counterparts) === $code) {
+                $matchedJeIds[] = $line->je_id;
+            }
+        }
+        $matchedJeIds = array_unique($matchedJeIds);
+
+        if (empty($matchedJeIds)) {
+            return collect();
+        }
+
+        return DB::table('journal_entries as je')
+            ->whereIn('je.id', $matchedJeIds)
+            ->select('je.id', 'je.code', 'je.entry_date', 'je.description', 'je.reference_type', 'je.reference_id')
+            ->orderBy('je.entry_date')
+            ->get();
+    }
+
+    // ─── Private ─────────────────────────────────────────────────────────────
+
+    private function computeAllLines(Carbon $from, Carbon $to): array
+    {
+        $amounts = array_fill_keys(array_keys(self::LINES), 0.0);
+        $cashAccounts = $this->resolveCashAccounts();
+        if (empty($cashAccounts)) {
+            return $amounts;
+        }
+
+        $movements = $this->getCashMovements($cashAccounts, $from, $to);
+        $counterpartsByJe = $this->getCounterparts($movements->pluck('je_id')->unique(), $cashAccounts);
+
+        foreach ($movements as $line) {
+            $amount    = (float) $line->debit - (float) $line->credit;
             $direction = $amount >= 0 ? 'in' : 'out';
             $counterparts = $counterpartsByJe[$line->je_id] ?? collect();
             $code = $this->classify($direction, $counterparts);
-            $totals[$code] += $amount;
+            if (isset($amounts[$code])) {
+                $amounts[$code] += $amount;
+            }
         }
-
-        return $this->buildOutput($from, $to, $openingCash, $totals);
+        return $amounts;
     }
-
-    // ─── Private helpers ──────────────────────────────────────────────────────
 
     private function resolveCashAccounts(): array
     {
@@ -96,37 +292,18 @@ class CashFlowStatementService
         }));
     }
 
-    private function cashBalance(array $cashAccounts, string $before): float
+    private function getCashMovements(array $cashAccounts, Carbon $from, Carbon $to): Collection
     {
-        if (empty($cashAccounts)) {
-            return 0.0;
-        }
-        $result = DB::table('journal_entry_lines as jel')
-            ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
-            ->where('je.status', 'posted')
-            ->where('je.entry_date', '<', $before)
-            ->whereIn('jel.account_code', $cashAccounts)
-            ->selectRaw('COALESCE(SUM(jel.debit), 0) as dr, COALESCE(SUM(jel.credit), 0) as cr')
-            ->first();
-
-        return (float)($result?->dr ?? 0) - (float)($result?->cr ?? 0);
-    }
-
-    private function getCashMovements(array $cashAccounts, string $from, string $to)
-    {
-        if (empty($cashAccounts)) {
-            return collect();
-        }
         return DB::table('journal_entry_lines as jel')
             ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
             ->where('je.status', 'posted')
-            ->whereBetween('je.entry_date', [$from, $to])
+            ->whereBetween('je.entry_date', [$from->toDateString(), $to->toDateString()])
             ->whereIn('jel.account_code', $cashAccounts)
             ->select('je.id as je_id', 'jel.account_code', 'jel.debit', 'jel.credit')
             ->get();
     }
 
-    private function getCounterparts(\Illuminate\Support\Collection $jeIds, array $cashAccounts)
+    private function getCounterparts(Collection $jeIds, array $cashAccounts): Collection
     {
         if ($jeIds->isEmpty()) {
             return collect();
@@ -141,95 +318,20 @@ class CashFlowStatementService
             ->groupBy('journal_entry_id');
     }
 
-    private function classify(string $direction, \Illuminate\Support\Collection $counterparts): string
+    private function classify(string $direction, Collection $counterparts): string
     {
         $map = self::MAP[$direction] ?? [];
-
-        // Find dominant counterpart by amount
-        $dominant = $counterparts->sortByDesc(fn($l) => (float)$l->dr + (float)$l->cr)->first();
+        $dominant = $counterparts->sortByDesc(fn ($l) => (float) $l->dr + (float) $l->cr)->first();
         if (!$dominant) {
             return $direction === 'in' ? '06' : '07';
         }
-
         $code = (string) $dominant->account_code;
-
-        // Try increasingly shorter prefixes until match found
-        for ($len = min(strlen($code), 4); $len >= 1; $len--) {
+        for ($len = min(strlen($code), 5); $len >= 1; $len--) {
             $prefix = substr($code, 0, $len);
             if (isset($map[$prefix])) {
-                return $map[$prefix][1]; // line_code
+                return $map[$prefix];
             }
         }
-
-        return $direction === 'in' ? '06' : '07'; // default
-    }
-
-    private function initTotals(): array
-    {
-        // All possible line codes — positive = inflow, negative = outflow
-        return [
-            '01' => 0.0, '02' => 0.0, '03' => 0.0, '04' => 0.0,
-            '05' => 0.0, '06' => 0.0, '07' => 0.0,
-            '21' => 0.0, '22' => 0.0,
-            '31' => 0.0, '32' => 0.0, '33' => 0.0, '34' => 0.0, '36' => 0.0,
-        ];
-    }
-
-    private function buildOutput(string $from, string $to, float $opening, array $totals): array
-    {
-        $netOperating = $totals['01'] + $totals['02'] + $totals['03'] + $totals['04']
-                      + $totals['05'] + $totals['06'] + $totals['07'];
-        $netInvesting = $totals['21'] + $totals['22'];
-        $netFinancing = $totals['31'] + $totals['32'] + $totals['33'] + $totals['34'] + $totals['36'];
-        $netTotal     = $netOperating + $netInvesting + $netFinancing;
-        $closing      = $opening + $netTotal;
-
-        return [
-            'from'         => $from,
-            'to'           => $to,
-            'opening_cash' => $opening,
-            'closing_cash' => $closing,
-            'net_total'    => $netTotal,
-            'sections'     => [
-                [
-                    'code'  => 'I',
-                    'label' => 'LƯU CHUYỂN TIỀN TỪ HOẠT ĐỘNG KINH DOANH',
-                    'net'   => $netOperating,
-                    'net_code' => '20',
-                    'lines' => [
-                        ['code' => '01', 'label' => 'Thu tiền từ bán hàng, cung cấp dịch vụ và DT khác', 'amount' => $totals['01']],
-                        ['code' => '02', 'label' => 'Tiền chi trả cho người cung cấp hàng hóa, dịch vụ', 'amount' => $totals['02']],
-                        ['code' => '03', 'label' => 'Tiền chi trả cho người lao động',                   'amount' => $totals['03']],
-                        ['code' => '04', 'label' => 'Tiền chi trả lãi vay',                              'amount' => $totals['04']],
-                        ['code' => '05', 'label' => 'Tiền nộp thuế và các khoản nộp khác vào NSNN',      'amount' => $totals['05']],
-                        ['code' => '06', 'label' => 'Tiền thu khác từ HĐKD',                             'amount' => $totals['06']],
-                        ['code' => '07', 'label' => 'Tiền chi khác cho HĐKD',                            'amount' => $totals['07']],
-                    ],
-                ],
-                [
-                    'code'  => 'II',
-                    'label' => 'LƯU CHUYỂN TIỀN TỪ HOẠT ĐỘNG ĐẦU TƯ',
-                    'net'   => $netInvesting,
-                    'net_code' => '30',
-                    'lines' => [
-                        ['code' => '21', 'label' => 'Tiền chi mua sắm, xây dựng TSCĐ và đầu tư dài hạn',          'amount' => $totals['21']],
-                        ['code' => '22', 'label' => 'Tiền thu từ thanh lý, nhượng bán TSCĐ và ĐT dài hạn khác',   'amount' => $totals['22']],
-                    ],
-                ],
-                [
-                    'code'  => 'III',
-                    'label' => 'LƯU CHUYỂN TIỀN TỪ HOẠT ĐỘNG TÀI CHÍNH',
-                    'net'   => $netFinancing,
-                    'net_code' => '40',
-                    'lines' => [
-                        ['code' => '31', 'label' => 'Tiền thu từ phát hành CP, nhận vốn góp CSH',      'amount' => $totals['31']],
-                        ['code' => '32', 'label' => 'Tiền chi trả vốn góp cho CSH, mua lại CP',        'amount' => $totals['32']],
-                        ['code' => '33', 'label' => 'Tiền vay ngắn hạn, dài hạn nhận được',             'amount' => $totals['33']],
-                        ['code' => '34', 'label' => 'Tiền chi trả nợ gốc vay',                          'amount' => $totals['34']],
-                        ['code' => '36', 'label' => 'Cổ tức, lợi nhuận đã trả cho chủ sở hữu',         'amount' => $totals['36']],
-                    ],
-                ],
-            ],
-        ];
+        return $direction === 'in' ? '06' : '07';
     }
 }

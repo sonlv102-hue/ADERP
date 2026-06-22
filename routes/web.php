@@ -683,8 +683,11 @@ Route::middleware('auth')->group(function () {
         Route::get('stock-card',              [InventoryReportController::class, 'stockCard'])->name('stock_card');
         Route::get('cash-flow',                  [CashFlowController::class,          'index'])->name('cash_flow');
         Route::get('cash-flow/export',           [CashFlowController::class,          'export'])->name('cash_flow.export');
-        Route::get('cash-flow-statement',        [CashFlowStatementController::class, 'index'])->name('cash_flow_statement');
-        Route::get('cash-flow-statement/export', [CashFlowStatementController::class, 'export'])->name('cash_flow_statement.export');
+        Route::get('cash-flow-statement',             [CashFlowStatementController::class, 'index'])->name('cash_flow_statement');
+        Route::get('cash-flow-statement/export',      [CashFlowStatementController::class, 'exportExcel'])->name('cash_flow_statement.export');
+        Route::get('cash-flow-statement/pdf',         [CashFlowStatementController::class, 'exportPdf'])->name('cash_flow_statement.pdf');
+        Route::get('cash-flow-statement/line-detail', [CashFlowStatementController::class, 'lineDetail'])->name('cash_flow_statement.line_detail');
+        Route::patch('cash-flow-statement/update-code', [CashFlowStatementController::class, 'updateVoucherCode'])->name('cash_flow_statement.update_code');
         Route::get('income-statement',           [IncomeStatementController::class,   'index'])->name('income_statement');
         Route::get('income-statement/export', [IncomeStatementController::class, 'export'])->name('income_statement.export');
 

@@ -14,7 +14,7 @@ class CashVoucher extends Model
         'counterparty', 'supplier_id', 'partner_type', 'customer_id', 'employee_id',
         'shareholder_id', 'advance_purpose', 'advance_due_date', 'advance_reference_id',
         'description', 'reference_type', 'reference_id', 'created_by',
-        'business_type', 'journal_mode', 'edited_by_user', 'edit_reason',
+        'business_type', 'cash_flow_code', 'journal_mode', 'edited_by_user', 'edit_reason',
     ];
 
     protected function casts(): array
