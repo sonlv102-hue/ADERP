@@ -1,279 +1,203 @@
-﻿<template>
+<template>
   <AppLayout>
     <div class="space-y-5">
-      <!-- Header -->
-      <div class="flex items-center justify-between flex-wrap gap-3">
+      <!-- Page header -->
+      <div class="erp-page-header">
         <div>
-          <h1 class="text-2xl font-bold text-gray-900">Kết quả Hoạt động Kinh doanh</h1>
-          <p class="text-sm text-gray-500 mt-0.5">Nguồn: bút toán kế toán đã posted (GL) — theo TT133 B02-DNN</p>
+          <h1 class="text-2xl font-bold text-gray-900">Báo cáo kết quả hoạt động kinh doanh</h1>
+          <p class="text-sm text-gray-500 mt-0.5">Mẫu số B02-DNN — Thông tư 133/2016/TT-BTC · Nguồn: bút toán GL đã posted</p>
         </div>
-        <a :href="exportUrl" class="inline-flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-          </svg>
-          Xuất Excel
-        </a>
+        <div class="flex items-center gap-2 flex-wrap">
+          <a :href="exportExcelUrl" class="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-medium">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+            Excel
+          </a>
+          <a :href="exportPdfUrl" target="_blank" class="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
+            PDF
+          </a>
+          <button @click="window.print()" class="inline-flex items-center gap-1.5 bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded-lg text-sm font-medium">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
+            In
+          </button>
+        </div>
       </div>
 
-      <!-- Filter -->
-      <div class="flex gap-3 items-center flex-wrap">
+      <!-- Filters -->
+      <div class="flex items-center gap-3 flex-wrap bg-white rounded-xl border border-gray-200 px-4 py-3">
         <div class="flex items-center gap-2">
-          <label class="text-sm text-gray-600 font-medium">Năm:</label>
-          <select v-model="year" @change="onYearChange"
-            class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-            <option v-for="y in yearOptions" :key="y" :value="y">{{ y }}</option>
+          <label class="text-sm font-medium text-gray-600">Năm:</label>
+          <select v-model="year" @change="applyFilters"
+            class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <option v-for="y in availableYears" :key="y" :value="y">{{ y }}</option>
           </select>
         </div>
-        <span class="text-gray-400 text-sm">hoặc chọn khoảng:</span>
         <div class="flex items-center gap-2">
-          <label class="text-sm text-gray-600">Từ</label>
-          <input v-model="dateFrom" type="date" @change="year = null"
-            class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          <label class="text-sm font-medium text-gray-600">Đơn vị tính:</label>
+          <select v-model="unit" @change="applyFilters"
+            class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+            <option value="dong">Đồng</option>
+            <option value="nghin_dong">Nghìn đồng</option>
+            <option value="trieu_dong">Triệu đồng</option>
+          </select>
         </div>
-        <div class="flex items-center gap-2">
-          <label class="text-sm text-gray-600">Đến</label>
-          <input v-model="dateTo" type="date"
-            class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+        <div class="flex items-center gap-2 ml-2">
+          <input id="hideEmpty" v-model="hideEmpty" type="checkbox" class="rounded border-gray-300 text-primary-600">
+          <label for="hideEmpty" class="text-sm text-gray-600">Ẩn dòng không có số liệu</label>
         </div>
-        <button @click="applyFilters" :disabled="isLoading"
-          class="inline-flex items-center gap-2 bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-70 disabled:cursor-not-allowed">
-          <svg v-if="isLoading" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-          </svg>
-          Cập nhật
-        </button>
       </div>
 
       <!-- Warnings -->
-      <div v-if="warnings?.length" class="space-y-2">
-        <div v-for="(w, i) in warnings" :key="i"
-          class="rounded-lg px-4 py-3 border"
+      <div v-if="report.warnings?.length" class="space-y-2">
+        <div v-for="(w, i) in report.warnings" :key="i"
+          class="rounded-lg px-4 py-3 border text-sm"
           :class="{
-            'bg-red-50 border-red-300':       w.level === 'error',
-            'bg-yellow-50 border-yellow-300': w.level === 'warning',
-            'bg-blue-50 border-blue-200':     w.level === 'info',
+            'bg-red-50 border-red-300 text-red-800':       w.level === 'error',
+            'bg-yellow-50 border-yellow-300 text-yellow-800': w.level === 'warning',
+            'bg-blue-50 border-blue-200 text-blue-800':     w.level === 'info',
           }">
-          <div class="flex items-start gap-2">
-            <svg class="w-4 h-4 flex-shrink-0 mt-0.5"
-              :class="{ 'text-red-500': w.level === 'error', 'text-yellow-600': w.level === 'warning', 'text-blue-500': w.level === 'info' }"
-              fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path v-if="w.level !== 'info'" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-              <path v-else stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 110 20A10 10 0 0112 2z" />
-            </svg>
-            <div class="flex-1">
-              <p class="text-sm"
-                :class="{ 'text-red-800': w.level === 'error', 'text-yellow-800': w.level === 'warning', 'text-blue-800': w.level === 'info' }">
-                {{ w.message }}
-              </p>
-              <!-- Draft JEs list -->
-              <div v-if="w.draft_jes?.length" class="mt-2">
-                <p class="text-xs font-semibold text-yellow-700 mb-1">Bút toán draft trong kỳ ({{ w.draft_count }} tổng — hiện {{ w.draft_jes.length }} dòng đầu):</p>
-                <table class="text-xs w-full border border-yellow-200 rounded">
-                  <thead class="bg-yellow-100">
-                    <tr>
-                      <th class="text-left px-2 py-1">Mã BT</th>
-                      <th class="text-left px-2 py-1">Ngày</th>
-                      <th class="text-left px-2 py-1">Nội dung</th>
-                      <th class="text-left px-2 py-1">Nguồn</th>
-                      <th class="px-2 py-1"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr v-for="je in w.draft_jes" :key="je.id" class="border-t border-yellow-100">
-                      <td class="px-2 py-1 font-mono">{{ je.code }}</td>
-                      <td class="px-2 py-1">{{ je.entry_date }}</td>
-                      <td class="px-2 py-1 truncate max-w-xs">{{ je.description }}</td>
-                      <td class="px-2 py-1 text-gray-500">{{ je.reference_type ?? '—' }}</td>
-                      <td class="px-2 py-1">
-                        <a :href="route('accounting.journal-entries.show', je.id)"
-                          class="text-primary-600 hover:underline" target="_blank">Xem</a>
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
+          {{ w.message }}
+        </div>
+      </div>
+
+      <!-- B02-DNN Table -->
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto print:border-0 print:rounded-none print:shadow-none">
+        <!-- Report header (print) -->
+        <div class="hidden print:block px-6 py-4">
+          <div class="flex justify-between items-start mb-4">
+            <div class="text-sm">
+              <div class="font-bold">{{ company?.company_name }}</div>
+              <div>Địa chỉ: {{ company?.company_address }}</div>
+            </div>
+            <div class="text-right text-sm italic">
+              <div class="font-bold not-italic">Mẫu số B02-DNN</div>
+              <div>(Ban hành theo Thông tư số 133/2016/TT-BTC</div>
+              <div>ngày 26/8/2016 của Bộ Tài chính)</div>
             </div>
           </div>
+          <h2 class="text-center text-xl font-bold uppercase tracking-wide mb-1">Báo cáo kết quả hoạt động kinh doanh</h2>
+          <p class="text-center text-sm italic mb-1">Năm {{ report.year }}</p>
+          <p class="text-right text-xs italic">Đơn vị tính: {{ unitLabel }}</p>
         </div>
-      </div>
 
-      <!-- KPI cards -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 transition-opacity" :class="{ 'opacity-60': isLoading }">
-        <div class="bg-white rounded-xl border border-gray-200 p-4">
-          <p class="text-xs text-gray-500 mb-1">Doanh thu (TK 511)</p>
-          <p class="text-lg font-bold text-gray-900">{{ fmt(summary.revenue) }}</p>
-          <div class="flex gap-2 mt-1">
-            <a :href="ledgerUrl('511')" class="text-xs text-primary-600 hover:underline">Xem chi tiết</a>
-          </div>
+        <!-- Screen header -->
+        <div class="print:hidden bg-gray-50 border-b border-gray-200 px-5 py-3 flex items-center justify-between">
+          <h2 class="font-semibold text-gray-800">Báo cáo KQHĐKD — Năm {{ report.year }}</h2>
+          <span class="text-xs text-gray-400">Đơn vị: {{ unitLabel }}</span>
         </div>
-        <div class="bg-white rounded-xl border border-red-200 bg-red-50 p-4">
-          <p class="text-xs text-red-600 mb-1">Giá vốn (TK 632)</p>
-          <p class="text-lg font-bold text-red-700">{{ fmt(summary.total_cogs) }}</p>
-          <a :href="ledgerUrl('632')" class="text-xs text-red-500 hover:underline mt-1 block">Xem chi tiết</a>
-        </div>
-        <div class="bg-white rounded-xl border p-4" :class="summary.gross_profit >= 0 ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'">
-          <p class="text-xs mb-1" :class="summary.gross_profit >= 0 ? 'text-green-600' : 'text-red-600'">Lợi nhuận gộp</p>
-          <p class="text-lg font-bold" :class="summary.gross_profit >= 0 ? 'text-green-700' : 'text-red-700'">{{ fmt(summary.gross_profit) }}</p>
-          <p class="text-xs mt-0.5" :class="summary.gross_profit >= 0 ? 'text-green-500' : 'text-red-500'">
-            {{ summary.gross_margin !== null ? summary.gross_margin + '%' : '—' }}
-          </p>
-        </div>
-        <div class="bg-white rounded-xl border border-gray-200 p-4">
-          <p class="text-xs text-gray-500 mb-1">Chi phí QLDN (TK 642) <span class="text-gray-400">(quản trị)</span></p>
-          <p class="text-lg font-bold text-gray-700">{{ fmt(summary.total_mgmt_expense) }}</p>
-          <a :href="ledgerUrl('642')" class="text-xs text-gray-400 hover:underline mt-1 block">Xem chi tiết TK 642</a>
-        </div>
-      </div>
 
-      <!-- Hướng dẫn đọc báo cáo (TT133 đúng chuẩn) -->
-      <div class="bg-blue-50 border border-blue-200 rounded-lg px-5 py-3 text-sm text-blue-800 space-y-1">
-        <p class="font-semibold">Hướng dẫn đọc Báo cáo KQHĐKD (TT133 B02-DNN):</p>
-        <ul class="list-disc list-inside space-y-0.5 text-blue-700 text-xs">
-          <li><strong>Nguồn dữ liệu:</strong> Tất cả chỉ tiêu lấy từ bút toán GL đã posted — không lấy từ hóa đơn hoặc bảng riêng.</li>
-          <li><strong>Doanh thu (Mã 01):</strong> Phát sinh Có TK 511 trong kỳ (5111: thương mại · 5113: dịch vụ/dự án). VAT đầu ra 3331 không được cộng vào doanh thu.</li>
-          <li><strong>Giảm trừ doanh thu (Mã 02):</strong> Phát sinh Nợ TK 511 theo nghiệp vụ chiết khấu, giảm giá, hàng trả lại. TK 521 là tùy chọn nếu doanh nghiệp cấu hình — không phải mặc định TT133.</li>
-          <li><strong>Giá vốn (Mã 11 — TK 632):</strong> Thương mại: Nợ 632/Có 156 khi xuất bán. Dự án: chỉ hạch toán sau khi nghiệm thu (Nợ 632/Có 154) — chi phí 154 chưa nghiệm thu không được tính vào đây.</li>
-          <li><strong>Chi phí QLDN (Mã 24 — TK 642):</strong> Tổng TK 642 (bao gồm 6421 bán hàng + 6422 QLDN) — chỉ trừ một lần trong công thức.</li>
-          <li><strong>Lợi nhuận sau thuế (Mã 60):</strong> = Lợi nhuận trước thuế − Thuế TNDN (TK 821). Đây là con số cuối cùng phản ánh lợi nhuận thực trong kỳ.</li>
-        </ul>
-      </div>
-
-      <!-- Cảnh báo lỗ -->
-      <div v-if="summary.net_profit !== undefined && summary.net_profit < 0"
-        class="bg-red-50 border border-red-300 rounded-lg px-5 py-3">
-        <div class="flex items-start gap-3">
-          <svg class="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
-          </svg>
-          <div class="flex-1">
-            <p class="font-semibold text-red-800 text-sm">Cảnh báo: Kinh doanh lỗ trong kỳ này</p>
-            <p class="text-red-700 text-xs mt-0.5">Lợi nhuận sau thuế: {{ fmt(summary.net_profit) }}</p>
-            <!-- Drill-down theo TK -->
-            <div v-if="drillDown?.by_account?.length" class="mt-2">
-              <p class="text-xs font-semibold text-red-700 mb-1">Phân tích theo tài khoản:</p>
-              <div class="flex flex-wrap gap-2">
-                <span v-for="tk in drillDown.by_account" :key="tk.tk"
-                  class="inline-flex items-center gap-1 bg-red-100 border border-red-200 rounded px-2 py-0.5 text-xs text-red-800">
-                  <a :href="ledgerUrl(tk.tk)" class="font-mono font-semibold hover:underline">TK {{ tk.tk }}</a>
-                  <span class="text-red-600">{{ tk.label }}:</span>
-                  <span class="font-semibold">{{ fmt(tk.amount) }}</span>
-                </span>
-              </div>
-            </div>
-            <div v-if="drillDown?.unposted_invoices > 0" class="mt-1">
-              <p class="text-xs text-red-600">
-                Lưu ý: có {{ drillDown.unposted_invoices }} hóa đơn bán hàng chưa có bút toán GL posted — doanh thu thực có thể cao hơn.
-                <a :href="route('sales.invoices.index')" class="underline">Xem hóa đơn</a>
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 transition-opacity" :class="{ 'opacity-60': isLoading }">
-        <!-- P&L Statement -->
-        <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-          <div class="bg-gray-50 border-b border-gray-200 px-5 py-3 flex items-center justify-between">
-            <h2 class="font-semibold text-gray-800">Báo cáo KQHĐKD — {{ periodLabel }}</h2>
-            <span class="text-xs text-gray-400">Nguồn: GL đã posted</span>
-          </div>
-          <table class="min-w-full text-sm">
-            <thead class="bg-gray-50 border-b border-gray-100">
-              <tr>
-                <th class="text-left px-5 py-2 text-xs text-gray-500 font-medium">Chỉ tiêu</th>
-                <th class="text-center px-2 py-2 text-xs text-gray-400 font-medium w-10">Mã</th>
-                <th class="text-right px-5 py-2 text-xs text-gray-500 font-medium">Số tiền</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(line, i) in statement" :key="i"
-                class="border-b border-gray-100 last:border-0"
-                :class="line.bold ? 'bg-gray-50' : 'hover:bg-gray-50'">
-                <td class="px-5 py-2 text-gray-700"
-                  :style="{ paddingLeft: line.indent === 2 ? '2.5rem' : line.indent === 1 ? '1.75rem' : '1.25rem' }">
-                  <span :class="line.bold ? 'font-semibold text-gray-900' : 'text-sm'">{{ line.label }}</span>
+        <table class="min-w-full text-sm">
+          <thead>
+            <tr class="bg-[#1E3A5F] text-white">
+              <th class="text-left px-4 py-2.5 font-medium text-xs w-[42%]">CHỈ TIÊU</th>
+              <th class="text-center px-2 py-2.5 font-medium text-xs w-[7%]">Mã số</th>
+              <th class="text-center px-2 py-2.5 font-medium text-xs w-[9%]">Thuyết minh</th>
+              <th class="text-right px-4 py-2.5 font-medium text-xs w-[21%]">Năm nay</th>
+              <th class="text-right px-4 py-2.5 font-medium text-xs w-[21%]">Năm trước</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-gray-100">
+            <template v-for="row in visibleRows" :key="row.code">
+              <tr :class="[row.isSummary ? 'bg-green-50 font-semibold' : 'hover:bg-gray-50']">
+                <td class="px-4 py-2 text-gray-800"
+                  :class="row.code === '23' ? 'pl-8 text-gray-500 italic' : ''">
+                  <span>{{ row.label }}</span>
                 </td>
-                <td class="px-2 py-2 text-center text-xs text-gray-400 font-mono">{{ line.code || '' }}</td>
-                <td class="px-5 py-2 text-right font-medium"
-                  :class="{
-                    'font-bold text-gray-900': line.bold,
-                    'text-green-700': !line.bold && line.amount > 0,
-                    'text-red-700':   !line.bold && line.amount < 0,
-                    'text-gray-400':  line.amount === 0,
-                  }">
-                  {{ line.amount !== 0 ? fmt(Math.abs(line.amount)) : '—' }}
+                <td class="px-2 py-2 text-center text-xs text-gray-500 font-mono">
+                  <button v-if="hasDetail(row.code)"
+                    @click="openDetail(row.code)"
+                    class="text-primary-600 hover:underline font-mono">
+                    {{ row.code }}
+                  </button>
+                  <span v-else>{{ row.code }}</span>
+                </td>
+                <td class="px-2 py-2 text-center text-xs text-gray-400">{{ row.note ?? '' }}</td>
+                <td class="px-4 py-2 text-right"
+                  :class="[
+                    row.isSummary ? 'font-bold' : '',
+                    amtClass(row.code, row.curr),
+                  ]">
+                  {{ fmtAmount(row.code, row.curr) }}
+                </td>
+                <td class="px-4 py-2 text-right text-gray-400"
+                  :class="row.isSummary ? 'font-bold' : ''">
+                  {{ fmtAmount(row.code, row.prev) }}
                 </td>
               </tr>
-            </tbody>
-          </table>
-          <!-- Drill-down links -->
-          <div class="px-5 py-3 border-t border-gray-100 flex flex-wrap gap-2">
-            <a :href="ledgerUrl('511')" class="text-xs text-primary-600 hover:underline">Xem chi tiết TK 511</a>
-            <span class="text-gray-300">|</span>
-            <a :href="ledgerUrl('632')" class="text-xs text-primary-600 hover:underline">Xem chi tiết TK 632</a>
-            <span class="text-gray-300">|</span>
-            <a :href="ledgerUrl('642')" class="text-xs text-primary-600 hover:underline">Xem chi tiết TK 642</a>
-            <span class="text-gray-300">|</span>
-            <a :href="route('accounting.journal-entries.index')" class="text-xs text-yellow-600 hover:underline">Xem bút toán chưa post</a>
+            </template>
+          </tbody>
+        </table>
+
+        <!-- Signature block -->
+        <div class="px-6 py-6 border-t border-gray-200 print:mt-8">
+          <p class="text-sm italic text-right mb-6">Lập, ngày &nbsp;&nbsp;&nbsp; tháng &nbsp;&nbsp;&nbsp; năm {{ report.year }}</p>
+          <div class="grid grid-cols-3 gap-4 text-center">
+            <div>
+              <p class="font-semibold text-xs uppercase">Người lập biểu</p>
+              <p class="text-xs text-gray-500 italic">(Ký, họ tên)</p>
+              <p class="mt-16 text-sm">&nbsp;</p>
+            </div>
+            <div>
+              <p class="font-semibold text-xs uppercase">Kế toán trưởng</p>
+              <p class="text-xs text-gray-500 italic">(Ký, họ tên)</p>
+              <p class="mt-16 text-sm">&nbsp;</p>
+            </div>
+            <div>
+              <p class="font-semibold text-xs uppercase">Người đại diện theo pháp luật</p>
+              <p class="text-xs text-gray-500 italic">(Ký, họ tên, đóng dấu)</p>
+              <p class="mt-16 text-sm">&nbsp;</p>
+            </div>
           </div>
         </div>
+      </div>
+    </div>
 
-        <!-- Monthly breakdown -->
-        <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-          <div class="bg-gray-50 border-b border-gray-200 px-5 py-3">
-            <h2 class="font-semibold text-gray-800">Phân tích theo tháng — {{ currentYear }}</h2>
-          </div>
-          <table class="min-w-full text-sm">
-            <thead class="border-b border-gray-200">
+    <!-- Line detail modal -->
+    <div v-if="detailModal.open" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-5xl max-h-[80vh] flex flex-col">
+        <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 flex-shrink-0">
+          <h3 class="font-semibold text-gray-800">
+            Chi tiết mã {{ detailModal.code }} — {{ codeLabel(detailModal.code) }} — Năm {{ report.year }}
+          </h3>
+          <button @click="detailModal.open = false" class="text-gray-400 hover:text-gray-600">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div class="overflow-y-auto flex-1">
+          <div v-if="detailModal.loading" class="py-12 text-center text-gray-400 text-sm">Đang tải...</div>
+          <div v-else-if="!detailModal.entries?.length" class="py-12 text-center text-gray-400 text-sm">Không có dữ liệu</div>
+          <table v-else class="min-w-full text-xs">
+            <thead class="bg-gray-50 sticky top-0">
               <tr>
-                <th class="text-left px-4 py-2 font-semibold text-gray-600 text-xs">Tháng</th>
-                <th class="text-right px-4 py-2 font-semibold text-gray-600 text-xs">Doanh thu</th>
-                <th class="text-right px-4 py-2 font-semibold text-gray-600 text-xs">Tổng chi phí</th>
-                <th class="text-right px-4 py-2 font-semibold text-gray-600 text-xs">LN gộp</th>
+                <th class="text-left px-3 py-2 font-medium text-gray-600">Ngày HT</th>
+                <th class="text-left px-3 py-2 font-medium text-gray-600">Số BT</th>
+                <th class="text-left px-3 py-2 font-medium text-gray-600 max-w-xs">Diễn giải</th>
+                <th class="text-center px-3 py-2 font-medium text-gray-600">TK</th>
+                <th class="text-right px-3 py-2 font-medium text-gray-600">Số tiền</th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
-              <tr v-for="row in monthly" :key="row.month" class="hover:bg-gray-50">
-                <td class="px-4 py-2 text-gray-700 font-medium text-xs">T{{ row.month }}</td>
-                <td class="px-4 py-2 text-right text-gray-700 text-xs">{{ row.revenue > 0 ? fmt(row.revenue) : '—' }}</td>
-                <td class="px-4 py-2 text-right text-red-600 text-xs">{{ row.cogs > 0 ? fmt(row.cogs) : '—' }}</td>
-                <td class="px-4 py-2 text-right text-xs font-semibold"
-                  :class="row.gross_profit > 0 ? 'text-green-700' : row.gross_profit < 0 ? 'text-red-700' : 'text-gray-400'">
-                  {{ row.gross_profit !== 0 ? fmt(row.gross_profit) : '—' }}
+              <tr v-for="(e, i) in detailModal.entries" :key="i" class="hover:bg-gray-50">
+                <td class="px-3 py-1.5 text-gray-500">{{ e.date }}</td>
+                <td class="px-3 py-1.5 font-mono">
+                  <a :href="route('accounting.journal-entries.show', e.je_id)" target="_blank"
+                    class="text-primary-600 hover:underline">{{ e.je_code }}</a>
                 </td>
+                <td class="px-3 py-1.5 text-gray-600 max-w-xs truncate">{{ e.description }}</td>
+                <td class="px-3 py-1.5 text-center font-mono text-gray-500">{{ e.account_code }}</td>
+                <td class="px-3 py-1.5 text-right font-medium">{{ fmt(e.amount) }}</td>
               </tr>
             </tbody>
             <tfoot class="bg-gray-50 border-t-2 border-gray-300">
               <tr>
-                <td class="px-4 py-2 font-semibold text-gray-700 text-xs">Cả năm</td>
-                <td class="px-4 py-2 text-right font-bold text-gray-800 text-xs">{{ fmt(summary.revenue) }}</td>
-                <td class="px-4 py-2 text-right font-bold text-red-700 text-xs">{{ fmt(summary.total_cogs) }}</td>
-                <td class="px-4 py-2 text-right font-bold text-xs" :class="summary.gross_profit >= 0 ? 'text-green-700' : 'text-red-700'">
-                  {{ fmt(summary.gross_profit) }}
+                <td colspan="4" class="px-3 py-2 font-semibold text-gray-700 text-xs">Tổng cộng</td>
+                <td class="px-3 py-2 text-right font-bold text-gray-900">
+                  {{ fmt(detailModal.entries.reduce((s, e) => s + e.amount, 0)) }}
                 </td>
               </tr>
             </tfoot>
           </table>
         </div>
-      </div>
-
-      <!-- Drill-down: Báo cáo quản trị dự án (ghi chú rõ) -->
-      <div v-if="drillDown?.unposted_invoices > 0 || drillDown?.by_account?.length"
-        class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm">
-        <p class="font-semibold text-amber-800 mb-2">Thông tin bổ sung (quản trị — không phải KQHĐKD chính thức)</p>
-        <div v-if="drillDown?.unposted_invoices > 0" class="text-amber-700 text-xs mb-1">
-          Có <strong>{{ drillDown.unposted_invoices }}</strong> hóa đơn bán hàng chưa có bút toán GL posted trong kỳ.
-          Các hóa đơn này <strong>không</strong> được tính vào KQHĐKD chính thức.
-          <a :href="route('sales.invoices.index')" class="underline ml-1">Xem danh sách hóa đơn</a>
-        </div>
-        <p class="text-amber-600 text-xs italic">
-          Báo cáo chi phí dự án WIP (TK 154) và chi phí dở dang không được phản ánh trong KQHĐKD chính thức
-          cho đến khi dự án được nghiệm thu và kết chuyển sang TK 632.
-        </p>
       </div>
     </div>
   </AppLayout>
@@ -284,65 +208,86 @@ import { ref, computed } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { useCurrency } from '@/composables/useCurrency';
-import { useInertiaLoading } from '@/composables/useInertiaLoading';
 
 const props = defineProps({
-  statement:   Array,
-  monthly:     Array,
-  summary:     Object,
-  warnings:    Array,
-  drillDown:   Object,
-  filters:     Object,
-  currentYear: Number,
-  dateFrom:    String,
-  dateTo:      String,
+  report:         Object,
+  company:        Object,
+  filters:        Object,
+  availableYears: Array,
 });
 
 const { formatVnd: fmt } = useCurrency();
-const { isLoading } = useInertiaLoading();
 
-const year     = ref(props.filters?.year      ?? props.currentYear);
-const dateFrom = ref(props.filters?.date_from ?? '');
-const dateTo   = ref(props.filters?.date_to   ?? '');
+const year      = ref(props.filters?.year ?? props.report?.year ?? new Date().getFullYear());
+const unit      = ref(props.filters?.unit ?? 'dong');
+const hideEmpty = ref(false);
 
-const yearOptions = computed(() => {
-  const current = new Date().getFullYear();
-  return [current - 2, current - 1, current, current + 1];
+const detailModal = ref({ open: false, code: '', loading: false, entries: [] });
+
+const unitLabel = computed(() => ({
+  nghin_dong:  'Nghìn đồng',
+  trieu_dong:  'Triệu đồng',
+})[unit.value] ?? 'Đồng');
+
+const visibleRows = computed(() => {
+  if (!hideEmpty.value) return props.report?.rows ?? [];
+  return (props.report?.rows ?? []).filter(r => r.curr !== 0 || r.prev !== 0 || r.isSummary);
 });
 
-const periodLabel = computed(() => {
-  if (props.dateFrom && props.dateTo) return `${props.dateFrom} – ${props.dateTo}`;
-  return `Năm ${props.currentYear}`;
-});
+// Codes where value is displayed as negative (cost side) — shown in parentheses when positive
+const COST_CODES = ['02', '11', '22', '23', '24', '32', '51'];
 
-const exportUrl = computed(() => {
-  const params = new URLSearchParams();
-  params.set('year', year.value ?? props.currentYear);
-  if (dateFrom.value) params.set('date_from', dateFrom.value);
-  if (dateTo.value)   params.set('date_to',   dateTo.value);
-  return route('reports.income_statement.export') + '?' + params.toString();
-});
-
-// Link tới Account Ledger cho một TK, với bộ lọc kỳ hiện tại
-function ledgerUrl(accountCode) {
-  const params = new URLSearchParams();
-  params.set('account_code', accountCode);
-  if (props.dateFrom) params.set('date_from', props.dateFrom);
-  if (props.dateTo)   params.set('date_to',   props.dateTo);
-  return route('reports.account_ledger') + '?' + params.toString();
+function fmtAmount(code, val) {
+  if (val === 0 || val === null || val === undefined) return '—';
+  if (COST_CODES.includes(code)) {
+    return val !== 0 ? '(' + fmt(Math.abs(val)) + ')' : '—';
+  }
+  return val < 0 ? '(' + fmt(Math.abs(val)) + ')' : fmt(val);
 }
 
-function onYearChange() {
-  dateFrom.value = '';
-  dateTo.value   = '';
-  applyFilters();
+function amtClass(code, val) {
+  if (val === 0) return 'text-gray-300';
+  if (COST_CODES.includes(code)) return 'text-red-700';
+  return val > 0 ? 'text-gray-900' : 'text-red-700';
 }
+
+// Codes that have GL detail entries
+const DETAIL_CODES = ['01', '02', '11', '21', '22', '24', '31', '32', '51'];
+function hasDetail(code) { return DETAIL_CODES.includes(code); }
+
+function codeLabel(code) {
+  const row = (props.report?.rows ?? []).find(r => r.code === code);
+  return row?.label ?? '';
+}
+
+async function openDetail(code) {
+  detailModal.value = { open: true, code, loading: true, entries: [] };
+  try {
+    const res = await fetch(
+      route('reports.income_statement.line_detail') + `?code=${code}&year=${props.report.year}`
+    );
+    const data = await res.json();
+    detailModal.value.entries = data.entries ?? [];
+  } catch {
+    detailModal.value.entries = [];
+  } finally {
+    detailModal.value.loading = false;
+  }
+}
+
+const exportExcelUrl = computed(() => {
+  const p = new URLSearchParams({ year: year.value, unit: unit.value });
+  return route('reports.income_statement.export') + '?' + p.toString();
+});
+
+const exportPdfUrl = computed(() => {
+  const p = new URLSearchParams({ year: year.value, unit: unit.value });
+  return route('reports.income_statement.pdf') + '?' + p.toString();
+});
 
 function applyFilters() {
-  router.get(route('reports.income_statement'), {
-    year:      year.value     || undefined,
-    date_from: dateFrom.value || undefined,
-    date_to:   dateTo.value   || undefined,
-  }, { preserveState: true, replace: true });
+  router.get(route('reports.income_statement'), { year: year.value, unit: unit.value }, {
+    preserveState: true, replace: true,
+  });
 }
 </script>

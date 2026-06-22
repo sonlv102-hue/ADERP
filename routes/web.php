@@ -688,8 +688,10 @@ Route::middleware('auth')->group(function () {
         Route::get('cash-flow-statement/pdf',         [CashFlowStatementController::class, 'exportPdf'])->name('cash_flow_statement.pdf');
         Route::get('cash-flow-statement/line-detail', [CashFlowStatementController::class, 'lineDetail'])->name('cash_flow_statement.line_detail');
         Route::patch('cash-flow-statement/update-code', [CashFlowStatementController::class, 'updateVoucherCode'])->name('cash_flow_statement.update_code');
-        Route::get('income-statement',           [IncomeStatementController::class,   'index'])->name('income_statement');
-        Route::get('income-statement/export', [IncomeStatementController::class, 'export'])->name('income_statement.export');
+        Route::get('income-statement',             [IncomeStatementController::class, 'index'])->name('income_statement');
+        Route::get('income-statement/export',     [IncomeStatementController::class, 'exportExcel'])->name('income_statement.export');
+        Route::get('income-statement/pdf',        [IncomeStatementController::class, 'exportPdf'])->name('income_statement.pdf');
+        Route::get('income-statement/line-detail',[IncomeStatementController::class, 'lineDetail'])->name('income_statement.line_detail');
 
         Route::get('balance-sheet',            [BalanceSheetController::class,    'index'])->name('balance_sheet');
         Route::get('balance-sheet/export',    [BalanceSheetController::class,    'export'])->name('balance_sheet.export');
