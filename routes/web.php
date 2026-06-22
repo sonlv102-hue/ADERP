@@ -310,6 +310,8 @@ Route::middleware('auth')->group(function () {
         Route::post('projects/{project}/materials', [ProjectController::class, 'addMaterial'])->name('projects.materials.store');
         Route::delete('projects/{project}/materials/{material}', [ProjectController::class, 'removeMaterial'])->name('projects.materials.destroy');
 
+        Route::get('projects/{project}/expenses/create', [ProjectController::class, 'expenseCreate'])->name('projects.expenses.create');
+        Route::post('projects/{project}/expenses/batch', [ProjectController::class, 'expenseBatchStore'])->name('projects.expenses.batch');
         Route::post('projects/{project}/expenses', [ProjectController::class, 'addExpense'])->name('projects.expenses.store');
         Route::delete('projects/{project}/expenses/{expense}', [ProjectController::class, 'removeExpense'])->name('projects.expenses.destroy');
 

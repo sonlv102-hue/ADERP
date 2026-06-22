@@ -676,6 +676,124 @@ class ProjectController extends Controller
         return back()->with('success', "Đã kết chuyển chi phí dự án {$project->code} vào giá vốn.");
     }
 
+    public function expenseCreate(Project $project): Response
+    {
+        return Inertia::render('Projects/Expenses/Create', [
+            'project' => [
+                'id'   => $project->id,
+                'code' => $project->code,
+                'name' => $project->name,
+            ],
+            'expenseCategories' => collect(ExpenseCategory::cases())->map(fn ($c) => [
+                'value' => $c->value,
+                'label' => $c->label(),
+                'defaultDebitAccount' => $c->defaultDebitAccount(),
+            ]),
+            'funds'        => Fund::where('type', 'cash')->orderBy('name')->get(['id', 'name', 'account_code']),
+            'bankAccounts' => BankAccount::orderBy('bank_name')->get(['id', 'bank_name', 'account_number', 'account_code']),
+            'employees'    => Employee::whereIn('status', ['active', 'probation'])->orderBy('name')->get(['id', 'code', 'name']),
+        ]);
+    }
+
+    public function expenseBatchStore(Request $request, Project $project): RedirectResponse
+    {
+        $paymentMethod = $request->input('payment_method', 'payable');
+
+        $data = $request->validate([
+            'expense_date'    => ['required', 'date'],
+            'invoice_number'  => ['nullable', 'string', 'max:100'],
+            'payment_method'  => ['required', 'string', 'in:cash,bank,payable,advance,salary,misc'],
+            'description'     => ['nullable', 'string', 'max:500'],
+            'post_immediately' => ['nullable', 'boolean'],
+            'supplier_id' => [
+                \Illuminate\Validation\Rule::requiredIf($paymentMethod === 'payable'),
+                'nullable', 'integer', 'exists:suppliers,id',
+            ],
+            'fund_id' => [
+                \Illuminate\Validation\Rule::requiredIf($paymentMethod === 'cash'),
+                'nullable', 'integer', 'exists:funds,id',
+            ],
+            'bank_account_id' => [
+                \Illuminate\Validation\Rule::requiredIf($paymentMethod === 'bank'),
+                'nullable', 'integer', 'exists:bank_accounts,id',
+            ],
+            'employee_id' => ['nullable', 'integer', 'exists:employees,id'],
+            'lines'       => ['required', 'array', 'min:1'],
+            'lines.*.category'      => ['required', 'string'],
+            'lines.*.description'   => ['required', 'string', 'max:255'],
+            'lines.*.amount'        => ['required', 'numeric', 'min:0'],
+            'lines.*.debit_account' => ['nullable', 'string', 'max:20'],
+            'lines.*.vat_rate'      => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'lines.*.vat_amount'    => ['nullable', 'integer', 'min:0'],
+            'lines.*.labor_type'    => ['nullable', 'string', 'in:internal_employee,freelance_contractor,subcontractor_invoice,insurance_allocation'],
+            'lines.*.notes'         => ['nullable', 'string', 'max:500'],
+            'lines.*.pit_withholding_enabled' => ['nullable', 'boolean'],
+            'lines.*.pit_rate'               => ['nullable', 'numeric', 'min:0', 'max:100'],
+        ]);
+
+        $shouldPost = (bool) ($data['post_immediately'] ?? true);
+
+        try {
+            DB::transaction(function () use ($data, $project, $shouldPost) {
+                foreach ($data['lines'] as $line) {
+                    $grossAmount = (int) round((float) $line['amount']);
+                    $debitAcct   = $line['debit_account'] ?? null;
+
+                    // Chặn TK 152/156
+                    if ($debitAcct && preg_match('/^15[26]/', $debitAcct)) {
+                        throw new \InvalidArgumentException(
+                            "TK {$debitAcct} (vật tư/hàng hóa) không được dùng trong Chi phí PS. Sử dụng phiếu xuất kho."
+                        );
+                    }
+
+                    $pitEnabled = !empty($line['pit_withholding_enabled'])
+                                  && in_array($data['payment_method'], ['cash', 'bank'])
+                                  && !empty($line['pit_rate']);
+                    $pitAmount  = $pitEnabled ? (int) round($grossAmount * (float) $line['pit_rate'] / 100) : 0;
+
+                    $expense = $project->expenses()->create([
+                        'category'                => $line['category'],
+                        'labor_type'              => $line['labor_type'] ?? null,
+                        'description'             => $line['description'],
+                        'amount'                  => $grossAmount,
+                        'expense_date'            => $data['expense_date'],
+                        'debit_account'           => $debitAcct,
+                        'vat_rate'                => $line['vat_rate'] ?? null,
+                        'vat_amount'              => (int) ($line['vat_amount'] ?? 0),
+                        'payment_method'          => $data['payment_method'],
+                        'supplier_id'             => $data['supplier_id'] ?? null,
+                        'fund_id'                 => $data['fund_id'] ?? null,
+                        'bank_account_id'         => $data['bank_account_id'] ?? null,
+                        'employee_id'             => $data['employee_id'] ?? null,
+                        'invoice_number'          => $data['invoice_number'] ?? null,
+                        'pit_withholding_enabled' => $pitEnabled,
+                        'pit_rate'                => $pitEnabled ? ($line['pit_rate'] ?? 0) : 0,
+                        'pit_amount'              => $pitAmount,
+                        'net_payment_amount'      => $pitEnabled ? max(0, $grossAmount - $pitAmount) : 0,
+                        'status'                  => 'draft',
+                        'created_by'              => auth()->id(),
+                    ]);
+
+                    if ($shouldPost && $grossAmount > 0) {
+                        $expense->loadMissing('project', 'supplier', 'fund', 'bankAccount');
+                        $this->wip->createFromExpense($expense);
+                    }
+                }
+            });
+        } catch (\Throwable $e) {
+            \Log::error("expenseBatchStore failed project#{$project->id}: {$e->getMessage()}");
+            return back()->with('error', 'Không thể ghi nhận chi phí: ' . $e->getMessage())->withInput();
+        }
+
+        $count = count($data['lines']);
+        $msg   = $shouldPost
+            ? "Đã ghi nhận {$count} dòng chi phí phát sinh."
+            : "Đã lưu nháp {$count} dòng chi phí.";
+
+        return redirect()->route('projects.projects.show', $project)
+            ->with('success', $msg);
+    }
+
     private function allowedTransitions(Project $project): array
     {
         $map = [
