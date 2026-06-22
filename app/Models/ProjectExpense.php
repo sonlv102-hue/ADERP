@@ -3,15 +3,17 @@
 namespace App\Models;
 
 use App\Enums\ExpenseCategory;
+use App\Enums\LaborType;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class ProjectExpense extends Model
 {
     protected $fillable = [
-        'project_id', 'category', 'description', 'amount', 'expense_date', 'created_by',
+        'project_id', 'category', 'labor_type', 'description', 'amount', 'expense_date', 'created_by',
         'supplier_id', 'purchase_invoice_id', 'invoice_number',
         'payment_method', 'vat_rate', 'vat_amount',
+        'pit_withholding_enabled', 'pit_rate', 'pit_amount', 'net_payment_amount',
         'debit_account', 'credit_account',
         'status', 'journal_entry_id', 'project_wip_entry_id',
         'employee_id', 'fund_id', 'bank_account_id',
@@ -20,11 +22,16 @@ class ProjectExpense extends Model
     protected function casts(): array
     {
         return [
-            'category'     => ExpenseCategory::class,
-            'expense_date' => 'date',
-            'amount'       => 'decimal:2',
-            'vat_rate'     => 'decimal:2',
-            'vat_amount'   => 'integer',
+            'category'              => ExpenseCategory::class,
+            'labor_type'            => LaborType::class,
+            'expense_date'          => 'date',
+            'amount'                => 'decimal:2',
+            'vat_rate'              => 'decimal:2',
+            'vat_amount'            => 'integer',
+            'pit_withholding_enabled' => 'boolean',
+            'pit_rate'              => 'decimal:2',
+            'pit_amount'            => 'integer',
+            'net_payment_amount'    => 'integer',
         ];
     }
 

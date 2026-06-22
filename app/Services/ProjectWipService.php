@@ -128,7 +128,7 @@ class ProjectWipService
 
         $vatAmount   = (int) ($expense->vat_amount ?? 0);
         $debitTk     = $expense->debit_account  ?? $this->resolveDebitAccount($expense);
-        $creditTk    = $expense->credit_account ?? $this->resolveCreditAccount($expense);
+        $creditLines = $this->buildCreditLines($expense, $amount, $vatAmount);
         $projectCode = $expense->project?->code ?? $expense->project_id;
 
         // TK 152/156 không được dùng ở đây — vật tư phải đi qua phiếu xuất kho
@@ -140,7 +140,7 @@ class ProjectWipService
 
         $isDirectTo154 = str_starts_with($debitTk, '154');
 
-        DB::transaction(function () use ($expense, $amount, $vatAmount, $debitTk, $creditTk, $projectCode, $isDirectTo154) {
+        DB::transaction(function () use ($expense, $amount, $vatAmount, $debitTk, $creditLines, $projectCode, $isDirectTo154) {
             $lines = [
                 ['account' => $debitTk, 'debit' => $amount, 'credit' => 0,
                  'description' => $expense->description, 'project_id' => $expense->project_id],
@@ -152,8 +152,9 @@ class ProjectWipService
                     'project_id'  => $expense->project_id];
             }
 
-            $lines[] = ['account' => $creditTk, 'debit' => 0, 'credit' => $amount + $vatAmount,
-                'description' => $expense->description, 'project_id' => $expense->project_id];
+            foreach ($creditLines as $cl) {
+                $lines[] = $cl;
+            }
 
             $je = $this->accounting->post(
                 "Chi phí phát sinh dự án {$projectCode}",
@@ -246,6 +247,35 @@ class ProjectWipService
         }
 
         return '3311';
+    }
+
+    /**
+     * Xây dựng danh sách dòng Có cho JE chi phí PS.
+     * Xử lý 2 case đặc biệt:
+     *   - PIT split: freelance_contractor + cash/bank + pit_enabled → Có TK tiền + Có 3335
+     *   - Trường hợp còn lại: 1 dòng Có duy nhất (bao gồm VAT nếu có)
+     */
+    private function buildCreditLines(ProjectExpense $expense, int $amount, int $vatAmount): array
+    {
+        $creditTk  = $expense->credit_account ?? $this->resolveCreditAccount($expense);
+        $pitEnabled = (bool) ($expense->pit_withholding_enabled ?? false);
+        $pitAmount  = (int) ($expense->pit_amount ?? 0);
+        $method     = $expense->payment_method ?? 'payable';
+
+        if ($pitEnabled && $pitAmount > 0 && in_array($method, ['cash', 'bank'])) {
+            $netAmount = $amount - $pitAmount;
+            return [
+                ['account' => $creditTk, 'debit' => 0, 'credit' => $netAmount,
+                 'description' => $expense->description . ' (thực trả)', 'project_id' => null],
+                ['account' => '3335',    'debit' => 0, 'credit' => $pitAmount,
+                 'description' => 'Thuế TNCN khấu trừ — ' . $expense->description, 'project_id' => null],
+            ];
+        }
+
+        return [
+            ['account' => $creditTk, 'debit' => 0, 'credit' => $amount + $vatAmount,
+             'description' => $expense->description, 'project_id' => null],
+        ];
     }
 
     /**

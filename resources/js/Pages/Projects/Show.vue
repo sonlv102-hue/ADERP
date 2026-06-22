@@ -446,6 +446,28 @@
                 class="border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" required />
             </div>
 
+            <!-- Loại nhân công — chỉ hiển thị khi category=labor -->
+            <div v-if="expenseForm.category === 'labor'" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="block text-xs text-gray-500 mb-0.5">Loại nhân công</label>
+                <select v-model="expenseForm.labor_type"
+                  class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-full bg-white">
+                  <option value="">-- Chọn loại nhân công (tùy chọn) --</option>
+                  <option v-for="lt in LABOR_TYPES" :key="lt.value" :value="lt.value">{{ lt.label }}</option>
+                </select>
+              </div>
+              <!-- Khoản trích BHXH/KPCĐ -->
+              <div v-if="expenseForm.labor_type === 'insurance_allocation'">
+                <label class="block text-xs text-gray-500 mb-0.5">Khoản trích <span class="text-red-500">*</span></label>
+                <select v-model="expenseForm.insurance_type" @change="onInsuranceTypeChange"
+                  :class="['border rounded-lg px-3 py-2 text-sm w-full bg-white', !expenseForm.insurance_type ? 'border-red-400' : 'border-gray-300']">
+                  <option value="">-- Chọn khoản trích --</option>
+                  <option v-for="ins in INSURANCE_TYPES" :key="ins.value" :value="ins.value">{{ ins.label }}</option>
+                </select>
+                <p v-if="!expenseForm.insurance_type" class="text-xs text-red-500 mt-0.5">Bắt buộc chọn khoản trích</p>
+              </div>
+            </div>
+
             <!-- Row 2: Hình thức ghi nhận (primary — xác định TK Có) -->
             <div>
               <label class="block text-xs text-gray-500 mb-0.5 font-medium">Hình thức ghi nhận <span class="text-red-500">*</span></label>
@@ -465,7 +487,14 @@
                   <div v-if="Number(expenseForm.vat_amount) > 0" class="font-mono text-blue-700">
                     Nợ 1331 {{ formatVnd(Number(expenseForm.vat_amount)) }}
                   </div>
-                  <div class="font-mono text-red-600">
+                  <template v-if="pitPreviewEnabled">
+                    <div class="font-mono text-red-600">
+                      Có {{ expenseForm.credit_account || PAYMENT_MODES[expenseForm.payment_method]?.credit }}
+                      {{ formatVnd(computedNetPayment) }}
+                    </div>
+                    <div class="font-mono text-red-600">Có 3335 {{ formatVnd(computedPitAmount) }}</div>
+                  </template>
+                  <div v-else class="font-mono text-red-600">
                     Có {{ expenseForm.credit_account || PAYMENT_MODES[expenseForm.payment_method]?.credit }}
                     {{ expenseForm.amount ? formatVnd(Number(expenseForm.amount) + Number(expenseForm.vat_amount || 0)) : '...' }}
                   </div>
@@ -533,6 +562,31 @@
                 </select>
                 <p v-if="expenseForm.payment_method === 'advance' && !expenseForm.employee_id"
                    class="text-xs text-red-500 mt-0.5">Bắt buộc chọn nhân viên quyết toán tạm ứng</p>
+              </div>
+            </div>
+
+            <!-- PIT khấu trừ TNCN — chỉ freelance_contractor + cash/bank -->
+            <div v-if="expenseForm.labor_type === 'freelance_contractor' && ['cash','bank'].includes(expenseForm.payment_method)"
+              class="border border-amber-200 bg-amber-50 rounded-lg px-3 py-2.5 space-y-2">
+              <label class="flex items-center gap-2 text-sm cursor-pointer select-none">
+                <input type="checkbox" v-model="expenseForm.pit_withholding_enabled" class="rounded accent-amber-600" />
+                <span class="font-medium text-amber-800">Khấu trừ thuế TNCN</span>
+              </label>
+              <div v-if="expenseForm.pit_withholding_enabled" class="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                <div>
+                  <label class="block text-xs text-gray-500 mb-0.5">Tỷ lệ khấu trừ (%)</label>
+                  <input v-model="expenseForm.pit_rate" type="number" min="0" max="100" step="0.1"
+                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white" />
+                </div>
+                <div class="text-sm space-y-1 self-end pb-1">
+                  <div class="text-gray-600">Thuế TNCN: <strong class="text-red-600">{{ formatVnd(computedPitAmount) }}</strong></div>
+                  <div class="text-gray-600">Số thực trả: <strong class="text-green-700">{{ formatVnd(computedNetPayment) }}</strong></div>
+                </div>
+                <div class="text-xs text-gray-500 font-mono space-y-0.5 self-end pb-1">
+                  <div class="text-blue-700">Nợ 154 {{ formatVnd(Number(expenseForm.amount)||0) }}</div>
+                  <div class="text-red-600">Có {{ expenseForm.credit_account || PAYMENT_MODES[expenseForm.payment_method]?.credit }} {{ formatVnd(computedNetPayment) }}</div>
+                  <div class="text-red-600">Có 3335 {{ formatVnd(computedPitAmount) }}</div>
+                </div>
               </div>
             </div>
 
@@ -1657,10 +1711,25 @@ const PAYMENT_MODES = {
   misc:    { label: 'Ghi nhận khác',           credit: '3388', creditName: '3388 - Phải trả khác' },
 };
 
+const LABOR_TYPES = [
+  { value: 'internal_employee',     label: 'Nhân công nội bộ' },
+  { value: 'freelance_contractor',  label: 'Thuê khoán cá nhân/đội nhóm' },
+  { value: 'subcontractor_invoice', label: 'Nhà thầu phụ có hóa đơn' },
+  { value: 'insurance_allocation',  label: 'Trích BHXH/KPCĐ' },
+];
+
+const INSURANCE_TYPES = [
+  { value: 'social_insurance',       label: 'BHXH doanh nghiệp (33831)',  account: '33831', accountName: '33831 - BHXH DN' },
+  { value: 'health_insurance',       label: 'BHYT doanh nghiệp (33841)',  account: '33841', accountName: '33841 - BHYT DN' },
+  { value: 'unemployment_insurance', label: 'BHTN doanh nghiệp (3385)',   account: '3385',  accountName: '3385 - BHTN' },
+  { value: 'trade_union',            label: 'KPCĐ doanh nghiệp (33821)',  account: '33821', accountName: '33821 - KPCĐ DN' },
+];
+
 const showAdvancedExpense = ref(false);
 
 const expenseForm = reactive({
   category: 'labor',
+  labor_type: '',
   description: '',
   amount: '',
   expense_date: '',
@@ -1674,6 +1743,13 @@ const expenseForm = reactive({
   fund_id: '',
   bank_account_id: '',
   employee_id: '',
+  // Insurance allocation
+  insurance_type: '',
+  // PIT
+  pit_withholding_enabled: false,
+  pit_rate: 10,
+  pit_amount: 0,
+  net_payment_amount: 0,
   // Extra
   payment_method: 'payable',
   invoice_number: '',
@@ -1693,6 +1769,28 @@ const expenseShowEmployee = computed(() => {
     || expenseForm.credit_account === '141' || expenseForm.credit_account === '3341';
 });
 
+// PIT computed
+const computedPitAmount = computed(() => {
+  if (!expenseForm.pit_withholding_enabled
+    || expenseForm.labor_type !== 'freelance_contractor'
+    || !['cash', 'bank'].includes(expenseForm.payment_method)) return 0;
+  const amount = Math.round(parseFloat(expenseForm.amount) || 0);
+  const rate   = parseFloat(expenseForm.pit_rate) || 0;
+  return Math.round(amount * rate / 100);
+});
+
+const computedNetPayment = computed(() => {
+  const amount = Math.round(parseFloat(expenseForm.amount) || 0);
+  return Math.max(0, amount - computedPitAmount.value);
+});
+
+const pitPreviewEnabled = computed(() =>
+  expenseForm.pit_withholding_enabled
+  && expenseForm.labor_type === 'freelance_contractor'
+  && ['cash', 'bank'].includes(expenseForm.payment_method)
+  && computedPitAmount.value > 0
+);
+
 // Auto-fill TK Có khi đổi hình thức ghi nhận
 watch(() => expenseForm.payment_method, (method) => {
   const mode = PAYMENT_MODES[method];
@@ -1704,6 +1802,7 @@ watch(() => expenseForm.payment_method, (method) => {
   if (method !== 'cash')    { expenseForm.fund_id = ''; }
   if (method !== 'bank')    { expenseForm.bank_account_id = ''; }
   if (method !== 'advance' && method !== 'salary') { expenseForm.employee_id = ''; }
+  if (!['cash', 'bank'].includes(method)) { expenseForm.pit_withholding_enabled = false; }
 }, { immediate: false });
 
 // Clear conditional fields when TK Có is manually changed via advanced section
@@ -1717,6 +1816,35 @@ watch(() => expenseForm.credit_account, (newVal) => {
   if (newVal !== '3341' && newVal !== '141') expenseForm.employee_id = '';
 });
 
+// Auto-set payment_method và credit khi đổi labor_type
+watch(() => expenseForm.labor_type, (lt) => {
+  expenseForm.pit_withholding_enabled = false;
+  expenseForm.pit_amount = 0;
+  expenseForm.net_payment_amount = 0;
+  expenseForm.insurance_type = '';
+  if (lt === 'internal_employee') {
+    expenseForm.payment_method = 'salary';
+    expenseForm.credit_account = '3341';
+    expenseForm.credit_account_name = '3341 - Phải trả công nhân viên';
+    expenseForm.supplier_id = null; expenseForm.supplier_name = '';
+  } else if (lt === 'subcontractor_invoice') {
+    expenseForm.payment_method = 'payable';
+    expenseForm.credit_account = '3311';
+    expenseForm.credit_account_name = '3311 - Phải trả nhà cung cấp';
+  } else if (lt === 'insurance_allocation') {
+    expenseForm.payment_method = 'misc';
+    expenseForm.credit_account = '';
+    expenseForm.credit_account_name = '';
+    expenseForm.supplier_id = null; expenseForm.supplier_name = '';
+  }
+}, { immediate: false });
+
+// Sync PIT amounts khi amount/pit_rate thay đổi
+watch([() => expenseForm.amount, () => expenseForm.pit_rate, () => expenseForm.pit_withholding_enabled], () => {
+  expenseForm.pit_amount = computedPitAmount.value;
+  expenseForm.net_payment_amount = computedNetPayment.value;
+});
+
 // Block submit when required fields missing
 const expenseSubmitBlocked = computed(() => {
   const pm  = expenseForm.payment_method;
@@ -1727,6 +1855,8 @@ const expenseSubmitBlocked = computed(() => {
   if ((pm === 'cash'    || ca === '1111') && !expenseForm.fund_id) return true;
   if ((pm === 'bank'    || ca === '1121') && !expenseForm.bank_account_id) return true;
   if (pm === 'advance' && !expenseForm.employee_id) return true;
+  if (expenseForm.labor_type === 'insurance_allocation' && !expenseForm.credit_account) return true;
+  if (expenseForm.pit_withholding_enabled && !(parseFloat(expenseForm.pit_rate) > 0)) return true;
   return false;
 });
 
@@ -1738,10 +1868,20 @@ function resetExpenseForm() {
     credit_account: '3311',
     credit_account_name: '3311 - Phải trả nhà cung cấp',
     supplier_id: null, supplier_name: '', fund_id: '', bank_account_id: '', employee_id: '',
+    labor_type: '', insurance_type: '',
+    pit_withholding_enabled: false, pit_rate: 10, pit_amount: 0, net_payment_amount: 0,
     payment_method: 'payable', invoice_number: '', vat_amount: '', vat_rate: '',
     force_duplicate: false,
   });
   showAdvancedExpense.value = false;
+}
+
+function onInsuranceTypeChange() {
+  const it = INSURANCE_TYPES.find(x => x.value === expenseForm.insurance_type);
+  if (it) {
+    expenseForm.credit_account = it.account;
+    expenseForm.credit_account_name = it.accountName;
+  }
 }
 
 const addExpense = () => {

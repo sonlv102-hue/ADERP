@@ -315,10 +315,15 @@ class ProjectController extends Controller
                         'bank_account_id'     => $e->bank_account_id,
                         'bank_account_name'   => $e->bankAccount ? ($e->bankAccount->bank_name . ' - ' . $e->bankAccount->account_number) : null,
                         'invoice_number'      => $e->invoice_number,
-                        'payment_method'      => $e->payment_method ?? 'payable',
-                        'vat_rate'            => $e->vat_rate,
-                        'debit_account'       => $debitAcct,
-                        'credit_account'      => $e->credit_account,
+                        'payment_method'          => $e->payment_method ?? 'payable',
+                        'labor_type'              => $e->labor_type?->value,
+                        'pit_withholding_enabled' => (bool) ($e->pit_withholding_enabled ?? false),
+                        'pit_rate'                => $e->pit_rate,
+                        'pit_amount'              => $e->pit_amount ?? 0,
+                        'net_payment_amount'      => $e->net_payment_amount ?? 0,
+                        'vat_rate'                => $e->vat_rate,
+                        'debit_account'           => $debitAcct,
+                        'credit_account'          => $e->credit_account,
                         'je_code'             => $e->journal_entry_id ? (\App\Models\JournalEntry::find($e->journal_entry_id)?->code ?? $jeCode) : $jeCode,
                         'je_id'               => $e->journal_entry_id ?? $jeId,
                         // Kết chuyển 154
@@ -520,6 +525,7 @@ class ProjectController extends Controller
 
         $data = $request->validate([
             'category'       => ['required', 'string'],
+            'labor_type'     => ['nullable', 'string', 'in:internal_employee,freelance_contractor,subcontractor_invoice,insurance_allocation'],
             'description'    => ['required', 'string', 'max:255'],
             'amount'         => ['required', 'numeric', 'min:0'],
             'expense_date'   => ['required', 'date'],
@@ -538,13 +544,28 @@ class ProjectController extends Controller
                 \Illuminate\Validation\Rule::requiredIf($creditAccount === '1121'),
                 'nullable', 'integer', 'exists:bank_accounts,id',
             ],
-            'employee_id'         => ['nullable', 'integer', 'exists:employees,id'],
-            'invoice_number'      => ['nullable', 'string', 'max:100'],
-            'payment_method'      => ['nullable', 'string', 'in:cash,bank,payable,advance,salary,misc'],
-            'vat_rate'            => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'vat_amount'          => ['nullable', 'integer', 'min:0'],
-            'purchase_invoice_id' => ['nullable', 'integer'],
+            'employee_id'             => ['nullable', 'integer', 'exists:employees,id'],
+            'invoice_number'          => ['nullable', 'string', 'max:100'],
+            'payment_method'          => ['nullable', 'string', 'in:cash,bank,payable,advance,salary,misc'],
+            'vat_rate'                => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'vat_amount'              => ['nullable', 'integer', 'min:0'],
+            'purchase_invoice_id'     => ['nullable', 'integer'],
+            'pit_withholding_enabled' => ['nullable', 'boolean'],
+            'pit_rate'                => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
+
+        // Compute PIT amounts server-side (không trust frontend)
+        $grossAmount = (int) round((float) ($data['amount'] ?? 0));
+        $pitEnabled  = !empty($data['pit_withholding_enabled'])
+                       && in_array($data['payment_method'] ?? '', ['cash', 'bank']);
+        if ($pitEnabled && !empty($data['pit_rate'])) {
+            $data['pit_amount']          = (int) round($grossAmount * (float) $data['pit_rate'] / 100);
+            $data['net_payment_amount']  = $grossAmount - $data['pit_amount'];
+        } else {
+            $data['pit_withholding_enabled'] = false;
+            $data['pit_amount']              = 0;
+            $data['net_payment_amount']      = 0;
+        }
 
         // Chặn TK 152/156 ở TK Nợ (vật tư phải đi qua phiếu xuất kho)
         $debitAccount = $data['debit_account'] ?? '';
