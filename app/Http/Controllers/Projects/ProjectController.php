@@ -554,6 +554,9 @@ class ProjectController extends Controller
             'pit_rate'                => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
+        // Ensure vat_amount defaults to 0 (nullable in validation but NOT NULL in DB)
+        $data['vat_amount'] = (int) ($data['vat_amount'] ?? 0);
+
         // Compute PIT amounts server-side (không trust frontend)
         $grossAmount = (int) round((float) ($data['amount'] ?? 0));
         $pitEnabled  = !empty($data['pit_withholding_enabled'])

@@ -18,6 +18,7 @@ use App\Models\ProductSerial;
 use App\Models\Project;
 use App\Models\ProjectInventoryLot;
 use App\Models\ProjectWipEntry;
+use App\Models\StockExitItemLotAllocation;
 use App\Models\StockExit;
 use App\Models\Warehouse;
 use App\Services\AccountingService;
@@ -619,6 +620,7 @@ class StockExitController extends Controller
             $oldItemIds = $stockExit->items->pluck('id');
             ProductSerial::whereIn('stock_exit_item_id', $oldItemIds)
                 ->update(['stock_exit_item_id' => null]);
+            StockExitItemLotAllocation::whereIn('stock_exit_item_id', $oldItemIds)->delete();
 
             $stockExit->items()->delete();
 
@@ -724,6 +726,7 @@ class StockExitController extends Controller
             ProjectWipEntry::where('source_type', StockExit::class)
                 ->where('source_id', $stockExit->id)
                 ->delete();
+            StockExitItemLotAllocation::whereIn('stock_exit_item_id', $itemIds)->delete();
             $stockExit->items()->delete();
             $stockExit->delete();
         });

@@ -110,6 +110,7 @@ class ProductController extends Controller
             'inventory_account'    => ['nullable', 'string', 'exists:account_codes,code'],
         ]);
 
+        $data['item_type']  = $data['item_type'] ?? 'goods';
         $data['total_cost'] = $this->calcTotalCost($data);
 
         Product::create($data);
@@ -168,6 +169,7 @@ class ProductController extends Controller
             'inventory_account'    => ['nullable', 'string', 'exists:account_codes,code'],
         ]);
 
+        $data['item_type']  = $data['item_type'] ?? $product->item_type ?? 'goods';
         $data['total_cost'] = $this->calcTotalCost($data);
 
         $product->update($data);
