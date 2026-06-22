@@ -49,11 +49,23 @@ Các rule chi tiết nằm trong `.claude/rules/`. Không import toàn bộ rule
 | Module map, service map, FSM, migration prefix | `.claude/rules/phase-history.md` |
 | Trạng thái module đã làm/xong/gần đây | `.claude/rules/project-state.md` |
 
-Skills:
+**Skills** (activate qua Skill tool):
+
+- **`cook`**: Bắt buộc activate trước mọi feature implementation (`/cook <task> --fast` hoặc `--interactive`).
+- **`fix`**: Bắt buộc activate trước mọi bug fix / test failure / lỗi runtime.
+- **`code-review`** (scoped web_erp/): Chạy sau mỗi lần implement để review quality.
+- `planning`: Dùng khi cần design plan chi tiết trước khi code.
+- `research`: Nghiên cứu kỹ thuật, so sánh lựa chọn trước khi quyết định.
+- `debug`: Debug có hệ thống, phân tích root cause.
 - `.claude/skills/formulas.md`: công thức tạo module mới, generateCode, FSM, PDF, permission, filter.
 
-Agents:
-- `.claude/agents/researcher`: chỉ dùng khi cần so sánh lựa chọn kỹ thuật; kết thúc bằng `Recommendation`.
+**Agents**:
+
+- **`planner`**: Tạo implementation plan trong `plans/` trước khi bắt đầu feature phức tạp.
+- **`tester`**: Delegate chạy test và phân tích kết quả — không ignore failing tests.
+- **`code-reviewer`**: Review code sau implementation — bắt buộc trước khi đánh dấu task hoàn thành.
+- `docs-manager`: Cập nhật `docs/` sau khi thay đổi architecture, API, schema.
+- `researcher`: Chỉ dùng khi cần so sánh lựa chọn kỹ thuật; kết thúc bằng `Recommendation`.
 
 ---
 
@@ -79,13 +91,25 @@ Agents:
 
 ## 5. Coding workflow
 
-1. Xác định đúng module và files liên quan.
-2. Đọc rule phù hợp trong `.claude/rules/`.
-3. Tìm pattern hiện có trước khi viết code mới.
-4. Tóm tắt phát hiện và đề xuất kế hoạch ngắn.
-5. Sửa ít nhất có thể.
-6. Chạy test/lint/typecheck hoặc command liên quan.
-7. Báo cáo kết quả theo format ở cuối file.
+Nguyên tắc: **YAGNI · KISS · DRY** — file ≤ 200 lines, diff nhỏ nhất có thể.
+
+**Feature mới:**
+
+1. Activate `cook` skill trước khi bắt đầu (`/cook <task> --fast` hoặc `--interactive`).
+2. Dùng `/plan` hoặc `planner` agent tạo plan trong `plans/` nếu task phức tạp.
+3. Đọc rule phù hợp trong `.claude/rules/` và tìm pattern hiện có.
+4. Implement — sửa ít nhất có thể, không refactor ngoài phạm vi.
+5. Chạy test (`php artisan test`) hoặc delegate `tester` agent.
+6. Activate `code-review` skill sau khi implement xong.
+7. Nếu thay đổi architecture/schema/API, delegate `docs-manager` cập nhật `docs/`.
+8. Báo cáo theo format cuối file.
+
+**Bug fix:**
+
+1. Activate `fix` skill trước khi sửa bất kỳ lỗi nào.
+2. Đọc file liên quan, xác định root cause (không đoán).
+3. Sửa minimal — chạy test liên quan để xác nhận.
+4. Báo cáo theo format cuối file.
 
 ---
 
