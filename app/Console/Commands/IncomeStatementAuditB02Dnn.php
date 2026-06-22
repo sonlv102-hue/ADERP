@@ -53,7 +53,7 @@ class IncomeStatementAuditB02Dnn extends Command
         // A3: Hóa đơn bán hàng có JE 511 nhưng không có JE 632
         $invoicesWithRevNoCogs = DB::table('invoices as inv')
             ->whereNotIn('inv.status', ['draft', 'cancelled'])
-            ->whereBetween('inv.invoice_date', [$from, $to])
+            ->whereBetween('inv.issue_date', [$from, $to])
             ->whereExists(function ($q) {
                 $q->from('journal_entries as je')
                   ->join('journal_entry_lines as jel', 'jel.journal_entry_id', '=', 'je.id')
