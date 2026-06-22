@@ -69,7 +69,6 @@ class InvoiceController extends Controller
     {
         return Inertia::render('Accounting/Invoices/Form', [
             'nextCode'        => Invoice::generateCode(),
-            'customers'       => Customer::orderBy('name')->get(['id', 'name']),
             'orders'          => $this->ordersWithItems(),
             'contracts'       => Contract::orderByDesc('id')->get(['id', 'code', 'title', 'value', 'order_id']),
             'methods'         => collect(PaymentMethod::cases())->map(fn ($m) => ['value' => $m->value, 'label' => $m->label()]),
@@ -242,9 +241,10 @@ class InvoiceController extends Controller
 
     public function edit(Invoice $invoice): Response
     {
-        $invoice->load('items');
+        $invoice->load(['items', 'customer']);
         return Inertia::render('Accounting/Invoices/Form', [
             'invoice'         => array_merge($invoice->toArray(), [
+                'customer_name' => $invoice->customer?->name,
                 'items' => $invoice->items->map(fn ($i) => [
                     'description' => $i->description,
                     'quantity'    => (float) $i->quantity,
@@ -254,7 +254,6 @@ class InvoiceController extends Controller
                 ])->values()->all(),
             ]),
             'nextCode'        => $invoice->code,
-            'customers'       => Customer::orderBy('name')->get(['id', 'name']),
             'orders'          => $this->ordersWithItems(),
             'contracts'       => Contract::orderByDesc('id')->get(['id', 'code', 'title', 'value', 'order_id']),
             'methods'         => collect(PaymentMethod::cases())->map(fn ($m) => ['value' => $m->value, 'label' => $m->label()]),

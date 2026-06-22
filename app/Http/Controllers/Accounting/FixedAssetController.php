@@ -249,7 +249,6 @@ class FixedAssetController extends Controller
             'asset'           => $asset ? $this->assetDetail($asset) : null,
             'prefill'         => $prefill,
             'categories'      => FixedAssetCategory::orderBy('name')->get(),
-            'suppliers'       => Supplier::where('is_active', true)->orderBy('name')->get(['id', 'name', 'code']),
             'detailAccounts'  => $detailAccounts,
             'assetTypes'      => [
                 ['value' => 'tangible',      'label' => 'TSCĐ hữu hình'],

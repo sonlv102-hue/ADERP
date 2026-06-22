@@ -57,9 +57,8 @@ class ContractController extends Controller
     public function create(): Response
     {
         return Inertia::render('Sales/Contracts/Form', [
-            'nextCode'  => Contract::generateCode(),
-            'customers' => Customer::orderBy('name')->get(['id', 'code', 'name']),
-            'orders'    => Order::with('items')->orderByDesc('id')->get(['id', 'code', 'customer_id'])->map(fn ($o) => [
+            'nextCode' => Contract::generateCode(),
+            'orders'   => Order::with('items')->orderByDesc('id')->get(['id', 'code', 'customer_id'])->map(fn ($o) => [
                 'id'          => $o->id,
                 'code'        => $o->code,
                 'customer_id' => $o->customer_id,
@@ -137,20 +136,21 @@ class ContractController extends Controller
             'Không thể sửa hợp đồng đã hoàn thành hoặc chấm dứt.'
         );
 
+        $contract->loadMissing('customer');
         return Inertia::render('Sales/Contracts/Form', [
             'contract' => [
-                'id'          => $contract->id,
-                'code'        => $contract->code,
-                'customer_id' => $contract->customer_id,
-                'order_id'    => $contract->order_id,
-                'title'       => $contract->title,
-                'value'       => $contract->value,
-                'start_date'  => $contract->start_date?->format('Y-m-d'),
-                'end_date'    => $contract->end_date?->format('Y-m-d'),
-                'notes'       => $contract->notes,
+                'id'            => $contract->id,
+                'code'          => $contract->code,
+                'customer_id'   => $contract->customer_id,
+                'customer_name' => $contract->customer?->name,
+                'order_id'      => $contract->order_id,
+                'title'         => $contract->title,
+                'value'         => $contract->value,
+                'start_date'    => $contract->start_date?->format('Y-m-d'),
+                'end_date'      => $contract->end_date?->format('Y-m-d'),
+                'notes'         => $contract->notes,
             ],
-            'customers' => Customer::orderBy('name')->get(['id', 'code', 'name']),
-            'orders'    => Order::with('items')->orderByDesc('id')->get(['id', 'code', 'customer_id'])->map(fn ($o) => [
+            'orders' => Order::with('items')->orderByDesc('id')->get(['id', 'code', 'customer_id'])->map(fn ($o) => [
                 'id'          => $o->id,
                 'code'        => $o->code,
                 'customer_id' => $o->customer_id,

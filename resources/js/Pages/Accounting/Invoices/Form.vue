@@ -26,11 +26,14 @@
             <!-- Khách hàng -->
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Khách hàng <span class="text-red-500">*</span></label>
-              <select v-model="form.customer_id"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-                <option value="">-- Chọn khách hàng --</option>
-                <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.name }}</option>
-              </select>
+              <RemoteSearchSelect
+                v-model="form.customer_id"
+                :display-text="form.customer_name"
+                :search-url="route('search.customers')"
+                placeholder="Tìm theo tên, mã KH, MST..."
+                :has-error="!!form.errors.customer_id"
+                @change="(opt) => form.customer_name = opt ? opt.label : ''"
+              />
               <p v-if="form.errors.customer_id" class="text-red-500 text-xs mt-1">{{ form.errors.customer_id }}</p>
             </div>
 
@@ -207,11 +210,12 @@
 import { computed, ref, watch } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
+import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 
 const props = defineProps({
   invoice:         Object,
   nextCode:        String,
-  customers:       Array,
+  customers:       { type: Array, default: () => [] },
   orders:          Array,
   contracts:       Array,
   methods:         Array,
@@ -244,6 +248,7 @@ const initialItems = props.invoice?.items?.length
 const form = useForm({
   code:                 props.invoice?.code                 ?? props.nextCode,
   customer_id:          props.invoice?.customer_id          ?? '',
+  customer_name:        props.invoice?.customer_name        ?? '',
   order_id:             props.invoice?.order_id             ?? null,
   contract_id:          props.invoice?.contract_id          ?? null,
   issue_date:           props.invoice?.issue_date           ?? today,

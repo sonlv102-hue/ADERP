@@ -79,8 +79,7 @@ class SupplierAdvanceController extends Controller
     public function create()
     {
         return Inertia::render('Purchasing/SupplierAdvances/Form', [
-            'suppliers' => Supplier::orderBy('name')->get(['id', 'name', 'code']),
-            'funds'     => Fund::where('is_active', true)->orderBy('name')->get(['id', 'name', 'type']),
+            'funds' => Fund::where('is_active', true)->orderBy('name')->get(['id', 'name', 'type']),
         ]);
     }
 
@@ -184,9 +183,8 @@ class SupplierAdvanceController extends Controller
     public function edit(SupplierOpeningAdvance $supplierAdvance)
     {
         return Inertia::render('Purchasing/SupplierAdvances/Form', [
-            'advance'   => $supplierAdvance->load('supplier'),
-            'suppliers' => Supplier::orderBy('name')->get(['id', 'name', 'code']),
-            'funds'     => Fund::where('is_active', true)->orderBy('name')->get(['id', 'name', 'type']),
+            'advance' => $supplierAdvance->load('supplier'),
+            'funds'   => Fund::where('is_active', true)->orderBy('name')->get(['id', 'name', 'type']),
         ]);
     }
 

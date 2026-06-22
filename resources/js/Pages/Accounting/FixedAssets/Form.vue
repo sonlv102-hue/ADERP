@@ -70,10 +70,13 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label class="erp-label">Nhà cung cấp</label>
-              <select v-model="form.supplier_id" class="erp-input w-full">
-                <option value="">— Chọn NCC —</option>
-                <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.code }} – {{ s.name }}</option>
-              </select>
+              <RemoteSearchSelect
+                v-model="form.supplier_id"
+                :display-text="form.supplier_name"
+                :search-url="route('search.suppliers')"
+                placeholder="Tìm nhà cung cấp..."
+                @change="(opt) => form.supplier_name = opt ? opt.label : ''"
+              />
             </div>
             <div>
               <label class="erp-label">Ngày hóa đơn</label>
@@ -247,12 +250,13 @@
 import { ref, computed } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
+import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 
 const props = defineProps({
   asset: Object,
   prefill: Object,
   categories: Array,
-  suppliers: Array,
+  suppliers: { type: Array, default: () => [] },
   detailAccounts: Array,
   assetTypes: Array,
   sourceTypes: Array,
@@ -266,7 +270,8 @@ const form = ref({
   asset_type: props.asset?.asset_type || 'tangible',
   source_type: props.asset?.source_type || p.source_type || 'purchased',
   serial_number: props.asset?.serial_number || '',
-  supplier_id: props.asset?.supplier_id || p.supplier_id || '',
+  supplier_id:   props.asset?.supplier_id   || p.supplier_id   || '',
+  supplier_name: props.asset?.supplier_name || p.supplier_name || '',
   purchase_invoice_id: props.asset?.purchase_invoice_id || p.purchase_invoice_id || '',
   invoice_date: props.asset?.invoice_date || p.invoice_date || '',
   acquisition_date: props.asset?.acquisition_date || p.acquisition_date || '',

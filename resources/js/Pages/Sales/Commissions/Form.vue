@@ -87,11 +87,13 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label class="block text-xs text-gray-500 mb-1">Khách hàng</label>
-              <select v-model="form.customer_id"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-                <option :value="null">-- Không --</option>
-                <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.name }}</option>
-              </select>
+              <RemoteSearchSelect
+                v-model="form.customer_id"
+                :display-text="form.customer_name"
+                :search-url="route('search.customers')"
+                placeholder="Tìm khách hàng..."
+                @change="(opt) => form.customer_name = opt ? opt.label : ''"
+              />
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1">Đơn hàng</label>
@@ -137,12 +139,13 @@
 <script setup>
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
+import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 
 const props = defineProps({
   commission: Object,
   nextCode:   String,
   types:      Array,
-  customers:  Array,
+  customers:  { type: Array, default: () => [] },
   orders:     Array,
   projects:   Array,
 });
@@ -151,6 +154,7 @@ const form = useForm({
   code:           props.commission?.code           ?? props.nextCode,
   type:           props.commission?.type           ?? '',
   customer_id:    props.commission?.customer_id    ?? null,
+  customer_name:  props.commission?.customer?.name ?? '',
   order_id:       props.commission?.order_id       ?? null,
   project_id:     props.commission?.project_id     ?? null,
   recipient_name: props.commission?.recipient_name ?? '',

@@ -53,14 +53,15 @@
           <label class="block text-sm font-medium text-gray-700 mb-1.5">
             Nhà cung cấp <span class="text-red-500">*</span>
           </label>
-          <select v-model="form.supplier_id"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-            :disabled="isEdit && hasAllocations">
-            <option value="">-- Chọn nhà cung cấp --</option>
-            <option v-for="s in suppliers" :key="s.id" :value="s.id">
-              [{{ s.code }}] {{ s.name }}
-            </option>
-          </select>
+          <RemoteSearchSelect
+            v-model="form.supplier_id"
+            :display-text="form.supplier_name"
+            :search-url="route('search.suppliers')"
+            placeholder="Tìm theo tên, mã NCC, MST..."
+            :disabled="isEdit && hasAllocations"
+            :has-error="!!form.errors.supplier_id"
+            @change="(opt) => form.supplier_name = opt ? opt.label : ''"
+          />
           <p v-if="errors.supplier_id" class="mt-1 text-xs text-red-600">{{ errors.supplier_id }}</p>
         </div>
 
@@ -186,10 +187,11 @@
 import { computed } from 'vue'
 import { Link, useForm } from '@inertiajs/vue3'
 import AppLayout from '@/Components/Layout/AppLayout.vue'
+import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue'
 
 const props = defineProps({
   advance:   Object,
-  suppliers: Array,
+  suppliers: { type: Array, default: () => [] },
   funds:     { type: Array, default: () => [] },
 })
 
@@ -199,6 +201,7 @@ const hasAllocations = computed(() => (props.advance?.active_allocations_count ?
 const form = useForm({
   advance_type:          props.advance?.advance_type ?? 'opening_balance',
   supplier_id:           props.advance?.supplier_id ?? '',
+  supplier_name:         props.advance?.supplier?.name ?? '',
   fund_id:               '',
   payment_method:        'bank_transfer',
   fiscal_year:           props.advance?.fiscal_year ?? new Date().getFullYear(),

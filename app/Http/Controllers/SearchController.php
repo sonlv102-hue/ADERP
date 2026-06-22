@@ -27,53 +27,69 @@ class SearchController extends Controller
 
     public function suppliers(Request $request): JsonResponse
     {
-        $q = $this->q($request);
+        $q     = $this->q($request);
+        $limit = min((int) $request->input('limit', 20), 50);
+
         $items = Supplier::query()
             ->when($q, fn ($b) => $b->where(fn ($b2) =>
                 $b2->whereRaw('LOWER(name) LIKE ?', ["%{$q}%"])
                    ->orWhereRaw('LOWER(code) LIKE ?', ["%{$q}%"])
                    ->orWhereRaw('LOWER(COALESCE(tax_code, \'\')) LIKE ?', ["%{$q}%"])
+                   ->orWhereRaw('LOWER(COALESCE(phone, \'\')) LIKE ?', ["%{$q}%"])
+                   ->orWhereRaw('LOWER(COALESCE(email, \'\')) LIKE ?', ["%{$q}%"])
             ))
             ->where('is_active', true)
             ->orderBy('name')
-            ->limit(30)
-            ->get(['id', 'code', 'name', 'phone'])
+            ->limit($limit)
+            ->get(['id', 'code', 'name', 'tax_code', 'phone', 'email'])
             ->map(fn ($s) => [
-                'value' => $s->id,
-                'label' => $s->name,
-                'code'  => $s->code,
-                'meta'  => $s->phone,
+                'value'    => $s->id,
+                'label'    => $s->name,
+                'code'     => $s->code,
+                'meta'     => collect([$s->tax_code, $s->phone])->filter()->implode(' · '),
+                'tax_code' => $s->tax_code,
+                'phone'    => $s->phone,
+                'email'    => $s->email,
             ]);
         return response()->json(['data' => $items]);
     }
 
     public function customers(Request $request): JsonResponse
     {
-        $q = $this->q($request);
+        $q     = $this->q($request);
+        $limit = min((int) $request->input('limit', 20), 50);
+
         $items = Customer::query()
             ->when($q, fn ($b) => $b->where(fn ($b2) =>
                 $b2->whereRaw('LOWER(name) LIKE ?', ["%{$q}%"])
                    ->orWhereRaw('LOWER(code) LIKE ?', ["%{$q}%"])
                    ->orWhereRaw('LOWER(COALESCE(tax_code, \'\')) LIKE ?', ["%{$q}%"])
                    ->orWhereRaw('LOWER(COALESCE(phone, \'\')) LIKE ?', ["%{$q}%"])
+                   ->orWhereRaw('LOWER(COALESCE(email, \'\')) LIKE ?', ["%{$q}%"])
             ))
             ->where('is_active', true)
             ->orderBy('name')
-            ->limit(30)
-            ->get(['id', 'code', 'name', 'phone', 'is_fdi'])
+            ->limit($limit)
+            ->get(['id', 'code', 'name', 'tax_code', 'phone', 'email', 'address', 'is_fdi'])
             ->map(fn ($c) => [
-                'value'  => $c->id,
-                'label'  => $c->name,
-                'code'   => $c->code,
-                'meta'   => $c->phone,
-                'is_fdi' => (bool) $c->is_fdi,
+                'value'    => $c->id,
+                'label'    => $c->name,
+                'code'     => $c->code,
+                'meta'     => collect([$c->tax_code, $c->phone])->filter()->implode(' · '),
+                'tax_code' => $c->tax_code,
+                'phone'    => $c->phone,
+                'email'    => $c->email,
+                'address'  => $c->address,
+                'is_fdi'   => (bool) $c->is_fdi,
             ]);
         return response()->json(['data' => $items]);
     }
 
     public function products(Request $request): JsonResponse
     {
-        $q = $this->q($request);
+        $q     = $this->q($request);
+        $limit = min((int) $request->input('limit', 20), 50);
+
         $items = Product::query()
             ->when($q, fn ($b) => $b->where(fn ($b2) =>
                 $b2->whereRaw('LOWER(name) LIKE ?', ["%{$q}%"])
@@ -81,17 +97,20 @@ class SearchController extends Controller
             ))
             ->where('is_active', true)
             ->orderBy('name')
-            ->limit(30)
-            ->get(['id', 'code', 'name', 'unit', 'cost_price', 'sell_price', 'vat_percent'])
+            ->limit($limit)
+            ->get(['id', 'code', 'name', 'unit', 'cost_price', 'sell_price', 'vat_percent',
+                   'revenue_account_code', 'inventory_account'])
             ->map(fn ($p) => [
-                'value'      => $p->id,
-                'label'      => $p->name,
-                'code'       => $p->code,
-                'meta'       => $p->unit,
-                'cost_price' => (float) $p->cost_price,
-                'sell_price' => (float) $p->sell_price,
-                'vat_percent'=> (float) ($p->vat_percent ?? 0),
-                'unit'       => $p->unit,
+                'value'                  => $p->id,
+                'label'                  => $p->name,
+                'code'                   => $p->code,
+                'meta'                   => $p->unit,
+                'cost_price'             => (float) $p->cost_price,
+                'sell_price'             => (float) $p->sell_price,
+                'vat_percent'            => (float) ($p->vat_percent ?? 0),
+                'unit'                   => $p->unit,
+                'revenue_account_code'   => $p->revenue_account_code,
+                'inventory_account'      => $p->inventory_account,
             ]);
         return response()->json(['data' => $items]);
     }

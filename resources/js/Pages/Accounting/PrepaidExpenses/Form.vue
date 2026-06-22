@@ -21,11 +21,13 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Nhà cung cấp</label>
-            <select v-model="form.supplier_id"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-              <option :value="null">— Không chọn —</option>
-              <option v-for="s in suppliers" :key="s.id" :value="s.id">{{ s.name }}</option>
-            </select>
+            <RemoteSearchSelect
+              v-model="form.supplier_id"
+              :display-text="form.supplier_name"
+              :search-url="route('search.suppliers')"
+              placeholder="Tìm nhà cung cấp..."
+              @change="(opt) => form.supplier_name = opt ? opt.label : ''"
+            />
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">TK chi phí trả trước *</label>
@@ -101,9 +103,10 @@
 import { useForm, Link } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { useCurrency } from '@/composables/useCurrency';
+import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 
 const props = defineProps({
-  suppliers:      Array,
+  suppliers:      { type: Array, default: () => [] },
   accountOptions: Array,
   expenseOptions: Array,
   creditOptions:  Array,
@@ -115,6 +118,7 @@ const today = new Date().toISOString().slice(0, 10);
 const form = useForm({
   description:     '',
   supplier_id:     null,
+  supplier_name:   '',
   account_code:    '242',
   expense_account: '642',
   credit_account:  '331',

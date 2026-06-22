@@ -51,13 +51,14 @@
           <label class="block text-sm font-medium text-gray-700 mb-1.5">
             Khách hàng <span class="text-red-500">*</span>
           </label>
-          <select v-model="form.customer_id"
-            class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-            <option value="">-- Chọn khách hàng --</option>
-            <option v-for="c in customers" :key="c.id" :value="c.id">
-              [{{ c.code }}] {{ c.name }}
-            </option>
-          </select>
+          <RemoteSearchSelect
+            v-model="form.customer_id"
+            :display-text="form.customer_name"
+            :search-url="route('search.customers')"
+            placeholder="Tìm theo tên, mã KH, MST..."
+            :has-error="!!form.errors.customer_id"
+            @change="(opt) => form.customer_name = opt ? opt.label : ''"
+          />
           <p v-if="errors.customer_id" class="mt-1 text-xs text-red-600">{{ errors.customer_id }}</p>
         </div>
 
@@ -155,15 +156,17 @@
 import { computed } from 'vue'
 import { Link, useForm } from '@inertiajs/vue3'
 import AppLayout from '@/Components/Layout/AppLayout.vue'
+import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue'
 
 const props = defineProps({
-  customers: Array,
+  customers: { type: Array, default: () => [] },
   funds:     { type: Array, default: () => [] },
 })
 
 const form = useForm({
   advance_type:   'opening_balance',
   customer_id:    '',
+  customer_name:  '',
   fund_id:        '',
   payment_method: 'bank_transfer',
   fiscal_year:    new Date().getFullYear(),

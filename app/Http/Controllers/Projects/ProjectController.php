@@ -70,7 +70,6 @@ class ProjectController extends Controller
     {
         return Inertia::render('Projects/Form', [
             'nextCode'  => Project::generateCode(),
-            'customers' => Customer::orderBy('name')->get(['id', 'name']),
             'contracts' => Contract::orderByDesc('id')->get(['id', 'code', 'title']),
             'users'     => User::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'statuses'  => collect(ProjectStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
@@ -410,10 +409,10 @@ class ProjectController extends Controller
 
     public function edit(Project $project): Response
     {
+        $project->loadMissing('customer');
         return Inertia::render('Projects/Form', [
             'project'   => $project,
             'nextCode'  => $project->code,
-            'customers' => Customer::orderBy('name')->get(['id', 'name']),
             'contracts' => Contract::orderByDesc('id')->get(['id', 'code', 'title']),
             'users'     => User::where('is_active', true)->orderBy('name')->get(['id', 'name']),
             'statuses'  => collect(ProjectStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),

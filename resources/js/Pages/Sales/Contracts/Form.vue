@@ -23,12 +23,14 @@
 
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Khách hàng <span class="text-red-500">*</span></label>
-              <select v-model="form.customer_id"
-                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
-                :class="{ 'border-red-500': form.errors.customer_id }">
-                <option value="">-- Chọn khách hàng --</option>
-                <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.code }} - {{ c.name }}</option>
-              </select>
+              <RemoteSearchSelect
+                v-model="form.customer_id"
+                :display-text="form.customer_name"
+                :search-url="route('search.customers')"
+                placeholder="Tìm theo tên, mã KH, MST..."
+                :has-error="!!form.errors.customer_id"
+                @change="(opt) => form.customer_name = opt ? opt.label : ''"
+              />
               <p v-if="form.errors.customer_id" class="mt-1 text-xs text-red-600">{{ form.errors.customer_id }}</p>
             </div>
 
@@ -99,11 +101,12 @@
 import { computed, watch } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
+import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 
 const props = defineProps({
   contract: Object,
   nextCode: String,
-  customers: Array,
+  customers: { type: Array, default: () => [] },
   orders: Array,
 });
 
@@ -111,7 +114,8 @@ const isEdit = !!props.contract;
 
 const form = useForm({
   code:        props.contract?.code ?? props.nextCode ?? '',
-  customer_id: props.contract?.customer_id ?? '',
+  customer_id:   props.contract?.customer_id    ?? '',
+  customer_name: props.contract?.customer_name ?? props.contract?.customer?.name ?? '',
   order_id:    props.contract?.order_id ?? null,
   title:       props.contract?.title ?? '',
   value:       props.contract?.value ?? 0,

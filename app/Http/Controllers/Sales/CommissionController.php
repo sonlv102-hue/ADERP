@@ -44,11 +44,10 @@ class CommissionController extends Controller
     public function create(): Response
     {
         return Inertia::render('Sales/Commissions/Form', [
-            'nextCode'  => Commission::generateCode(),
-            'types'     => collect(CommissionType::cases())->map(fn ($t) => ['value' => $t->value, 'label' => $t->label()]),
-            'customers' => Customer::orderBy('name')->get(['id', 'name']),
-            'orders'    => Order::orderByDesc('id')->get(['id', 'code']),
-            'projects'  => Project::orderByDesc('id')->get(['id', 'code', 'name']),
+            'nextCode' => Commission::generateCode(),
+            'types'    => collect(CommissionType::cases())->map(fn ($t) => ['value' => $t->value, 'label' => $t->label()]),
+            'orders'   => Order::orderByDesc('id')->get(['id', 'code']),
+            'projects' => Project::orderByDesc('id')->get(['id', 'code', 'name']),
         ]);
     }
 
@@ -92,10 +91,10 @@ class CommissionController extends Controller
     {
         abort_unless($commission->status === CommissionStatus::Draft, 403, 'Chỉ có thể sửa khi ở trạng thái Nháp.');
 
+        $commission->loadMissing('customer');
         return Inertia::render('Sales/Commissions/Form', [
             'commission' => $commission,
             'types'      => collect(CommissionType::cases())->map(fn ($t) => ['value' => $t->value, 'label' => $t->label()]),
-            'customers'  => Customer::orderBy('name')->get(['id', 'name']),
             'orders'     => Order::orderByDesc('id')->get(['id', 'code']),
             'projects'   => Project::orderByDesc('id')->get(['id', 'code', 'name']),
         ]);

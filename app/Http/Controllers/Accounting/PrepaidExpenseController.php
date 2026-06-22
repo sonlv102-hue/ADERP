@@ -48,7 +48,6 @@ class PrepaidExpenseController extends Controller
     public function create(): Response
     {
         return Inertia::render('Accounting/PrepaidExpenses/Form', [
-            'suppliers'      => Supplier::orderBy('name')->get(['id', 'name']),
             'accountOptions' => [
                 ['code' => '142', 'label' => '142 — Chi phí trả trước ngắn hạn'],
                 ['code' => '242', 'label' => '242 — Chi phí trả trước dài hạn'],

@@ -30,10 +30,14 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Khách hàng <span class="text-red-500">*</span></label>
-            <select v-model="form.customer_id" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
-              <option value="">-- Chọn khách hàng --</option>
-              <option v-for="c in customers" :key="c.id" :value="c.id">{{ c.name }}</option>
-            </select>
+            <RemoteSearchSelect
+              v-model="form.customer_id"
+              :display-text="form.customer_name"
+              :search-url="route('search.customers')"
+              placeholder="Tìm theo tên, mã KH, MST..."
+              :has-error="!!form.errors.customer_id"
+              @change="(opt) => form.customer_name = opt ? opt.label : ''"
+            />
             <p v-if="form.errors.customer_id" class="text-red-500 text-xs mt-1">{{ form.errors.customer_id }}</p>
           </div>
           <div>
@@ -102,11 +106,12 @@
 import { computed } from 'vue';
 import { useForm, Link } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
+import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 
 const props = defineProps({
   project: Object,
   nextCode: String,
-  customers: Array,
+  customers: { type: Array, default: () => [] },
   contracts: Array,
   users: Array,
   statuses: Array,
@@ -117,7 +122,8 @@ const isEdit = computed(() => !!props.project?.id);
 const form = useForm({
   code:              props.project?.code ?? props.nextCode,
   name:              props.project?.name ?? '',
-  customer_id:       props.project?.customer_id ?? '',
+  customer_id:       props.project?.customer_id    ?? '',
+  customer_name:     props.project?.customer?.name ?? '',
   contract_id:       props.project?.contract_id ?? null,
   location:          props.project?.location ?? '',
   manager_id:        props.project?.manager_id ?? null,

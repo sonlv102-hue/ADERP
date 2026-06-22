@@ -56,9 +56,8 @@ class PurchaseContractController extends Controller
     public function create(): Response
     {
         return Inertia::render('Purchasing/PurchaseContracts/Form', [
-            'nextCode'  => PurchaseContract::generateCode(),
-            'suppliers' => Supplier::orderBy('name')->get(['id', 'code', 'name']),
-            'orders'    => PurchaseOrder::with('supplier')
+            'nextCode' => PurchaseContract::generateCode(),
+            'orders'   => PurchaseOrder::with('supplier')
                 ->orderByDesc('id')
                 ->get(['id', 'code', 'supplier_id'])
                 ->map(fn ($o) => [
@@ -158,11 +157,13 @@ class PurchaseContractController extends Controller
     {
         abort_if($purchaseContract->status !== PurchaseContractStatus::Draft, 403, 'Chỉ sửa được hợp đồng ở trạng thái nháp.');
 
+        $purchaseContract->loadMissing('supplier');
         return Inertia::render('Purchasing/PurchaseContracts/Form', [
-            'contract'  => [
+            'contract' => [
                 'id'                => $purchaseContract->id,
                 'code'              => $purchaseContract->code,
                 'supplier_id'       => $purchaseContract->supplier_id,
+                'supplier_name'     => $purchaseContract->supplier?->name,
                 'purchase_order_id' => $purchaseContract->purchase_order_id,
                 'title'             => $purchaseContract->title,
                 'value'             => $purchaseContract->value,
@@ -170,8 +171,7 @@ class PurchaseContractController extends Controller
                 'end_date'          => $purchaseContract->end_date?->format('Y-m-d'),
                 'notes'             => $purchaseContract->notes,
             ],
-            'suppliers' => Supplier::orderBy('name')->get(['id', 'code', 'name']),
-            'orders'    => PurchaseOrder::orderByDesc('id')->get(['id', 'code', 'supplier_id'])
+            'orders' => PurchaseOrder::orderByDesc('id')->get(['id', 'code', 'supplier_id'])
                 ->map(fn ($o) => ['id' => $o->id, 'code' => $o->code, 'supplier_id' => $o->supplier_id, 'total' => 0]),
         ]);
     }

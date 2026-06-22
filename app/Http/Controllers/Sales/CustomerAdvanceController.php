@@ -79,8 +79,7 @@ class CustomerAdvanceController extends Controller
         $this->authorize('accounting.manage');
 
         return Inertia::render('Sales/CustomerAdvances/Form', [
-            'customers' => Customer::orderBy('name')->get(['id', 'name', 'code']),
-            'funds'     => \App\Models\Fund::where('is_active', true)->orderBy('name')->get(['id', 'name', 'type']),
+            'funds' => \App\Models\Fund::where('is_active', true)->orderBy('name')->get(['id', 'name', 'type']),
         ]);
     }
 
