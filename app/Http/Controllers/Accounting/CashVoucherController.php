@@ -11,6 +11,7 @@ use App\Models\Customer;
 use App\Models\Employee;
 use App\Models\Fund;
 use App\Models\Supplier;
+use Illuminate\Support\Collection;
 use App\Services\CashVoucherService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -127,8 +128,11 @@ class CashVoucherController extends Controller
                 ->with('error', 'Chỉ sửa được phiếu ở trạng thái nháp.');
         }
 
-        $cashVoucher->load('journalLines');
+        $cashVoucher->load(['journalLines', 'supplier', 'customer', 'employee']);
         $type = $cashVoucher->type;
+
+        // Batch-resolve partner names for manual JE lines
+        $linePartners = $this->resolveLinePartnerNames($cashVoucher->journalLines);
 
         return Inertia::render('Accounting/CashVouchers/Form', array_merge(
             $this->formProps($type),
@@ -143,20 +147,24 @@ class CashVoucherController extends Controller
                     'counterparty'    => $cashVoucher->counterparty,
                     'partner_type'    => $cashVoucher->partner_type,
                     'supplier_id'     => $cashVoucher->supplier_id,
+                    'supplier_name'   => $cashVoucher->supplier?->name,
                     'customer_id'     => $cashVoucher->customer_id,
+                    'customer_name'   => $cashVoucher->customer?->name,
                     'employee_id'     => $cashVoucher->employee_id,
+                    'employee_name'   => $cashVoucher->employee?->name,
                     'description'     => $cashVoucher->description,
                     'business_type'   => $cashVoucher->business_type,
                     'journal_mode'    => $cashVoucher->journal_mode,
                     'edited_by_user'  => $cashVoucher->edited_by_user,
                     'edit_reason'     => $cashVoucher->edit_reason,
                     'lines'           => $cashVoucher->journalLines->map(fn ($l) => [
-                        'debit_account'  => $l->debit_account,
-                        'credit_account' => $l->credit_account,
-                        'amount'         => (float) $l->amount,
-                        'description'    => $l->description,
-                        'partner_type'   => $l->partner_type,
-                        'partner_id'     => $l->partner_id,
+                        'debit_account'   => $l->debit_account,
+                        'credit_account'  => $l->credit_account,
+                        'amount'          => (float) $l->amount,
+                        'description'     => $l->description,
+                        'partner_type'    => $l->partner_type,
+                        'partner_id'      => $l->partner_id,
+                        'partner_display' => $linePartners[$l->partner_type][$l->partner_id] ?? null,
                     ])->values()->toArray(),
                 ],
             ]
@@ -223,6 +231,27 @@ class CashVoucherController extends Controller
 
     // ─── Helpers ─────────────────────────────────────────────────────────────
 
+    /** Batch-load partner names for JE lines to avoid N+1 in edit mode. */
+    private function resolveLinePartnerNames(Collection $lines): array
+    {
+        $supplierIds = $lines->where('partner_type', 'supplier')->pluck('partner_id')->filter()->unique();
+        $customerIds = $lines->where('partner_type', 'customer')->pluck('partner_id')->filter()->unique();
+        $employeeIds = $lines->where('partner_type', 'employee')->pluck('partner_id')->filter()->unique();
+
+        $suppliers = $supplierIds->isNotEmpty()
+            ? Supplier::whereIn('id', $supplierIds)->pluck('name', 'id') : collect();
+        $customers = $customerIds->isNotEmpty()
+            ? Customer::whereIn('id', $customerIds)->pluck('name', 'id') : collect();
+        $employees = $employeeIds->isNotEmpty()
+            ? Employee::whereIn('id', $employeeIds)->pluck('name', 'id') : collect();
+
+        return [
+            'supplier' => $suppliers->toArray(),
+            'customer' => $customers->toArray(),
+            'employee' => $employees->toArray(),
+        ];
+    }
+
     private function formProps(CashVoucherType $type): array
     {
         $businessTypes = array_map(fn ($bt) => [
@@ -241,11 +270,6 @@ class CashVoucherController extends Controller
             'nextCode'      => CashVoucher::generateCode($type),
             'funds'         => Fund::where('is_active', true)->orderBy('name')->get(['id', 'name', 'type']),
             'defaultType'   => $type->value,
-            'suppliers'     => Supplier::where('is_active', true)->orderBy('name')
-                ->get(['id', 'code', 'name', 'payable_account_code']),
-            'customers'     => Customer::where('is_active', true)->orderBy('name')
-                ->get(['id', 'code', 'name', 'receivable_account_code']),
-            'employees'     => Employee::orderBy('name')->get(['id', 'code', 'name']),
             'businessTypes' => $businessTypes,
             'accountCodes'  => $accountCodes,
         ];

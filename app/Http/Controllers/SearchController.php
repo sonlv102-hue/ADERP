@@ -41,15 +41,16 @@ class SearchController extends Controller
             ->where('is_active', true)
             ->orderBy('name')
             ->limit($limit)
-            ->get(['id', 'code', 'name', 'tax_code', 'phone', 'email'])
+            ->get(['id', 'code', 'name', 'tax_code', 'phone', 'email', 'payable_account_code'])
             ->map(fn ($s) => [
-                'value'    => $s->id,
-                'label'    => $s->name,
-                'code'     => $s->code,
-                'meta'     => collect([$s->tax_code, $s->phone])->filter()->implode(' · '),
-                'tax_code' => $s->tax_code,
-                'phone'    => $s->phone,
-                'email'    => $s->email,
+                'value'                => $s->id,
+                'label'                => $s->name,
+                'code'                 => $s->code,
+                'meta'                 => collect([$s->tax_code, $s->phone])->filter()->implode(' · '),
+                'tax_code'             => $s->tax_code,
+                'phone'                => $s->phone,
+                'email'                => $s->email,
+                'payable_account_code' => $s->payable_account_code ?? '3311',
             ]);
         return response()->json(['data' => $items]);
     }
@@ -70,17 +71,18 @@ class SearchController extends Controller
             ->where('is_active', true)
             ->orderBy('name')
             ->limit($limit)
-            ->get(['id', 'code', 'name', 'tax_code', 'phone', 'email', 'address', 'is_fdi'])
+            ->get(['id', 'code', 'name', 'tax_code', 'phone', 'email', 'address', 'is_fdi', 'receivable_account_code'])
             ->map(fn ($c) => [
-                'value'    => $c->id,
-                'label'    => $c->name,
-                'code'     => $c->code,
-                'meta'     => collect([$c->tax_code, $c->phone])->filter()->implode(' · '),
-                'tax_code' => $c->tax_code,
-                'phone'    => $c->phone,
-                'email'    => $c->email,
-                'address'  => $c->address,
-                'is_fdi'   => (bool) $c->is_fdi,
+                'value'                    => $c->id,
+                'label'                    => $c->name,
+                'code'                     => $c->code,
+                'meta'                     => collect([$c->tax_code, $c->phone])->filter()->implode(' · '),
+                'tax_code'                 => $c->tax_code,
+                'phone'                    => $c->phone,
+                'email'                    => $c->email,
+                'address'                  => $c->address,
+                'is_fdi'                   => (bool) $c->is_fdi,
+                'receivable_account_code'  => $c->receivable_account_code ?? '1311',
             ]);
         return response()->json(['data' => $items]);
     }
@@ -90,25 +92,27 @@ class SearchController extends Controller
         $q     = $this->q($request);
         $limit = min((int) $request->input('limit', 20), 50);
 
-        $items = Product::query()
+        $items = Product::with('category')
             ->when($q, fn ($b) => $b->where(fn ($b2) =>
-                $b2->whereRaw('LOWER(name) LIKE ?', ["%{$q}%"])
-                   ->orWhereRaw('LOWER(code) LIKE ?', ["%{$q}%"])
+                $b2->whereRaw('LOWER(products.name) LIKE ?', ["%{$q}%"])
+                   ->orWhereRaw('LOWER(products.code) LIKE ?', ["%{$q}%"])
+                   ->orWhereHas('category', fn ($c) => $c->whereRaw('LOWER(name) LIKE ?', ["%{$q}%"]))
             ))
             ->where('is_active', true)
             ->orderBy('name')
             ->limit($limit)
             ->get(['id', 'code', 'name', 'unit', 'cost_price', 'sell_price', 'vat_percent',
-                   'revenue_account_code', 'inventory_account'])
+                   'revenue_account_code', 'inventory_account', 'category_id'])
             ->map(fn ($p) => [
                 'value'                  => $p->id,
                 'label'                  => $p->name,
                 'code'                   => $p->code,
-                'meta'                   => $p->unit,
+                'meta'                   => collect([$p->unit, $p->category?->name])->filter()->implode(' · '),
                 'cost_price'             => (float) $p->cost_price,
                 'sell_price'             => (float) $p->sell_price,
                 'vat_percent'            => (float) ($p->vat_percent ?? 0),
                 'unit'                   => $p->unit,
+                'category_name'          => $p->category?->name,
                 'revenue_account_code'   => $p->revenue_account_code,
                 'inventory_account'      => $p->inventory_account,
             ]);

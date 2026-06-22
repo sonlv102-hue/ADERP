@@ -38,13 +38,12 @@
 
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">Quỹ <span class="text-red-500">*</span></label>
-              <SearchableSelect
-                v-model="form.fund_id"
-                :options="fundOptions"
-                placeholder="-- Chọn quỹ --"
-                :has-error="!!form.errors.fund_id"
-                @change="onFundChange"
-              />
+              <select v-model="form.fund_id" @change="onFundChange"
+                class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 outline-none"
+                :class="{ 'border-red-500': form.errors.fund_id }">
+                <option value="">-- Chọn quỹ --</option>
+                <option v-for="f in funds" :key="f.id" :value="f.id">{{ f.name }} ({{ f.type === 'bank' ? 'Ngân hàng' : 'Tiền mặt' }})</option>
+              </select>
               <p v-if="form.errors.fund_id" class="mt-1 text-xs text-red-600">{{ form.errors.fund_id }}</p>
             </div>
 
@@ -98,10 +97,11 @@
             <!-- Nhà cung cấp -->
             <div v-if="form.partner_type === 'supplier'" class="sm:col-span-2">
               <label class="block text-sm font-medium text-gray-700 mb-1">Nhà cung cấp</label>
-              <SearchableSelect
+              <RemoteSearchSelect
                 v-model="form.supplier_id"
-                :options="supplierOptions"
-                placeholder="-- Tìm nhà cung cấp --"
+                :search-url="route('search.suppliers')"
+                :display-text="supplierDisplay"
+                placeholder="Tìm theo tên, mã NCC, MST, SĐT..."
                 @change="onSupplierChange"
               />
             </div>
@@ -109,10 +109,11 @@
             <!-- Khách hàng -->
             <div v-if="form.partner_type === 'customer'" class="sm:col-span-2">
               <label class="block text-sm font-medium text-gray-700 mb-1">Khách hàng</label>
-              <SearchableSelect
+              <RemoteSearchSelect
                 v-model="form.customer_id"
-                :options="customerOptions"
-                placeholder="-- Tìm khách hàng --"
+                :search-url="route('search.customers')"
+                :display-text="customerDisplay"
+                placeholder="Tìm theo tên, mã KH, MST, SĐT..."
                 @change="onCustomerChange"
               />
             </div>
@@ -120,10 +121,11 @@
             <!-- Nhân viên -->
             <div v-if="form.partner_type === 'employee'" class="sm:col-span-2">
               <label class="block text-sm font-medium text-gray-700 mb-1">Nhân viên</label>
-              <SearchableSelect
+              <RemoteSearchSelect
                 v-model="form.employee_id"
-                :options="employeeOptions"
-                placeholder="-- Chọn nhân viên --"
+                :search-url="route('search.employees')"
+                :display-text="employeeDisplay"
+                placeholder="Tìm theo tên hoặc mã nhân viên..."
                 @change="onEmployeeChange"
               />
             </div>
@@ -200,20 +202,22 @@
                   <td class="py-2 pr-3">
                     <template v-if="form.journal_mode === 'manual'">
                       <div class="flex gap-1">
-                        <select v-model="line.partner_type" @change="line.partner_id = null"
-                          class="px-1 py-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-primary-500 outline-none">
+                        <select v-model="line.partner_type" @change="line.partner_id = null; line._partnerDisplay = ''"
+                          class="px-1 py-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-primary-500 outline-none flex-shrink-0">
                           <option :value="null">—</option>
                           <option value="supplier">NCC</option>
                           <option value="customer">KH</option>
                           <option value="employee">NV</option>
                         </select>
-                        <select v-if="line.partner_type" v-model="line.partner_id"
-                          class="flex-1 px-1 py-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-primary-500 outline-none min-w-0">
-                          <option :value="null">--</option>
-                          <option v-for="p in partnerListFor(line.partner_type)" :key="p.id" :value="p.id">
-                            {{ p.name }}
-                          </option>
-                        </select>
+                        <RemoteSearchSelect
+                          v-if="line.partner_type"
+                          :model-value="line.partner_id"
+                          :search-url="partnerSearchUrl(line.partner_type)"
+                          :display-text="line._partnerDisplay || ''"
+                          placeholder="Tìm..."
+                          @update:model-value="(v) => line.partner_id = v"
+                          @change="(opt) => line._partnerDisplay = opt ? opt.label : ''"
+                        />
                       </div>
                     </template>
                     <span v-else class="text-xs text-gray-600">{{ partnerLabel(line) }}</span>
@@ -288,10 +292,10 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
-import SearchableSelect from '@/Components/Shared/SearchableSelect.vue';
+import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({
@@ -299,14 +303,24 @@ const props = defineProps({
   funds:         Array,
   nextCode:      String,
   defaultType:   String,
-  suppliers:     Array,
-  customers:     Array,
-  employees:     Array,
+  // Backward compat — no longer preloaded; kept as empty defaults so old JS refs don't crash
+  suppliers:     { type: Array, default: () => [] },
+  customers:     { type: Array, default: () => [] },
+  employees:     { type: Array, default: () => [] },
   businessTypes: Array,
   accountCodes:  Array,
 });
 
 const { formatVnd } = useCurrency();
+
+// Display texts for RemoteSearchSelect (edit mode)
+const supplierDisplay  = ref(props.voucher?.supplier_name ?? '')
+const customerDisplay  = ref(props.voucher?.customer_name ?? '')
+const employeeDisplay  = ref(props.voucher?.employee_name ?? '')
+
+// Cache payable/receivable TK for auto JE preview (updated when user selects partner)
+const supplierPayableAccount    = ref('3311')
+const customerReceivableAccount = ref('1311')
 
 const form = useForm({
   code:            props.voucher?.code         ?? props.nextCode,
@@ -324,25 +338,12 @@ const form = useForm({
   journal_mode:    props.voucher?.journal_mode  ?? 'auto',
   edited_by_user:  props.voucher?.edited_by_user ?? false,
   edit_reason:     props.voucher?.edit_reason   ?? '',
-  lines:           props.voucher?.lines?.length ? props.voucher.lines : [],
+  lines:           props.voucher?.lines?.length
+    ? props.voucher.lines.map(l => ({ ...l, _partnerDisplay: l.partner_display ?? '' }))
+    : [],
 });
 
-const fundOptions = computed(() =>
-  (props.funds ?? []).map(f => ({
-    value: f.id,
-    label: f.name,
-    meta: f.type === 'cash' ? 'Tiền mặt' : 'Ngân hàng',
-  }))
-);
-const supplierOptions = computed(() =>
-  (props.suppliers ?? []).map(s => ({ value: s.id, code: s.code, label: s.name }))
-);
-const customerOptions = computed(() =>
-  (props.customers ?? []).map(c => ({ value: c.id, code: c.code, label: c.name }))
-);
-const employeeOptions = computed(() =>
-  (props.employees ?? []).map(e => ({ value: e.id, code: e.code, label: e.name }))
-);
+// funds is a small static list — used in the <select> directly via props.funds
 
 const partnerTypeOptions = [
   { value: null,       label: 'Không có' },
@@ -382,14 +383,12 @@ function buildDefaultLines() {
       return { partner_type: 'employee', partner_id: form.employee_id };
     }
     if (form.business_type === 'pay_supplier') {
-      const s = props.suppliers?.find(s => s.id === form.supplier_id);
       return { partner_type: 'supplier', partner_id: form.supplier_id,
-               _counter: s?.payable_account_code || '3311' };
+               _counter: supplierPayableAccount.value };
     }
     if (form.business_type === 'collect_customer') {
-      const c = props.customers?.find(c => c.id === form.customer_id);
       return { partner_type: 'customer', partner_id: form.customer_id,
-               _counter: c?.receivable_account_code || '1311' };
+               _counter: customerReceivableAccount.value };
     }
     return { partner_type: null, partner_id: null };
   };
@@ -452,9 +451,13 @@ function onPartnerTypeChange() {
   if (form.journal_mode === 'auto') regenerateLines();
 }
 
-function onEmployeeChange() {
-  const emp = props.employees?.find(e => e.id === form.employee_id);
-  if (emp) form.counterparty = emp.name;
+function onEmployeeChange(opt) {
+  if (opt) {
+    employeeDisplay.value  = opt.label
+    form.counterparty      = opt.label
+  } else {
+    employeeDisplay.value = ''
+  }
   if (form.journal_mode === 'auto') regenerateLines();
 }
 
@@ -481,29 +484,40 @@ function removeLine(i) {
 }
 
 // ── Partner helpers ───────────────────────────────────────────────────────
-function partnerListFor(type) {
-  if (type === 'supplier') return props.suppliers ?? [];
-  if (type === 'customer') return props.customers ?? [];
-  if (type === 'employee') return props.employees ?? [];
-  return [];
-}
-
 function partnerLabel(line) {
   if (!line.partner_type || !line.partner_id) return '—';
-  const list = partnerListFor(line.partner_type);
-  const entity = list.find(p => p.id === line.partner_id);
+  if (line._partnerDisplay) return line._partnerDisplay;
   const prefix = line.partner_type === 'supplier' ? 'NCC' : line.partner_type === 'customer' ? 'KH' : 'NV';
-  return entity ? `${prefix}: ${entity.name}` : '—';
+  return `${prefix} #${line.partner_id}`;
+}
+
+function partnerSearchUrl(type) {
+  if (type === 'supplier') return window.route('search.suppliers')
+  if (type === 'customer') return window.route('search.customers')
+  if (type === 'employee') return window.route('search.employees')
+  return ''
 }
 
 // ── Supplier / Customer change handlers ──────────────────────────────────
 function onSupplierChange(opt) {
-  if (opt) form.counterparty = opt.label;
+  if (opt) {
+    supplierDisplay.value          = opt.label
+    supplierPayableAccount.value   = opt.payable_account_code ?? '3311'
+    form.counterparty              = opt.label
+  } else {
+    supplierDisplay.value = ''
+  }
   if (form.journal_mode === 'auto') regenerateLines();
 }
 
 function onCustomerChange(opt) {
-  if (opt) form.counterparty = opt.label;
+  if (opt) {
+    customerDisplay.value               = opt.label
+    customerReceivableAccount.value     = opt.receivable_account_code ?? '1311'
+    form.counterparty                   = opt.label
+  } else {
+    customerDisplay.value = ''
+  }
   if (form.journal_mode === 'auto') regenerateLines();
 }
 
