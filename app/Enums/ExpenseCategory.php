@@ -21,10 +21,16 @@ enum ExpenseCategory: string
         };
     }
 
-    /** TK mặc định bên Nợ — từ 2026-06-21 mặc định là 154 (hạch toán thẳng vào WIP dự án) */
+    /** TK mặc định bên Nợ theo danh mục — kế toán kết chuyển về 154 sau */
     public function defaultDebitAccount(): string
     {
-        return '154';
+        return match($this) {
+            self::Labor     => '6271',
+            self::Equipment => '6237',
+            self::Material  => '6272',
+            self::Transport => '6278',
+            self::Other     => '6279',
+        };
     }
 
     /** cost_type cho ProjectWipEntry */

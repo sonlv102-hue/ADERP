@@ -6,6 +6,7 @@ use App\Models\AccountCode;
 use App\Models\AccountingPeriod;
 use App\Models\BankAccount;
 use App\Models\Employee;
+use App\Models\FixedAsset;
 use App\Models\Fund;
 use App\Models\JournalEntry;
 use App\Models\Project;
@@ -19,7 +20,7 @@ use Illuminate\Support\Facades\Gate;
 use Tests\TestCase;
 
 /**
- * Chi phí PS — Hình thức ghi nhận (payment_method) v2:
+ * Chi phí PS — Hình thức ghi nhận (payment_method) v2+v3:
  *
  * TC1:  payable (Ghi công nợ NCC) + NCC → Nợ154/Có3311, WIP ngay
  * TC2:  cash (Chi tiền mặt) + Fund → Nợ154/Có1111, WIP ngay
@@ -31,6 +32,12 @@ use Tests\TestCase;
  * TC8:  TK Nợ 6237 (nâng cao) → không tạo WIP ngay, hiện KC button
  * TC9:  Kết chuyển Nợ6237→Nợ154 → tạo JE N154/C6237, WIP tạo sau
  * TC10: audit-journals command phát hiện J3 (3311 thiếu supplier)
+ * TC11: depreciation → Nợ154/Có214, fixed_asset_id lưu được
+ * TC12: depreciation via batch không có fixed_asset_id → validate error
+ * TC13: insurance + credit_account=33831 → Nợ154/Có33831 (không phải 338 tổng hợp)
+ * TC14: insurance via batch không có credit_account → validate error
+ * TC15: payable + vat_amount → JE có Nợ1331 (thuế GTGT đầu vào)
+ * TC16: misc lưu đúng contractor_name
  */
 class ProjectExpenseModeTest extends TestCase
 {
@@ -42,6 +49,7 @@ class ProjectExpenseModeTest extends TestCase
     private Employee $employee;
     private Fund $fund;
     private BankAccount $bankAccount;
+    private FixedAsset $fixedAsset;
 
     protected function setUp(): void
     {
@@ -65,10 +73,20 @@ class ProjectExpenseModeTest extends TestCase
             ['code' => '3341', 'name' => 'Phải trả NV',   'type' => 'liability', 'normal_balance' => 'credit', 'is_detail' => true],
             ['code' => '3388', 'name' => 'Phải trả khác', 'type' => 'liability', 'normal_balance' => 'credit', 'is_detail' => true],
             ['code' => '141',  'name' => 'Tạm ứng',       'type' => 'asset',     'normal_balance' => 'debit',  'is_detail' => true],
-            ['code' => '6237', 'name' => 'CP máy TC',     'type' => 'expense',   'normal_balance' => 'debit',  'is_detail' => true],
+            ['code' => '6237',  'name' => 'CP máy TC',         'type' => 'expense',   'normal_balance' => 'debit',  'is_detail' => true],
+            ['code' => '214',   'name' => 'Hao mòn TSCĐ',      'type' => 'liability', 'normal_balance' => 'credit', 'is_detail' => true],
+            ['code' => '33831', 'name' => 'BHXH NSDLĐ',         'type' => 'liability', 'normal_balance' => 'credit', 'is_detail' => true],
         ] as $ac) {
             AccountCode::firstOrCreate(['code' => $ac['code']], array_merge($ac, ['is_active' => true]));
         }
+
+        $this->fixedAsset = FixedAsset::create([
+            'code'             => 'TSCD-TEST-001',
+            'name'             => 'Máy thi công test',
+            'acquisition_date' => '2025-01-01',
+            'acquisition_cost' => 100_000_000,
+            'status'           => 'active',
+        ]);
 
         $customer = \App\Models\Customer::create(['code' => 'KH-MODE', 'name' => 'KH Mode', 'phone' => '0900000099']);
         $this->project = Project::create([
@@ -279,6 +297,167 @@ class ProjectExpenseModeTest extends TestCase
         $this->assertNotNull($wip);
         $this->assertEquals($expense->project_id, $wip->project_id);
     }
+
+    // ─── Tests for v3 payment modes ─────────────────────────────────────────────
+
+    /** TC11: depreciation → Nợ154/Có214, fixed_asset_id stored */
+    public function test_depreciation_mode_creates_wip_with_214(): void
+    {
+        $this->post(
+            route('projects.projects.expenses.batch', $this->project->id),
+            [
+                'expense_date'    => '2026-06-22',
+                'payment_method'  => 'depreciation',
+                'fixed_asset_id'  => $this->fixedAsset->id,
+                'post_immediately' => true,
+                'lines' => [
+                    ['category' => 'equipment', 'description' => 'Khấu hao máy thi công', 'amount' => 500000, 'debit_account' => '154'],
+                ],
+            ]
+        )->assertRedirect()->assertSessionHas('success');
+
+        $expense = ProjectExpense::where('project_id', $this->project->id)->latest()->first();
+        $this->assertNotNull($expense);
+        $this->assertEquals($this->fixedAsset->id, $expense->fixed_asset_id);
+        $this->assertNotNull($expense->project_wip_entry_id);
+
+        $je = JournalEntry::find($expense->journal_entry_id);
+        $this->assertNotNull($je);
+        $this->assertTrue($je->lines->contains(fn ($l) => $l->account_code === '214' && $l->credit > 0));
+        $this->assertFalse($je->lines->contains(fn ($l) => $l->account_code === '3311'));
+    }
+
+    /** TC12: depreciation via batch không có fixed_asset_id → validate error */
+    public function test_depreciation_without_fixed_asset_id_fails(): void
+    {
+        $res = $this->post(
+            route('projects.projects.expenses.batch', $this->project->id),
+            [
+                'expense_date'   => '2026-06-22',
+                'payment_method' => 'depreciation',
+                // fixed_asset_id intentionally missing
+                'lines' => [
+                    ['category' => 'equipment', 'description' => 'KH TSCĐ', 'amount' => 500000],
+                ],
+            ]
+        );
+
+        $res->assertRedirect();
+        $res->assertSessionHasErrors(['fixed_asset_id']);
+        $this->assertEquals(0, ProjectExpense::where('project_id', $this->project->id)->count());
+    }
+
+    /** TC13: insurance + credit_account=33831 → Nợ154/Có33831 (không dùng 338 tổng hợp) */
+    public function test_insurance_mode_creates_wip_with_detail_338_account(): void
+    {
+        $this->post(
+            route('projects.projects.expenses.batch', $this->project->id),
+            [
+                'expense_date'    => '2026-06-22',
+                'payment_method'  => 'insurance',
+                'credit_account'  => '33831',
+                'post_immediately' => true,
+                'lines' => [
+                    ['category' => 'labor', 'description' => 'Trích BHXH NSDLĐ', 'amount' => 300000, 'debit_account' => '154'],
+                ],
+            ]
+        )->assertRedirect()->assertSessionHas('success');
+
+        $expense = ProjectExpense::where('project_id', $this->project->id)->latest()->first();
+        $this->assertNotNull($expense);
+        $this->assertEquals('33831', $expense->credit_account);
+        $this->assertNotNull($expense->project_wip_entry_id);
+
+        $je = JournalEntry::find($expense->journal_entry_id);
+        $this->assertNotNull($je);
+        $this->assertTrue($je->lines->contains(fn ($l) => $l->account_code === '33831' && $l->credit > 0));
+        $this->assertFalse($je->lines->contains(fn ($l) => $l->account_code === '338'));
+    }
+
+    /** TC14: insurance via batch không có credit_account → validate error */
+    public function test_insurance_without_credit_account_fails(): void
+    {
+        $res = $this->post(
+            route('projects.projects.expenses.batch', $this->project->id),
+            [
+                'expense_date'   => '2026-06-22',
+                'payment_method' => 'insurance',
+                // credit_account intentionally missing
+                'lines' => [
+                    ['category' => 'labor', 'description' => 'Trích BHXH', 'amount' => 300000],
+                ],
+            ]
+        );
+
+        $res->assertRedirect();
+        $res->assertSessionHasErrors(['credit_account']);
+        $this->assertEquals(0, ProjectExpense::where('project_id', $this->project->id)->count());
+    }
+
+    /** TC15: payable + vat_amount → JE có thêm Nợ 1331 */
+    public function test_payable_with_vat_creates_1331_debit(): void
+    {
+        $this->post(
+            route('projects.projects.expenses.batch', $this->project->id),
+            [
+                'expense_date'    => '2026-06-22',
+                'payment_method'  => 'payable',
+                'supplier_id'     => $this->supplier->id,
+                'post_immediately' => true,
+                'lines' => [
+                    [
+                        'category'       => 'equipment',
+                        'description'    => 'Mua vật liệu có VAT',
+                        'amount'         => 1000000,
+                        'vat_rate'       => 10,
+                        'vat_amount'     => 100000,
+                        'has_vat_invoice' => true,
+                        'debit_account'  => '154',
+                    ],
+                ],
+            ]
+        )->assertRedirect()->assertSessionHas('success');
+
+        $expense = ProjectExpense::where('project_id', $this->project->id)->latest()->first();
+        $this->assertNotNull($expense);
+        $this->assertEquals(100000, $expense->vat_amount);
+
+        $je = JournalEntry::find($expense->journal_entry_id);
+        $this->assertNotNull($je);
+        $this->assertTrue($je->lines->contains(fn ($l) => $l->account_code === '1331' && $l->debit > 0));
+        $this->assertTrue($je->lines->contains(fn ($l) => $l->account_code === '3311' && $l->credit >= 1100000));
+    }
+
+    /** TC16: misc lưu đúng contractor_name và không cần supplier */
+    public function test_misc_stores_contractor_info(): void
+    {
+        $this->post(
+            route('projects.projects.expenses.batch', $this->project->id),
+            [
+                'expense_date'      => '2026-06-22',
+                'payment_method'    => 'misc',
+                'contractor_name'   => 'Đội thợ Nguyễn Văn A',
+                'contractor_phone'  => '0912345678',
+                'contract_number'   => 'HK-2026-001',
+                'post_immediately'  => true,
+                'lines' => [
+                    ['category' => 'labor', 'description' => 'Tiền nhân công khoán', 'amount' => 2000000, 'debit_account' => '154'],
+                ],
+            ]
+        )->assertRedirect()->assertSessionHas('success');
+
+        $expense = ProjectExpense::where('project_id', $this->project->id)->latest()->first();
+        $this->assertNotNull($expense);
+        $this->assertNull($expense->supplier_id);
+        $this->assertEquals('Đội thợ Nguyễn Văn A', $expense->contractor_name);
+        $this->assertEquals('0912345678', $expense->contractor_phone);
+        $this->assertEquals('HK-2026-001', $expense->contract_number);
+
+        $je = JournalEntry::find($expense->journal_entry_id);
+        $this->assertTrue($je->lines->contains(fn ($l) => $l->account_code === '3388' && $l->credit > 0));
+    }
+
+    // ─── End v3 tests ────────────────────────────────────────────────────────────
 
     /** TC10: audit-journals phát hiện J3 (Có3311 thiếu supplier) */
     public function test_audit_command_detects_missing_supplier_on_3311(): void

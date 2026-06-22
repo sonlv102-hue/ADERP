@@ -329,6 +329,13 @@ class ProjectWipService
         if ($method === 'misc') {
             return '3388';
         }
+        if ($method === 'depreciation') {
+            return '214';
+        }
+        if ($method === 'insurance') {
+            // TK 338 chi tiết được lưu trong credit_account; fallback BHXH NSDLĐ
+            return $expense->credit_account ?? '33831';
+        }
 
         // payable: dùng TK phải trả của NCC nếu có
         if ($expense->supplier_id) {

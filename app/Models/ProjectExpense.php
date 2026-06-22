@@ -18,7 +18,7 @@ class ProjectExpense extends Model
         'contractor_id_number', 'contract_number',
         'debit_account', 'credit_account',
         'status', 'journal_entry_id', 'project_wip_entry_id',
-        'employee_id', 'fund_id', 'bank_account_id', 'cash_voucher_id',
+        'employee_id', 'fund_id', 'bank_account_id', 'cash_voucher_id', 'fixed_asset_id',
     ];
 
     protected function casts(): array
@@ -71,6 +71,11 @@ class ProjectExpense extends Model
     public function cashVoucher(): BelongsTo
     {
         return $this->belongsTo(CashVoucher::class);
+    }
+
+    public function fixedAsset(): BelongsTo
+    {
+        return $this->belongsTo(FixedAsset::class);
     }
 
     public function journalEntry(): BelongsTo

@@ -160,6 +160,48 @@
             </div>
           </div>
 
+          <!-- BHXH / KPCĐ khi insurance -->
+          <div v-if="form.payment_method === 'insurance'" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Loại khoản trích <span class="text-red-500">*</span></label>
+              <select v-if="!isLocked && !expense.has_posted_transfers"
+                v-model="form.credit_account"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">-- Chọn loại --</option>
+                <option v-for="ins in INSURANCE_ACCOUNTS" :key="ins.value" :value="ins.value">{{ ins.label }}</option>
+              </select>
+              <div v-else class="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 font-mono text-blue-700">
+                {{ form.credit_account || '—' }}
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">TK Có</label>
+              <div class="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 font-mono text-blue-700">
+                {{ form.credit_account || '338xx' }}
+              </div>
+            </div>
+          </div>
+
+          <!-- TSCĐ khi depreciation -->
+          <div v-if="form.payment_method === 'depreciation'" class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">TSCĐ / máy thi công <span class="text-red-500">*</span></label>
+              <select v-if="!isLocked && !expense.has_posted_transfers"
+                v-model="form.fixed_asset_id"
+                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                <option value="">-- Chọn TSCĐ --</option>
+                <option v-for="fa in (fixedAssets ?? [])" :key="fa.id" :value="fa.id">{{ fa.code }} — {{ fa.name }}</option>
+              </select>
+              <div v-else class="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50">
+                {{ (fixedAssets ?? []).find(f => f.id == form.fixed_asset_id)?.name || '—' }}
+              </div>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">TK Có</label>
+              <div class="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 font-mono text-blue-700">214 — Hao mòn TSCĐ</div>
+            </div>
+          </div>
+
           <!-- VAT -->
           <div v-if="!isLocked && !expense.has_posted_transfers" class="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
@@ -297,18 +339,30 @@ const props = defineProps({
   funds:             Array,
   bankAccounts:      Array,
   employees:         Array,
+  fixedAssets:       Array,
 });
 
 const { formatVnd } = useCurrency();
 
 const PAYMENT_MODES = {
-  payable: { label: 'Ghi công nợ NCC (Có 3311)',      credit: '3311' },
-  cash:    { label: 'Chi tiền mặt (Có 1111)',          credit: '1111' },
-  bank:    { label: 'Chi ngân hàng (Có 1121)',         credit: '1121' },
-  advance: { label: 'Quyết toán tạm ứng (Có 141)',     credit: '141'  },
-  salary:  { label: 'Ghi nhận nhân công (Có 3341)',    credit: '3341' },
-  misc:    { label: 'Ghi nhận khác (Có 3388)',         credit: '3388' },
+  payable:      { label: 'Ghi công nợ NCC / nhà thầu có HĐ (Có 3311)', credit: '3311' },
+  cash:         { label: 'Chi tiền mặt (Có 1111)',                       credit: '1111' },
+  bank:         { label: 'Chi ngân hàng (Có 1121)',                      credit: '1121' },
+  advance:      { label: 'Quyết toán tạm ứng (Có 141)',                  credit: '141'  },
+  salary:       { label: 'Ghi nhận lương nội bộ (Có 3341)',              credit: '3341' },
+  misc:         { label: 'Thuê khoán / chưa trả (Có 3388)',              credit: '3388' },
+  insurance:    { label: 'Trích BHXH / KPCĐ (Có 338 chi tiết)',          credit: '338'  },
+  depreciation: { label: 'Khấu hao TSCĐ / máy thi công (Có 214)',       credit: '214'  },
 };
+
+const INSURANCE_ACCOUNTS = [
+  { value: '33831', label: '33831 — BHXH người sử dụng lao động (17.5%)' },
+  { value: '33832', label: '33832 — BHXH người lao động (8%)' },
+  { value: '33841', label: '33841 — BHYT người sử dụng lao động (3%)' },
+  { value: '33842', label: '33842 — BHYT người lao động (1.5%)' },
+  { value: '3385',  label: '3385 — BHTN (gộp NLĐ + NSDLĐ)' },
+  { value: '33821', label: '33821 — KPCĐ người sử dụng lao động (2%)' },
+];
 
 // Locked nếu đã có bút toán (nhưng chưa có transfer — transfer block riêng)
 const isLocked = computed(() => !!props.expense.journal_entry_id);
@@ -341,6 +395,7 @@ const form = useForm({
   contractor_phone:          props.expense.contractor_phone ?? '',
   contractor_id_number:      props.expense.contractor_id_number ?? '',
   contract_number:           props.expense.contract_number ?? '',
+  fixed_asset_id:            props.expense.fixed_asset_id ?? '',
   post_immediately:          false,
 });
 
@@ -361,10 +416,13 @@ function onCategoryChange() {
 }
 
 function onPaymentMethodChange() {
-  form.supplier_id   = null;
-  form.supplier_name = '';
-  form.fund_id       = '';
+  form.supplier_id    = null;
+  form.supplier_name  = '';
+  form.fund_id        = '';
   form.bank_account_id = '';
+  form.fixed_asset_id  = '';
+  // Reset credit_account khi đổi khỏi insurance
+  if (form.payment_method !== 'insurance') form.credit_account = '';
 }
 
 function computeVat() {

@@ -59,7 +59,7 @@
       <div class="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
         <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">2. Đối tượng liên quan</h2>
 
-        <!-- Ghi công nợ NCC -->
+        <!-- Ghi công nợ NCC / nhà thầu có hóa đơn -->
         <template v-if="form.payment_method === 'payable'">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -125,7 +125,7 @@
           </div>
         </template>
 
-        <!-- Nhân viên (advance/salary) -->
+        <!-- Quyết toán tạm ứng / Ghi nhận lương nội bộ -->
         <template v-else-if="form.payment_method === 'advance' || form.payment_method === 'salary'">
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
@@ -148,15 +148,91 @@
           </div>
         </template>
 
-        <!-- Misc -->
-        <template v-else>
-          <div class="text-sm text-gray-500 bg-gray-50 rounded-lg px-4 py-3">
-            TK Có: <span class="font-mono text-blue-700">3388 — Phải trả khác</span>
+        <!-- Thuê khoán / chưa trả (3388) -->
+        <template v-else-if="form.payment_method === 'misc'">
+          <div class="text-sm text-gray-500 bg-amber-50 rounded-lg px-4 py-3 border border-amber-200">
+            TK Có: <span class="font-mono text-blue-700 font-semibold">3388 — Phải trả khác (chưa trả)</span>
+            <span class="ml-2 text-amber-600 text-xs">· Dùng khi chưa thanh toán cho đội/người nhận khoán</span>
+          </div>
+          <!-- Thông tin đội/người nhận khoán -->
+          <div class="border border-amber-200 rounded-lg bg-amber-50 p-4 space-y-3">
+            <p class="text-xs font-semibold text-amber-700">Thông tin đội / người nhận khoán <span class="font-normal text-amber-600">(không bắt buộc)</span></p>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label class="block text-xs text-gray-600 mb-1">Tên đội / người nhận khoán</label>
+                <input v-model="form.contractor_name" type="text" placeholder="Đội thợ Nguyễn Văn A..."
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-1">Người đại diện</label>
+                <input v-model="form.contractor_representative" type="text"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-1">Số điện thoại</label>
+                <input v-model="form.contractor_phone" type="text"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-1">CCCD / MST cá nhân</label>
+                <input v-model="form.contractor_id_number" type="text"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-600 mb-1">Số hợp đồng khoán</label>
+                <input v-model="form.contract_number" type="text"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" />
+              </div>
+            </div>
           </div>
         </template>
 
-        <!-- Thông tin đội/người nhận khoán (freelance_contractor) -->
-        <div v-if="hasFreelanceContractors && form.payment_method !== 'payable'"
+        <!-- Trích BHXH / KPCĐ (338 chi tiết) -->
+        <template v-else-if="form.payment_method === 'insurance'">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">Loại khoản trích <span class="text-red-500">*</span></label>
+              <select v-model="form.credit_account"
+                :class="['w-full border rounded-lg px-3 py-2 text-sm', form.errors.credit_account ? 'border-red-400' : 'border-gray-300']">
+                <option value="">-- Chọn loại --</option>
+                <option v-for="ins in INSURANCE_ACCOUNTS" :key="ins.value" :value="ins.value">{{ ins.label }}</option>
+              </select>
+              <p v-if="form.errors.credit_account" class="text-red-500 text-xs mt-1">{{ form.errors.credit_account }}</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">TK Có</label>
+              <div class="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 font-mono text-blue-700">
+                {{ form.credit_account || '338xx' }} — {{ insuranceAccountLabel }}
+              </div>
+            </div>
+          </div>
+          <p class="text-xs text-gray-500">Không dùng TK 338 tổng hợp — phải chọn TK chi tiết ở trên.</p>
+        </template>
+
+        <!-- Khấu hao TSCĐ / máy thi công (214) -->
+        <template v-else-if="form.payment_method === 'depreciation'">
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">TSCĐ / máy thi công <span class="text-red-500">*</span></label>
+              <select v-model="form.fixed_asset_id"
+                :class="['w-full border rounded-lg px-3 py-2 text-sm', form.errors.fixed_asset_id ? 'border-red-400' : 'border-gray-300']">
+                <option value="">-- Chọn TSCĐ --</option>
+                <option v-for="fa in fixedAssets" :key="fa.id" :value="fa.id">{{ fa.code }} — {{ fa.name }}</option>
+              </select>
+              <p v-if="form.errors.fixed_asset_id" class="text-red-500 text-xs mt-1">{{ form.errors.fixed_asset_id }}</p>
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-1">TK Có</label>
+              <div class="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-50 font-mono text-blue-700">
+                214 — Hao mòn TSCĐ
+              </div>
+            </div>
+          </div>
+          <p class="text-xs text-gray-500">Bút toán: Nợ 154 / Có 214 — ghi nhận khấu hao TSCĐ hoặc máy thi công vào chi phí dự án.</p>
+        </template>
+
+        <!-- Thông tin đội/người nhận khoán cho freelance labor lines (khi method khác misc) -->
+        <div v-if="hasFreelanceContractors && !['payable','misc'].includes(form.payment_method)"
           class="mt-3 border border-amber-200 rounded-lg bg-amber-50 p-4 space-y-3">
           <p class="text-xs font-semibold text-amber-700">Thông tin đội/người nhận khoán
             <span class="font-normal text-amber-600">(không bắt buộc)</span>
@@ -165,27 +241,27 @@
             <div>
               <label class="block text-xs text-gray-600 mb-1">Tên đội/người nhận khoán</label>
               <input v-model="form.contractor_name" type="text" placeholder="Đội thợ Nguyễn Văn A..."
-                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" />
             </div>
             <div>
               <label class="block text-xs text-gray-600 mb-1">Người đại diện</label>
               <input v-model="form.contractor_representative" type="text"
-                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" />
             </div>
             <div>
               <label class="block text-xs text-gray-600 mb-1">Số điện thoại</label>
               <input v-model="form.contractor_phone" type="text"
-                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" />
             </div>
             <div>
               <label class="block text-xs text-gray-600 mb-1">CCCD/MST cá nhân</label>
               <input v-model="form.contractor_id_number" type="text"
-                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" />
             </div>
             <div>
               <label class="block text-xs text-gray-600 mb-1">Số hợp đồng khoán</label>
               <input v-model="form.contract_number" type="text"
-                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                class="w-full border border-gray-300 rounded-lg px-3 py-1.5 text-sm" />
             </div>
           </div>
         </div>
@@ -244,16 +320,16 @@
                 </td>
                 <!-- TK Nợ (advanced) -->
                 <td class="px-3 py-2" v-if="showAdvancedAccounts">
-                  <input v-model="line.debit_account" type="text" placeholder="154"
+                  <input v-model="line.debit_account" type="text" :placeholder="expenseCategoryDebit(line.category)"
                     :class="['w-full border rounded px-2 py-1.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-primary-500',
                       line.debit_account && /^15[26]/.test(line.debit_account) ? 'border-red-400 bg-red-50' : 'border-gray-300']" />
                   <p v-if="line.debit_account && /^15[26]/.test(line.debit_account)" class="text-xs text-red-500 mt-0.5">Dùng phiếu xuất kho</p>
-                  <p v-else-if="line.debit_account && !line.debit_account.startsWith('154')" class="text-xs text-amber-600 mt-0.5">Cần kết chuyển →154</p>
-                  <p v-else-if="!line.debit_account" class="text-xs text-gray-400 mt-0.5">Mặc định: 154</p>
+                  <p v-else-if="line.debit_account && line.debit_account.startsWith('154')" class="text-xs text-blue-600 mt-0.5">Hạch toán thẳng WIP 154</p>
+                  <p v-else-if="line.debit_account" class="text-xs text-amber-600 mt-0.5">Cần kết chuyển →154</p>
                 </td>
                 <!-- Loại NC (nếu category=labor) -->
                 <td class="px-3 py-2" v-if="showLaborType">
-                  <select v-if="line.category === 'labor'" v-model="line.labor_type"
+                  <select v-if="line.category === 'labor'" v-model="line.labor_type" @change="onLaborTypeChange(line)"
                     class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary-500">
                     <option value="">— Chọn loại —</option>
                     <option v-for="lt in LABOR_TYPES" :key="lt.value" :value="lt.value">{{ lt.label }}</option>
@@ -309,7 +385,7 @@
           </table>
         </div>
 
-        <!-- Freelance section — has_vat_invoice + PIT (cho dòng "Thuê khoán") -->
+        <!-- Freelance detail section — has_vat_invoice + PIT -->
         <div v-if="hasFreelanceContractors" class="border-t border-amber-200 bg-amber-50 px-4 py-3">
           <p class="text-xs font-semibold text-amber-700 mb-2">Chi tiết dòng "Thuê khoán cá nhân/đội nhóm"</p>
           <div v-for="(line, idx) in freelanceLines" :key="idx"
@@ -384,7 +460,7 @@
             <p class="font-semibold text-gray-600 mb-1">Bút toán dự kiến:</p>
             <template v-for="(line, i) in form.lines" :key="i">
               <div class="font-mono">
-                <span class="text-blue-700">Nợ {{ line.debit_account || '154' }}</span>
+                <span class="text-blue-700">Nợ {{ line.debit_account || expenseCategoryDebit(line.category) }}</span>
                 <span class="text-gray-500 ml-2">{{ formatVnd(Number(line.amount) || 0) }}</span>
               </div>
               <div v-if="Number(line.vat_amount) > 0" class="font-mono">
@@ -425,51 +501,68 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed } from 'vue';
 import { useForm, Link } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({
-  project:          Object,
+  project:           Object,
   expenseCategories: Array,
-  funds:            Array,
-  bankAccounts:     Array,
-  employees:        Array,
+  funds:             Array,
+  bankAccounts:      Array,
+  employees:         Array,
+  fixedAssets:       Array,
 });
 
 const { formatVnd } = useCurrency();
 
 const PAYMENT_MODES = {
-  payable: { label: 'Ghi công nợ NCC (Có 3311)',       credit: '3311' },
-  cash:    { label: 'Chi tiền mặt (Có 1111)',           credit: '1111' },
-  bank:    { label: 'Chi ngân hàng (Có 1121)',          credit: '1121' },
-  advance: { label: 'Quyết toán tạm ứng (Có 141)',      credit: '141'  },
-  salary:  { label: 'Ghi nhận nhân công (Có 3341)',     credit: '3341' },
-  misc:    { label: 'Ghi nhận khác (Có 3388)',          credit: '3388' },
+  payable:      { label: 'Ghi công nợ NCC / nhà thầu có HĐ (Có 3311)', credit: '3311' },
+  cash:         { label: 'Chi tiền mặt (Có 1111)',                       credit: '1111' },
+  bank:         { label: 'Chi ngân hàng (Có 1121)',                      credit: '1121' },
+  advance:      { label: 'Quyết toán tạm ứng (Có 141)',                  credit: '141'  },
+  salary:       { label: 'Ghi nhận lương nội bộ (Có 3341)',              credit: '3341' },
+  misc:         { label: 'Thuê khoán / chưa trả (Có 3388)',              credit: '3388' },
+  insurance:    { label: 'Trích BHXH / KPCĐ (Có 338 chi tiết)',          credit: '338'  },
+  depreciation: { label: 'Khấu hao TSCĐ / máy thi công (Có 214)',       credit: '214'  },
 };
+
+const INSURANCE_ACCOUNTS = [
+  { value: '33831', label: '33831 — BHXH người sử dụng lao động (17.5%)' },
+  { value: '33832', label: '33832 — BHXH người lao động (8%)' },
+  { value: '33841', label: '33841 — BHYT người sử dụng lao động (3%)' },
+  { value: '33842', label: '33842 — BHYT người lao động (1.5%)' },
+  { value: '3385',  label: '3385 — BHTN (gộp NLĐ + NSDLĐ)' },
+  { value: '33821', label: '33821 — KPCĐ người sử dụng lao động (2%)' },
+];
 
 const LABOR_TYPES = [
   { value: 'internal_employee',     label: 'Nhân công nội bộ' },
-  { value: 'freelance_contractor',  label: 'Thuê khoán cá nhân/đội nhóm' },
+  { value: 'freelance_contractor',  label: 'Thuê khoán cá nhân/đội nhóm/thời vụ' },
   { value: 'subcontractor_invoice', label: 'Nhà thầu phụ có hóa đơn' },
   { value: 'insurance_allocation',  label: 'Trích BHXH/KPCĐ' },
 ];
+
+// VAT is disabled for these payment methods regardless of labor type
+const VAT_DISABLED_METHODS = new Set(['misc', 'insurance', 'depreciation', 'salary', 'advance']);
 
 const showAdvancedAccounts = ref(false);
 const submitError = ref('');
 
 const form = useForm({
-  expense_date:   '',
-  invoice_number: '',
-  payment_method: 'payable',
-  description:    '',
-  supplier_id:    null,
-  supplier_name:  '',
-  fund_id:        '',
+  expense_date:    '',
+  invoice_number:  '',
+  payment_method:  'payable',
+  description:     '',
+  supplier_id:     null,
+  supplier_name:   '',
+  fund_id:         '',
   bank_account_id: '',
-  employee_id:    '',
+  employee_id:     '',
+  fixed_asset_id:  '',
+  credit_account:  '',   // used for insurance 338 sub-TK
   // Contractor info (header-level, shared across all lines)
   contractor_name:           '',
   contractor_representative: '',
@@ -480,7 +573,6 @@ const form = useForm({
   lines: [],
 });
 
-// Khởi tạo 1 dòng rỗng ban đầu
 addLine();
 
 function makeLine() {
@@ -488,7 +580,7 @@ function makeLine() {
   return {
     category:              'labor',
     description:           '',
-    debit_account:         defaultCat?.defaultDebitAccount ?? '154',
+    debit_account:         defaultCat?.defaultDebitAccount ?? '6271',
     labor_type:            '',
     amount:                '',
     vat_rate:              '',
@@ -519,6 +611,20 @@ function onCategoryChange(line) {
   }
 }
 
+function onLaborTypeChange(line) {
+  // Gợi ý payment_method khi chọn loại nhân công
+  if (line.labor_type === 'subcontractor_invoice' && form.payment_method !== 'payable') {
+    // không tự chuyển, chỉ hiện cảnh báo qua hasSubcontractorLines
+  }
+  if (line.labor_type === 'insurance_allocation' && form.payment_method !== 'insurance') {
+    // gợi ý chuyển sang insurance nhưng không tự chuyển
+  }
+  if (line.labor_type !== 'freelance_contractor') {
+    line.has_vat_invoice = false;
+    line.pit_withholding_enabled = false;
+  }
+}
+
 function onHasVatChange(line) {
   if (!line.has_vat_invoice) {
     line.vat_rate = '';
@@ -527,16 +633,28 @@ function onHasVatChange(line) {
 }
 
 function isVatDisabled(line) {
+  if (VAT_DISABLED_METHODS.has(form.payment_method)) return true;
   return line.labor_type === 'freelance_contractor' && !line.has_vat_invoice;
 }
 
 function onPaymentMethodChange() {
-  form.supplier_id = null;
-  form.supplier_name = '';
-  form.fund_id = '';
+  form.supplier_id    = null;
+  form.supplier_name  = '';
+  form.fund_id        = '';
   form.bank_account_id = '';
-  form.employee_id = '';
-  submitError.value = '';
+  form.employee_id    = '';
+  form.fixed_asset_id = '';
+  form.credit_account = '';
+  submitError.value   = '';
+  // Clear VAT for VAT-disabled methods
+  if (VAT_DISABLED_METHODS.has(form.payment_method)) {
+    form.lines.forEach(l => { l.vat_rate = ''; l.vat_amount = ''; });
+  }
+}
+
+function expenseCategoryDebit(categoryValue) {
+  const cat = props.expenseCategories.find(c => c.value === categoryValue);
+  return cat?.defaultDebitAccount ?? '6271';
 }
 
 function computeLineVat(line) {
@@ -563,7 +681,6 @@ function computeNet(line) {
   return Math.max(0, (parseFloat(line.amount) || 0) - computePit(line));
 }
 
-// Computed: các dòng có loại = freelance_contractor
 const freelanceLines = computed(() =>
   form.lines.filter(l => l.labor_type === 'freelance_contractor')
 );
@@ -572,7 +689,6 @@ const hasSubcontractorLines   = computed(() =>
   form.lines.some(l => l.labor_type === 'subcontractor_invoice')
 );
 
-// Totals
 const totalBeforeVat = computed(() =>
   form.lines.reduce((s, l) => s + (parseFloat(l.amount) || 0), 0)
 );
@@ -592,7 +708,6 @@ const totalNeedTransfer = computed(() =>
     .reduce((s, l) => s + (parseFloat(l.amount) || 0), 0)
 );
 
-// TK Có display
 const selectedFundAccount = computed(() => {
   if (!form.fund_id) return null;
   return props.funds.find(f => f.id === form.fund_id)?.account_code ?? '1111';
@@ -601,18 +716,23 @@ const selectedBankAccount = computed(() => {
   if (!form.bank_account_id) return null;
   return props.bankAccounts.find(b => b.id == form.bank_account_id)?.account_code ?? '1121';
 });
-const creditAccountDisplay = computed(() => PAYMENT_MODES[form.payment_method]?.credit ?? '3311');
+const insuranceAccountLabel = computed(() => {
+  if (!form.credit_account) return 'chọn loại khoản trích';
+  return INSURANCE_ACCOUNTS.find(i => i.value === form.credit_account)?.label.split(' — ')[1] ?? form.credit_account;
+});
+const creditAccountDisplay = computed(() => {
+  if (form.payment_method === 'insurance') return form.credit_account || '338xx';
+  return PAYMENT_MODES[form.payment_method]?.credit ?? '3311';
+});
 
-// Computed: cột span cho empty row
 const showLaborType = computed(() => form.lines.some(l => l.category === 'labor'));
 const colSpan = computed(() => {
-  let n = 7; // base columns
+  let n = 7;
   if (showAdvancedAccounts.value) n++;
   if (showLaborType.value) n++;
   return n;
 });
 
-// Validation
 const canSubmit = computed(() => {
   if (!form.expense_date) return false;
   if (form.lines.length === 0) return false;
@@ -621,6 +741,8 @@ const canSubmit = computed(() => {
   if (form.payment_method === 'payable' && !form.supplier_id) return false;
   if (form.payment_method === 'cash' && !form.fund_id) return false;
   if (form.payment_method === 'bank' && !form.bank_account_id) return false;
+  if (form.payment_method === 'insurance' && !form.credit_account) return false;
+  if (form.payment_method === 'depreciation' && !form.fixed_asset_id) return false;
   return true;
 });
 
@@ -634,15 +756,14 @@ function submit(postImmediately) {
 
   form.post_immediately = postImmediately;
 
-  // Normalize lines before submit
   const cleanLines = form.lines.map(l => ({
     ...l,
-    amount:          Math.round(parseFloat(l.amount) || 0),
-    vat_amount:      isVatDisabled(l) ? 0 : Math.round(parseFloat(l.vat_amount) || 0),
-    vat_rate:        isVatDisabled(l) ? 0 : (parseFloat(l.vat_rate) || 0),
-    pit_rate:        parseFloat(l.pit_rate) || 0,
-    debit_account:   l.debit_account || null,
-    labor_type:      l.labor_type || null,
+    amount:     Math.round(parseFloat(l.amount) || 0),
+    vat_amount: isVatDisabled(l) ? 0 : Math.round(parseFloat(l.vat_amount) || 0),
+    vat_rate:   isVatDisabled(l) ? 0 : (parseFloat(l.vat_rate) || 0),
+    pit_rate:   parseFloat(l.pit_rate) || 0,
+    debit_account: l.debit_account || null,
+    labor_type:    l.labor_type || null,
     has_vat_invoice: !!l.has_vat_invoice,
   }));
 

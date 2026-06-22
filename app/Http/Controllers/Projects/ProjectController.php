@@ -558,7 +558,8 @@ class ProjectController extends Controller
             ],
             'employee_id'             => ['nullable', 'integer', 'exists:employees,id'],
             'invoice_number'          => ['nullable', 'string', 'max:100'],
-            'payment_method'          => ['nullable', 'string', 'in:cash,bank,payable,advance,salary,misc'],
+            'payment_method'          => ['nullable', 'string', 'in:cash,bank,payable,advance,salary,misc,depreciation,insurance'],
+            'fixed_asset_id'          => ['nullable', 'integer', 'exists:fixed_assets,id'],
             'vat_rate'                => ['nullable', 'numeric', 'min:0', 'max:100'],
             'vat_amount'              => ['nullable', 'integer', 'min:0'],
             'has_vat_invoice'         => ['nullable', 'boolean'],
@@ -726,6 +727,7 @@ class ProjectController extends Controller
                 'contractor_phone'          => $expense->contractor_phone,
                 'contractor_id_number'      => $expense->contractor_id_number,
                 'contract_number'           => $expense->contract_number,
+                'fixed_asset_id'            => $expense->fixed_asset_id,
                 'status'                    => $expense->status ?? 'draft',
                 'journal_entry_id'          => $expense->journal_entry_id,
                 'has_posted_transfers'      => $expense->transfers()->where('status', 'posted')->exists(),
@@ -738,6 +740,8 @@ class ProjectController extends Controller
             'funds'        => Fund::where('type', 'cash')->orderBy('name')->get(['id', 'name', 'account_code']),
             'bankAccounts' => BankAccount::orderBy('bank_name')->get(['id', 'bank_name', 'account_number', 'account_code']),
             'employees'    => Employee::whereIn('status', ['active', 'probation'])->orderBy('name')->get(['id', 'code', 'name']),
+            'fixedAssets'  => \App\Models\FixedAsset::whereIn('status', ['active', 'fully_depreciated'])
+                ->orderBy('code')->get(['id', 'code', 'name']),
         ]);
     }
 
@@ -787,7 +791,8 @@ class ProjectController extends Controller
             'bank_account_id'           => ['nullable', 'integer', 'exists:bank_accounts,id'],
             'employee_id'               => ['nullable', 'integer', 'exists:employees,id'],
             'invoice_number'            => ['nullable', 'string', 'max:100'],
-            'payment_method'            => ['nullable', 'string', 'in:cash,bank,payable,advance,salary,misc'],
+            'payment_method'            => ['nullable', 'string', 'in:cash,bank,payable,advance,salary,misc,depreciation,insurance'],
+            'fixed_asset_id'            => ['nullable', 'integer', 'exists:fixed_assets,id'],
             'vat_rate'                  => ['nullable', 'numeric', 'min:0', 'max:100'],
             'vat_amount'                => ['nullable', 'integer', 'min:0'],
             'has_vat_invoice'           => ['nullable', 'boolean'],
@@ -875,6 +880,8 @@ class ProjectController extends Controller
             'funds'        => Fund::where('type', 'cash')->orderBy('name')->get(['id', 'name', 'account_code']),
             'bankAccounts' => BankAccount::orderBy('bank_name')->get(['id', 'bank_name', 'account_number', 'account_code']),
             'employees'    => Employee::whereIn('status', ['active', 'probation'])->orderBy('name')->get(['id', 'code', 'name']),
+            'fixedAssets'  => \App\Models\FixedAsset::whereIn('status', ['active', 'fully_depreciated'])
+                ->orderBy('code')->get(['id', 'code', 'name']),
         ]);
     }
 
@@ -885,7 +892,7 @@ class ProjectController extends Controller
         $data = $request->validate([
             'expense_date'    => ['required', 'date'],
             'invoice_number'  => ['nullable', 'string', 'max:100'],
-            'payment_method'  => ['required', 'string', 'in:cash,bank,payable,advance,salary,misc'],
+            'payment_method'  => ['required', 'string', 'in:cash,bank,payable,advance,salary,misc,depreciation,insurance'],
             'description'     => ['nullable', 'string', 'max:500'],
             'post_immediately' => ['nullable', 'boolean'],
             'supplier_id' => [
@@ -899,6 +906,15 @@ class ProjectController extends Controller
             'bank_account_id' => [
                 \Illuminate\Validation\Rule::requiredIf($paymentMethod === 'bank'),
                 'nullable', 'integer', 'exists:bank_accounts,id',
+            ],
+            'fixed_asset_id' => [
+                \Illuminate\Validation\Rule::requiredIf($paymentMethod === 'depreciation'),
+                'nullable', 'integer', 'exists:fixed_assets,id',
+            ],
+            'credit_account' => [
+                \Illuminate\Validation\Rule::requiredIf($paymentMethod === 'insurance'),
+                'nullable', 'string', 'max:20',
+                \Illuminate\Validation\Rule::when($paymentMethod === 'insurance', ['regex:/^338/']),
             ],
             'employee_id' => ['nullable', 'integer', 'exists:employees,id'],
             // Contractor info — header-level (shared across all lines in batch)
@@ -970,6 +986,7 @@ class ProjectController extends Controller
                         'fund_id'                 => $data['fund_id'] ?? null,
                         'bank_account_id'         => $data['bank_account_id'] ?? null,
                         'employee_id'             => $data['employee_id'] ?? null,
+                        'fixed_asset_id'          => $data['fixed_asset_id'] ?? null,
                         'invoice_number'          => $data['invoice_number'] ?? null,
                         'contractor_name'           => $data['contractor_name'] ?? null,
                         'contractor_representative' => $data['contractor_representative'] ?? null,
@@ -1023,9 +1040,14 @@ class ProjectController extends Controller
             }
             return AccountingSettings::get('bank_account', '1121');
         }
-        if ($method === 'advance') return '141';
-        if ($method === 'salary')  return AccountingSettings::get('salary_payable_account', '3341');
-        if ($method === 'misc')    return '3388';
+        if ($method === 'advance')      return '141';
+        if ($method === 'salary')       return AccountingSettings::get('salary_payable_account', '3341');
+        if ($method === 'misc')         return '3388';
+        if ($method === 'depreciation') return '214';
+        if ($method === 'insurance') {
+            // credit_account chứa TK 338 chi tiết được chọn trực tiếp từ form
+            return $data['credit_account'] ?? '33831';
+        }
 
         // payable (default)
         if (!empty($data['supplier_id'])) {
