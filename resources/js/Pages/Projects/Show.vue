@@ -855,6 +855,13 @@
             </button>
           </div>
 
+          <div class="flex items-center justify-between mb-2">
+            <p class="text-xs text-gray-500">{{ wipEntriesFiltered.length }} dòng{{ showCancelledWip ? ' (gồm đã hủy)' : '' }}</p>
+            <label class="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+              <input type="checkbox" v-model="showCancelledWip" class="rounded border-gray-300 text-primary-600" />
+              Hiện dòng đã hủy
+            </label>
+          </div>
           <div class="overflow-x-auto">
             <table class="min-w-full text-sm">
               <thead class="bg-gray-50 border-b border-gray-200">
@@ -871,7 +878,7 @@
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
-                <tr v-for="e in wipEntries" :key="e.id"
+                <tr v-for="e in wipEntriesFiltered" :key="e.id"
                   :class="['hover:bg-gray-50', e.status !== 'active' ? 'opacity-60' : '']">
                   <td class="px-4 py-2 text-gray-600 whitespace-nowrap">{{ e.entry_date }}</td>
                   <td class="px-4 py-2">
@@ -883,7 +890,12 @@
                   </td>
                   <td class="px-4 py-2 text-xs text-gray-500 whitespace-nowrap">
                     {{ wipSourceLabel(e.source_type) }}
-                    <span v-if="e.source_code" class="ml-1 font-mono text-gray-400">{{ e.source_code }}</span>
+                    <a v-if="e.is_purchase_invoice && e.source_id"
+                      :href="route('purchasing.purchase-invoices.show', e.source_id)"
+                      class="ml-1 font-mono text-primary-600 hover:underline">
+                      {{ e.source_code ?? '#' + e.source_id }}
+                    </a>
+                    <span v-else-if="e.source_code" class="ml-1 font-mono text-gray-400">{{ e.source_code }}</span>
                   </td>
                   <td class="px-4 py-2 text-right font-medium text-gray-800 whitespace-nowrap">{{ formatVnd(e.amount) }}</td>
                   <td class="px-4 py-2 text-xs text-gray-500 font-mono whitespace-nowrap">{{ e.journal_code ?? '—' }}</td>
@@ -912,10 +924,15 @@
                     </button>
                   </td>
                 </tr>
-                <tr v-if="!wipEntries.length">
+                <tr v-if="!wipEntriesFiltered.length">
                   <td :colspan="can('project.wip.adjust') ? 9 : 8" class="px-4 py-10 text-center text-gray-400">
-                    Chưa có chi phí dở dang nào cho dự án này.
-                    <br><span class="text-xs">Tạo phiếu xuất kho với mục đích "Xuất cho dự án" để tích lũy TK 154.</span>
+                    <template v-if="!showCancelledWip && wipEntries.some(e => e.status !== 'active')">
+                      Không có dòng hiệu lực. <button @click="showCancelledWip = true" class="text-primary-600 underline text-xs ml-1">Xem dòng đã hủy</button>
+                    </template>
+                    <template v-else>
+                      Chưa có chi phí dở dang nào cho dự án này.
+                      <br><span class="text-xs">Tạo phiếu xuất kho với mục đích "Xuất cho dự án" để tích lũy TK 154.</span>
+                    </template>
                   </td>
                 </tr>
               </tbody>
@@ -941,8 +958,15 @@
                 <button v-else
                   @click="openWipCorrection(wipMenu.entry, 'cancel')"
                   class="text-left text-sm px-3 py-2 rounded-lg hover:bg-gray-50 text-gray-600 border border-gray-200">
-                  Xóa dòng chưa hạch toán
+                  Xóa khỏi TK154 (chưa hạch toán)
                 </button>
+                <!-- Link xem nguồn hóa đơn mua -->
+                <a v-if="wipMenu.entry?.is_purchase_invoice && wipMenu.entry?.source_id"
+                  :href="route('purchasing.purchase-invoices.show', wipMenu.entry.source_id)"
+                  class="text-left text-sm px-3 py-2 rounded-lg hover:bg-blue-50 text-blue-600 border border-blue-100 block"
+                  @click="wipMenu.open = false">
+                  → Xem hóa đơn mua {{ wipMenu.entry.source_code ?? '' }}
+                </a>
               </template>
               <!-- Stock-exit: link trực tiếp đến phiếu xuất kho -->
               <template v-else>
@@ -975,9 +999,14 @@
 
             <!-- Entry info -->
             <div class="bg-gray-50 rounded-lg px-4 py-3 text-sm space-y-1">
-              <p class="text-gray-500">Dòng chi phí: <span class="text-gray-900 font-medium">{{ wipCorrection.entry?.description }}</span></p>
+              <p class="text-gray-500">Ngày: <span class="text-gray-900">{{ wipCorrection.entry?.entry_date }}</span></p>
+              <p class="text-gray-500">Nguồn: <span class="text-gray-900">{{ wipSourceLabel(wipCorrection.entry?.source_type) }}{{ wipCorrection.entry?.source_code ? ' · ' + wipCorrection.entry.source_code : '' }}</span></p>
+              <p class="text-gray-500">Mô tả: <span class="text-gray-900 font-medium">{{ wipCorrection.entry?.description }}</span></p>
               <p class="text-gray-500">Số tiền TK 154: <span class="text-gray-900 font-bold">{{ formatVnd(wipCorrection.entry?.amount) }}</span></p>
               <p class="text-gray-500">Bút toán gốc: <span class="font-mono text-gray-700">{{ wipCorrection.entry?.journal_code ?? '—' }}</span></p>
+              <p v-if="wipCorrection.action === 'cancel'" class="text-xs text-yellow-600 mt-1">
+                ⚠ Sau khi xóa, tổng TK 154 dự án sẽ giảm {{ formatVnd(wipCorrection.entry?.amount) }}.
+              </p>
             </div>
 
             <!-- Transfer: choose target project -->
@@ -1033,12 +1062,21 @@
             </div>
             <p v-else-if="wipCorrection.loadingPreview" class="text-xs text-gray-400">Đang tải preview...</p>
 
-            <!-- Reason -->
-            <div class="space-y-1">
+            <!-- Reason (predefined + free text) -->
+            <div class="space-y-2">
               <label class="text-xs font-medium text-gray-600">Lý do <span class="text-red-500">*</span></label>
+              <template v-if="wipCorrection.action === 'cancel'">
+                <div class="flex flex-wrap gap-1.5">
+                  <button v-for="preset in WIP_CANCEL_REASONS" :key="preset"
+                    @click="wipCorrection.reason = preset"
+                    :class="['text-xs px-2.5 py-1 rounded-full border transition-colors', wipCorrection.reason === preset ? 'bg-primary-100 border-primary-400 text-primary-700' : 'border-gray-200 text-gray-500 hover:border-gray-400']">
+                    {{ preset }}
+                  </button>
+                </div>
+              </template>
               <textarea v-model="wipCorrection.reason" rows="2" required
                 class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm resize-none"
-                placeholder="Nhập lý do bắt buộc..." />
+                placeholder="Nhập hoặc chọn lý do bắt buộc..." />
             </div>
 
             <!-- Error -->
@@ -1297,8 +1335,22 @@ const WIP_SOURCE_LABELS = {
   'App\\Models\\StockExit':             'Xuất kho',
   'App\\Models\\ProjectExpense':        'Chi phí PS',
   'App\\Models\\ProjectDirectMaterial': 'Vật tư phát sinh',
+  'App\\Models\\PurchaseInvoice':       'Hóa đơn mua',
 };
 const wipSourceLabel = (type) => WIP_SOURCE_LABELS[type] ?? type?.split('\\').pop() ?? '—';
+
+const WIP_CANCEL_REASONS = [
+  'Nhập sai dự án',
+  'Không thuộc chi phí dự án',
+  'Dòng WIP sinh lỗi / trùng',
+  'Hóa đơn mua sai thông tin',
+  'Khác',
+];
+
+const showCancelledWip = ref(false);
+const wipEntriesFiltered = computed(() =>
+  showCancelledWip.value ? props.wipEntries : props.wipEntries.filter(e => e.status === 'active')
+);
 
 const wipStatusClass = (status) => {
   if (status === 'active')      return 'bg-green-100 text-green-700';
@@ -1326,11 +1378,17 @@ const wipCorrection = reactive({
   error: '',
 });
 
-const wipCorrectionTitle = computed(() => ({
-  cancel:   'Hủy chi phí dở dang TK 154',
-  transfer: 'Chuyển chi phí sang dự án khác',
-  reclass:  'Điều chỉnh tài khoản chi phí',
-}[wipCorrection.action] ?? 'Xử lý chi phí dở dang'));
+const wipCorrectionTitle = computed(() => {
+  if (wipCorrection.action === 'cancel') {
+    return wipCorrection.entry?.has_je
+      ? 'Hủy chi phí / Tạo bút toán đảo'
+      : 'Xóa khỏi TK154 (chưa hạch toán)';
+  }
+  return {
+    transfer: 'Chuyển chi phí sang dự án khác',
+    reclass:  'Điều chỉnh tài khoản chi phí',
+  }[wipCorrection.action] ?? 'Xử lý chi phí dở dang';
+});
 
 const openWipCorrection = async (entry, action) => {
   wipMenu.open = false;

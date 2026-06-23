@@ -99,6 +99,8 @@ class ProjectWipService
 
     /**
      * Tạo WIP entry từ dòng của PurchaseInvoice (ví dụ: chi phí hạch toán trực tiếp TK154).
+     * Skip nếu đã có WIP entry (bất kỳ status) cho cùng source_id + source_item_id —
+     * tránh tạo lại khi repair/backfill sau khi user đã hủy thủ công.
      */
     public function createFromPurchaseInvoiceItem(\App\Models\PurchaseInvoice $invoice, \App\Models\PurchaseInvoiceItem $item, int $journalEntryId): void
     {
@@ -107,6 +109,12 @@ class ProjectWipService
 
         $amount = (int) round((float) $item->amount);
         if ($amount <= 0) return;
+
+        $exists = ProjectWipEntry::where('source_type', \App\Models\PurchaseInvoice::class)
+            ->where('source_id', $invoice->id)
+            ->where('source_item_id', $item->id)
+            ->exists();
+        if ($exists) return;
 
         ProjectWipEntry::create([
             'project_id'       => $projectId,
@@ -423,14 +431,19 @@ class ProjectWipService
                 'source_type'      => $e->source_type,
                 'source_type_short'=> class_basename($e->source_type ?? ''),
                 'source_id'        => $e->source_id,
-                'source_code'      => ($e->source_type === \App\Models\StockExit::class) ? ($e->source?->code ?? null) : null,
+                'source_code'      => match (true) {
+                    $e->source_type === \App\Models\StockExit::class        => $e->source?->code ?? null,
+                    $e->source_type === \App\Models\PurchaseInvoice::class  => $e->source?->code ?? null,
+                    default => null,
+                },
                 'status'           => $e->status ?? 'active',
                 'status_label'     => $e->statusLabel(),
                 'status_color'     => $e->statusColor(),
                 'cancel_reason'    => $e->cancel_reason,
                 'cancelled_at'     => $e->cancelled_at?->format('d/m/Y H:i'),
                 'cancelled_by_name'=> $e->cancelledByUser?->name,
-                'is_stock_exit'    => ($e->source_type === \App\Models\StockExit::class),
+                'is_stock_exit'       => ($e->source_type === \App\Models\StockExit::class),
+                'is_purchase_invoice' => ($e->source_type === \App\Models\PurchaseInvoice::class),
             ]);
     }
 

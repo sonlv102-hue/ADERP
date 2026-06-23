@@ -10,8 +10,13 @@ use App\Models\JournalEntryLine;
 use App\Models\Project;
 use App\Models\ProjectWipCorrectionLog;
 use App\Models\ProjectWipEntry;
+use App\Models\PurchaseInvoice;
+use App\Models\PurchaseInvoiceItem;
+use App\Models\PurchaseOrder;
 use App\Models\StockExit;
+use App\Models\Supplier;
 use App\Models\User;
+use App\Models\Warehouse;
 use App\Services\ProjectWipCorrectionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Gate;
@@ -313,5 +318,149 @@ class ProjectWipCorrectionTest extends TestCase
         $summary = $service->getWipSummary($this->project->id);
         $materialRow = collect($summary)->firstWhere('cost_type', 'material');
         $this->assertEquals(10_000_000, (int) $materialRow['total']);
+    }
+
+    private function makePurchaseInvoiceWithItem(?int $projectId = null): array
+    {
+        $supplier  = Supplier::firstOrCreate(['code' => 'NCC-WIP-T1'], ['name' => 'NCC WIP Test', 'phone' => '0900000099']);
+        $warehouse = Warehouse::firstOrCreate(['code' => 'KHO-WIP'], ['name' => 'Kho WIP', 'is_active' => true]);
+        $po = PurchaseOrder::create([
+            'code'         => 'MH-WIP-' . uniqid(),
+            'supplier_id'  => $supplier->id,
+            'warehouse_id' => $warehouse->id,
+            'status'       => 'sent',
+            'order_date'   => now()->toDateString(),
+            'total'        => 500_000,
+            'created_by'   => $this->user->id,
+        ]);
+        $invoice = PurchaseInvoice::create([
+            'code'              => 'HD-WIP-' . uniqid(),
+            'purchase_order_id' => $po->id,
+            'supplier_id'       => $supplier->id,
+            'invoice_date'      => now()->toDateString(),
+            'status'            => 'valid',
+            'total'             => 500_000,
+            'subtotal'          => 500_000,
+            'tax_amount'        => 0,
+            'created_by'        => $this->user->id,
+        ]);
+        $item = PurchaseInvoiceItem::create([
+            'purchase_invoice_id' => $invoice->id,
+            'description'         => 'Chi phí dự án test',
+            'amount'              => 500_000,
+            'project_id'          => $projectId ?? $this->project->id,
+            'account_code'        => '154',
+        ]);
+        return [$invoice, $item];
+    }
+
+    // TC10: PurchaseInvoice-sourced WIP không có JE → cancel không tạo JE đảo
+    public function test_tc10_purchase_invoice_wip_no_je_cancel_no_reversal(): void
+    {
+        $entry = $this->makeWipEntry([
+            'source_type'    => 'App\\Models\\PurchaseInvoice',
+            'source_id'      => 99,
+            'source_item_id' => 99,
+        ]);
+
+        $service = app(ProjectWipCorrectionService::class);
+        $entry->load('journalEntry', 'project');
+        $log = $service->cancelEntry($entry, 'Nhập sai dự án');
+
+        $entry->refresh();
+        $this->assertEquals('cancelled', $entry->status);
+        $this->assertEquals('Nhập sai dự án', $entry->cancel_reason);
+        $this->assertNull($log->correction_je_id);
+        $this->assertDatabaseHas('project_wip_correction_logs', [
+            'wip_entry_id' => $entry->id,
+            'action_type'  => 'cancel',
+        ]);
+    }
+
+    // TC11: PurchaseInvoice WIP có JE posted → cancel tạo JE đảo
+    public function test_tc11_purchase_invoice_wip_with_posted_je_cancel_creates_reversal(): void
+    {
+        $je    = $this->makePostedJe();
+        $entry = $this->makeWipEntry([
+            'source_type'      => 'App\\Models\\PurchaseInvoice',
+            'source_id'        => 99,
+            'source_item_id'   => 99,
+            'journal_entry_id' => $je->id,
+        ]);
+
+        $service = app(ProjectWipCorrectionService::class);
+        $entry->load('journalEntry.lines', 'project');
+        $log = $service->cancelEntry($entry, 'Hóa đơn mua sai thông tin');
+
+        $entry->refresh();
+        $this->assertEquals('cancelled', $entry->status);
+        $this->assertNotNull($log->correction_je_id);
+
+        $reversalJe = JournalEntry::find($log->correction_je_id);
+        $this->assertEquals('posted', $reversalJe->status);
+        $lines = $reversalJe->lines->keyBy('account_code');
+        $this->assertGreaterThan(0, (int) $lines['154']->credit);
+    }
+
+    // TC12: createFromPurchaseInvoiceItem dedup — không tạo WIP thứ hai khi gọi lại
+    public function test_tc12_create_from_purchase_invoice_item_deduplicates(): void
+    {
+        [$invoice, $item] = $this->makePurchaseInvoiceWithItem();
+        $je = $this->makePostedJe();
+
+        $service = app(\App\Services\ProjectWipService::class);
+        $service->createFromPurchaseInvoiceItem($invoice, $item, $je->id);
+        $service->createFromPurchaseInvoiceItem($invoice, $item, $je->id);
+
+        $count = ProjectWipEntry::where('source_type', 'App\\Models\\PurchaseInvoice')
+            ->where('source_id', $invoice->id)
+            ->where('source_item_id', $item->id)
+            ->count();
+
+        $this->assertEquals(1, $count, 'Chỉ được tạo 1 WIP entry dù gọi createFromPurchaseInvoiceItem 2 lần');
+    }
+
+    // TC13: Đã cancel WIP thì gọi createFromPurchaseInvoiceItem lại không tạo thêm
+    public function test_tc13_cancelled_wip_not_recreated_by_create(): void
+    {
+        [$invoice, $item] = $this->makePurchaseInvoiceWithItem();
+
+        ProjectWipEntry::create([
+            'project_id'     => $this->project->id,
+            'source_type'    => 'App\\Models\\PurchaseInvoice',
+            'source_id'      => $invoice->id,
+            'source_item_id' => $item->id,
+            'cost_type'      => 'overhead',
+            'amount'         => 500_000,
+            'description'    => 'Test',
+            'entry_date'     => now()->toDateString(),
+            'status'         => 'cancelled',
+            'cancel_reason'  => 'Dòng WIP sinh lỗi',
+            'created_by'     => $this->user->id,
+        ]);
+
+        $je      = $this->makePostedJe();
+        $service = app(\App\Services\ProjectWipService::class);
+        $service->createFromPurchaseInvoiceItem($invoice, $item, $je->id);
+
+        $total = ProjectWipEntry::where('source_type', 'App\\Models\\PurchaseInvoice')
+            ->where('source_id', $invoice->id)
+            ->where('source_item_id', $item->id)
+            ->count();
+
+        $this->assertEquals(1, $total, 'Không được tạo thêm WIP khi đã có dòng cancelled cùng source');
+    }
+
+    // TC14: Audit command phát hiện W6 — PI source orphan
+    public function test_tc14_audit_command_detects_w6_purchase_invoice_orphan(): void
+    {
+        $entry = $this->makeWipEntry([
+            'source_type' => 'App\\Models\\PurchaseInvoice',
+            'source_id'   => 999_999, // không tồn tại
+        ]);
+
+        $this->artisan('projects:wip-audit', ['--project' => $this->project->id])
+            ->assertExitCode(1)
+            ->expectsOutputToContain('W6');
     }
 }
