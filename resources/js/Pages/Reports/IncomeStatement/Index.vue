@@ -8,15 +8,15 @@
           <p class="text-sm text-gray-500 mt-0.5">Mẫu số B02-DNN — Thông tư 133/2016/TT-BTC · Nguồn: bút toán GL đã posted</p>
         </div>
         <div class="flex items-center gap-2 flex-wrap">
-          <a :href="exportExcelUrl" class="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-2 rounded-lg text-sm font-medium">
+          <a :href="exportExcelUrl" class="erp-btn-secondary flex items-center gap-1.5 text-sm">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
             Excel
           </a>
-          <a :href="exportPdfUrl" target="_blank" class="inline-flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg text-sm font-medium">
+          <a :href="exportPdfUrl" target="_blank" class="erp-btn-secondary flex items-center gap-1.5 text-sm">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/></svg>
             PDF
           </a>
-          <button @click="window.print()" class="inline-flex items-center gap-1.5 bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded-lg text-sm font-medium">
+          <button onclick="window.print()" class="erp-btn-secondary flex items-center gap-1.5 text-sm">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
             In
           </button>
@@ -27,15 +27,13 @@
       <div class="flex items-center gap-3 flex-wrap bg-white rounded-xl border border-gray-200 px-4 py-3">
         <div class="flex items-center gap-2">
           <label class="text-sm font-medium text-gray-600">Năm:</label>
-          <select v-model="year" @change="applyFilters"
-            class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+          <select v-model="year" @change="applyFilters" class="erp-input text-sm w-24">
             <option v-for="y in availableYears" :key="y" :value="y">{{ y }}</option>
           </select>
         </div>
         <div class="flex items-center gap-2">
           <label class="text-sm font-medium text-gray-600">Đơn vị tính:</label>
-          <select v-model="unit" @change="applyFilters"
-            class="border border-gray-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+          <select v-model="unit" @change="applyFilters" class="erp-input text-sm w-36">
             <option value="dong">Đồng</option>
             <option value="nghin_dong">Nghìn đồng</option>
             <option value="trieu_dong">Triệu đồng</option>
@@ -88,7 +86,7 @@
 
         <table class="min-w-full text-sm">
           <thead>
-            <tr class="bg-[#1E3A5F] text-white">
+            <tr class="bg-slate-700 text-white">
               <th class="text-left px-4 py-2.5 font-medium text-xs w-[42%]">CHỈ TIÊU</th>
               <th class="text-center px-2 py-2.5 font-medium text-xs w-[7%]">Mã số</th>
               <th class="text-center px-2 py-2.5 font-medium text-xs w-[9%]">Thuyết minh</th>

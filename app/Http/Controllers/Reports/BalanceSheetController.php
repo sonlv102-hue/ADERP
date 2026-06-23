@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Reports;
 use App\Exports\Reports\BalanceSheetExport;
 use App\Http\Controllers\Controller;
 use App\Models\BalanceSheetAccountMapping;
+use App\Models\Setting;
 use App\Services\Accounting\FinancialPositionReportService;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -25,12 +27,23 @@ class BalanceSheetController extends Controller
 
     public function index(Request $request): Response
     {
-        $asOf = $request->input('as_of', now()->toDateString());
-        $mode = $request->input('mode', 'management');
-        $data = $this->reportSvc->build($asOf, $mode);
+        $asOf    = $request->input('as_of', now()->toDateString());
+        $mode    = $request->input('mode', 'management');
+        $data    = $this->reportSvc->build($asOf, $mode);
+        $company = Setting::getGroup('company');
+
+        // Số đầu năm: số dư tại 01/01 của năm hiện tại
+        $startOfYear = substr($asOf, 0, 4) . '-01-01';
+        $priorData   = $this->reportSvc->build($startOfYear, $mode);
+        $priorMap    = collect($priorData['rows'])->keyBy('config_code')->map(fn($r) => $r['amount'] ?? 0.0);
+
+        $rows = array_map(function (array $row) use ($priorMap): array {
+            $row['prior_amount'] = $priorMap[$row['config_code']] ?? 0.0;
+            return $row;
+        }, $data['rows']);
 
         return Inertia::render('Reports/BalanceSheet/Index', [
-            'balanceSheet'     => $data['rows'],
+            'balanceSheet'     => $rows,
             'summary'          => $data['summary'],
             'warnings'         => $data['warnings'],
             'trialBalance'     => $data['trial_balance'],
@@ -40,6 +53,7 @@ class BalanceSheetController extends Controller
                 'report_name' => $data['report_name'],
                 'circular'    => $data['circular'],
             ],
+            'company'               => $company,
             'reportItems'           => $this->getReportItems(),
             'canManageAccounting'   => auth()->user()->can('accounting.manage'),
             'filters'               => ['as_of' => $asOf, 'mode' => $mode],
@@ -52,11 +66,9 @@ class BalanceSheetController extends Controller
 
     public function export(Request $request): BinaryFileResponse
     {
-        $asOf = $request->input('as_of', now()->toDateString());
-        $mode = $request->input('mode', 'management');
-        $data = $this->reportSvc->build($asOf, $mode);
-
-        // Cột Đầu năm: lấy số dư tại ngày 01/01 của năm hiện tại
+        $asOf        = $request->input('as_of', now()->toDateString());
+        $mode        = $request->input('mode', 'management');
+        $data        = $this->reportSvc->build($asOf, $mode);
         $startOfYear = substr($asOf, 0, 4) . '-01-01';
         $priorData   = $this->reportSvc->build($startOfYear, $mode);
 
@@ -64,6 +76,26 @@ class BalanceSheetController extends Controller
             new BalanceSheetExport($data, $priorData),
             'bcttc-b01a-dnn-' . $asOf . '.xlsx'
         );
+    }
+
+    public function exportPdf(Request $request)
+    {
+        $asOf        = $request->input('as_of', now()->toDateString());
+        $mode        = $request->input('mode', 'management');
+        $data        = $this->reportSvc->build($asOf, $mode);
+        $company     = Setting::getGroup('company');
+        $startOfYear = substr($asOf, 0, 4) . '-01-01';
+        $priorData   = $this->reportSvc->build($startOfYear, $mode);
+        $priorMap    = collect($priorData['rows'])->keyBy('config_code')->map(fn($r) => $r['amount'] ?? 0.0);
+
+        $rows = array_map(function (array $row) use ($priorMap): array {
+            $row['prior_amount'] = $priorMap[$row['config_code']] ?? 0.0;
+            return $row;
+        }, $data['rows']);
+
+        return Pdf::loadView('pdf.b01a-dnn', compact('rows', 'company', 'asOf', 'data'))
+            ->setPaper('a4', 'portrait')
+            ->stream('b01a-dnn-' . $asOf . '.pdf');
     }
 
     public function mapAccount(Request $request): RedirectResponse

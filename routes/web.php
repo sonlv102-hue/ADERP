@@ -693,8 +693,9 @@ Route::middleware('auth')->group(function () {
         Route::get('income-statement/pdf',        [IncomeStatementController::class, 'exportPdf'])->name('income_statement.pdf');
         Route::get('income-statement/line-detail',[IncomeStatementController::class, 'lineDetail'])->name('income_statement.line_detail');
 
-        Route::get('balance-sheet',            [BalanceSheetController::class,    'index'])->name('balance_sheet');
-        Route::get('balance-sheet/export',    [BalanceSheetController::class,    'export'])->name('balance_sheet.export');
+        Route::get('balance-sheet',              [BalanceSheetController::class, 'index'])->name('balance_sheet');
+        Route::get('balance-sheet/export',       [BalanceSheetController::class, 'export'])->name('balance_sheet.export');
+        Route::get('balance-sheet/pdf',          [BalanceSheetController::class, 'exportPdf'])->name('balance_sheet.pdf');
         Route::post('balance-sheet/map-account', [BalanceSheetController::class, 'mapAccount'])->name('balance_sheet.map_account');
         Route::get('trial-balance',           [TrialBalanceController::class,    'index'])->name('trial_balance');
         Route::get('trial-balance/export',    [TrialBalanceController::class,    'export'])->name('trial_balance.export');
