@@ -124,7 +124,7 @@ class ProjectWipCorrectionService
                 'wip_entry_id'   => $entry->id,
                 'action_type'    => 'cancel',
                 'from_project_id'=> $entry->project_id,
-                'amount'         => $entry->amount,
+                'amount'         => (int) $entry->amount,
                 'reason'         => $reason,
                 'performed_by'   => auth()->id(),
                 'correction_je_id' => $correctionJe?->id,
