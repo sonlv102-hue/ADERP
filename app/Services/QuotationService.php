@@ -96,6 +96,7 @@ class QuotationService
                         (float) $qItem->unit_price * (1 - (float) $qItem->discount_percent / 100) * $docFactor,
                         0
                     ),
+                    'vat_rate'   => $qItem->vat_rate !== null ? (float) $qItem->vat_rate : null,
                 ]);
             }
 
