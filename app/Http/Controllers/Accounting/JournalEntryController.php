@@ -322,7 +322,44 @@ class JournalEntryController extends Controller
                 ->with('success', "Đã xóa bút toán đã hủy: {$label}.");
         }
 
-        return back()->with('error', 'Chỉ có thể xóa bút toán ở trạng thái Nháp hoặc Đã hủy (admin).');
+        if ($journalEntry->status === 'reversed') {
+            if (! auth()->user()->hasRole('admin')) {
+                return back()->with('error', 'Chỉ admin mới có thể xóa bút toán đã đảo ngược.');
+            }
+
+            $codes = [];
+
+            DB::transaction(function () use ($journalEntry, &$codes) {
+                $pair = $journalEntry->reversed_by_id
+                    ? JournalEntry::find($journalEntry->reversed_by_id)
+                    : JournalEntry::where('reversed_by_id', $journalEntry->id)->first();
+
+                $ids   = collect([$journalEntry->id]);
+                $codes = [$journalEntry->code];
+
+                if ($pair) {
+                    $ids->push($pair->id);
+                    $codes[] = $pair->code;
+                }
+
+                ProjectWipEntry::whereIn('journal_entry_id', $ids)->update(['journal_entry_id' => null]);
+                JournalEntry::whereIn('reversed_by_id', $ids)->update(['reversed_by_id' => null]);
+                JournalEntryLine::whereIn('journal_entry_id', $ids)->delete();
+                JournalEntry::whereIn('id', $ids)->delete();
+            });
+
+            $label = implode(' + ', $codes);
+
+            activity()
+                ->causedBy(auth()->user())
+                ->withProperties(['codes' => $codes, 'action' => 'force_delete_reversed'])
+                ->log("Admin xóa vĩnh viễn bút toán đã đảo ngược: {$label}.");
+
+            return redirect()->route('accounting.journal-entries.index')
+                ->with('success', "Đã xóa vĩnh viễn bút toán đã đảo ngược: {$label}.");
+        }
+
+        return back()->with('error', 'Chỉ có thể xóa bút toán ở trạng thái Nháp, Đã hủy hoặc Đã đảo ngược (admin).');
     }
 
     /**

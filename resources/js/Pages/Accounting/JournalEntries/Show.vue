@@ -95,6 +95,12 @@
               Hủy cặp bút toán
             </button>
             <span v-else class="text-xs text-gray-400 italic">Kỳ đã khóa sổ</span>
+            <!-- Xóa vĩnh viễn bút toán đã đảo: chỉ admin -->
+            <button v-if="hasRole('admin')"
+              @click="showDeleteReversedModal = true"
+              class="text-sm px-3 py-1.5 border border-red-300 text-red-600 rounded-lg hover:bg-red-50">
+              Xóa vĩnh viễn
+            </button>
           </template>
         </div>
       </div>
@@ -258,6 +264,24 @@
         <div class="flex justify-end gap-3 px-6 pb-6">
           <button @click="showDeleteVoidedModal = false" class="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700">Hủy</button>
           <button @click="submitDeleteVoided" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700">Xóa vĩnh viễn</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Xóa vĩnh viễn bút toán đã đảo ngược (admin only) -->
+    <div v-if="showDeleteReversedModal" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-xl shadow-xl w-full max-w-sm">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="font-semibold text-gray-900">Xóa vĩnh viễn {{ entry.code }}</h3>
+        </div>
+        <div class="p-6 space-y-3 text-sm text-gray-700">
+          <p>Bút toán đã đảo ngược sẽ bị xóa vĩnh viễn khỏi hệ thống cùng các dòng hạch toán.</p>
+          <p class="text-amber-700 bg-amber-50 px-3 py-2 rounded-lg">Nếu bút toán thuộc một cặp đảo ngược, cả hai sẽ bị xóa cùng lúc.</p>
+          <p class="text-red-600 bg-red-50 px-3 py-2 rounded-lg font-medium">Hành động này sẽ được ghi vào lịch sử hệ thống. Không thể hoàn tác.</p>
+        </div>
+        <div class="flex justify-end gap-3 px-6 pb-6">
+          <button @click="showDeleteReversedModal = false" class="px-4 py-2 text-sm border border-gray-300 rounded-lg text-gray-700">Hủy</button>
+          <button @click="submitDeleteReversed" class="px-4 py-2 text-sm bg-red-600 text-white rounded-lg hover:bg-red-700">Xóa vĩnh viễn</button>
         </div>
       </div>
     </div>
@@ -457,6 +481,13 @@ function submitDeleteDraft() {
 const showDeleteVoidedModal = ref(false);
 
 function submitDeleteVoided() {
+  router.delete(route('accounting.journal-entries.destroy', props.entry.id));
+}
+
+// Delete reversed modal (admin only)
+const showDeleteReversedModal = ref(false);
+
+function submitDeleteReversed() {
   router.delete(route('accounting.journal-entries.destroy', props.entry.id));
 }
 
