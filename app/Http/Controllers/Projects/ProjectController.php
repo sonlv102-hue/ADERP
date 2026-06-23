@@ -558,6 +558,8 @@ class ProjectController extends Controller
 
         // Ensure vat_amount defaults to 0 (nullable in validation but NOT NULL in DB)
         $data['vat_amount'] = (int) ($data['vat_amount'] ?? 0);
+        // Ensure payment_method defaults to 'payable' (nullable in validation but NOT NULL in DB)
+        $data['payment_method'] = $data['payment_method'] ?? 'payable';
 
         // freelance_contractor không có hóa đơn VAT → clear VAT
         if (($data['labor_type'] ?? '') === 'freelance_contractor' && empty($data['has_vat_invoice'])) {
@@ -976,7 +978,7 @@ class ProjectController extends Controller
                         'vat_rate'                  => $vatRate,
                         'vat_amount'                => $vatAmount,
                         'has_vat_invoice'           => $lineHasVat,
-                        'payment_method'            => $paymentMethod,
+                        'payment_method'            => $paymentMethod ?? 'payable',
                         'supplier_id'               => $data['supplier_id'] ?? null,
                         'fund_id'                   => $data['fund_id'] ?? null,
                         'bank_account_id'           => $data['bank_account_id'] ?? null,
