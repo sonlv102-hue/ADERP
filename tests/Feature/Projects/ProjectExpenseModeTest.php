@@ -228,16 +228,20 @@ class ProjectExpenseModeTest extends TestCase
         $this->assertTrue($je->lines->contains(fn ($l) => $l->account_code === '3388' && $l->credit > 0));
     }
 
-    /** TC7: payable nhưng không có supplier → validate error, expense không được tạo */
-    public function test_payable_without_supplier_is_rejected(): void
+    /** TC7: payable không có supplier → ĐƯỢC PHÉP — supplier là thông tin bổ sung, không bắt buộc */
+    public function test_payable_without_supplier_is_allowed(): void
     {
         $this->addExpense([
             'payment_method' => 'payable',
             'credit_account' => '3311',
             'supplier_id'    => null,
-        ])->assertRedirect();
+        ])->assertRedirect()->assertSessionHas('success');
 
-        $this->assertEquals(0, ProjectExpense::where('project_id', $this->project->id)->count());
+        $expense = ProjectExpense::where('project_id', $this->project->id)->first();
+        $this->assertNotNull($expense);
+        $this->assertNull($expense->supplier_id);
+        $this->assertEquals('3311', $expense->credit_account);
+        $this->assertEquals('posted', $expense->status);
     }
 
     /** TC8: TK Nợ 6237 (nâng cao) → không tạo WIP ngay, can_transfer=true */
@@ -327,24 +331,45 @@ class ProjectExpenseModeTest extends TestCase
         $this->assertFalse($je->lines->contains(fn ($l) => $l->account_code === '3311'));
     }
 
-    /** TC12: depreciation via batch không có fixed_asset_id → validate error */
-    public function test_depreciation_without_fixed_asset_id_fails(): void
+    /** TC12: depreciation via batch không có debit_account trong line và post_immediately → lỗi TK Nợ */
+    public function test_depreciation_without_debit_account_fails_on_confirm(): void
     {
         $res = $this->post(
             route('projects.projects.expenses.batch', $this->project->id),
             [
-                'expense_date'   => '2026-06-22',
-                'payment_method' => 'depreciation',
-                // fixed_asset_id intentionally missing
+                'expense_date'     => '2026-06-22',
+                'payment_method'   => 'depreciation',
+                'fixed_asset_id'   => $this->fixedAsset->id,
+                'post_immediately' => true,
+                'lines' => [
+                    // no debit_account → confirm pre-check catches it
+                    ['category' => 'equipment', 'description' => 'KH TSCĐ', 'amount' => 500000],
+                ],
+            ]
+        );
+
+        $res->assertRedirect()->assertSessionHas('error');
+        $this->assertEquals(0, ProjectExpense::where('project_id', $this->project->id)->count());
+    }
+
+    /** TC12b: depreciation không có fixed_asset_id (chỉ metadata) → cho phép lưu nháp */
+    public function test_depreciation_without_fixed_asset_saves_draft(): void
+    {
+        $res = $this->post(
+            route('projects.projects.expenses.batch', $this->project->id),
+            [
+                'expense_date'     => '2026-06-22',
+                'payment_method'   => 'depreciation',
+                'post_immediately' => false,
                 'lines' => [
                     ['category' => 'equipment', 'description' => 'KH TSCĐ', 'amount' => 500000],
                 ],
             ]
         );
 
-        $res->assertRedirect();
-        $res->assertSessionHasErrors(['fixed_asset_id']);
-        $this->assertEquals(0, ProjectExpense::where('project_id', $this->project->id)->count());
+        $res->assertRedirect()->assertSessionHas('success');
+        $this->assertEquals(1, ProjectExpense::where('project_id', $this->project->id)->count());
+        $this->assertEquals('draft', ProjectExpense::where('project_id', $this->project->id)->first()->status);
     }
 
     /** TC13: insurance + credit_account=33831 → Nợ154/Có33831 (không dùng 338 tổng hợp) */
@@ -374,23 +399,52 @@ class ProjectExpenseModeTest extends TestCase
         $this->assertFalse($je->lines->contains(fn ($l) => $l->account_code === '338'));
     }
 
-    /** TC14: insurance via batch không có credit_account → validate error */
-    public function test_insurance_without_credit_account_fails(): void
+    /** TC14: insurance không có credit_account nhưng có debit_account → fallback AccountingSettings (33831) */
+    public function test_insurance_without_credit_account_uses_fallback(): void
     {
+        // Seed TK 33831 cần thiết cho JE
+        \App\Models\AccountCode::firstOrCreate(['code' => '33831'], [
+            'name' => 'BHXH NSDLĐ', 'type' => 'liability', 'normal_balance' => 'credit',
+            'is_detail' => true, 'is_active' => true,
+        ]);
+
         $res = $this->post(
             route('projects.projects.expenses.batch', $this->project->id),
             [
-                'expense_date'   => '2026-06-22',
-                'payment_method' => 'insurance',
-                // credit_account intentionally missing
+                'expense_date'     => '2026-06-22',
+                'payment_method'   => 'insurance',
+                'post_immediately' => true,
+                // credit_account not provided → resolveExpenseCreditAccount('insurance') returns '33831' fallback
                 'lines' => [
-                    ['category' => 'labor', 'description' => 'Trích BHXH', 'amount' => 300000],
+                    ['category' => 'labor', 'description' => 'Trích BHXH', 'amount' => 300000, 'debit_account' => '154'],
                 ],
             ]
         );
 
-        $res->assertRedirect();
-        $res->assertSessionHasErrors(['credit_account']);
+        $res->assertRedirect()->assertSessionHas('success');
+        $expense = ProjectExpense::where('project_id', $this->project->id)->first();
+        $this->assertNotNull($expense);
+        // Credit resolved from AccountingSettings fallback
+        $this->assertEquals('33831', $expense->credit_account);
+    }
+
+    /** TC14b: batch confirm không có credit_account và không có payment_method → lỗi TK Có */
+    public function test_confirm_without_credit_account_and_no_payment_method_fails(): void
+    {
+        $res = $this->post(
+            route('projects.projects.expenses.batch', $this->project->id),
+            [
+                'expense_date'     => '2026-06-22',
+                // No payment_method → no header credit resolution
+                'post_immediately' => true,
+                'lines' => [
+                    ['category' => 'labor', 'description' => 'Chi phí lao động', 'amount' => 300000, 'debit_account' => '154'],
+                    // no credit_account in line, no header credit
+                ],
+            ]
+        );
+
+        $res->assertRedirect()->assertSessionHas('error');
         $this->assertEquals(0, ProjectExpense::where('project_id', $this->project->id)->count());
     }
 

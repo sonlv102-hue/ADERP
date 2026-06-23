@@ -157,30 +157,31 @@ class ProjectExpenseContractorTest extends TestCase
         $this->assertNotNull($lines->firstWhere('account_code', '3311'));
     }
 
-    /** TC4: subcontractor_invoice + misc, không supplier_id → validation fail */
-    public function test_subcontractor_invoice_without_supplier_fails(): void
+    /** TC4: subcontractor_invoice + misc, không supplier_id → GHI NHẬN ĐƯỢC — supplier là thông tin bổ sung */
+    public function test_subcontractor_invoice_without_supplier_is_allowed(): void
     {
         $this->addExpense([
             'labor_type'     => 'subcontractor_invoice',
             'payment_method' => 'misc',
             'credit_account' => '3388',
-            // supplier_id không có
-        ])->assertRedirect()->assertSessionMissing('success');
+            // supplier_id omitted — no longer required
+        ])->assertRedirect()->assertSessionHas('success');
 
-        $this->assertEquals(0, ProjectExpense::where('project_id', $this->project->id)->count(),
-            'Không được tạo expense khi subcontractor_invoice thiếu supplier_id');
+        $this->assertEquals(1, ProjectExpense::where('project_id', $this->project->id)->count());
+        $expense = ProjectExpense::where('project_id', $this->project->id)->first();
+        $this->assertNull($expense->supplier_id);
     }
 
-    /** TC5: credit_account=3311 mà không có supplier_id → validation fail */
-    public function test_credit_3311_without_supplier_fails(): void
+    /** TC5: credit_account=3311 không có supplier_id → GHI NHẬN ĐƯỢC — supplier advisory only */
+    public function test_credit_3311_without_supplier_is_allowed(): void
     {
         $this->addExpense([
             'payment_method' => 'payable',
             'credit_account' => '3311',
-            // supplier_id không có
-        ])->assertRedirect()->assertSessionMissing('success');
+            // supplier_id omitted — no longer required
+        ])->assertRedirect()->assertSessionHas('success');
 
-        $this->assertEquals(0, ProjectExpense::where('project_id', $this->project->id)->count());
+        $this->assertEquals(1, ProjectExpense::where('project_id', $this->project->id)->count());
     }
 
     /** TC6: credit_account=3388 mà không có supplier_id → OK */

@@ -198,32 +198,42 @@ class ProjectExpenseV2Test extends TestCase
         $this->assertNotNull($lines->firstWhere('account_code', '3341'));
     }
 
-    /** TC4: TK Có = 3311 không có supplier_id → validate error */
-    public function test_credit_3311_without_supplier_fails_validation(): void
+    /** TC4: TK Có = 3311 không có supplier_id → GHI NHẬN ĐƯỢC — supplier là thông tin bổ sung */
+    public function test_credit_3311_without_supplier_is_allowed(): void
     {
         $this->store([
             'category'       => 'equipment',
-            'description'    => 'Thiếu NCC',
+            'description'    => 'Không có NCC vẫn ghi được',
             'amount'         => 1000000,
             'expense_date'   => '2026-06-10',
             'debit_account'  => '154',
             'credit_account' => '3311',
-            // supplier_id deliberately omitted
-        ])->assertSessionHasErrors('supplier_id');
+            // supplier_id deliberately omitted — no longer required
+        ])->assertRedirect()->assertSessionHas('success');
+
+        $expense = \App\Models\ProjectExpense::where('project_id', $this->project->id)->first();
+        $this->assertNotNull($expense);
+        $this->assertNull($expense->supplier_id);
+        $this->assertEquals('3311', $expense->credit_account);
     }
 
-    /** TC5: TK Có = 1111 không có fund_id → validate error */
-    public function test_credit_1111_without_fund_fails_validation(): void
+    /** TC5: TK Có = 1111 không có fund_id → GHI NHẬN ĐƯỢC — fund là thông tin bổ sung */
+    public function test_credit_1111_without_fund_is_allowed(): void
     {
         $this->store([
             'category'       => 'labor',
-            'description'    => 'Thiếu quỹ',
+            'description'    => 'Không có quỹ vẫn ghi được',
             'amount'         => 500000,
             'expense_date'   => '2026-06-10',
             'debit_account'  => '154',
             'credit_account' => '1111',
-            // fund_id deliberately omitted
-        ])->assertSessionHasErrors('fund_id');
+            // fund_id deliberately omitted — no longer required
+        ])->assertRedirect()->assertSessionHas('success');
+
+        $expense = \App\Models\ProjectExpense::where('project_id', $this->project->id)->first();
+        $this->assertNotNull($expense);
+        $this->assertNull($expense->fund_id);
+        $this->assertEquals('1111', $expense->credit_account);
     }
 
     /** TC6: TK Nợ = 152 (vật tư) → bị chặn, không tạo JE */

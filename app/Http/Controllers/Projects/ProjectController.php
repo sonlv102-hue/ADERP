@@ -528,33 +528,17 @@ class ProjectController extends Controller
     // Expenses
     public function addExpense(Request $request, Project $project): RedirectResponse
     {
-        $creditAccount = $request->input('credit_account', '');
-        $laborType     = $request->input('labor_type', '');
-
-        // supplier_id required when: credit_account = 3311 OR labor_type = subcontractor_invoice
-        $supplierRequired = $creditAccount === '3311' || $laborType === 'subcontractor_invoice';
-
         $data = $request->validate([
             'category'       => ['required', 'string'],
             'labor_type'     => ['nullable', 'string', 'in:internal_employee,freelance_contractor,subcontractor_invoice,insurance_allocation'],
-            'description'    => ['required', 'string', 'max:255'],
+            'description'    => ['nullable', 'string', 'max:255'],
             'amount'         => ['required', 'numeric', 'min:0'],
             'expense_date'   => ['required', 'date'],
             'debit_account'  => ['nullable', 'string', 'max:20'],
             'credit_account' => ['nullable', 'string', 'max:20'],
-            // Conditional required based on TK Có / labor_type
-            'supplier_id' => [
-                \Illuminate\Validation\Rule::requiredIf($supplierRequired),
-                'nullable', 'integer', 'exists:suppliers,id',
-            ],
-            'fund_id' => [
-                \Illuminate\Validation\Rule::requiredIf($creditAccount === '1111'),
-                'nullable', 'integer', 'exists:funds,id',
-            ],
-            'bank_account_id' => [
-                \Illuminate\Validation\Rule::requiredIf($creditAccount === '1121'),
-                'nullable', 'integer', 'exists:bank_accounts,id',
-            ],
+            'supplier_id'    => ['nullable', 'integer', 'exists:suppliers,id'],
+            'fund_id'        => ['nullable', 'integer', 'exists:funds,id'],
+            'bank_account_id'=> ['nullable', 'integer', 'exists:bank_accounts,id'],
             'employee_id'             => ['nullable', 'integer', 'exists:employees,id'],
             'invoice_number'          => ['nullable', 'string', 'max:100'],
             'payment_method'          => ['nullable', 'string', 'in:cash,bank,payable,advance,salary,misc,depreciation,insurance'],
@@ -565,7 +549,6 @@ class ProjectController extends Controller
             'purchase_invoice_id'     => ['nullable', 'integer'],
             'pit_withholding_enabled' => ['nullable', 'boolean'],
             'pit_rate'                => ['nullable', 'numeric', 'min:0', 'max:100'],
-            // Contractor info (freelance_contractor)
             'contractor_name'           => ['nullable', 'string', 'max:255'],
             'contractor_representative' => ['nullable', 'string', 'max:100'],
             'contractor_phone'          => ['nullable', 'string', 'max:50'],
@@ -886,123 +869,136 @@ class ProjectController extends Controller
 
     public function expenseBatchStore(Request $request, Project $project): RedirectResponse
     {
-        $paymentMethod = $request->input('payment_method', 'payable');
+        // Read post_immediately BEFORE validation to use in conditional rules
+        $postImmediately = $request->boolean('post_immediately', true);
+        $paymentMethod   = $request->input('payment_method') ?: null;
 
         $data = $request->validate([
-            'expense_date'    => ['required', 'date'],
-            'invoice_number'  => ['nullable', 'string', 'max:100'],
-            'payment_method'  => ['required', 'string', 'in:cash,bank,payable,advance,salary,misc,depreciation,insurance'],
-            'description'     => ['nullable', 'string', 'max:500'],
+            'expense_date'     => ['required', 'date'],
+            'invoice_number'   => ['nullable', 'string', 'max:100'],
+            'payment_method'   => ['nullable', 'string', 'in:cash,bank,payable,advance,salary,misc,depreciation,insurance'],
+            'description'      => ['nullable', 'string', 'max:500'],
             'post_immediately' => ['nullable', 'boolean'],
-            'supplier_id' => [
-                \Illuminate\Validation\Rule::requiredIf($paymentMethod === 'payable'),
-                'nullable', 'integer', 'exists:suppliers,id',
-            ],
-            'fund_id' => [
-                \Illuminate\Validation\Rule::requiredIf($paymentMethod === 'cash'),
-                'nullable', 'integer', 'exists:funds,id',
-            ],
-            'bank_account_id' => [
-                \Illuminate\Validation\Rule::requiredIf($paymentMethod === 'bank'),
-                'nullable', 'integer', 'exists:bank_accounts,id',
-            ],
-            'fixed_asset_id' => [
-                \Illuminate\Validation\Rule::requiredIf($paymentMethod === 'depreciation'),
-                'nullable', 'integer', 'exists:fixed_assets,id',
-            ],
-            'credit_account' => [
-                \Illuminate\Validation\Rule::requiredIf($paymentMethod === 'insurance'),
-                'nullable', 'string', 'max:20',
-                \Illuminate\Validation\Rule::when($paymentMethod === 'insurance', ['regex:/^338/']),
-            ],
-            'employee_id' => ['nullable', 'integer', 'exists:employees,id'],
-            // Contractor info — header-level (shared across all lines in batch)
+            // All related objects are now optional (no requiredIf)
+            'supplier_id'    => ['nullable', 'integer', 'exists:suppliers,id'],
+            'fund_id'        => ['nullable', 'integer', 'exists:funds,id'],
+            'bank_account_id'=> ['nullable', 'integer', 'exists:bank_accounts,id'],
+            'fixed_asset_id' => ['nullable', 'integer', 'exists:fixed_assets,id'],
+            'credit_account' => ['nullable', 'string', 'max:20'],  // header-level (insurance helper or insurance mode)
+            'employee_id'    => ['nullable', 'integer', 'exists:employees,id'],
             'contractor_name'           => ['nullable', 'string', 'max:255'],
             'contractor_representative' => ['nullable', 'string', 'max:100'],
             'contractor_phone'          => ['nullable', 'string', 'max:50'],
             'contractor_id_number'      => ['nullable', 'string', 'max:50'],
             'contract_number'           => ['nullable', 'string', 'max:100'],
-            'lines'       => ['required', 'array', 'min:1'],
-            'lines.*.category'           => ['required', 'string'],
-            'lines.*.description'        => ['required', 'string', 'max:255'],
-            'lines.*.amount'             => ['required', 'numeric', 'min:0'],
-            'lines.*.debit_account'      => ['nullable', 'string', 'max:20'],
-            'lines.*.vat_rate'           => ['nullable', 'numeric', 'min:0', 'max:100'],
-            'lines.*.vat_amount'         => ['nullable', 'integer', 'min:0'],
-            'lines.*.has_vat_invoice'    => ['nullable', 'boolean'],
-            'lines.*.labor_type'         => ['nullable', 'string', 'in:internal_employee,freelance_contractor,subcontractor_invoice,insurance_allocation'],
-            'lines.*.notes'              => ['nullable', 'string', 'max:500'],
-            'lines.*.pit_withholding_enabled' => ['nullable', 'boolean'],
+            'lines'                          => ['required', 'array', 'min:1'],
+            'lines.*.category'               => ['required', 'string'],
+            'lines.*.description'            => ['nullable', 'string', 'max:255'],
+            'lines.*.amount'                 => ['required', 'numeric', 'min:0'],
+            'lines.*.debit_account'          => ['nullable', 'string', 'max:20'],
+            'lines.*.credit_account'         => ['nullable', 'string', 'max:20'],  // per-line (takes priority over header)
+            'lines.*.vat_rate'               => ['nullable', 'numeric', 'min:0', 'max:100'],
+            'lines.*.vat_amount'             => ['nullable', 'integer', 'min:0'],
+            'lines.*.has_vat_invoice'        => ['nullable', 'boolean'],
+            'lines.*.labor_type'             => ['nullable', 'string', 'in:internal_employee,freelance_contractor,subcontractor_invoice,insurance_allocation'],
+            'lines.*.notes'                  => ['nullable', 'string', 'max:500'],
+            'lines.*.pit_withholding_enabled'=> ['nullable', 'boolean'],
             'lines.*.pit_rate'               => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
-        $shouldPost = (bool) ($data['post_immediately'] ?? true);
+        $shouldPost = (bool) ($data['post_immediately'] ?? $postImmediately);
 
-        // Resolve credit_account once per batch (header-level: same payment method for all lines)
-        $creditAcct = $this->resolveExpenseCreditAccount($data);
+        // Header-level credit resolved from payment_method (backward compat + helper mode)
+        $headerCreditAcct = $paymentMethod ? $this->resolveExpenseCreditAccount($data) : null;
+
+        // When posting: validate each line has debit_account and a resolvable credit_account
+        if ($shouldPost) {
+            foreach ($data['lines'] as $idx => $line) {
+                $lineNum    = $idx + 1;
+                $lineDebit  = $line['debit_account'] ?? null;
+                $lineCredit = $line['credit_account'] ?? $headerCreditAcct;
+
+                if (!$lineDebit) {
+                    return back()->withInput()->with(
+                        'error',
+                        "Dòng {$lineNum}: Chưa có TK Nợ. Vui lòng nhập TK Nợ trước khi ghi nhận."
+                    );
+                }
+                if (!$lineCredit) {
+                    return back()->withInput()->with(
+                        'error',
+                        "Dòng {$lineNum}: Chưa có TK Có. Vui lòng nhập TK Có trước khi ghi nhận."
+                    );
+                }
+            }
+        }
 
         try {
-            DB::transaction(function () use ($data, $project, $shouldPost, $creditAcct) {
+            DB::transaction(function () use ($data, $project, $shouldPost, $headerCreditAcct, $paymentMethod) {
                 foreach ($data['lines'] as $line) {
                     $grossAmount = (int) round((float) $line['amount']);
 
-                    // Always resolve debit_account from category when not provided
-                    $debitAcct = $line['debit_account']
-                        ?: ExpenseCategory::from($line['category'])->defaultDebitAccount();
+                    // Resolve debit: per-line input first, then category default when posting
+                    $debitAcct = $line['debit_account'] ?? null;
+                    if (!$debitAcct && $shouldPost) {
+                        $debitAcct = ExpenseCategory::from($line['category'])->defaultDebitAccount();
+                    }
+
+                    // Resolve credit: per-line first, then header (from payment_method)
+                    $creditAcct = $line['credit_account'] ?? $headerCreditAcct;
 
                     // Chặn TK 152/156
-                    if (preg_match('/^15[26]/', $debitAcct)) {
+                    if ($debitAcct && preg_match('/^15[26]/', $debitAcct)) {
                         throw new \InvalidArgumentException(
                             "TK {$debitAcct} (vật tư/hàng hóa) không được dùng trong Chi phí PS. Sử dụng phiếu xuất kho."
                         );
                     }
 
                     $pitEnabled = !empty($line['pit_withholding_enabled'])
-                                  && in_array($data['payment_method'], ['cash', 'bank'])
+                                  && in_array($paymentMethod, ['cash', 'bank'])
                                   && !empty($line['pit_rate']);
                     $pitAmount  = $pitEnabled ? (int) round($grossAmount * (float) $line['pit_rate'] / 100) : 0;
 
-                    // freelance_contractor không có HĐ VAT → clear VAT
-                    $lineLaborType   = $line['labor_type'] ?? null;
-                    $lineHasVat      = !empty($line['has_vat_invoice']);
+                    $lineLaborType    = $line['labor_type'] ?? null;
+                    $lineHasVat       = !empty($line['has_vat_invoice']);
                     $isFreelanceNoVat = $lineLaborType === 'freelance_contractor' && !$lineHasVat;
                     $vatRate   = $isFreelanceNoVat ? null : ($line['vat_rate'] ?? null);
                     $vatAmount = $isFreelanceNoVat ? 0   : (int) ($line['vat_amount'] ?? 0);
 
                     $expense = $project->expenses()->create([
-                        'category'                => $line['category'],
-                        'labor_type'              => $lineLaborType,
-                        'description'             => $line['description'],
-                        'amount'                  => $grossAmount,
-                        'expense_date'            => $data['expense_date'],
-                        'debit_account'           => $debitAcct,
-                        'credit_account'          => $creditAcct,
-                        'vat_rate'                => $vatRate,
-                        'vat_amount'              => $vatAmount,
-                        'has_vat_invoice'         => $lineHasVat,
-                        'payment_method'          => $data['payment_method'],
-                        'supplier_id'             => $data['supplier_id'] ?? null,
-                        'fund_id'                 => $data['fund_id'] ?? null,
-                        'bank_account_id'         => $data['bank_account_id'] ?? null,
-                        'employee_id'             => $data['employee_id'] ?? null,
-                        'fixed_asset_id'          => $data['fixed_asset_id'] ?? null,
-                        'invoice_number'          => $data['invoice_number'] ?? null,
+                        'category'                  => $line['category'],
+                        'labor_type'                => $lineLaborType,
+                        'description'               => $line['description'] ?? null,
+                        'amount'                    => $grossAmount,
+                        'expense_date'              => $data['expense_date'],
+                        'debit_account'             => $debitAcct,
+                        'credit_account'            => $creditAcct,
+                        'vat_rate'                  => $vatRate,
+                        'vat_amount'                => $vatAmount,
+                        'has_vat_invoice'           => $lineHasVat,
+                        'payment_method'            => $paymentMethod,
+                        'supplier_id'               => $data['supplier_id'] ?? null,
+                        'fund_id'                   => $data['fund_id'] ?? null,
+                        'bank_account_id'           => $data['bank_account_id'] ?? null,
+                        'employee_id'               => $data['employee_id'] ?? null,
+                        'fixed_asset_id'            => $data['fixed_asset_id'] ?? null,
+                        'invoice_number'            => $data['invoice_number'] ?? null,
                         'contractor_name'           => $data['contractor_name'] ?? null,
                         'contractor_representative' => $data['contractor_representative'] ?? null,
                         'contractor_phone'          => $data['contractor_phone'] ?? null,
                         'contractor_id_number'      => $data['contractor_id_number'] ?? null,
                         'contract_number'           => $data['contract_number'] ?? null,
-                        'pit_withholding_enabled' => $pitEnabled,
-                        'pit_rate'                => $pitEnabled ? ($line['pit_rate'] ?? 0) : 0,
-                        'pit_amount'              => $pitAmount,
-                        'net_payment_amount'      => $pitEnabled ? max(0, $grossAmount - $pitAmount) : 0,
-                        'status'                  => 'draft',
-                        'created_by'              => auth()->id(),
+                        'pit_withholding_enabled'   => $pitEnabled,
+                        'pit_rate'                  => $pitEnabled ? ($line['pit_rate'] ?? 0) : 0,
+                        'pit_amount'                => $pitAmount,
+                        'net_payment_amount'        => $pitEnabled ? max(0, $grossAmount - $pitAmount) : 0,
+                        'status'                    => 'draft',
+                        'created_by'                => auth()->id(),
                     ]);
 
                     if ($shouldPost && $grossAmount > 0) {
                         $expense->loadMissing('project', 'supplier', 'fund', 'bankAccount');
-                        $this->wip->createFromExpense($expense, useCashVoucher: true);
+                        $this->wip->createFromExpense($expense, useCashVoucher: $paymentMethod === 'cash');
                     }
                 }
             });
