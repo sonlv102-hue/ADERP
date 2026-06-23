@@ -21,8 +21,12 @@
 | Phase F (2026-06-07) | 900045–900065 | Accounting audit: COGS snapshot, revenue mapping, PIT config, AR/AP cleanup, Journal index |
 | Phase G (2026-06-13) | 900066–900078 | Project FIFO lots, StockEntry/Exit lot columns, JournalEntry void workflow |
 | Phase H (2026-06-14) | 900079–900084 | Period close batches, JE edit/unpost, AccountingSettings |
-| **Phase I (2026-06-15)** | **900085–900087** | Fund Transfer (LCQ-), Balance Sheet tabs (TK chưa map), Payroll Adjustment |
-| **Next (900xxx)** | **900088** | Tiếp tục sau 2026_06_15_900087 |
+| Phase I (2026-06-15) | 900085–900087 | Fund Transfer (LCQ-), Balance Sheet tabs (TK chưa map), Payroll Adjustment |
+| **Phase J (2026-06-15)** | **900088–900114** | Fixed Assets full overhaul, Supplier Advance/331UT, Personal Finance, Payroll accounting, AR/AP CashVoucher, Prepayment Offset |
+| **Phase L (2026-06-18–19)** | **900115–900131** | CCDC (small_tools 7 tables), Customer Advance/131UT, Search indexes, AVCO seed/backfill |
+| **Phase M (2026-06-19–21)** | **900132–900146** | AVCO engine (inventory_balances), Project Direct Materials, WIP corrections, StockExit multi-PO, Invoice per-line items |
+| **Phase N (2026-06-21–22)** | **900200–900210** | Project expense extensions (labor/PIT/contractor/fixed_asset), Extra cost transfers (154 batch), B02/B03 TT133, cash_flow_code |
+| **Next (900xxx)** | **900211** | Tiếp tục sau 2026_06_22_900210 (date prefix: 2026_06_23_) |
 | **Next (bank/E series)** | **100007** | Tiếp tục sau 2026_06_05_100006 nếu cùng chủ đề |
 
 ## Services & FSM
@@ -48,6 +52,22 @@
 | AccountingService | JournalEntry, JournalEntryLine | post() + markPosted() + reverseOrDelete() + reverse() + createDraft() + updateLines() + unpost() + restoreOriginalLines() |
 | AccountingSettings | (helper, no model) | get(key, default) — request-level cache; clearCache() sau update |
 | BankReconciliationService | BankTransaction, JournalEntry | reconcile() + unreconcile() |
+| FundTransferService | FundTransfer, Fund | post() Dr/Cr fund accounts; reverse(); cancel() |
+| FixedAssetDepreciationService | FixedAsset, FixedAssetDepreciation | runMonthly(period); schedule view |
+| FixedAssetJournalService | FixedAsset, JournalEntry | postAcquisition(); postDisposal(); postMovement() |
+| SupplierAdvanceService | SupplierOpeningAdvance, SupplierAdvanceAllocation | create() enforce 331UT; allocate() Dr3311/Cr331UT khi khác TK |
+| CustomerAdvanceService | CustomerOpeningAdvance, CustomerAdvanceAllocation | create() enforce 131UT; allocate() |
+| SmallToolService | SmallTool, SmallToolReceipt/Issue/Allocation/Disposal | confirm() Dr1531/Cr331; issue() Dr2422/Cr1531; allocate() phân bổ chi phí |
+| SmallToolJournalService | SmallTool, JournalEntry | postAcquisition(); postIssue(); postAllocation() |
+| AvcoService | InventoryBalance, StockMovement | recordEntry(); recordExit(); initializeFromOpeningBalance(); getBalance() |
+| ProjectDirectMaterialService | ProjectDirectMaterial | store() 3 loại: tracking_only/invoice_link/journal_entry; assertNoDoublePost() |
+| ProjectWipCorrectionService | ProjectWipEntry, JournalEntry | correction flow Dr/Cr 154 |
+| ProjectExtraCostTransferService | ProjectExtraCostTransfer, ProjectWipEntry | previewBatch(); transferBatch(); reverse() |
+| PersonalLoanService | PersonalLoan, PersonalLoanRepayment | confirm(); repay() |
+| PersonalExpenseService | PersonalExpenseReport, PersonalExpenseLine | confirm() + JE |
+| ArApLedgerService | (utility) | Mọi màn AR/AP phải dùng service này — không tự query invoice/purchase_invoice riêng |
+| PayrollRollbackService | Payroll, PayrollItem | rollback confirmed payroll |
+| SystemHealthService | (utility) | 10 checks độc lập — seed, FK, orphan, migration drift |
 | PeriodCloseService | AccountingPeriod, PeriodCloseBatch, JournalEntry | close(period) idempotent; getPeriodBalances(); kết chuyển Dr/Cr 911 ↔ 4212 |
 
 ## Completed Modules
@@ -96,8 +116,40 @@
   - Product: item_type + revenue_account_code + inventory_account UI trên Form/Show
   - ProductCategory: revenue_account_code UI trên Form
 - **Phase I (2026-06-15):**
-  - Fund Transfer (LCQ-): bảng fund_transfers, FundTransferStatus enum, FundTransferService (post/reverse/cancel), resolveFundAccount() ưu tiên fund.account_code rồi fallback AccountingSettings
-  - Fund: account_code column (FK tuỳ chọn vào chi tiết TK 1121/1111); balance() tính thêm transfers_in/out; Funds/Form + Index updated
-  - Balance Sheet: thêm 3 tabs — "Bảng cân đối", "TK chưa map" (badge count), "Kiểm tra cân đối"; unmappedAccounts passed từ controller
-  - Payroll Adjustment: payroll_items.adjustment_amount/reason/taxable/adjusted_by/adjusted_at; payrolls.total_adjustment; PayrollService.updateAdjustment(); thuc_linh = net_salary + adjustment_amount - advance; JE Dr bao gồm adjustment khi taxable=true; Payrolls/Show.vue: cột "Điều chỉnh" + adjForm trong edit modal
-- **Extras:** In-app TabBar (useTabs.js), Delivery tracking (order_items.delivered_quantity), Serial tracking in entries/exits, Backup module (BackupController), Opening Balance Excel import
+  - Fund Transfer (LCQ-): fund_transfers, FundTransferService (post/reverse/cancel)
+  - Balance Sheet: tabs "Bảng cân đối" / "TK chưa map" / "Kiểm tra cân đối"
+  - Payroll Adjustment: adjustment_amount/reason/taxable per payroll_item
+- **Phase J (2026-06-15):**
+  - Fixed Assets full: fixed_asset_categories, fixed_asset_movements, fixed_asset_repairs, fixed_asset_disposals; FixedAssetService + FixedAssetJournalService + FixedAssetDepreciationService; TT45 fields
+  - Purchase Invoice Type (9 loại): PurchaseInvoiceType enum, 3311 vs 3312 routing per type
+  - Supplier Advance / TK 331UT: supplier_opening_advances, supplier_advance_allocations; SupplierAdvanceService; allocate() Dr3311/Cr331UT
+  - Personal Finance: shareholders (TV-), personal_loans (PVay-), personal_expense_reports (PCH-)
+  - Payroll bút toán: Cr 3341/3335/33831/33832/33841/33842/3385/33821; chi lương qua Fund → CashVoucher PC-
+  - balance_sheet_account_mappings; fix parent account codes (TK 112→1121)
+- **Phase K (2026-06-17):**
+  - AR/AP Cash Voucher integration: cash_voucher_id trên payments + purchase_invoice_payments; PT-/PC- tự động
+  - Supplier Prepayment Offset: payment_type cash/offset/combined trên purchase_invoice_payments
+  - Period close enhancements; purchase_order_id nullable trên purchase_invoices
+- **Phase L (2026-06-18–19):**
+  - CCDC: small_tool_categories, small_tools, small_tool_receipts, small_tool_issues, small_tool_allocations, small_tool_transfers, small_tool_disposals; SmallToolService + SmallToolJournalService + SmallToolAllocationService
+  - Customer Advance / TK 131UT: customer_opening_advances, customer_advance_allocations; CustomerAdvanceService
+  - Search: RemoteSearchSelect.vue + SearchController (8 endpoints); search indexes migration 900123/900209
+  - source_item_id trên stock_movements (traceability)
+  - AVCO seed: advance account codes 331UT/131UT; supplier advance reversal fields
+- **Phase M (2026-06-19–21):**
+  - AVCO engine: inventory_balances (product+warehouse UNIQUE, qty/value/avg_cost); cost_source='avco'|'fifo'|'legacy' trên stock_exit_items; AvcoService wired vào StockService
+  - Purchase Invoice per-line: purchase_invoice_items (per-line account_code, project_id, credit_account)
+  - Project Direct Materials: project_direct_materials; ProjectDirectMaterialService (3 loại, chống double-post)
+  - Project WIP corrections: project_wip_correction_logs; ProjectWipCorrectionService
+  - StockExit redesign: purchase_order_id trên stock_exits; stock_exit_purchase_orders junction; order_item_id trên stock_exit_items; multi-PO filter trên Form.vue
+  - Invoice per-line: invoice_items; InvoiceController cogs_status
+  - TK 621/623 seeded; project_expenses extended (debit/credit account, supplier, VAT, payment_method)
+- **Phase N (2026-06-21–22):**
+  - Project expense modes: labor_type, PIT withholding, contractor fields, fixed_asset link, cash_voucher link; transfer_status cancelled/data_error
+  - Project Extra Cost Transfers (kết chuyển 154 batch): project_extra_cost_transfers; ProjectExtraCostTransferService (previewBatch/transferBatch)
+  - B02-DNN IncomeStatementService TT133 rewrite (cột Năm trước)
+  - B03-DNN CashFlowStatementService TT133 (direct method, phân loại theo TK đối ứng); cash_flow_code trên cash_vouchers
+  - WIP cancel for PurchaseInvoice source; admin force-delete stock exit
+  - Internal Transfer Report: period filter (month/year/custom/all)
+  - RemoteSearchSelect đợt 2: 9 forms nữa (SupplierAdvances, PrepaidExpenses, FixedAssets, PurchaseContracts, CustomerAdvances, Invoices, Projects, Sales/Contracts, Commissions)
+- **Extras:** In-app TabBar (useTabs.js), Delivery tracking, Serial tracking, Backup module, Opening Balance Excel import, Mobile Responsive (2026-06-19), Admin System Health (SystemHealthService, 10 checks), Dashboard KPI widget, Account Ledger TK cha→con, Draft JE badge
