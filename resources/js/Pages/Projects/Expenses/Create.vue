@@ -404,7 +404,18 @@ const form = useForm({
   lines: [],
 });
 
-addLine();
+// TK Có được resolve từ payment_method (header-level)
+const resolvedHeaderCredit = computed(() => {
+  if (!form.payment_method) return '';
+  if (form.payment_method === 'insurance') return form.credit_account_insurance || '';
+  if (form.payment_method === 'cash' && form.fund_id) {
+    return props.funds.find(f => f.id == form.fund_id)?.account_code || '1111';
+  }
+  if (form.payment_method === 'bank' && form.bank_account_id) {
+    return props.bankAccounts.find(b => b.id == form.bank_account_id)?.account_code || '1121';
+  }
+  return PAYMENT_MODES[form.payment_method]?.credit || '';
+});
 
 function makeLine() {
   const creditFromHelper = resolvedHeaderCredit.value;
@@ -430,18 +441,7 @@ function removeLine(idx) {
   form.lines.splice(idx, 1);
 }
 
-// TK Có được resolve từ payment_method (header-level)
-const resolvedHeaderCredit = computed(() => {
-  if (!form.payment_method) return '';
-  if (form.payment_method === 'insurance') return form.credit_account_insurance || '';
-  if (form.payment_method === 'cash' && form.fund_id) {
-    return props.funds.find(f => f.id == form.fund_id)?.account_code || '1111';
-  }
-  if (form.payment_method === 'bank' && form.bank_account_id) {
-    return props.bankAccounts.find(b => b.id == form.bank_account_id)?.account_code || '1121';
-  }
-  return PAYMENT_MODES[form.payment_method]?.credit || '';
-});
+addLine();
 
 function onPaymentMethodChange() {
   // Reset related objects
