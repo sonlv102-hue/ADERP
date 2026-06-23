@@ -114,7 +114,7 @@
                 </template>
                 <span v-else class="text-gray-400">—</span>
               </td>
-              <td class="px-5 py-3 text-right font-medium text-gray-800">{{ formatVnd(item.line_total) }}</td>
+              <td class="px-5 py-3 text-right font-medium text-gray-800">{{ formatVnd(item.line_total + (item.vat_amount ?? 0)) }}</td>
             </tr>
           </tbody>
           <tfoot class="bg-gray-50 border-t border-gray-200">

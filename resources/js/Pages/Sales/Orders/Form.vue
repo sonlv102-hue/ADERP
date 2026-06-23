@@ -506,6 +506,7 @@ const onProductSelect = (idx, opt) => {
     item.name            = opt.label;
     item.unit            = opt.unit ?? opt.meta ?? '';
     item.unit_price      = opt.sell_price ?? opt.cost_price ?? 0;
+    item.vat_rate        = opt.vat_percent !== undefined ? opt.vat_percent : item.vat_rate;
     item._productDisplay = `${opt.code} - ${opt.label}`;
   } else {
     item.name = ''; item.unit = ''; item._productDisplay = '';
