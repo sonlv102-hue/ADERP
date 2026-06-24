@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen bg-slate-100 flex">
+  <div class="h-screen bg-slate-100 flex overflow-hidden">
 
     <!-- Sidebar -->
     <Sidebar :open="sidebarOpen" :is-mobile="isMobile" @close="sidebarOpen = false" />
@@ -56,7 +56,7 @@
       </div>
 
       <!-- Page content -->
-      <main class="flex-1 p-4 lg:p-6">
+      <main class="flex-1 min-h-0 overflow-y-auto p-4 lg:p-6">
         <slot />
       </main>
     </div>
