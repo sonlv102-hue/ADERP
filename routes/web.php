@@ -656,6 +656,7 @@ Route::middleware('auth')->group(function () {
 
         Route::resource('supplier-advances', SupplierAdvanceController::class);
         Route::post('supplier-advances/{supplierAdvance}/cancel', [SupplierAdvanceController::class, 'cancel'])->name('supplier-advances.cancel');
+        Route::post('supplier-advances/{supplierAdvance}/refund', [SupplierAdvanceController::class, 'refund'])->name('supplier-advances.refund');
 
         Route::get('purchase-contracts/export-excel', [PurchaseContractController::class, 'exportExcel'])->name('purchase-contracts.export-excel');
         Route::resource('purchase-contracts', PurchaseContractController::class);

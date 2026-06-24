@@ -11,7 +11,7 @@ class SupplierOpeningAdvance extends Model
     protected $fillable = [
         'supplier_id', 'advance_type', 'source_type', 'source_id',
         'fiscal_year', 'opening_date', 'account_code',
-        'amount', 'remaining_amount', 'currency', 'reference_no',
+        'amount', 'remaining_amount', 'refunded_amount', 'currency', 'reference_no',
         'bank_transaction_ref', 'original_payment_date', 'original_payment_note',
         'status', 'notes', 'created_by',
     ];
@@ -21,6 +21,7 @@ class SupplierOpeningAdvance extends Model
         'original_payment_date' => 'date',
         'amount'                => 'decimal:2',
         'remaining_amount'      => 'decimal:2',
+        'refunded_amount'       => 'decimal:2',
     ];
 
     public function supplier(): BelongsTo
@@ -42,6 +43,12 @@ class SupplierOpeningAdvance extends Model
     {
         return $this->hasMany(SupplierAdvanceAllocation::class, 'opening_advance_id')
             ->where('status', 'active');
+    }
+
+    public function refunds(): HasMany
+    {
+        return $this->hasMany(SupplierAdvanceRefund::class, 'supplier_advance_id')
+            ->where('status', 'confirmed');
     }
 
     public function scopeAvailable($query)

@@ -5,10 +5,13 @@ namespace App\Services;
 use App\Enums\CashVoucherStatus;
 use App\Enums\PurchaseInvoiceStatus;
 use App\Models\ArApOpeningBalance;
+use App\Models\BankAccount;
 use App\Models\CashVoucher;
+use App\Models\Fund;
 use App\Models\PurchaseInvoice;
 use App\Models\Supplier;
 use App\Models\SupplierAdvanceAllocation;
+use App\Models\SupplierAdvanceRefund;
 use App\Models\SupplierOpeningAdvance;
 use App\Services\AccountingSettings;
 use Illuminate\Support\Collection;
@@ -112,6 +115,104 @@ class SupplierAdvanceService
             ]);
 
             Log::info("SupplierAdvance #{$advance->id} cancelled by user " . auth()->id() . ". Reason: {$reason}");
+        });
+    }
+
+    /**
+     * Thu hồi tiền trả trước — NCC hoàn lại tiền.
+     * JE: Dr cash_account / Cr 331UT (hoặc advance.account_code)
+     */
+    public function refund(SupplierOpeningAdvance $advance, array $data): SupplierAdvanceRefund
+    {
+        if ($advance->status === 'cancelled') {
+            throw new \RuntimeException('Không thể thu hồi khoản đã hủy.');
+        }
+        if ($advance->status === 'fully_applied' && (float) $advance->remaining_amount <= 0) {
+            throw new \RuntimeException('Khoản trả trước đã dùng hết, không có số dư để thu hồi.');
+        }
+
+        $amount    = round((float) $data['amount'], 2);
+        $remaining = round((float) $advance->remaining_amount, 2);
+
+        if ($amount <= 0) {
+            throw new \RuntimeException('Số tiền thu hồi phải lớn hơn 0.');
+        }
+        if ($amount > $remaining + 0.01) {
+            throw new \RuntimeException(
+                'Số tiền thu hồi (' . number_format($amount, 0, ',', '.') . ') vượt quá số còn lại (' . number_format($remaining, 0, ',', '.') . ').'
+            );
+        }
+
+        return DB::transaction(function () use ($advance, $data, $amount) {
+            $supplier       = Supplier::findOrFail($advance->supplier_id);
+            $advanceAccount = $advance->account_code ?? AccountingSettings::get('supplier_advance_account', '331UT');
+
+            // Xác định TK tiền nhận về
+            if ($data['refund_method'] === 'cash') {
+                $fund        = Fund::findOrFail($data['fund_id']);
+                $cashAccount = $fund->account_code;
+            } else {
+                $bank        = BankAccount::findOrFail($data['bank_account_id']);
+                $cashAccount = $bank->account_code;
+            }
+
+            // JE: Dr cashAccount / Cr advanceAccount
+            $je = $this->accounting->post(
+                description: 'Thu hồi trả trước NCC ' . $supplier->name . ($advance->reference_no ? " ({$advance->reference_no})" : ''),
+                date: \Carbon\Carbon::parse($data['refund_date']),
+                lines: [
+                    [
+                        'account'      => $cashAccount,
+                        'debit'        => $amount,
+                        'credit'       => 0,
+                        'description'  => 'Thu tiền hoàn lại NCC ' . $supplier->name,
+                        'partner_type' => 'supplier',
+                        'partner_id'   => $advance->supplier_id,
+                    ],
+                    [
+                        'account'      => $advanceAccount,
+                        'debit'        => 0,
+                        'credit'       => $amount,
+                        'description'  => 'Giảm trả trước NCC ' . $supplier->name,
+                        'partner_type' => 'supplier',
+                        'partner_id'   => $advance->supplier_id,
+                    ],
+                ],
+                referenceType: SupplierAdvanceRefund::class,
+                referenceId: 0,
+                isAuto: false,
+            );
+
+            $refund = SupplierAdvanceRefund::create([
+                'supplier_advance_id' => $advance->id,
+                'supplier_id'         => $advance->supplier_id,
+                'refund_date'         => $data['refund_date'],
+                'amount'              => $amount,
+                'refund_method'       => $data['refund_method'],
+                'fund_id'             => $data['fund_id'] ?? null,
+                'bank_account_id'     => $data['bank_account_id'] ?? null,
+                'journal_entry_id'    => $je?->id,
+                'description'         => $data['description'] ?? null,
+                'status'              => 'confirmed',
+                'created_by'          => auth()->id(),
+            ]);
+
+            if ($je) {
+                \App\Models\JournalEntry::where('id', $je->id)->update(['reference_id' => $refund->id]);
+            }
+
+            $newRefunded  = round((float) $advance->refunded_amount + $amount, 2);
+            $newRemaining = round((float) $advance->remaining_amount - $amount, 2);
+
+            $advance->update([
+                'refunded_amount'  => $newRefunded,
+                'remaining_amount' => $newRemaining,
+                'status'           => $newRemaining <= 0 ? 'fully_applied' : 'partially_applied',
+            ]);
+
+            Log::info("SupplierAdvance #{$advance->id} thu hồi " . number_format($amount, 0, ',', '.') . " đ bởi user " . auth()->id());
+
+            return $refund;
         });
     }
 
