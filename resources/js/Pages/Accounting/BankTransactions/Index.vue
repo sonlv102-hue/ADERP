@@ -17,16 +17,19 @@
         </div>
       </div>
 
-      <!-- Import Excel + Recategorize buttons -->
-      <div v-if="can('accounting.manage')" class="flex justify-end gap-2 mb-3">
-        <button @click="showRecategorize = true" class="erp-btn-secondary flex items-center gap-2">
+      <!-- Export + Import Excel + Recategorize buttons -->
+      <div class="flex justify-end gap-2 mb-3 flex-wrap">
+        <ExportExcelButton
+          :endpoint="route('accounting.bank-accounts.transactions.export-excel', props.bankAccount.id)"
+          :filters="filters" />
+        <button v-if="can('accounting.manage')" @click="showRecategorize = true" class="erp-btn-secondary flex items-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
           </svg>
           Phân loại lại
         </button>
-        <button @click="showImport = true" class="erp-btn-secondary flex items-center gap-2">
+        <button v-if="can('accounting.manage')" @click="showImport = true" class="erp-btn-secondary flex items-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
@@ -285,6 +288,7 @@ import { ref } from 'vue';
 import { router, useForm, Link } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
+import ExportExcelButton from '@/Components/Shared/ExportExcelButton.vue';
 import { usePermission } from '@/composables/usePermission';
 
 const { hasPermission: can } = usePermission();

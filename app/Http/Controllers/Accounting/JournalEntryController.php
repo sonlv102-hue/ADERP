@@ -474,4 +474,12 @@ class JournalEntryController extends Controller
 
         return back()->with('success', $message);
     }
+
+    public function exportExcel(\Illuminate\Http\Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\JournalEntriesExport($request->all()),
+            'but-toan_' . now()->format('Y-m-d') . '.xlsx'
+        );
+    }
 }

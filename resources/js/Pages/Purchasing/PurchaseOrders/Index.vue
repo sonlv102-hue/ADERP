@@ -3,7 +3,8 @@
     <div class="space-y-5">
       <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-gray-900">Đơn mua hàng</h1>
-        <div class="flex gap-2">
+        <div class="flex gap-2 flex-wrap">
+          <ExportExcelButton :endpoint="route('purchasing.purchase-orders.export-excel')" :filters="{ q: search, status: statusFilter }" />
           <button v-if="can('purchasing.create')" @click="openImport"
             class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -335,6 +336,7 @@ import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
 import Modal from '@/Components/Shared/Modal.vue';
+import ExportExcelButton from '@/Components/Shared/ExportExcelButton.vue';
 import { usePermission } from '@/composables/usePermission';
 import { useCurrency } from '@/composables/useCurrency';
 

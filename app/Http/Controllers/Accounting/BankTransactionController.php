@@ -170,4 +170,13 @@ class BankTransactionController extends Controller
 
         return back()->with('success', $msg);
     }
+
+    public function exportExcel(\Illuminate\Http\Request $request, \App\Models\BankAccount $bankAccount): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        $filters = array_merge($request->all(), ['bank_account_id' => $bankAccount->id]);
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\BankTransactionsExport($filters),
+            'giao-dich-ngan-hang_' . now()->format('Y-m-d') . '.xlsx'
+        );
+    }
 }

@@ -236,6 +236,7 @@ Route::middleware('auth')->group(function () {
 
     // Sales - báo giá, đơn hàng, hợp đồng
     Route::prefix('sales')->name('sales.')->middleware('can:quotations.view')->group(function () {
+        Route::get('quotations/export-excel', [QuotationController::class, 'exportExcel'])->name('quotations.export-excel');
         Route::resource('quotations', QuotationController::class);
         Route::post('quotations/{quotation}/mark-sent', [QuotationController::class, 'markSent'])->name('quotations.mark-sent');
         Route::post('quotations/{quotation}/approve', [QuotationController::class, 'approve'])->name('quotations.approve');
@@ -248,6 +249,7 @@ Route::middleware('auth')->group(function () {
         Route::post('quotations/{quotation}/attachment', [QuotationController::class, 'uploadAttachment'])->name('quotations.attachment.upload');
         Route::delete('quotations/{quotation}/attachment', [QuotationController::class, 'deleteAttachment'])->name('quotations.attachment.delete');
 
+        Route::get('orders/export-excel', [OrderController::class, 'exportExcel'])->name('orders.export-excel');
         Route::resource('orders', OrderController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
         Route::post('orders/{order}/process', [OrderController::class, 'process'])->name('orders.process');
         Route::post('orders/{order}/complete', [OrderController::class, 'complete'])->name('orders.complete');
@@ -301,6 +303,7 @@ Route::middleware('auth')->group(function () {
 
     // Projects - dự án thi công IT
     Route::prefix('projects')->name('projects.')->middleware('can:projects.view')->group(function () {
+        Route::get('projects/export-excel', [ProjectController::class, 'exportExcel'])->name('projects.export-excel');
         Route::resource('projects', ProjectController::class);
         Route::post('projects/{project}/transition', [ProjectController::class, 'transition'])->name('projects.transition');
 
@@ -310,6 +313,8 @@ Route::middleware('auth')->group(function () {
         Route::post('projects/{project}/materials', [ProjectController::class, 'addMaterial'])->name('projects.materials.store');
         Route::delete('projects/{project}/materials/{material}', [ProjectController::class, 'removeMaterial'])->name('projects.materials.destroy');
 
+        Route::get('projects/{project}/expenses/export-excel', [ProjectController::class, 'exportExpensesExcel'])->name('projects.expenses.export-excel');
+        Route::get('projects/{project}/wip/export-excel', [ProjectController::class, 'exportWipExcel'])->name('projects.wip.export-excel');
         Route::get('projects/{project}/expenses/create', [ProjectController::class, 'expenseCreate'])->name('projects.expenses.create');
         Route::post('projects/{project}/expenses/batch', [ProjectController::class, 'expenseBatchStore'])->name('projects.expenses.batch');
         Route::post('projects/{project}/expenses', [ProjectController::class, 'addExpense'])->name('projects.expenses.store');
@@ -360,6 +365,7 @@ Route::middleware('auth')->group(function () {
 
     // Accounting - kế toán
     Route::prefix('accounting')->name('accounting.')->middleware('can:accounting.view')->group(function () {
+        Route::get('invoices/export-excel', [InvoiceController::class, 'exportExcel'])->name('invoices.export-excel');
         Route::resource('invoices', InvoiceController::class);
         Route::post('invoices/{invoice}/mark-sent',       [InvoiceController::class, 'markSent'])->name('invoices.mark-sent');
         Route::post('invoices/{invoice}/mark-paid',       [InvoiceController::class, 'markPaid'])->name('invoices.mark-paid');
@@ -383,6 +389,7 @@ Route::middleware('auth')->group(function () {
 
         // Quỹ và phiếu thu/chi
         Route::resource('funds', FundController::class)->except(['show']);
+        Route::get('cash-vouchers/export-excel', [CashVoucherController::class, 'exportExcel'])->name('cash-vouchers.export-excel');
         Route::resource('cash-vouchers', CashVoucherController::class);
         Route::post('cash-vouchers/{cashVoucher}/confirm', [CashVoucherController::class, 'confirm'])->name('cash-vouchers.confirm');
         Route::post('cash-vouchers/{cashVoucher}/cancel',  [CashVoucherController::class, 'cancel'])->name('cash-vouchers.cancel');
@@ -464,6 +471,7 @@ Route::middleware('auth')->group(function () {
         Route::delete('ar-ap-opening-balance/{arApOpeningBalance}',     [ArApOpeningBalanceController::class, 'destroy'])->name('ar-ap-opening-balance.destroy')->middleware('can:accounting.manage');
 
         // Phiếu kế toán / Bút toán (Journal Entries)
+        Route::get('journal-entries/export-excel', [JournalEntryController::class, 'exportExcel'])->name('journal-entries.export-excel');
         Route::resource('journal-entries', JournalEntryController::class)->only(['index', 'create', 'store', 'show', 'update', 'destroy']);
         Route::get('journal-entries/{journalEntry}/edit', [JournalEntryController::class, 'edit'])->name('journal-entries.edit')->middleware('can:accounting.manage');
         Route::post('journal-entries/{journalEntry}/post', [JournalEntryController::class, 'markPosted'])->name('journal-entries.post')->middleware('can:accounting.manage');
@@ -483,6 +491,7 @@ Route::middleware('auth')->group(function () {
 
         // Tài khoản ngân hàng + Đối chiếu (Bank Accounts & Reconciliation)
         Route::resource('bank-accounts', BankAccountController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update']);
+        Route::get('bank-accounts/{bankAccount}/transactions/export-excel', [BankTransactionController::class, 'exportExcel'])->name('bank-accounts.transactions.export-excel');
         Route::resource('bank-accounts.transactions', BankTransactionController::class)->only(['index', 'store']);
         Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/reconcile',   [BankTransactionController::class, 'reconcile'])->name('bank-accounts.transactions.reconcile')->middleware('can:accounting.manage');
         Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/unreconcile', [BankTransactionController::class, 'unreconcile'])->name('bank-accounts.transactions.unreconcile')->middleware('can:accounting.manage');
@@ -627,11 +636,13 @@ Route::middleware('auth')->group(function () {
         Route::get('purchase-orders/import/template', [PurchaseOrderController::class, 'importTemplate'])->name('purchase-orders.import.template');
         Route::post('purchase-orders/import/preview',  [PurchaseOrderController::class, 'importPreview'])->name('purchase-orders.import.preview');
         Route::post('purchase-orders/import/confirm',  [PurchaseOrderController::class, 'importConfirm'])->name('purchase-orders.import.confirm');
+        Route::get('purchase-orders/export-excel', [PurchaseOrderController::class, 'exportExcel'])->name('purchase-orders.export-excel');
         Route::resource('purchase-orders', PurchaseOrderController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
         Route::post('purchase-orders/{purchaseOrder}/send',    [PurchaseOrderController::class, 'send'])->name('purchase-orders.send');
         Route::post('purchase-orders/{purchaseOrder}/receive', [PurchaseOrderController::class, 'receive'])->name('purchase-orders.receive');
         Route::post('purchase-orders/{purchaseOrder}/cancel',  [PurchaseOrderController::class, 'cancel'])->name('purchase-orders.cancel');
 
+        Route::get('purchase-invoices/export-excel', [PurchaseInvoiceController::class, 'exportExcel'])->name('purchase-invoices.export-excel');
         Route::resource('purchase-invoices', PurchaseInvoiceController::class);
         Route::post('purchase-invoices/{purchaseInvoice}/transition', [PurchaseInvoiceController::class, 'transition'])->name('purchase-invoices.transition');
         Route::post('purchase-invoices/{purchaseInvoice}/recall-payments', [PurchaseInvoiceController::class, 'recallPayments'])->name('purchase-invoices.recall-payments')->middleware('can:purchasing.approve');
@@ -646,6 +657,7 @@ Route::middleware('auth')->group(function () {
         Route::resource('supplier-advances', SupplierAdvanceController::class);
         Route::post('supplier-advances/{supplierAdvance}/cancel', [SupplierAdvanceController::class, 'cancel'])->name('supplier-advances.cancel');
 
+        Route::get('purchase-contracts/export-excel', [PurchaseContractController::class, 'exportExcel'])->name('purchase-contracts.export-excel');
         Route::resource('purchase-contracts', PurchaseContractController::class);
         Route::post('purchase-contracts/{purchaseContract}/activate',  [PurchaseContractController::class, 'activate'])->name('purchase-contracts.activate');
         Route::post('purchase-contracts/{purchaseContract}/complete',  [PurchaseContractController::class, 'complete'])->name('purchase-contracts.complete');

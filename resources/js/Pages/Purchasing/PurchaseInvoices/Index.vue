@@ -3,10 +3,12 @@
     <div class="space-y-5">
       <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-gray-900">Hóa đơn đầu vào</h1>
-        <Link v-if="can('purchasing.create')" :href="route('purchasing.purchase-invoices.create')"
-          class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-          Thêm hóa đơn
-        </Link>
+        <div class="flex gap-2 flex-wrap">
+          <ExportExcelButton :endpoint="route('purchasing.purchase-invoices.export-excel')" :filters="{ search: search, status: statusFilter }" />
+          <Link v-if="can('purchasing.create')" :href="route('purchasing.purchase-invoices.create')" class="erp-btn-primary">
+            Thêm hóa đơn
+          </Link>
+        </div>
       </div>
 
       <!-- Filters -->
@@ -213,6 +215,7 @@ import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
+import ExportExcelButton from '@/Components/Shared/ExportExcelButton.vue';
 import { usePermission } from '@/composables/usePermission';
 import { useCurrency } from '@/composables/useCurrency';
 

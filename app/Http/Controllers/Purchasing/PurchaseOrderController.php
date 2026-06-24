@@ -515,4 +515,12 @@ class PurchaseOrderController extends Controller
             default            => 'none',
         };
     }
+
+    public function exportExcel(\Illuminate\Http\Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\PurchaseOrdersExport($request->all()),
+            'don-mua-hang_' . now()->format('Y-m-d') . '.xlsx'
+        );
+    }
 }

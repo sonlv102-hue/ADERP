@@ -1073,4 +1073,30 @@ class ProjectController extends Controller
 
         return $map[$project->status->value] ?? [];
     }
+
+    public function exportExcel(\Illuminate\Http\Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\ProjectsExport($request->all()),
+            'du-an_' . now()->format('Y-m-d') . '.xlsx'
+        );
+    }
+
+    public function exportExpensesExcel(\Illuminate\Http\Request $request, \App\Models\Project $project): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        $filters = array_merge($request->all(), ['project_id' => $project->id]);
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\ProjectExpensesExport($filters),
+            'chi-phi-ps_' . $project->code . '_' . now()->format('Y-m-d') . '.xlsx'
+        );
+    }
+
+    public function exportWipExcel(\Illuminate\Http\Request $request, \App\Models\Project $project): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        $filters = array_merge($request->all(), ['project_id' => $project->id]);
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\ProjectWipExport($filters),
+            'wip-154_' . $project->code . '_' . now()->format('Y-m-d') . '.xlsx'
+        );
+    }
 }

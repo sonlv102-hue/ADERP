@@ -3,7 +3,8 @@
     <div class="space-y-5">
       <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-slate-900">Phiếu kế toán / Bút toán</h1>
-        <div class="flex items-center gap-2">
+        <div class="flex items-center gap-2 flex-wrap">
+          <ExportExcelButton :endpoint="route('accounting.journal-entries.export-excel')" :filters="{ search, status, from, to }" />
           <button v-if="can('accounting.manage') && draftCount > 0" @click="showBulkApprove = true"
             class="erp-btn-secondary text-green-700 border-green-300 hover:bg-green-50 hover:border-green-400">
             <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -177,6 +178,7 @@ import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
 import Modal from '@/Components/Shared/Modal.vue';
+import ExportExcelButton from '@/Components/Shared/ExportExcelButton.vue';
 import { usePermission } from '@/composables/usePermission';
 import { useCurrency } from '@/composables/useCurrency';
 

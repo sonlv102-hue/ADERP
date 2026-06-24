@@ -570,4 +570,12 @@ class OrderController extends Controller
             })
             ->all();
     }
+
+    public function exportExcel(\Illuminate\Http\Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\SalesOrdersExport($request->all()),
+            'don-hang-ban_' . now()->format('Y-m-d') . '.xlsx'
+        );
+    }
 }

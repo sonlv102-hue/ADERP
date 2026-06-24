@@ -385,4 +385,12 @@ class QuotationController extends Controller
 
         return $pdf->download("BaoGia-{$quotation->code}.pdf");
     }
+
+    public function exportExcel(Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\QuotationsExport($request->all()),
+            'bao-gia_' . now()->format('Y-m-d') . '.xlsx'
+        );
+    }
 }

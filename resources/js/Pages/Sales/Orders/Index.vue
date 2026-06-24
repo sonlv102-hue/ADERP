@@ -3,12 +3,15 @@
     <div class="space-y-5">
       <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-slate-900">Đơn hàng</h1>
-        <Link :href="route('sales.orders.create')" class="erp-btn-primary">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-          </svg>
-          Tạo đơn hàng
-        </Link>
+        <div class="flex gap-2 flex-wrap">
+          <ExportExcelButton :endpoint="route('sales.orders.export-excel')" :filters="{ q: search, status: statusFilter }" />
+          <Link :href="route('sales.orders.create')" class="erp-btn-primary">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Tạo đơn hàng
+          </Link>
+        </div>
       </div>
 
       <!-- Search -->
@@ -144,6 +147,7 @@ import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
+import ExportExcelButton from '@/Components/Shared/ExportExcelButton.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({ orders: Object, filters: Object, statuses: Array });

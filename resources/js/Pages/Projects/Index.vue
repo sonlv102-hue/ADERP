@@ -3,13 +3,15 @@
     <div class="space-y-5">
       <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-gray-900">Dự án thi công IT</h1>
-        <Link v-if="can('projects.create')" :href="route('projects.projects.create')"
-          class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-          </svg>
-          Tạo dự án
-        </Link>
+        <div class="flex gap-2 flex-wrap">
+          <ExportExcelButton :endpoint="route('projects.projects.export-excel')" />
+          <Link v-if="can('projects.create')" :href="route('projects.projects.create')" class="erp-btn-primary flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Tạo dự án
+          </Link>
+        </div>
       </div>
 
       <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
@@ -68,6 +70,7 @@ import { Link } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
+import ExportExcelButton from '@/Components/Shared/ExportExcelButton.vue';
 import { usePermission } from '@/composables/usePermission';
 
 defineProps({ projects: Object });

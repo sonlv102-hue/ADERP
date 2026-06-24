@@ -348,4 +348,18 @@ class CashVoucherController extends Controller
             ]);
         }
     }
+
+    public function exportExcel(\Illuminate\Http\Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        $type = $request->input('type');
+        $filename = match ($type) {
+            'receipt' => 'phieu-thu_',
+            'payment' => 'phieu-chi_',
+            default   => 'phieu-thu-chi_',
+        };
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\CashVouchersExport($request->all()),
+            $filename . now()->format('Y-m-d') . '.xlsx'
+        );
+    }
 }

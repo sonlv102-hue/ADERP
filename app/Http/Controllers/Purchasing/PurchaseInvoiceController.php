@@ -593,4 +593,12 @@ class PurchaseInvoiceController extends Controller
 
         return $map[$status->value] ?? [];
     }
+
+    public function exportExcel(\Illuminate\Http\Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\PurchaseInvoicesExport($request->all()),
+            'hoa-don-dau-vao_' . now()->format('Y-m-d') . '.xlsx'
+        );
+    }
 }

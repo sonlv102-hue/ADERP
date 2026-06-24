@@ -3,7 +3,8 @@
     <div class="max-w-6xl space-y-5">
       <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-gray-900">Phiếu thu / Phiếu chi</h1>
-        <div class="flex gap-2">
+        <div class="flex gap-2 flex-wrap">
+          <ExportExcelButton :endpoint="route('accounting.cash-vouchers.export-excel')" :filters="filters" />
           <Link :href="route('accounting.cash-vouchers.create', { type: 'receipt' })"
             class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
             + Phiếu thu
@@ -97,6 +98,7 @@ import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
+import ExportExcelButton from '@/Components/Shared/ExportExcelButton.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({ vouchers: Object, funds: Array, filters: Object });

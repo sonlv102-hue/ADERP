@@ -564,4 +564,12 @@ class InvoiceController extends Controller
 
         return null;
     }
+
+    public function exportExcel(\Illuminate\Http\Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse
+    {
+        return \Maatwebsite\Excel\Facades\Excel::download(
+            new \App\Exports\SalesInvoicesExport($request->all()),
+            'hoa-don-ban_' . now()->format('Y-m-d') . '.xlsx'
+        );
+    }
 }
