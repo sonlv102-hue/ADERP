@@ -712,7 +712,9 @@ Route::middleware('auth')->group(function () {
         Route::get('ar-detail/export',        [ArDetailController::class,        'export'])->name('ar.detail.export');
         Route::get('ap-detail',               [ApDetailController::class,        'index'])->name('ap.detail');
         Route::get('ap-detail/export',        [ApDetailController::class,        'export'])->name('ap.detail.export');
-        Route::get('document-checklist',      [DocumentChecklistController::class,'index'])->name('document_checklist');
+        Route::get('document-checklist',        [DocumentChecklistController::class,'index'])->name('document_checklist');
+        Route::get('document-checklist/export', [DocumentChecklistController::class,'export'])->name('document_checklist.export');
+        Route::get('document-checklist/pdf',    [DocumentChecklistController::class,'exportPdf'])->name('document_checklist.pdf');
     });
 
     // Documents - quản lý hồ sơ chứng từ

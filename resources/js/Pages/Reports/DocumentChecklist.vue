@@ -1,236 +1,295 @@
-﻿<template>
+<template>
   <AppLayout>
-    <div class="space-y-5">
-      <h1 class="text-2xl font-bold text-gray-900">Bảng kê chứng từ</h1>
+    <div class="space-y-4">
 
-      <!-- Tabs -->
-      <div class="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
-        <button @click="switchTab('sales')"
-          :class="activeTab === 'sales'
-            ? 'bg-white text-gray-900 shadow-sm'
-            : 'text-gray-500 hover:text-gray-700'"
-          class="px-5 py-2 rounded-lg text-sm font-medium transition-all">
-          Đơn hàng bán
-        </button>
-        <button @click="switchTab('purchases')"
-          :class="activeTab === 'purchases'
-            ? 'bg-white text-gray-900 shadow-sm'
-            : 'text-gray-500 hover:text-gray-700'"
-          class="px-5 py-2 rounded-lg text-sm font-medium transition-all">
-          Đơn hàng mua
-        </button>
+      <!-- Page header -->
+      <div class="erp-page-header">
+        <div>
+          <h1 class="text-xl font-bold text-gray-900">Bảng kê chứng từ</h1>
+          <p class="text-sm text-gray-500 mt-0.5">Liệt kê chi tiết từng dòng bút toán đã ghi sổ</p>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap">
+          <a :href="exportExcelUrl" class="erp-btn-secondary text-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            Excel
+          </a>
+          <a :href="exportPdfUrl" class="erp-btn-secondary text-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"/>
+            </svg>
+            PDF
+          </a>
+          <button @click="print()" class="erp-btn-secondary text-sm">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/>
+            </svg>
+            In
+          </button>
+        </div>
       </div>
 
       <!-- Filters -->
-      <div class="bg-white rounded-xl border border-gray-200 p-4 flex flex-wrap gap-3 items-center">
-        <div class="flex gap-2 items-center">
-          <label class="text-sm text-gray-600 whitespace-nowrap">Từ ngày</label>
-          <input v-model="filters.date_from" type="date" @change="applyFilters"
-            class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none" />
-        </div>
-        <div class="flex gap-2 items-center">
-          <label class="text-sm text-gray-600 whitespace-nowrap">Đến ngày</label>
-          <input v-model="filters.date_to" type="date" @change="applyFilters"
-            class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none" />
-        </div>
-        <select v-model="filters.partner_id" @change="applyFilters"
-          class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 outline-none min-w-44">
-          <option value="">{{ activeTab === 'sales' ? 'Tất cả khách hàng' : 'Tất cả nhà cung cấp' }}</option>
-          <option v-for="p in partnerList" :key="p.id" :value="p.id">{{ p.name }}</option>
-        </select>
-        <label class="flex items-center gap-2 cursor-pointer select-none">
-          <input v-model="filters.missing" type="checkbox" true-value="1" false-value="" @change="applyFilters"
-            class="h-4 w-4 rounded border-gray-300 text-primary-600" />
-          <span class="text-sm text-gray-700">Chỉ hiện đơn thiếu chứng từ</span>
-        </label>
-
-        <!-- Summary chips -->
-        <div class="ml-auto flex gap-2 text-xs">
-          <span class="px-2.5 py-1 rounded-full bg-gray-100 text-gray-600 font-medium">
-            Tổng: {{ rows.length }} đơn
-          </span>
-          <span class="px-2.5 py-1 rounded-full bg-green-100 text-green-700 font-medium">
-            Đủ: {{ completeCount }}
-          </span>
-          <span class="px-2.5 py-1 rounded-full bg-red-100 text-red-700 font-medium">
-            Thiếu: {{ rows.length - completeCount }}
-          </span>
+      <div class="bg-white rounded-xl border border-gray-200 p-4">
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div class="space-y-1">
+            <label class="text-xs font-medium text-gray-600">Từ ngày</label>
+            <input v-model="f.date_from" type="date"
+              class="erp-input w-full" />
+          </div>
+          <div class="space-y-1">
+            <label class="text-xs font-medium text-gray-600">Đến ngày</label>
+            <input v-model="f.date_to" type="date"
+              class="erp-input w-full" />
+          </div>
+          <div class="space-y-1">
+            <label class="text-xs font-medium text-gray-600">Số chứng từ</label>
+            <input v-model="f.ref_no" type="text" placeholder="Tìm theo mã bút toán..."
+              class="erp-input w-full" />
+          </div>
+          <div class="space-y-1">
+            <label class="text-xs font-medium text-gray-600">Loại chứng từ</label>
+            <select v-model="f.source_type" class="erp-input w-full">
+              <option value="">-- Tất cả --</option>
+              <option value="invoice">Hóa đơn bán hàng</option>
+              <option value="purchase_invoice">Hóa đơn đầu vào</option>
+              <option value="cash_voucher">Phiếu thu/chi</option>
+              <option value="stock_entry">Nhập kho</option>
+              <option value="stock_exit">Xuất kho</option>
+              <option value="payroll">Lương</option>
+              <option value="project_expense">Chi phí dự án</option>
+              <option value="manual">Bút toán thủ công</option>
+            </select>
+          </div>
+          <div class="space-y-1">
+            <label class="text-xs font-medium text-gray-600">Tài khoản</label>
+            <input v-model="f.account_code" type="text" placeholder="VD: 1111, 3311..."
+              class="erp-input w-full" />
+          </div>
+          <div class="space-y-1">
+            <label class="text-xs font-medium text-gray-600">TK đối ứng</label>
+            <input v-model="f.counter_account" type="text" placeholder="VD: 5111, 3311..."
+              class="erp-input w-full" />
+          </div>
+          <div class="space-y-1">
+            <label class="text-xs font-medium text-gray-600">Loại đối tượng</label>
+            <select v-model="f.partner_type" class="erp-input w-full">
+              <option value="">-- Tất cả --</option>
+              <option value="customer">Khách hàng</option>
+              <option value="supplier">Nhà cung cấp</option>
+              <option value="employee">Nhân viên</option>
+            </select>
+          </div>
+          <div class="space-y-1 flex items-end gap-3">
+            <label class="flex items-center gap-2 cursor-pointer mb-1">
+              <input v-model="f.include_reversed" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-primary-600" />
+              <span class="text-xs text-gray-600">Kể cả đảo</span>
+            </label>
+            <button @click="applyFilters" class="erp-btn-primary text-sm flex-1">Xem báo cáo</button>
+          </div>
         </div>
       </div>
 
-      <!-- Sales table -->
-      <div v-if="activeTab === 'sales'" class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+      <!-- Balance warning -->
+      <div v-if="!isBalanced" class="flex items-center gap-3 px-4 py-3 bg-orange-50 border border-orange-200 rounded-xl text-orange-800 text-sm font-medium">
+        <svg class="w-5 h-5 flex-shrink-0 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        </svg>
+        Cảnh báo: Tổng phát sinh Nợ ({{ fmt(totals.debit) }}) ≠ Tổng phát sinh Có ({{ fmt(totals.credit) }}) —
+        kiểm tra lại bút toán trong kỳ.
+      </div>
+
+      <!-- KPI strip -->
+      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div class="bg-white rounded-xl border border-gray-200 p-4 text-center">
+          <p class="text-xs text-gray-500 mb-1">Tổng dòng bút toán</p>
+          <p class="text-lg font-bold text-gray-900">{{ total.toLocaleString('vi') }}</p>
+        </div>
+        <div class="bg-blue-50 rounded-xl border border-blue-200 p-4 text-center">
+          <p class="text-xs text-blue-600 mb-1">Tổng phát sinh Nợ</p>
+          <p class="text-lg font-bold text-blue-800">{{ fmt(totals.debit) }}</p>
+        </div>
+        <div class="bg-green-50 rounded-xl border border-green-200 p-4 text-center">
+          <p class="text-xs text-green-600 mb-1">Tổng phát sinh Có</p>
+          <p class="text-lg font-bold text-green-800">{{ fmt(totals.credit) }}</p>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <table class="min-w-full text-sm">
-          <thead class="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th class="text-left px-4 py-3 font-semibold text-gray-600">Đơn hàng</th>
-              <th class="text-left px-4 py-3 font-semibold text-gray-600">Khách hàng</th>
-              <th class="text-left px-4 py-3 font-semibold text-gray-600">Ngày đặt</th>
-              <th class="text-left px-4 py-3 font-semibold text-gray-600">Trạng thái</th>
-              <th class="text-center px-4 py-3 font-semibold text-gray-600">Hợp đồng</th>
-              <th class="text-center px-4 py-3 font-semibold text-gray-600">Hóa đơn</th>
-              <th class="text-center px-4 py-3 font-semibold text-gray-600">Xuất kho</th>
-              <th class="text-center px-4 py-3 font-semibold text-gray-600">HQ Khai báo</th>
-              <th class="text-center px-4 py-3 font-semibold text-gray-600">Tình trạng</th>
+          <!-- Grouped header -->
+          <thead>
+            <tr class="bg-[#1E3A5F] text-white">
+              <th colspan="2" class="px-3 py-2 text-center text-xs font-semibold border-r border-blue-400/40">CHỨNG TỪ</th>
+              <th rowspan="2" class="px-3 py-2 text-left text-xs font-semibold border-r border-blue-400/40 align-middle">TÊN KHÁCH</th>
+              <th rowspan="2" class="px-3 py-2 text-left text-xs font-semibold border-r border-blue-400/40 align-middle">DIỄN GIẢI</th>
+              <th rowspan="2" class="px-3 py-2 text-center text-xs font-semibold border-r border-blue-400/40 align-middle">TÀI KHOẢN</th>
+              <th rowspan="2" class="px-3 py-2 text-center text-xs font-semibold border-r border-blue-400/40 align-middle">TK ĐỐI ỨNG</th>
+              <th colspan="2" class="px-3 py-2 text-center text-xs font-semibold border-l border-blue-400/40">SỐ PHÁT SINH</th>
+              <th rowspan="2" class="px-2 py-2 text-center text-xs font-semibold align-middle">Nguồn</th>
+            </tr>
+            <tr class="bg-[#1E3A5F] text-white border-t border-blue-400/30">
+              <th class="px-3 py-1.5 text-center text-xs font-semibold border-r border-blue-400/40 min-w-24">NGÀY</th>
+              <th class="px-3 py-1.5 text-center text-xs font-semibold border-r border-blue-400/40">SỐ</th>
+              <th class="px-3 py-1.5 text-right text-xs font-semibold text-blue-200 min-w-32">NỢ</th>
+              <th class="px-3 py-1.5 text-right text-xs font-semibold text-green-200 min-w-32">CÓ</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <tr v-for="r in rows" :key="r.id" :class="r.is_complete ? '' : 'bg-red-50/30'">
-              <td class="px-4 py-3 font-mono text-xs">
-                <Link :href="route('sales.orders.show', r.id)" class="text-primary-600 hover:underline font-medium">
-                  {{ r.code }}
-                </Link>
+            <tr v-for="(row, idx) in rows" :key="idx"
+              class="hover:bg-gray-50 transition-colors"
+              :class="idx % 2 === 1 ? 'bg-gray-50/50' : ''">
+              <td class="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">{{ formatDate(row.date) }}</td>
+              <td class="px-3 py-2 text-xs font-mono">
+                <Link :href="route('accounting.journal-entries.show', row.journal_entry_id)"
+                  class="text-primary-600 hover:underline">{{ row.je_code }}</Link>
               </td>
-              <td class="px-4 py-3 text-gray-800">
-                {{ r.partner }}
-                <span v-if="r.is_fdi" class="ml-1 inline-flex items-center px-1.5 py-0.5 rounded text-xs font-semibold bg-amber-100 text-amber-700 border border-amber-200">FDI</span>
+              <td class="px-3 py-2 text-xs text-gray-800 max-w-40 truncate" :title="row.object_name">
+                {{ row.object_name || '—' }}
               </td>
-              <td class="px-4 py-3 text-gray-600 whitespace-nowrap">{{ r.date }}</td>
-              <td class="px-4 py-3">
-                <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{{ r.status }}</span>
+              <td class="px-3 py-2 text-xs text-gray-700 max-w-64">{{ row.description }}</td>
+              <td class="px-3 py-2 text-xs text-center font-mono font-semibold text-gray-800">
+                {{ row.account_code }}
               </td>
-              <td class="px-4 py-3 text-center"><DocBadge :ok="r.has_contract" /></td>
-              <td class="px-4 py-3 text-center"><DocBadge :ok="r.has_invoice" /></td>
-              <td class="px-4 py-3 text-center"><DocBadge :ok="r.has_stock_exit" /></td>
-              <td class="px-4 py-3 text-center">
-                <DocBadge v-if="r.needs_customs" :ok="r.has_customs" :label="r.customs_status === 'declared' ? 'Đã khai' : 'Chờ khai'" />
-                <span v-else class="text-gray-300 text-xs">—</span>
+              <td class="px-3 py-2 text-xs text-center font-mono"
+                :class="row.counter_account === 'Nhiều TK' ? 'text-orange-600 italic' : 'text-gray-700'">
+                {{ row.counter_account }}
               </td>
-              <td class="px-4 py-3 text-center">
-                <span v-if="r.is_complete"
-                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                  <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-                  </svg>
-                  Đủ chứng từ
-                </span>
-                <span v-else
-                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-                  </svg>
-                  Thiếu: {{ r.missing_docs.join(', ') }}
-                </span>
+              <td class="px-3 py-2 text-xs text-right font-medium text-blue-700">
+                {{ row.debit > 0 ? fmt(row.debit) : '' }}
+              </td>
+              <td class="px-3 py-2 text-xs text-right font-medium text-green-700">
+                {{ row.credit > 0 ? fmt(row.credit) : '' }}
+              </td>
+              <td class="px-2 py-2 text-center">
+                <a v-if="row.source_url" :href="row.source_url"
+                  class="text-xs text-primary-600 hover:underline" :title="row.source_label">
+                  {{ sourceShort(row.source_label) }}
+                </a>
+                <span v-else class="text-xs text-gray-400">{{ sourceShort(row.source_label) }}</span>
               </td>
             </tr>
-            <tr v-if="!rows.length">
-              <td colspan="9" class="px-5 py-10 text-center text-gray-400">Không có dữ liệu</td>
+
+            <!-- Empty -->
+            <tr v-if="rows.length === 0">
+              <td colspan="9" class="px-4 py-10 text-center text-gray-400 text-sm">
+                Không có dữ liệu — hãy chọn khoảng thời gian và bấm "Xem báo cáo"
+              </td>
+            </tr>
+
+            <!-- Total row -->
+            <tr v-if="rows.length > 0" class="bg-blue-50 font-bold border-t-2 border-blue-300">
+              <td colspan="6" class="px-3 py-2 text-xs text-center text-gray-700">TỔNG CỘNG</td>
+              <td class="px-3 py-2 text-xs text-right text-blue-800">{{ fmt(totals.debit) }}</td>
+              <td class="px-3 py-2 text-xs text-right text-green-800">{{ fmt(totals.credit) }}</td>
+              <td></td>
             </tr>
           </tbody>
         </table>
       </div>
 
-      <!-- Purchases table -->
-      <div v-if="activeTab === 'purchases'" class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
-        <table class="min-w-full text-sm">
-          <thead class="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th class="text-left px-4 py-3 font-semibold text-gray-600">Đơn mua</th>
-              <th class="text-left px-4 py-3 font-semibold text-gray-600">Nhà cung cấp</th>
-              <th class="text-left px-4 py-3 font-semibold text-gray-600">Ngày đặt</th>
-              <th class="text-left px-4 py-3 font-semibold text-gray-600">Trạng thái</th>
-              <th class="text-center px-4 py-3 font-semibold text-gray-600">Hợp đồng mua</th>
-              <th class="text-center px-4 py-3 font-semibold text-gray-600">Hóa đơn NCC</th>
-              <th class="text-center px-4 py-3 font-semibold text-gray-600">Nhập kho</th>
-              <th class="text-center px-4 py-3 font-semibold text-gray-600">Tình trạng</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100">
-            <tr v-for="r in rows" :key="r.id" :class="r.is_complete ? '' : 'bg-red-50/30'">
-              <td class="px-4 py-3 font-mono text-xs">
-                <Link :href="route('purchasing.purchase-orders.show', r.id)" class="text-primary-600 hover:underline font-medium">
-                  {{ r.code }}
-                </Link>
-              </td>
-              <td class="px-4 py-3 text-gray-800">{{ r.partner }}</td>
-              <td class="px-4 py-3 text-gray-600 whitespace-nowrap">{{ r.date }}</td>
-              <td class="px-4 py-3">
-                <span class="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">{{ r.status }}</span>
-              </td>
-              <td class="px-4 py-3 text-center"><DocBadge :ok="r.has_contract" /></td>
-              <td class="px-4 py-3 text-center"><DocBadge :ok="r.has_invoice" /></td>
-              <td class="px-4 py-3 text-center"><DocBadge :ok="r.has_stock_entry" /></td>
-              <td class="px-4 py-3 text-center">
-                <span v-if="r.is_complete"
-                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                  <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
-                  </svg>
-                  Đủ chứng từ
-                </span>
-                <span v-else
-                  class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                  <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
-                  </svg>
-                  Thiếu: {{ r.missing_docs.join(', ') }}
-                </span>
-              </td>
-            </tr>
-            <tr v-if="!rows.length">
-              <td colspan="8" class="px-5 py-10 text-center text-gray-400">Không có dữ liệu</td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- Pagination -->
+      <div v-if="lastPage > 1" class="flex items-center justify-center gap-2">
+        <button v-for="p in pageRange" :key="p" @click="goPage(p)"
+          class="px-3 py-1 rounded text-sm"
+          :class="p === currentPage
+            ? 'bg-primary-600 text-white'
+            : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-50'">
+          {{ p }}
+        </button>
       </div>
+
     </div>
   </AppLayout>
 </template>
 
 <script setup>
-import { ref, computed, defineComponent, h } from 'vue';
-import { Link, router } from '@inertiajs/vue3';
+import { ref, computed } from 'vue';
+import { router, Link } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
+import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({
-  tab: String, sales: Array, purchases: Array,
-  customers: Array, suppliers: Array, filters: Object,
+  rows:        { type: Array, default: () => [] },
+  totals:      { type: Object, default: () => ({ debit: 0, credit: 0 }) },
+  isBalanced:  { type: Boolean, default: true },
+  total:       { type: Number, default: 0 },
+  currentPage: { type: Number, default: 1 },
+  lastPage:    { type: Number, default: 1 },
+  filters:     { type: Object, default: () => ({}) },
+  sourceTypes: { type: Array, default: () => [] },
+  company:     { type: Object, default: () => ({}) },
 });
 
-// Inline DocBadge component
-const DocBadge = defineComponent({
-  props: { ok: Boolean, label: String },
-  setup(p) {
-    return () => p.ok
-      ? h('span', { class: 'inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-100 text-green-600' },
-          h('svg', { class: 'w-4 h-4', fill: 'currentColor', viewBox: '0 0 20 20' },
-            h('path', { 'fill-rule': 'evenodd', d: 'M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z', 'clip-rule': 'evenodd' })
-          )
-        )
-      : h('span', { class: 'inline-flex items-center justify-center w-6 h-6 rounded-full bg-red-100 text-red-500' },
-          h('svg', { class: 'w-4 h-4', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
-            h('path', { 'stroke-linecap': 'round', 'stroke-linejoin': 'round', 'stroke-width': '2', d: 'M6 18L18 6M6 6l12 12' })
-          )
-        );
-  },
+const { formatVnd: fmt } = useCurrency();
+
+const f = ref({
+  date_from:       props.filters.date_from       ?? new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10),
+  date_to:         props.filters.date_to         ?? new Date().toISOString().slice(0, 10),
+  ref_no:          props.filters.ref_no          ?? '',
+  source_type:     props.filters.source_type     ?? '',
+  account_code:    props.filters.account_code    ?? '',
+  counter_account: props.filters.counter_account ?? '',
+  partner_type:    props.filters.partner_type    ?? '',
+  include_reversed:props.filters.include_reversed ?? false,
 });
 
-const activeTab = ref(props.tab ?? 'sales');
-
-const filters = ref({
-  date_from:  props.filters.date_from ?? new Date(new Date().getFullYear(), 0, 1).toISOString().slice(0, 10),
-  date_to:    props.filters.date_to   ?? new Date().toISOString().slice(0, 10),
-  partner_id: props.filters.partner_id ?? '',
-  missing:    props.filters.missing ?? '',
+const pageRange = computed(() => {
+  const pages = [];
+  for (let i = Math.max(1, props.currentPage - 2); i <= Math.min(props.lastPage, props.currentPage + 2); i++) {
+    pages.push(i);
+  }
+  return pages;
 });
 
-const rows = computed(() => activeTab.value === 'sales' ? props.sales : props.purchases);
-const completeCount = computed(() => rows.value.filter(r => r.is_complete).length);
-const partnerList = computed(() => activeTab.value === 'sales' ? props.customers : props.suppliers);
+const exportExcelUrl = computed(() => route('reports.document_checklist.export') + '?' + buildQuery());
+const exportPdfUrl   = computed(() => route('reports.document_checklist.pdf')    + '?' + buildQuery());
 
-function switchTab(tab) {
-  activeTab.value = tab;
-  filters.value.partner_id = '';
-  applyFilters();
+function buildQuery() {
+  const p = new URLSearchParams();
+  Object.entries(f.value).forEach(([k, v]) => { if (v) p.set(k, v); });
+  return p.toString();
 }
 
 function applyFilters() {
-  router.get(route('reports.document_checklist'), {
-    tab:        activeTab.value,
-    date_from:  filters.value.date_from,
-    date_to:    filters.value.date_to,
-    partner_id: filters.value.partner_id || undefined,
-    missing:    filters.value.missing || undefined,
-  }, { preserveState: true });
+  router.get(route('reports.document_checklist'), { ...f.value, page: 1 },
+    { preserveState: true, replace: true });
+}
+
+function goPage(p) {
+  router.get(route('reports.document_checklist'), { ...f.value, page: p },
+    { preserveState: true, replace: true });
+}
+
+function formatDate(d) {
+  if (!d) return '';
+  const dt = new Date(d);
+  return dt.toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+const SOURCE_SHORT = {
+  'Hóa đơn bán hàng': 'HĐ bán',
+  'Hóa đơn đầu vào':  'HĐ mua',
+  'Phiếu thu/chi':    'PT/PC',
+  'Nhập kho':         'NK',
+  'Xuất kho':         'XK',
+  'Lương':            'Lương',
+  'Chi phí dự án':    'CPDA',
+  'Số dư đầu kỳ':     'ĐK',
+  'Bút toán thủ công':'BT',
+};
+
+function sourceShort(label) {
+  return SOURCE_SHORT[label] ?? label ?? '';
+}
+
+function print() {
+  window.open(exportPdfUrl.value, '_blank');
 }
 </script>
