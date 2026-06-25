@@ -70,17 +70,17 @@ class BankStatementImportService
             $rows = Excel::toArray([], $file)[0] ?? [];
             [$detectedBank, $detectedAcctNum] = $this->parser->detectAccountNumber($rows);
 
+            $isMismatch = false;
             if ($detectedAcctNum !== null) {
                 $ndDet = preg_replace('/[\s\-\.]/', '', $detectedAcctNum);
                 $ndExp = preg_replace('/[\s\-\.]/', '', $account->account_number);
                 if ($ndDet !== $ndExp) {
+                    $isMismatch = true;
                     $import->update([
                         'detected_bank_name'      => $detectedBank,
                         'detected_account_number' => $detectedAcctNum,
-                        'status'                  => 'account_mismatch',
-                        'error_message'           => "Số TK trong file ({$detectedAcctNum}) không khớp với TK đang mở ({$account->account_number}).",
+                        'error_message'           => "Số TK trong file ({$detectedAcctNum}) không khớp với TK đang mở ({$account->account_number}). Vẫn import được — hãy kiểm tra lại file.",
                     ]);
-                    return;
                 }
             }
 
@@ -146,7 +146,7 @@ class BankStatementImportService
                 'total_rows_valid'        => $valid,
                 'total_rows_duplicate'    => $dup,
                 'total_rows_error'        => $err,
-                'status'                  => 'parsed',
+                'status'                  => $isMismatch ? 'account_mismatch' : 'parsed',
             ]);
         } catch (\Throwable $e) {
             $import->update(['status' => 'error', 'error_message' => $e->getMessage()]);
