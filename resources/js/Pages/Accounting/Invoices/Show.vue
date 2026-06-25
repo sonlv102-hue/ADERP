@@ -17,7 +17,7 @@
             class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium">
             PDF
           </a>
-          <Link v-if="invoice.allowed_actions.includes('edit') && can('accounting.manage')"
+          <Link v-if="invoice.allowed_actions.includes('edit') && can('accounting.view')"
             :href="route('accounting.invoices.edit', invoice.id)"
             class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 rounded-lg text-sm font-medium">
             Sửa

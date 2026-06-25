@@ -5,7 +5,7 @@
         <h1 class="text-2xl font-bold text-gray-900">Hóa đơn</h1>
         <div class="flex gap-2 flex-wrap">
           <ExportExcelButton :endpoint="route('accounting.invoices.export-excel')" :filters="{ search: search, status: statusFilter }" />
-          <Link v-if="can('accounting.manage')" :href="route('accounting.invoices.create')" class="erp-btn-primary">
+          <Link v-if="can('accounting.view')" :href="route('accounting.invoices.create')" class="erp-btn-primary">
             Tạo hóa đơn
           </Link>
         </div>
