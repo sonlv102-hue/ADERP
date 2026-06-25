@@ -497,6 +497,15 @@ Route::middleware('auth')->group(function () {
         Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/unreconcile', [BankTransactionController::class, 'unreconcile'])->name('bank-accounts.transactions.unreconcile')->middleware('can:accounting.manage');
         Route::post('bank-accounts/{bankAccount}/transactions/import-excel',                  [BankTransactionController::class, 'importExcel'])->name('bank-accounts.transactions.import-excel')->middleware('can:accounting.manage');
         Route::post('bank-accounts/{bankAccount}/transactions/recategorize',                 [BankTransactionController::class, 'recategorize'])->name('bank-accounts.transactions.recategorize')->middleware('can:accounting.manage');
+        // Đối soát tự động (Matching)
+        Route::post('bank-accounts/{bankAccount}/transactions/match-all',                                    [BankTransactionController::class, 'matchAll'])->name('bank-accounts.transactions.match-all')->middleware('can:accounting.manage');
+        Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/confirm-match',              [BankTransactionController::class, 'confirmMatch'])->name('bank-accounts.transactions.confirm-match')->middleware('can:accounting.manage');
+        Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/ignore-match',               [BankTransactionController::class, 'ignoreMatch'])->name('bank-accounts.transactions.ignore-match')->middleware('can:accounting.manage');
+        Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/create-journal-entry',       [BankTransactionController::class, 'createJournalEntry'])->name('bank-accounts.transactions.create-journal-entry')->middleware('can:accounting.manage');
+        // Đối chiếu thủ công (Allocation)
+        Route::get( 'bank-accounts/{bankAccount}/transactions/{bankTransaction}/reconcile-data',   [BankTransactionController::class, 'reconcileData'])->name('bank-accounts.transactions.reconcile-data')->middleware('can:accounting.manage');
+        Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/allocate',         [BankTransactionController::class, 'allocate'])->name('bank-accounts.transactions.allocate')->middleware('can:accounting.manage');
+        Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/cancel-allocation',[BankTransactionController::class, 'cancelAllocation'])->name('bank-accounts.transactions.cancel-allocation')->middleware('can:accounting.manage');
         // Tài khoản nội bộ
         Route::resource('internal-bank-accounts', InternalBankAccountController::class)->only(['index', 'store', 'update', 'destroy'])->middleware('can:accounting.manage');
         // Báo cáo chuyển khoản nội bộ

@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class SupplierBankAccount extends Model
 {
     protected $fillable = [
-        'supplier_id', 'bank_name', 'account_number',
+        'supplier_id', 'bank_name', 'account_number', 'normalized_account_number',
         'account_name', 'branch', 'is_primary', 'is_active',
     ];
 

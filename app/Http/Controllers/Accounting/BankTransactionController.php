@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers\Accounting;
 
+use App\Enums\BankTransactionMatchStatus;
 use App\Enums\BankTransactionStatus;
 use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use App\Models\BankTransaction;
-use App\Models\JournalEntry;
 use App\Services\BankReconciliationService;
+use App\Services\BankTransactionAllocationService;
+use App\Services\BankTransactionMatchingService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -16,12 +19,17 @@ use Inertia\Response;
 
 class BankTransactionController extends Controller
 {
-    public function __construct(private BankReconciliationService $service) {}
+    public function __construct(
+        private BankReconciliationService $service,
+        private BankTransactionMatchingService $matching,
+        private BankTransactionAllocationService $allocationService,
+    ) {}
 
     public function index(Request $request, BankAccount $bankAccount): Response
     {
         $status      = $request->input('status');
         $txType      = $request->input('tx_type');
+        $matchStatus = $request->input('match_status');
         $from        = $request->input('date_from');
         $to          = $request->input('date_to');
         $counterpart = $request->input('counterpart');
@@ -33,6 +41,7 @@ class BankTransactionController extends Controller
 
         if ($status)      $query->where('status', $status);
         if ($txType)      $query->where('tx_type', $txType);
+        if ($matchStatus) $query->where('match_status', $matchStatus);
         if ($from)        $query->where('transaction_date', '>=', $from);
         if ($to)          $query->where('transaction_date', '<=', $to);
         if ($counterpart) {
@@ -66,14 +75,19 @@ class BankTransactionController extends Controller
             'status_color'        => $t->status->color(),
             'journal_entry_id'    => $t->journal_entry_id,
             'journal_entry_code'  => $t->journalEntry?->code,
+            // Matching fields
+            'match_status'        => $t->match_status?->value ?? BankTransactionMatchStatus::Unmatched->value,
+            'match_status_label'  => $t->match_status?->label() ?? BankTransactionMatchStatus::Unmatched->label(),
+            'match_status_color'  => $t->match_status?->color() ?? BankTransactionMatchStatus::Unmatched->color(),
+            'matched_party_type'  => $t->matched_party_type,
+            'matched_party_id'    => $t->matched_party_id,
+            'matched_party_name'  => $t->matchedPartyName(),
+            'matched_document_type' => $t->matched_document_type,
+            'matched_document_id' => $t->matched_document_id,
+            'confidence_score'    => $t->confidence_score,
+            'suggested_tx_type'   => $t->suggested_tx_type,
+            'match_note'          => $t->match_note,
         ]);
-
-        // Suggest unposted JEs on TK 112 for reconciliation
-        $pendingJEs = JournalEntry::where('status', 'posted')
-            ->whereHas('lines', fn ($q) => $q->where('account_code', 'like', '112%'))
-            ->orderByDesc('entry_date')
-            ->limit(50)
-            ->get(['id', 'code', 'entry_date', 'description']);
 
         return Inertia::render('Accounting/BankTransactions/Index', [
             'bankAccount'  => [
@@ -85,12 +99,10 @@ class BankTransactionController extends Controller
                 'balance'        => $bankAccount->currentBalance(),
             ],
             'transactions' => $transactions,
-            'pendingJEs'   => $pendingJEs,
             'alertCount'   => $alertCount,
-            'filters'      => $request->only(['counterpart', 'tx_type', 'status', 'date_from', 'date_to']),
-            'statuses'     => collect(BankTransactionStatus::cases())->map(fn ($s) => [
-                'value' => $s->value, 'label' => $s->label(),
-            ]),
+            'filters'      => $request->only(['counterpart', 'tx_type', 'status', 'match_status', 'date_from', 'date_to']),
+            'statuses'     => collect(BankTransactionStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
+            'matchStatuses' => collect(BankTransactionMatchStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
         ]);
     }
 
@@ -178,5 +190,126 @@ class BankTransactionController extends Controller
             new \App\Exports\BankTransactionsExport($filters),
             'giao-dich-ngan-hang_' . now()->format('Y-m-d') . '.xlsx'
         );
+    }
+
+    /** POST: Tự động đối soát hàng loạt tất cả giao dịch chưa xử lý. */
+    public function matchAll(BankAccount $bankAccount): RedirectResponse
+    {
+        $this->authorize('accounting.manage');
+
+        $result = $this->matching->matchAll($bankAccount);
+
+        return back()->with('success',
+            "Đối soát xong {$result['total']} giao dịch. Đề xuất: {$result['suggested']}."
+        );
+    }
+
+    /** POST: Xác nhận (hoặc chỉnh sửa) đề xuất cho 1 giao dịch. */
+    public function confirmMatch(Request $request, BankAccount $bankAccount, BankTransaction $bankTransaction): RedirectResponse
+    {
+        $this->authorize('accounting.manage');
+
+        $data = $request->validate([
+            'matched_party_type'    => 'nullable|in:customer,supplier',
+            'matched_party_id'      => 'nullable|integer',
+            'matched_document_type' => 'nullable|string',
+            'matched_document_id'   => 'nullable|integer',
+            'tx_type'               => 'nullable|string',
+            'match_note'            => 'nullable|string|max:500',
+        ]);
+
+        try {
+            $this->matching->confirmMatch($bankTransaction, $data);
+            return back()->with('success', 'Đã xác nhận đề xuất.');
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['general' => $e->getMessage()]);
+        }
+    }
+
+    /** POST: Bỏ qua giao dịch này (không cần đối soát). */
+    public function ignoreMatch(BankAccount $bankAccount, BankTransaction $bankTransaction): RedirectResponse
+    {
+        $this->authorize('accounting.manage');
+        $this->matching->ignoreMatch($bankTransaction);
+        return back()->with('success', 'Đã đánh dấu bỏ qua.');
+    }
+
+    /** POST: Tạo bút toán kế toán cho giao dịch đã confirmed (auto-match flow). */
+    public function createJournalEntry(BankAccount $bankAccount, BankTransaction $bankTransaction): RedirectResponse
+    {
+        $this->authorize('accounting.manage');
+
+        try {
+            $je = $this->matching->createJournalEntry($bankTransaction);
+            return back()->with('success', "Đã tạo bút toán {$je->code}.");
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['general' => $e->getMessage()]);
+        }
+    }
+
+    /** GET: Trả về dữ liệu đối chiếu (party + chứng từ mở) cho modal. */
+    public function reconcileData(Request $request, BankAccount $bankAccount, BankTransaction $bankTransaction): JsonResponse
+    {
+        $this->authorize('accounting.manage');
+
+        $data = $this->allocationService->getReconcileData(
+            $bankTransaction,
+            $request->input('party_type'),
+            $request->integer('party_id') ?: null,
+        );
+
+        return response()->json($data);
+    }
+
+    /** POST: Phân bổ và tạo bút toán (manual allocation flow). */
+    public function allocate(Request $request, BankAccount $bankAccount, BankTransaction $bankTransaction): RedirectResponse
+    {
+        $this->authorize('accounting.manage');
+
+        $data = $request->validate([
+            'party_type'               => 'required|in:customer,supplier',
+            'party_id'                 => 'required|integer',
+            'allocations'              => 'required|array|min:1',
+            'allocations.*.type'       => 'required|string',
+            'allocations.*.id'         => 'nullable|integer',
+            'allocations.*.account_code' => 'required|string|max:20',
+            'allocations.*.amount'     => 'required|numeric|min:1',
+            'allocations.*.description' => 'nullable|string|max:300',
+        ]);
+
+        try {
+            $je = $this->allocationService->allocate(
+                $bankTransaction,
+                ['type' => $data['party_type'], 'id' => $data['party_id'],
+                 'name' => $this->resolvePartyName($data['party_type'], $data['party_id'])],
+                $data['allocations'],
+            );
+            return back()->with('success', "Đã đối chiếu và tạo bút toán {$je->code}.");
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['general' => $e->getMessage()]);
+        }
+    }
+
+    /** POST: Hủy đối chiếu — đảo JE + reset status. */
+    public function cancelAllocation(Request $request, BankAccount $bankAccount, BankTransaction $bankTransaction): RedirectResponse
+    {
+        $this->authorize('accounting.manage');
+
+        try {
+            $this->allocationService->cancelAllocation(
+                $bankTransaction,
+                $request->input('reason', 'Người dùng hủy đối chiếu'),
+            );
+            return back()->with('success', 'Đã hủy đối chiếu và tạo bút toán đảo.');
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['general' => $e->getMessage()]);
+        }
+    }
+
+    private function resolvePartyName(string $type, int $id): string
+    {
+        if ($type === 'customer') return \App\Models\Customer::find($id)?->name ?? '';
+        if ($type === 'supplier') return \App\Models\Supplier::find($id)?->name ?? '';
+        return '';
     }
 }

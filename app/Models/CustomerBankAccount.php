@@ -8,8 +8,8 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class CustomerBankAccount extends Model
 {
     protected $fillable = [
-        'customer_id', 'bank_name', 'account_number', 'account_name',
-        'branch', 'is_primary', 'is_active',
+        'customer_id', 'bank_name', 'account_number', 'normalized_account_number',
+        'account_name', 'branch', 'is_primary', 'is_active',
     ];
 
     protected function casts(): array
@@ -20,5 +20,10 @@ class CustomerBankAccount extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function bankTransactions(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(BankTransaction::class, 'customer_bank_account_id');
     }
 }
