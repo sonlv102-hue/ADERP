@@ -203,11 +203,22 @@ function removeFile(i) { files.value.splice(i, 1); }
 async function readFiles() {
   if (!files.value.length) return;
   loading.value = true; uploadError.value = '';
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
   const fd = new FormData();
   files.value.forEach(f => fd.append('files[]', f));
-  fd.append('_token', document.querySelector('meta[name="csrf-token"]')?.content ?? '');
   try {
-    const res  = await fetch(props.uploadUrl, { method: 'POST', body: fd });
+    const res = await fetch(props.uploadUrl, {
+      method: 'POST',
+      body: fd,
+      headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+      credentials: 'same-origin',
+    });
+    const ct = res.headers.get('content-type') ?? '';
+    if (!ct.includes('application/json')) {
+      const text = await res.text();
+      console.error('Non-JSON import response:', text.slice(0, 500));
+      throw new Error('Server trả về lỗi không phải JSON. Kiểm tra CSRF hoặc log backend.');
+    }
     const data = await res.json();
     if (!res.ok) throw new Error(data.message ?? 'Upload thất bại.');
     batchId.value = data.batch_id;
@@ -222,10 +233,21 @@ async function readFiles() {
 
 async function confirmImport() {
   confirming.value = true; confirmError.value = '';
+  const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
   const fd = new FormData();
-  fd.append('_token', document.querySelector('meta[name="csrf-token"]')?.content ?? '');
   try {
-    const res  = await fetch(route('accounting.bank-statement-import-batches.confirm', batchId.value), { method: 'POST', body: fd });
+    const res = await fetch(route('accounting.bank-statement-import-batches.confirm', batchId.value), {
+      method: 'POST',
+      body: fd,
+      headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+      credentials: 'same-origin',
+    });
+    const ct = res.headers.get('content-type') ?? '';
+    if (!ct.includes('application/json')) {
+      const text = await res.text();
+      console.error('Non-JSON confirm response:', text.slice(0, 500));
+      throw new Error('Server trả về lỗi không phải JSON. Kiểm tra log backend.');
+    }
     const data = await res.json();
     if (!res.ok) throw new Error(data.message ?? 'Import thất bại.');
     importedCount.value = data.imported;
@@ -239,9 +261,13 @@ async function confirmImport() {
 
 async function handleClose() {
   if (batchId.value && phase.value === 'preview') {
-    const fd = new FormData();
-    fd.append('_token', document.querySelector('meta[name="csrf-token"]')?.content ?? '');
-    fetch(route('accounting.bank-statement-import-batches.cancel', batchId.value), { method: 'POST', body: fd });
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+    fetch(route('accounting.bank-statement-import-batches.cancel', batchId.value), {
+      method: 'POST',
+      body: new FormData(),
+      headers: { 'Accept': 'application/json', 'X-CSRF-TOKEN': csrfToken },
+      credentials: 'same-origin',
+    });
   }
   emit('close');
 }
