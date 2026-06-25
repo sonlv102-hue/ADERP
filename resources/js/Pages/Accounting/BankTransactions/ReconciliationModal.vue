@@ -2,7 +2,6 @@
   <Modal :show="!!transaction" max-width="2xl" @close="$emit('close')">
     <template #title>Đối chiếu giao dịch ngân hàng</template>
 
-    <!-- Loading -->
     <div v-if="loading" class="py-8 text-center text-gray-400 text-sm">Đang tải dữ liệu...</div>
 
     <div v-else class="space-y-5">
@@ -63,11 +62,78 @@
         </div>
       </div>
 
-      <!-- III. Chứng từ liên quan -->
-      <div v-if="reconcileData?.party">
-        <div class="flex items-center justify-between mb-2">
+      <!-- III. Tab bar (chỉ hiện khi đã có đối tượng) -->
+      <div v-if="reconcileData?.party" class="border-b border-gray-200">
+        <nav class="flex">
+          <button @click="activeTab = 'existing'"
+            :class="activeTab === 'existing'
+              ? 'border-primary-500 text-primary-700 font-semibold'
+              : 'border-transparent text-gray-500 hover:text-gray-700'"
+            class="px-4 py-2 text-sm border-b-2 -mb-px transition-colors">
+            Khớp chứng từ đã có
+            <span v-if="reconcileData.existing_entries?.length"
+              class="ml-1 bg-primary-100 text-primary-700 text-xs px-1.5 py-0.5 rounded-full">
+              {{ reconcileData.existing_entries.length }}
+            </span>
+          </button>
+          <button @click="activeTab = 'new'"
+            :class="activeTab === 'new'
+              ? 'border-primary-500 text-primary-700 font-semibold'
+              : 'border-transparent text-gray-500 hover:text-gray-700'"
+            class="px-4 py-2 text-sm border-b-2 -mb-px transition-colors">
+            Tạo thanh toán mới
+          </button>
+        </nav>
+      </div>
+
+      <!-- IV-A. Tab "Khớp chứng từ đã có" -->
+      <div v-if="reconcileData?.party && activeTab === 'existing'" class="space-y-3">
+        <p class="text-xs text-gray-500">
+          Chọn chứng từ kế toán đã tồn tại để khớp với giao dịch này. Sẽ không tạo bút toán mới.
+        </p>
+        <div v-if="!reconcileData.existing_entries?.length"
+          class="text-sm text-gray-400 text-center py-8 bg-gray-50 rounded-lg">
+          Không có chứng từ kế toán nào phù hợp trong vòng 60 ngày
+        </div>
+        <div v-else class="bg-white border border-gray-200 rounded-lg overflow-x-auto">
+          <table class="min-w-full text-xs">
+            <thead class="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th class="px-3 py-2 w-8"></th>
+                <th class="px-3 py-2 text-left">Số BT</th>
+                <th class="px-3 py-2 text-left">Ngày</th>
+                <th class="px-3 py-2 text-left">Diễn giải</th>
+                <th class="px-3 py-2 text-right">Số tiền</th>
+                <th class="px-3 py-2 text-center">Lệch %</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="entry in reconcileData.existing_entries" :key="entry.id"
+                @click="selectedExisting = entry.id"
+                class="hover:bg-blue-50 cursor-pointer transition-colors"
+                :class="selectedExisting === entry.id ? 'bg-blue-50' : ''">
+                <td class="px-3 py-2 text-center">
+                  <input type="radio" :value="entry.id" v-model="selectedExisting" class="accent-primary-600" />
+                </td>
+                <td class="px-3 py-2 font-mono font-medium text-primary-700">{{ entry.code }}</td>
+                <td class="px-3 py-2 text-gray-500 whitespace-nowrap">{{ formatDate(entry.date) }}</td>
+                <td class="px-3 py-2 text-gray-700 max-w-[200px] truncate">{{ entry.description }}</td>
+                <td class="px-3 py-2 text-right font-medium">{{ formatVnd(entry.amount) }}</td>
+                <td class="px-3 py-2 text-center">
+                  <span v-if="entry.is_exact_match" class="text-green-600 font-medium">Khớp</span>
+                  <span v-else class="text-orange-500">{{ entry.amount_diff_pct }}%</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- IV-B. Tab "Tạo thanh toán mới" -->
+      <div v-if="reconcileData?.party && activeTab === 'new'" class="space-y-3">
+        <div class="flex items-center justify-between">
           <h4 class="text-sm font-semibold text-gray-700">Chứng từ còn phải {{ reconcileData.is_credit ? 'thu' : 'trả' }}</h4>
-          <span v-if="reconcileData.documents.length === 0" class="text-xs text-gray-400">Không có chứng từ mở</span>
+          <span v-if="!reconcileData.documents.length" class="text-xs text-gray-400">Không có chứng từ mở</span>
         </div>
         <div v-if="reconcileData.documents.length" class="bg-white border border-gray-200 rounded-lg overflow-x-auto">
           <table class="min-w-full text-xs">
@@ -109,28 +175,28 @@
             </tbody>
           </table>
         </div>
-      </div>
 
-      <!-- IV. Kết quả phân bổ -->
-      <div v-if="selectedDocs.length" class="bg-gray-50 rounded-lg px-4 py-3 text-sm space-y-1">
-        <div class="flex justify-between">
-          <span class="text-gray-500">Tổng giao dịch:</span>
-          <span class="font-medium">{{ formatVnd(reconcileData.tx_amount) }}</span>
-        </div>
-        <div class="flex justify-between">
-          <span class="text-gray-500">Tổng phân bổ:</span>
-          <span class="font-semibold" :class="totalAllocated > reconcileData.tx_amount ? 'text-red-600' : 'text-primary-700'">
-            {{ formatVnd(totalAllocated) }}
-          </span>
-        </div>
-        <div class="flex justify-between border-t border-gray-200 pt-1 mt-1">
-          <span class="text-gray-500">Còn chưa phân bổ:</span>
-          <span :class="unallocated > 0 ? 'text-yellow-600 font-medium' : 'text-green-600 font-semibold'">
-            {{ formatVnd(unallocated) }}
-          </span>
-        </div>
-        <div v-if="totalAllocated > reconcileData.tx_amount" class="text-red-600 text-xs font-medium pt-1">
-          ⚠ Tổng phân bổ vượt quá số tiền giao dịch
+        <!-- Kết quả phân bổ -->
+        <div v-if="selectedDocs.length" class="bg-gray-50 rounded-lg px-4 py-3 text-sm space-y-1">
+          <div class="flex justify-between">
+            <span class="text-gray-500">Tổng giao dịch:</span>
+            <span class="font-medium">{{ formatVnd(reconcileData.tx_amount) }}</span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-gray-500">Tổng phân bổ:</span>
+            <span class="font-semibold" :class="totalAllocated > reconcileData.tx_amount ? 'text-red-600' : 'text-primary-700'">
+              {{ formatVnd(totalAllocated) }}
+            </span>
+          </div>
+          <div class="flex justify-between border-t border-gray-200 pt-1 mt-1">
+            <span class="text-gray-500">Còn chưa phân bổ:</span>
+            <span :class="unallocated > 0 ? 'text-yellow-600 font-medium' : 'text-green-600 font-semibold'">
+              {{ formatVnd(unallocated) }}
+            </span>
+          </div>
+          <div v-if="totalAllocated > reconcileData.tx_amount" class="text-red-600 text-xs font-medium pt-1">
+            ⚠ Tổng phân bổ vượt quá số tiền giao dịch
+          </div>
         </div>
       </div>
 
@@ -139,10 +205,19 @@
 
     <template #footer>
       <button @click="$emit('close')" class="erp-btn-secondary">Hủy</button>
-      <button v-if="selectedDocs.length" @click="submit"
+      <!-- Flow A: khớp chứng từ đã có -->
+      <button v-if="reconcileData?.party && activeTab === 'existing' && selectedExisting"
+        @click="submitExisting"
+        :disabled="submitting"
+        class="erp-btn-primary">
+        {{ submitting ? 'Đang xử lý...' : 'Xác nhận khớp' }}
+      </button>
+      <!-- Flow B: tạo thanh toán mới -->
+      <button v-if="reconcileData?.party && activeTab === 'new' && selectedDocs.length"
+        @click="submitNew"
         :disabled="submitting || totalAllocated > (reconcileData?.tx_amount ?? 0) || totalAllocated <= 0"
         class="erp-btn-primary">
-        {{ submitting ? 'Đang xử lý...' : 'Xác nhận đối chiếu' }}
+        {{ submitting ? 'Đang xử lý...' : 'Tạo thanh toán' }}
       </button>
     </template>
   </Modal>
@@ -155,7 +230,7 @@ import Modal from '@/Components/Shared/Modal.vue';
 import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 
 const props = defineProps({
-  transaction:  Object,   // { id, bank_account_id, description, transaction_date, credit, debit, counterpart_account, counterpart_name, matched_party_type, matched_party_id }
+  transaction:  Object,
   bankAccountId: Number,
 });
 const emit = defineEmits(['close']);
@@ -164,20 +239,34 @@ const loading          = ref(false);
 const submitting       = ref(false);
 const errors           = ref({});
 const reconcileData    = ref(null);
-const selectedDocs     = ref([]);   // [{ doc, amount }]
+const activeTab        = ref('new');
+const selectedExisting = ref(null);
+const selectedDocs     = ref([]);
 const manualPartyType  = ref('');
 const manualPartyId    = ref(null);
 const manualPartyName  = ref('');
 
 watch(() => props.transaction, async (tx) => {
   if (!tx) return;
-  selectedDocs.value  = [];
-  manualPartyType.value = '';
-  manualPartyId.value = null;
-  manualPartyName.value = '';
-  errors.value = {};
+  selectedDocs.value     = [];
+  selectedExisting.value = null;
+  activeTab.value        = 'new';
+  manualPartyType.value  = '';
+  manualPartyId.value    = null;
+  manualPartyName.value  = '';
+  errors.value           = {};
   await loadReconcileData();
 }, { immediate: true });
+
+// Auto-select tab based on existing entries
+watch(() => reconcileData.value?.existing_entries, (entries) => {
+  if (entries && entries.length > 0) {
+    activeTab.value = 'existing';
+    selectedExisting.value = entries.find(e => e.is_exact_match)?.id ?? null;
+  } else {
+    activeTab.value = 'new';
+  }
+});
 
 async function loadReconcileData() {
   if (!props.transaction) return;
@@ -192,7 +281,8 @@ async function loadReconcileData() {
       [props.bankAccountId, props.transaction.id]) + (params.toString() ? '?' + params : '');
     const res = await fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } });
     reconcileData.value = await res.json();
-    selectedDocs.value = [];
+    selectedDocs.value  = [];
+    selectedExisting.value = null;
   } catch {
     errors.value = { general: 'Không thể tải dữ liệu. Vui lòng thử lại.' };
   } finally {
@@ -201,10 +291,11 @@ async function loadReconcileData() {
 }
 
 function clearParty() {
-  reconcileData.value = { ...reconcileData.value, party: null, documents: [] };
-  manualPartyType.value = '';
-  manualPartyId.value = null;
-  selectedDocs.value = [];
+  reconcileData.value = { ...reconcileData.value, party: null, documents: [], existing_entries: [] };
+  manualPartyType.value  = '';
+  manualPartyId.value    = null;
+  selectedDocs.value     = [];
+  selectedExisting.value = null;
 }
 
 function isSelected(doc) {
@@ -218,10 +309,7 @@ function getAllocAmount(doc) {
 
 function toggleDoc(doc) {
   const idx = selectedDocs.value.findIndex(s => s.doc.type === doc.type && s.doc.id === doc.id);
-  if (idx >= 0) {
-    selectedDocs.value.splice(idx, 1);
-    return;
-  }
+  if (idx >= 0) { selectedDocs.value.splice(idx, 1); return; }
   const remaining = (reconcileData.value?.tx_amount ?? 0) - totalAllocated.value;
   const suggested = Math.min(doc.amount_remaining, Math.max(0, remaining));
   selectedDocs.value.push({ doc, amount: suggested });
@@ -237,11 +325,27 @@ function clampAlloc(doc) {
 const totalAllocated = computed(() => selectedDocs.value.reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0));
 const unallocated = computed(() => Math.max(0, (reconcileData.value?.tx_amount ?? 0) - totalAllocated.value));
 
-async function submit() {
-  if (!reconcileData.value?.party) return;
-  errors.value = {};
+// Flow A: khớp chứng từ đã có — chỉ link, không tạo JE mới
+function submitExisting() {
+  if (!selectedExisting.value) return;
+  errors.value   = {};
   submitting.value = true;
+  router.post(
+    route('accounting.bank-accounts.transactions.reconcile', [props.bankAccountId, props.transaction.id]),
+    { journal_entry_id: selectedExisting.value },
+    {
+      onSuccess: () => emit('close'),
+      onError: (e) => { errors.value = e; },
+      onFinish: () => { submitting.value = false; },
+    }
+  );
+}
 
+// Flow B: tạo thanh toán mới — tạo allocation + JE mới
+function submitNew() {
+  if (!reconcileData.value?.party) return;
+  errors.value   = {};
+  submitting.value = true;
   const party = reconcileData.value.party;
   const allocations = selectedDocs.value.map(s => ({
     type:         s.doc.type,
@@ -250,7 +354,6 @@ async function submit() {
     amount:       Math.round(parseFloat(s.amount) || 0),
     description:  `${s.doc.code}: ${props.transaction.description}`,
   }));
-
   router.post(
     route('accounting.bank-accounts.transactions.allocate', [props.bankAccountId, props.transaction.id]),
     { party_type: party.type, party_id: party.id, allocations },

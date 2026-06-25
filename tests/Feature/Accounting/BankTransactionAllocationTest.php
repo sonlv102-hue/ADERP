@@ -391,6 +391,66 @@ class BankTransactionAllocationTest extends TestCase
         $this->assertSame(95, $data['party']['confidence_score']);
     }
 
+    // ─── TC_NEW: Chặn double-posting khi tx đã có JE từ Flow A ──────────────
+
+    public function test_allocate_blocked_when_tx_already_has_journal_entry(): void
+    {
+        $this->expectException(\RuntimeException::class);
+        $this->expectExceptionMessageMatches('/đã được đối chiếu/i');
+
+        $tx  = $this->makeDebitTx(10_000_000);
+        $inv = $this->makePurchaseInvoice(10_000_000);
+
+        // Simulate Flow A: chỉ cần set reconcile_mode (không cần JE thật)
+        $tx->update([
+            'reconcile_mode' => 'match_existing',
+            'status'         => BankTransactionStatus::Reconciled,
+        ]);
+
+        $party = ['type' => 'supplier', 'id' => $this->supplier->id, 'name' => $this->supplier->name, 'code' => $this->supplier->code];
+        $this->svc->allocate($tx, $party, [[
+            'type' => 'purchase_invoice', 'id' => $inv->id,
+            'amount' => 10_000_000, 'account_code' => '3311',
+        ]]);
+    }
+
+    // ─── TC_CANCEL_A: Hủy Flow A → chỉ unlink, JE gốc không bị đảo ─────────
+
+    public function test_cancel_match_existing_unlinks_je_without_reversing(): void
+    {
+        $tx = $this->makeDebitTx(10_000_000);
+
+        $accounting = app(\App\Services\AccountingService::class);
+        $je = $accounting->post(
+            description: 'Bút toán kế toán có sẵn',
+            date: \Carbon\Carbon::parse('2026-06-15'),
+            lines: [
+                ['account' => '3311', 'debit' => 10_000_000, 'credit' => 0],
+                ['account' => '1121', 'debit' => 0, 'credit' => 10_000_000],
+            ],
+        );
+
+        $tx->update([
+            'journal_entry_id' => $je->id,
+            'reconcile_mode'   => 'match_existing',
+            'match_status'     => BankTransactionMatchStatus::Matched,
+            'status'           => BankTransactionStatus::Reconciled,
+            'reconciled_at'    => now(),
+        ]);
+
+        $this->svc->cancelAllocation($tx, 'Hủy khớp');
+
+        // JE gốc phải KHÔNG bị reversed
+        $je->refresh();
+        $this->assertSame('posted', $je->status);
+
+        $tx->refresh();
+        $this->assertSame(BankTransactionMatchStatus::Unmatched, $tx->match_status);
+        $this->assertSame(BankTransactionStatus::Pending, $tx->status);
+        $this->assertNull($tx->journal_entry_id);
+        $this->assertNull($tx->reconcile_mode);
+    }
+
     // ─── TC8b: Tự động nhận diện KH từ số TK ngân hàng đối ứng ─────────────
 
     public function test_party_auto_lookup_from_customer_bank_account(): void

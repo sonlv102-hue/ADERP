@@ -25,12 +25,14 @@ class BankTransactionAllocationService
     {
         $party = $this->resolveParty($tx, $partyType, $partyId);
         $documents = $this->loadDocuments($tx, $party);
+        $existingEntries = $this->loadExistingEntries($tx, $party);
         $alreadyAllocated = (float) BankTransactionAllocation::where('bank_transaction_id', $tx->id)
             ->where('status', 'active')->sum('allocated_amount');
 
         return [
             'party'            => $party,
             'documents'        => $documents,
+            'existing_entries' => $existingEntries,
             'tx_amount'        => (float) max($tx->debit, $tx->credit),
             'already_allocated' => $alreadyAllocated,
             'is_credit'        => $tx->credit > 0,
@@ -44,6 +46,10 @@ class BankTransactionAllocationService
             ->where('status', 'active')->count();
         if ($existing > 0) {
             throw new \RuntimeException('Giao dịch đã có phân bổ. Hủy đối chiếu trước khi phân bổ lại.');
+        }
+        // Guard: tx đã khớp với chứng từ có sẵn (Flow A) → chặn double-posting
+        if ($tx->reconcile_mode === 'match_existing') {
+            throw new \RuntimeException('Giao dịch đã được đối chiếu với chứng từ có sẵn. Hủy đối chiếu trước khi phân bổ.');
         }
 
         $txAmount    = (float) max($tx->debit, $tx->credit);
@@ -112,6 +118,7 @@ class BankTransactionAllocationService
                 'matched_party_type' => $party['type'],
                 'matched_party_id'   => $party['id'],
                 'journal_entry_id'   => $je->id,
+                'reconcile_mode'     => 'create_new_payment',
                 'status'             => $isFullyAllocated ? BankTransactionStatus::Reconciled : $tx->status,
                 'reconciled_at'      => $isFullyAllocated ? now() : null,
                 'reconciled_by'      => $isFullyAllocated ? auth()->id() : null,
@@ -123,14 +130,28 @@ class BankTransactionAllocationService
         });
     }
 
-    /** Hủy toàn bộ phân bổ, đảo JE nếu đã posted. Hỗ trợ cả auto-match flow (không có allocations). */
+    /** Hủy đối chiếu. Flow A (match_existing): chỉ unlink, không đảo JE. Flow B: đảo JE + cancel allocations. */
     public function cancelAllocation(BankTransaction $tx, string $reason = 'Người dùng hủy đối chiếu'): void
     {
+        // Flow A: khớp chứng từ có sẵn — chỉ unlink, không reverse JE của người dùng
+        if ($tx->reconcile_mode === 'match_existing') {
+            $tx->update([
+                'match_status'     => BankTransactionMatchStatus::Unmatched,
+                'status'           => BankTransactionStatus::Pending,
+                'journal_entry_id' => null,
+                'reconcile_mode'   => null,
+                'reconciled_at'    => null,
+                'reconciled_by'    => null,
+            ]);
+            return;
+        }
+
+        // Flow B (create_new_payment) hoặc auto-match legacy (reconcile_mode = null)
         $allocations = BankTransactionAllocation::where('bank_transaction_id', $tx->id)
             ->where('status', 'active')->get();
 
         if ($allocations->isEmpty()) {
-            // Auto-match flow: không có allocation records, nhưng có thể có journal_entry_id
+            // Auto-match flow: không có allocation records, nhưng có journal_entry_id
             if (!$tx->journal_entry_id) {
                 throw new \RuntimeException('Không có phân bổ hoặc bút toán nào để hủy.');
             }
@@ -143,6 +164,7 @@ class BankTransactionAllocationService
                     'match_status'     => BankTransactionMatchStatus::Unmatched,
                     'status'           => BankTransactionStatus::Pending,
                     'journal_entry_id' => null,
+                    'reconcile_mode'   => null,
                     'reconciled_at'    => null,
                     'reconciled_by'    => null,
                 ]);
@@ -172,6 +194,7 @@ class BankTransactionAllocationService
                 'match_status'     => BankTransactionMatchStatus::Unmatched,
                 'status'           => BankTransactionStatus::Pending,
                 'journal_entry_id' => null,
+                'reconcile_mode'   => null,
                 'reconciled_at'    => null,
                 'reconciled_by'    => null,
             ]);
@@ -299,6 +322,54 @@ class BankTransactionAllocationService
                     'amount_remaining' => $remaining,
                 ];
             })->filter()->values()->toArray();
+    }
+
+    /** Tra cứu JE đã posted khớp với đối tượng và gần với ngày giao dịch, chưa link với bank tx nào. */
+    private function loadExistingEntries(BankTransaction $tx, ?array $party): array
+    {
+        if (!$party) return [];
+
+        $txAmount = (float) max($tx->debit, $tx->credit);
+        $txDate   = Carbon::parse($tx->transaction_date);
+        $isCredit = $tx->credit > 0;
+
+        $results = DB::table('journal_entries as je')
+            ->join('journal_entry_lines as jel', 'je.id', '=', 'jel.journal_entry_id')
+            ->where('je.status', 'posted')
+            ->where('jel.partner_type', $party['type'])
+            ->where('jel.partner_id', $party['id'])
+            ->whereNotExists(function ($q) {
+                $q->select(DB::raw(1))
+                  ->from('bank_transactions as bt')
+                  ->whereColumn('bt.journal_entry_id', 'je.id');
+            })
+            ->whereBetween('je.entry_date', [
+                $txDate->copy()->subDays(60)->toDateString(),
+                $txDate->copy()->addDays(60)->toDateString(),
+            ])
+            ->select([
+                'je.id', 'je.code', 'je.description', 'je.entry_date',
+                DB::raw('SUM(jel.debit) as total_debit'),
+                DB::raw('SUM(jel.credit) as total_credit'),
+            ])
+            ->groupBy('je.id', 'je.code', 'je.description', 'je.entry_date')
+            ->orderByDesc('je.entry_date')
+            ->limit(20)
+            ->get();
+
+        return $results->map(function ($je) use ($txAmount, $isCredit) {
+            $jeAmount = $isCredit ? (float) $je->total_debit : (float) $je->total_credit;
+            $diff = $txAmount > 0 ? abs($jeAmount - $txAmount) / $txAmount : 1;
+            return [
+                'id'              => $je->id,
+                'code'            => $je->code,
+                'date'            => $je->entry_date,
+                'description'     => $je->description,
+                'amount'          => $jeAmount,
+                'amount_diff_pct' => round($diff * 100, 1),
+                'is_exact_match'  => $diff < 0.01,
+            ];
+        })->sortByDesc('is_exact_match')->values()->toArray();
     }
 
     private function buildJeDescription(BankTransaction $tx, array $party): string

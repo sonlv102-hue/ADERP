@@ -21,7 +21,7 @@ class BankTransaction extends Model
         // Matching workflow
         'match_status', 'matched_party_type', 'matched_party_id',
         'matched_document_type', 'matched_document_id', 'confidence_score',
-        'match_note', 'suggested_tx_type',
+        'match_note', 'suggested_tx_type', 'reconcile_mode',
         'customer_bank_account_id', 'cash_voucher_id', 'confirmed_by', 'confirmed_at',
     ];
 

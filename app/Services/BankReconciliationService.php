@@ -2,9 +2,11 @@
 
 namespace App\Services;
 
+use App\Enums\BankTransactionMatchStatus;
 use App\Enums\BankTransactionStatus;
 use App\Models\BankAccount;
 use App\Models\BankTransaction;
+use App\Models\BankTransactionAllocation;
 use App\Models\InternalBankAccount;
 use App\Models\JournalEntry;
 use App\Models\SupplierBankAccount;
@@ -327,13 +329,21 @@ class BankReconciliationService
             throw new \RuntimeException('Giao dịch đã được đối chiếu.');
         }
 
+        $hasAllocations = BankTransactionAllocation::where('bank_transaction_id', $tx->id)
+            ->where('status', 'active')->exists();
+        if ($hasAllocations) {
+            throw new \RuntimeException('Giao dịch đã có phân bổ thanh toán. Hủy phân bổ trước khi khớp lại.');
+        }
+
         $je = JournalEntry::where('status', 'posted')->findOrFail($journalEntryId);
 
         $tx->update([
-            'status'          => BankTransactionStatus::Reconciled,
-            'journal_entry_id'=> $je->id,
-            'reconciled_at'   => now(),
-            'reconciled_by'   => auth()->id(),
+            'status'           => BankTransactionStatus::Reconciled,
+            'match_status'     => BankTransactionMatchStatus::Matched,
+            'journal_entry_id' => $je->id,
+            'reconcile_mode'   => 'match_existing',
+            'reconciled_at'    => now(),
+            'reconciled_by'    => auth()->id(),
         ]);
     }
 
@@ -345,7 +355,9 @@ class BankReconciliationService
 
         $tx->update([
             'status'           => BankTransactionStatus::Pending,
+            'match_status'     => BankTransactionMatchStatus::Unmatched,
             'journal_entry_id' => null,
+            'reconcile_mode'   => null,
             'reconciled_at'    => null,
             'reconciled_by'    => null,
         ]);
