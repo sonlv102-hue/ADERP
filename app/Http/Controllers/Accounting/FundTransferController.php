@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Accounting;
 
 use App\Enums\FundTransferStatus;
+use App\Exports\FundTransfersExport;
 use App\Http\Controllers\Controller;
 use App\Models\AccountCode;
 use App\Models\Fund;
@@ -12,7 +13,9 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class FundTransferController extends Controller
 {
@@ -126,6 +129,14 @@ class FundTransferController extends Controller
         } catch (RuntimeException $e) {
             return back()->with('error', $e->getMessage());
         }
+    }
+
+    public function exportExcel(Request $request): BinaryFileResponse
+    {
+        return Excel::download(
+            new FundTransfersExport($request->only(['status'])),
+            'luan-chuyen-quy_' . now()->format('Ymd_His') . '.xlsx'
+        );
     }
 
     public function destroy(FundTransfer $fundTransfer): RedirectResponse

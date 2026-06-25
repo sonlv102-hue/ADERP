@@ -3,10 +3,16 @@
     <div class="max-w-5xl space-y-5">
       <div class="flex items-center justify-between flex-wrap gap-3">
         <h1 class="text-2xl font-bold text-gray-900">Luân chuyển quỹ</h1>
-        <Link :href="route('accounting.fund-transfers.create')"
-          class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-          + Tạo phiếu luân chuyển
-        </Link>
+        <div class="flex items-center gap-2">
+          <ExportExcelButton
+            :endpoint="route('accounting.fund-transfers.export-excel')"
+            :filters="{ status: filterStatus }"
+          />
+          <Link :href="route('accounting.fund-transfers.create')"
+            class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+            + Tạo phiếu luân chuyển
+          </Link>
+        </div>
       </div>
 
       <div v-if="$page.props.flash?.success" class="bg-green-50 border border-green-200 text-green-800 rounded-xl px-4 py-3 text-sm">
@@ -70,6 +76,7 @@ import { ref } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
+import ExportExcelButton from '@/Components/Shared/ExportExcelButton.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({

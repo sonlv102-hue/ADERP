@@ -396,6 +396,7 @@ Route::middleware('auth')->group(function () {
         Route::post('cash-vouchers/{cashVoucher}/unpost',  [CashVoucherController::class, 'unpost'])->name('cash-vouchers.unpost');
 
         // Luân chuyển quỹ
+        Route::get('fund-transfers/export-excel', [FundTransferController::class, 'exportExcel'])->name('fund-transfers.export-excel');
         Route::resource('fund-transfers', FundTransferController::class)->only(['index', 'create', 'store', 'show', 'destroy']);
         Route::post('fund-transfers/{fundTransfer}/post',    [FundTransferController::class, 'post'])->name('fund-transfers.post');
         Route::post('fund-transfers/{fundTransfer}/reverse', [FundTransferController::class, 'reverse'])->name('fund-transfers.reverse');
