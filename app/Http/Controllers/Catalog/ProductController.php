@@ -53,7 +53,7 @@ class ProductController extends Controller
     {
         $product->load('category');
 
-        $stock = \App\Models\StockMovement::where('product_id', $product->id)->sum('quantity');
+        $stock = \App\Models\InventoryBalance::stockForProduct($product->id);
 
         return Inertia::render('Catalog/Products/Show', [
             'product' => [

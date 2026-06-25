@@ -28,7 +28,7 @@ class StockExit extends Model
     protected static int    $codePad    = 4;
 
     protected $fillable = [
-        'code', 'warehouse_id', 'customer_id', 'order_id', 'purchase_order_id', 'created_by',
+        'code', 'warehouse_id', 'to_warehouse_id', 'customer_id', 'order_id', 'purchase_order_id', 'created_by',
         'exit_date', 'reason', 'status', 'notes',
         'item_usage_type', 'project_id',
         'issue_purpose', 'cost_account', 'inventory_account',
@@ -88,6 +88,11 @@ class StockExit extends Model
     public function project(): BelongsTo
     {
         return $this->belongsTo(Project::class);
+    }
+
+    public function toWarehouse(): BelongsTo
+    {
+        return $this->belongsTo(Warehouse::class, 'to_warehouse_id');
     }
 
     public function items(): HasMany

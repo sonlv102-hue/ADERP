@@ -275,6 +275,7 @@ class SearchController extends Controller
         $keyword     = $this->q($request);
 
         if ($projectId) {
+            // Lấy tồn từ project_inventory_lots (FIFO) của dự án
             $lots = ProjectInventoryLot::with('product')
                 ->where('project_id', $projectId)
                 ->where('warehouse_id', $warehouseId)
@@ -283,9 +284,22 @@ class SearchController extends Controller
                 ->get()
                 ->groupBy('product_id');
 
-            $items = $lots->map(function ($productLots) use ($keyword) {
-                $first   = $productLots->first();
-                $product = $first->product;
+            // Lấy tồn từ inventory_balances (AVCO) của kho chung
+            $avcoBalances = \App\Models\InventoryBalance::where('warehouse_id', $warehouseId)
+                ->where('qty_on_hand', '>', 0)
+                ->get()
+                ->keyBy('product_id');
+
+            // Gộp tất cả product_id có tồn
+            $allProductIds = collect($lots->keys())->merge($avcoBalances->keys())->unique();
+
+            $items = $allProductIds->map(function ($productId) use ($lots, $avcoBalances, $keyword) {
+                $product = null;
+                if ($lots->has($productId)) {
+                    $product = $lots[$productId]->first()->product;
+                } elseif ($avcoBalances->has($productId)) {
+                    $product = $avcoBalances[$productId]->product;
+                }
                 if (! $product || ! $product->is_active) return null;
 
                 if ($keyword) {
@@ -296,23 +310,45 @@ class SearchController extends Controller
                     }
                 }
 
-                $availableQty = round(
-                    $productLots->sum(fn ($l) => (float) $l->received_qty - (float) $l->issued_qty),
-                    3
-                );
+                // Tồn từ project lots (FIFO)
+                $lotQty = 0.0;
+                $lotCostValue = 0.0;
+                if ($lots->has($productId)) {
+                    foreach ($lots[$productId] as $l) {
+                        $avail = (float) $l->received_qty - (float) $l->issued_qty;
+                        $lotQty += $avail;
+                        $lotCostValue += $avail * (float) ($l->unit_cost ?? 0);
+                    }
+                }
 
-                // Tính giá vốn bình quân gia quyền từ các lô còn tồn
-                $totalCostValue = $productLots->sum(fn ($l) => ((float) $l->received_qty - (float) $l->issued_qty) * (float) ($l->unit_cost ?? 0));
-                $avgCostFromLots = $availableQty > 0 ? round($totalCostValue / $availableQty, 2) : null;
+                // Tồn từ AVCO (kho chung)
+                $avcoQty  = $avcoBalances->has($productId) ? (float) $avcoBalances[$productId]->qty_on_hand : 0.0;
+                $avcoRate = $avcoBalances->has($productId) ? (float) $avcoBalances[$productId]->avg_cost : 0.0;
+
+                $totalQty = round($lotQty + $avcoQty, 3);
+                if ($totalQty <= 0) return null;
+
+                // Giá bình quân tổng hợp
+                $totalCostValue = $lotCostValue + ($avcoQty * $avcoRate);
+                $avgCost = $totalQty > 0 ? round($totalCostValue / $totalQty, 2) : null;
+
+                // Chú thích nguồn tồn
+                $sourceParts = [];
+                if ($lotQty > 0) $sourceParts[] = "lô DA: {$lotQty}";
+                if ($avcoQty > 0) $sourceParts[] = "kho chung: {$avcoQty}";
+                $meta = "Tồn: {$totalQty}" . ($product->unit ? " {$product->unit}" : '');
+                if (count($sourceParts) > 1) {
+                    $meta .= ' (' . implode(', ', $sourceParts) . ')';
+                }
 
                 return [
                     'value'      => $product->id,
                     'label'      => $product->name,
                     'code'       => $product->code,
-                    'meta'       => $product->unit ? "Tồn: {$availableQty} {$product->unit}" : "Tồn: {$availableQty}",
+                    'meta'       => $meta,
                     'unit'       => $product->unit,
-                    'qty'        => $availableQty,
-                    'avg_cost'   => $avgCostFromLots,
+                    'qty'        => $totalQty,
+                    'avg_cost'   => $avgCost,
                     'sell_price' => (float) ($product->sell_price ?? 0),
                 ];
             })->filter()->values()->take(30);

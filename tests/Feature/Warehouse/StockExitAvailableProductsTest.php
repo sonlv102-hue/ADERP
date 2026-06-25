@@ -189,12 +189,16 @@ class StockExitAvailableProductsTest extends TestCase
         $res->assertStatus(200);
         $data = collect($res->json('data'));
 
+        // productA: lot=7 + AVCO=50 (setUp seed) → tổng 57
         $productAData = $data->firstWhere('value', $this->productA->id);
-        $this->assertNotNull($productAData, 'productA phải có trong project lots');
-        $this->assertEquals(7, $productAData['qty'], 'Qty = received(10) - issued(3) = 7');
+        $this->assertNotNull($productAData, 'productA phải xuất hiện (lot DA + AVCO)');
+        $this->assertEquals(57, $productAData['qty'], 'Qty = lot(7) + AVCO(50) = 57');
+        $this->assertStringContainsString('lô DA', $productAData['meta']);
 
-        // productBoth không có lot trong dự án → không hiển thị
-        $this->assertNull($data->firstWhere('value', $this->productBoth->id));
+        // productBoth không có lot dự án, nhưng có AVCO=20 → vẫn hiển thị từ kho chung
+        $productBothData = $data->firstWhere('value', $this->productBoth->id);
+        $this->assertNotNull($productBothData, 'productBoth phải xuất hiện từ AVCO kho chung');
+        $this->assertEquals(20, $productBothData['qty'], 'Qty = AVCO(20), không có lot dự án');
     }
 
     // ─── TC4: Backend block khi qty > tồn kho non-project ────────────────────
@@ -287,6 +291,8 @@ class StockExitAvailableProductsTest extends TestCase
             'status'              => 'active',
         ]);
 
+        // lot dự án = 5, AVCO kho chung (setUp) = 20 → tổng = 25
+        // Yêu cầu 30 → vượt cả lot + AVCO → phải bị chặn
         $res = $this->post(route('warehouse.stock-exits.store'), [
             'code'           => 'XK-TEST-PROJECT-BLOCK',
             'exit_date'      => '2026-06-15',
@@ -297,7 +303,7 @@ class StockExitAvailableProductsTest extends TestCase
             'items'          => [
                 [
                     'product_id' => $this->productBoth->id,
-                    'quantity'   => 10, // tồn project chỉ có 5
+                    'quantity'   => 30, // lot(5) + AVCO(20) = 25 < 30 → chặn
                     'unit_price' => 0,
                     'serial_ids' => [],
                 ],

@@ -34,7 +34,7 @@
           </svg>
           Phân loại lại
         </button>
-        <button v-if="can('accounting.manage')" @click="showImport = true" class="erp-btn-secondary flex items-center gap-2">
+        <button v-if="can('accounting.manage')" @click="showMultiImport = true" class="erp-btn-secondary flex items-center gap-2">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
             <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
           </svg>
@@ -225,27 +225,13 @@
         <Pagination :links="transactions.links" class="px-4 py-3" />
       </div>
 
-      <!-- Import Excel modal -->
-      <div v-if="showImport" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-        <div class="bg-white rounded-xl shadow-xl p-6 w-full max-w-md">
-          <h3 class="text-lg font-bold text-gray-900 mb-1">Import sao kê Techcombank</h3>
-          <p class="text-sm text-gray-500 mb-4">Tải file Excel (.xlsx) từ Internet Banking Techcombank → Tra cứu lịch sử giao dịch → Xuất Excel.</p>
-          <div class="mb-4">
-            <label class="block text-sm font-medium text-gray-700 mb-1">Chọn file Excel <span class="text-red-500">*</span></label>
-            <input ref="fileInput" type="file" accept=".xlsx,.xls,.csv" @change="onFileChange"
-              class="block w-full text-sm text-gray-600 file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary-50 file:text-primary-700 hover:file:bg-primary-100" />
-            <p v-if="importFile" class="text-xs text-gray-500 mt-1">{{ importFile.name }} ({{ (importFile.size / 1024).toFixed(1) }} KB)</p>
-          </div>
-          <div v-if="importError" class="mb-3 text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{{ importError }}</div>
-          <div class="bg-blue-50 rounded-lg px-3 py-2 mb-4 text-xs text-blue-700">Giao dịch trùng sẽ tự động bỏ qua.</div>
-          <div class="flex gap-3">
-            <button @click="submitImport" :disabled="!importFile || importing" class="erp-btn-primary flex-1">
-              {{ importing ? 'Đang import...' : 'Import' }}
-            </button>
-            <button @click="closeImport" class="erp-btn-secondary">Hủy</button>
-          </div>
-        </div>
-      </div>
+      <!-- Import Excel modal (multi-file) -->
+      <MultiFileImportModal
+        v-if="showMultiImport"
+        :upload-url="route('accounting.bank-accounts.transactions.import-excel-batch', props.bankAccount.id)"
+        @close="showMultiImport = false"
+        @imported="showMultiImport = false"
+      />
 
       <!-- Recategorize modal -->
       <div v-if="showRecategorize" class="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
@@ -321,6 +307,7 @@ import Pagination from '@/Components/Shared/Pagination.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import ExportExcelButton from '@/Components/Shared/ExportExcelButton.vue';
 import ReconciliationModal from './ReconciliationModal.vue';
+import MultiFileImportModal from './MultiFileImportModal.vue';
 import { usePermission } from '@/composables/usePermission';
 
 const { hasPermission: can } = usePermission();
@@ -428,33 +415,9 @@ function unreconcile(tx) {
   router.post(route('accounting.bank-accounts.transactions.unreconcile', [props.bankAccount.id, tx.id]));
 }
 
-// ─── Import Excel ─────────────────────────────────────────────────────────────
+// ─── Import Excel (multi-file) ────────────────────────────────────────────────
 
-const showImport  = ref(false);
-const importFile  = ref(null);
-const importError = ref('');
-const importing   = ref(false);
-const fileInput   = ref(null);
-
-function onFileChange(e) { importFile.value = e.target.files[0] ?? null; importError.value = ''; }
-
-function closeImport() {
-  showImport.value = false; importFile.value = null; importError.value = '';
-  if (fileInput.value) fileInput.value.value = '';
-}
-
-function submitImport() {
-  if (!importFile.value) return;
-  importing.value = true; importError.value = '';
-  const fd = new FormData();
-  fd.append('excel_file', importFile.value);
-  router.post(route('accounting.bank-accounts.transactions.import-excel', props.bankAccount.id), fd, {
-    forceFormData: true,
-    onSuccess: () => closeImport(),
-    onError: (errors) => { importError.value = errors.excel_file ?? errors.message ?? 'Import thất bại.'; },
-    onFinish: () => { importing.value = false; },
-  });
-}
+const showMultiImport = ref(false);
 
 // ─── Filters & helpers ────────────────────────────────────────────────────────
 

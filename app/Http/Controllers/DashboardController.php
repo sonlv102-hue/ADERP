@@ -14,7 +14,7 @@ use App\Models\Payment;
 use App\Models\Payroll;
 use App\Models\Product;
 use App\Models\Project;
-use App\Models\StockMovement;
+use App\Models\InventoryBalance;
 use App\Models\Ticket;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -93,10 +93,7 @@ class DashboardController extends Controller
 
         if ($products->isEmpty()) return [];
 
-        $stocks = StockMovement::whereIn('product_id', $products->pluck('id'))
-            ->selectRaw('product_id, SUM(quantity) as total')
-            ->groupBy('product_id')
-            ->pluck('total', 'product_id');
+        $stocks = InventoryBalance::stockForProducts($products->pluck('id'));
 
         return $products
             ->map(fn ($p) => [
@@ -137,10 +134,7 @@ class DashboardController extends Controller
             ->pluck('product_id')
             ->unique();
 
-        $stocks = StockMovement::whereIn('product_id', $productIds)
-            ->selectRaw('product_id, SUM(quantity) as total')
-            ->groupBy('product_id')
-            ->pluck('total', 'product_id');
+        $stocks = InventoryBalance::stockForProducts($productIds);
 
         $result = [];
         foreach ($orders as $order) {

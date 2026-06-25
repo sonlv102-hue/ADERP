@@ -70,6 +70,7 @@ use App\Http\Controllers\Purchasing\PurchaseInvoiceController;
 use App\Http\Controllers\Purchasing\PurchaseInvoicePaymentController;
 use App\Http\Controllers\Purchasing\PurchaseContractController;
 use App\Http\Controllers\Purchasing\SupplierBankAccountController;
+use App\Http\Controllers\Accounting\BankStatementImportController;
 use App\Http\Controllers\Accounting\InternalBankAccountController;
 use App\Http\Controllers\Accounting\InternalTransferReportController;
 use App\Http\Controllers\Accounting\AccountingPostingJobController;
@@ -497,6 +498,11 @@ Route::middleware('auth')->group(function () {
         Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/reconcile',   [BankTransactionController::class, 'reconcile'])->name('bank-accounts.transactions.reconcile')->middleware('can:accounting.manage');
         Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/unreconcile', [BankTransactionController::class, 'unreconcile'])->name('bank-accounts.transactions.unreconcile')->middleware('can:accounting.manage');
         Route::post('bank-accounts/{bankAccount}/transactions/import-excel',                  [BankTransactionController::class, 'importExcel'])->name('bank-accounts.transactions.import-excel')->middleware('can:accounting.manage');
+        Route::post('bank-accounts/{bankAccount}/transactions/import-excel/batch',            [BankStatementImportController::class, 'uploadBatch'])->name('bank-accounts.transactions.import-excel-batch')->middleware('can:accounting.manage');
+        // Batch import — preview / confirm / cancel
+        Route::get( 'bank-statement-import-batches/{batch}/preview', [BankStatementImportController::class, 'preview'])->name('bank-statement-import-batches.preview')->middleware('can:accounting.manage');
+        Route::post('bank-statement-import-batches/{batch}/confirm', [BankStatementImportController::class, 'confirm'])->name('bank-statement-import-batches.confirm')->middleware('can:accounting.manage');
+        Route::post('bank-statement-import-batches/{batch}/cancel',  [BankStatementImportController::class, 'cancel'])->name('bank-statement-import-batches.cancel')->middleware('can:accounting.manage');
         Route::post('bank-accounts/{bankAccount}/transactions/recategorize',                 [BankTransactionController::class, 'recategorize'])->name('bank-accounts.transactions.recategorize')->middleware('can:accounting.manage');
         // Đối soát tự động (Matching)
         Route::post('bank-accounts/{bankAccount}/transactions/match-all',                                    [BankTransactionController::class, 'matchAll'])->name('bank-accounts.transactions.match-all')->middleware('can:accounting.manage');

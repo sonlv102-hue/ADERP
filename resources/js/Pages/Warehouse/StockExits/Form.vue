@@ -127,14 +127,24 @@
                 </FormField>
               </template>
 
-              <!-- Dự án (project_cost only) -->
-              <FormField v-if="form.issue_purpose === 'project_cost'" label="Dự án" required :error="form.errors.project_id">
+              <!-- Dự án (project_cost hoặc project_transfer) -->
+              <FormField v-if="isProjectPurpose" label="Dự án" required :error="form.errors.project_id">
                 <RemoteSearchSelect
                   v-model="form.project_id"
                   :search-url="route('search.projects')"
                   :display-text="initialProjectDisplay"
                   placeholder="— Tìm dự án —"
                   :has-error="!!form.errors.project_id"
+                />
+              </FormField>
+
+              <!-- Kho đích (project_transfer only) -->
+              <FormField v-if="form.issue_purpose === 'project_transfer'" label="Kho đích (kho dự án)" required :error="form.errors.to_warehouse_id">
+                <SearchableSelect
+                  v-model="form.to_warehouse_id"
+                  :options="toWarehouseOptions"
+                  placeholder="— Chọn kho đích —"
+                  :has-error="!!form.errors.to_warehouse_id"
                 />
               </FormField>
 
@@ -200,8 +210,8 @@
                       <p class="mt-1 text-xs text-gray-400">Tự động điền danh sách hàng xuất từ lô FIFO sẵn có.</p>
                     </div>
                   </div>
-                  <div v-else class="rounded-xl border border-amber-100 bg-amber-50 px-4 py-2.5 text-xs text-amber-700">
-                    Chưa có lô hàng nào trong kho cho dự án này.
+                  <div v-else class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-2.5 text-xs text-blue-700">
+                    Dự án chưa có lô FIFO riêng trong kho này. Bạn có thể thêm sản phẩm trực tiếp từ tồn kho chung bằng nút "Thêm dòng".
                   </div>
                 </div>
               </template>
@@ -485,6 +495,18 @@ const props = defineProps({
   exit: { type: Object, default: null },
 });
 
+// Kho đích cho project_transfer (lọc bỏ kho nguồn)
+const toWarehouseOptions = computed(() =>
+  (props.warehouses ?? [])
+    .filter(w => w.id !== form.warehouse_id)
+    .map(w => ({ value: w.id, code: w.code ?? '', label: w.name }))
+);
+
+// Các issue_purpose gắn với dự án
+const isProjectPurpose = computed(() =>
+  form.issue_purpose === 'project_cost' || form.issue_purpose === 'project_transfer'
+);
+
 const { formatVnd } = useCurrency();
 
 const warehouseOptions = computed(() =>
@@ -508,6 +530,7 @@ const form = useForm({
   code:                props.exit?.code              ?? props.nextCode ?? '',
   exit_date:           props.exit?.exit_date         ?? today,
   warehouse_id:        props.exit?.warehouse_id      ?? '',
+  to_warehouse_id:     props.exit?.to_warehouse_id   ?? null,
   customer_id:         props.exit?.customer_id       ?? null,
   order_id:            props.exit?.order_id          ?? null,
   purchase_order_ids:  props.exit?.purchase_order_ids ?? [],
@@ -539,6 +562,7 @@ const productSearchUrl = computed(() =>
 const selectedPoIds = ref(Array.isArray(props.exit?.purchase_order_ids) ? [...props.exit.purchase_order_ids] : []);
 
 // Extra params cho ProductSearch: luôn gửi warehouse_id khi có
+// Gửi project_id cho project_cost (để merge lots + AVCO); không gửi cho project_transfer
 const productSearchParams = computed(() => {
   const params = {};
   if (form.warehouse_id) params.warehouse_id = form.warehouse_id;
@@ -631,7 +655,7 @@ const lotsLoading = ref(false);
 const fetchAvailableLots = async () => {
   if (form.issue_purpose !== 'project_cost' || !form.project_id || !form.warehouse_id) {
     availableLots.value = [];
-    return;
+    return;  // Không load lots cho project_transfer (dùng AVCO kho chung)
   }
   lotsLoading.value = true;
   try {
@@ -658,14 +682,19 @@ watch(availableLots, (lots) => {
 });
 
 const onIssuePurposeChange = () => {
-  form.item_usage_type = form.issue_purpose === 'project_cost' ? 'project' : 'commercial';
-  if (form.issue_purpose !== 'project_cost') {
+  const isProject = form.issue_purpose === 'project_cost' || form.issue_purpose === 'project_transfer';
+  form.item_usage_type = isProject ? 'project' : 'commercial';
+  if (!isProject) {
     form.project_id = null;
+    form.to_warehouse_id = null;
     form.purchase_order_ids = [];
     selectedPoIds.value = [];
     availableLots.value = [];
   } else {
     form.order_id = null;
+    if (form.issue_purpose !== 'project_transfer') {
+      form.to_warehouse_id = null;
+    }
   }
   form.items.forEach(item => { item._qtyOnHand = null; });
 };

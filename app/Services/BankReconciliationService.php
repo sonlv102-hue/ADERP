@@ -7,6 +7,7 @@ use App\Enums\BankTransactionStatus;
 use App\Models\BankAccount;
 use App\Models\BankTransaction;
 use App\Models\BankTransactionAllocation;
+use App\Models\CustomerBankAccount;
 use App\Models\InternalBankAccount;
 use App\Models\JournalEntry;
 use App\Models\SupplierBankAccount;
@@ -221,7 +222,7 @@ class BankReconciliationService
 
     /**
      * Phân loại giao dịch dựa trên số TK bên đối ứng.
-     * Tra cứu supplier_bank_accounts và internal_bank_accounts.
+     * Tra cứu internal_bank_accounts, supplier_bank_accounts, customer_bank_accounts.
      */
     private function categorize(array &$data): void
     {
@@ -231,33 +232,45 @@ class BankReconciliationService
             return;
         }
 
-        // Normalise: remove spaces/dashes
+        // Remove spaces and dashes for consistent comparison
         $normalized = preg_replace('/[\s\-]/', '', $acct);
 
-        // Check internal accounts first (higher priority)
+        // 1. Internal accounts — highest priority; normalize both sides (strip spaces + dashes)
         $internal = InternalBankAccount::where('is_active', true)
-            ->whereRaw("REPLACE(account_number, ' ', '') = ?", [$normalized])
+            ->whereRaw("REPLACE(REPLACE(account_number, ' ', ''), '-', '') = ?", [$normalized])
             ->first();
 
         if ($internal) {
-            $data['tx_type']           = 'internal_transfer';
+            $data['tx_type']             = 'internal_transfer';
             $data['internal_account_id'] = $internal->id;
-            // Alert for debit (tiền ra) internal transfers
             if ($data['debit'] > 0) {
                 $data['alert_note'] = "Chuyển khoản nội bộ đến {$internal->name} ({$internal->account_number}). Cần hồ sơ đối ứng. Nếu là tạm ứng, cần hoàn ứng sau khi sử dụng.";
             }
             return;
         }
 
-        // Check supplier bank accounts
+        // 2. Supplier bank accounts — use pre-normalized column (consistent with MatchingService)
         $supplierBank = SupplierBankAccount::where('is_active', true)
-            ->whereRaw("REPLACE(account_number, ' ', '') = ?", [$normalized])
+            ->where('normalized_account_number', $normalized)
             ->first();
 
         if ($supplierBank) {
             $data['tx_type']                  = 'supplier_payment';
             $data['supplier_bank_account_id'] = $supplierBank->id;
             return;
+        }
+
+        // 3. Customer bank accounts — classify credit (tiền vào) as customer_receipt
+        if (($data['credit'] ?? 0) > 0) {
+            $customerBank = CustomerBankAccount::where('is_active', true)
+                ->where('normalized_account_number', $normalized)
+                ->first();
+
+            if ($customerBank) {
+                $data['tx_type']                   = 'customer_receipt';
+                $data['customer_bank_account_id']  = $customerBank->id;
+                return;
+            }
         }
 
         $data['tx_type'] = 'unknown';
@@ -381,12 +394,14 @@ class BankReconciliationService
         }
 
         $internalAccounts = InternalBankAccount::where('is_active', true)->get();
-        $supplierBanks    = SupplierBankAccount::where('is_active', true)->get();
+        $supplierBanks    = SupplierBankAccount::where('is_active', true)->get(['id', 'normalized_account_number', 'account_number']);
+        $customerBanks    = CustomerBankAccount::where('is_active', true)->get(['id', 'customer_id', 'normalized_account_number', 'account_number']);
 
         $updated = 0;
         foreach ($transactions as $tx) {
             $normalized = preg_replace('/[\s\-]/', '', $tx->counterpart_account);
 
+            // 1. Internal accounts
             $internal = $internalAccounts->first(
                 fn ($a) => preg_replace('/[\s\-]/', '', $a->account_number) === $normalized
             );
@@ -401,13 +416,23 @@ class BankReconciliationService
                 continue;
             }
 
-            $supplier = $supplierBanks->first(
-                fn ($a) => preg_replace('/[\s\-]/', '', $a->account_number) === $normalized
-            );
+            // 2. Supplier bank accounts
+            $supplier = $supplierBanks->first(fn ($a) => $a->normalized_account_number === $normalized);
 
             if ($supplier) {
                 $tx->update(['tx_type' => 'supplier_payment', 'supplier_bank_account_id' => $supplier->id]);
                 $updated++;
+                continue;
+            }
+
+            // 3. Customer bank accounts — only for credit transactions
+            if ($tx->credit > 0) {
+                $customerBank = $customerBanks->first(fn ($a) => $a->normalized_account_number === $normalized);
+
+                if ($customerBank) {
+                    $tx->update(['tx_type' => 'customer_receipt', 'customer_bank_account_id' => $customerBank->id]);
+                    $updated++;
+                }
             }
         }
 

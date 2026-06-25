@@ -5,7 +5,7 @@ namespace App\Http\Controllers\Sales;
 use App\Enums\CustomsStatus;
 use App\Enums\OrderStatus;
 use App\Enums\QuotationStatus;
-use App\Models\StockMovement;
+use App\Models\InventoryBalance;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
@@ -168,10 +168,7 @@ class OrderController extends Controller
 
         // Tồn kho hiện tại cho từng sản phẩm trong đơn
         $productIds = $order->items->whereNotNull('product_id')->pluck('product_id');
-        $stocks = StockMovement::whereIn('product_id', $productIds)
-            ->selectRaw('product_id, COALESCE(SUM(quantity), 0) as total')
-            ->groupBy('product_id')
-            ->pluck('total', 'product_id');
+        $stocks = InventoryBalance::stockForProducts($productIds);
 
         return Inertia::render('Sales/Orders/Show', [
             'order' => [

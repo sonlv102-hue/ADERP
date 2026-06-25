@@ -220,7 +220,8 @@ class StockExitController extends Controller
 
         if ($isProject && $projectId) {
             foreach ($productQtyMap as $productId => $requestedQty) {
-                $available = (float) (ProjectInventoryLot::where('project_id', $projectId)
+                // Tồn FIFO từ project_inventory_lots của dự án
+                $lotAvailable = (float) (ProjectInventoryLot::where('project_id', $projectId)
                     ->where('warehouse_id', $warehouseId)
                     ->where('product_id', $productId)
                     ->where('status', 'active')
@@ -228,10 +229,19 @@ class StockExitController extends Controller
                     ->selectRaw('SUM(received_qty - issued_qty) as avail')
                     ->value('avail') ?? 0);
 
-                if ($available < $requestedQty) {
+                // Nếu lots đủ thì OK
+                if ($lotAvailable >= $requestedQty) continue;
+
+                // Fallback: cộng thêm tồn AVCO (hàng kho công ty)
+                $avcoAvailable = (float) (InventoryBalance::where('product_id', $productId)
+                    ->where('warehouse_id', $warehouseId)
+                    ->value('qty_on_hand') ?? 0);
+
+                $totalAvailable = $lotAvailable + $avcoAvailable;
+                if ($totalAvailable < $requestedQty) {
                     $product = Product::find($productId);
                     $errors[] = "Không đủ tồn kho cho {$product->code} - {$product->name} tại kho {$warehouse->name}. "
-                        . "Tồn dự án: {$available}, số lượng xuất: {$requestedQty}.";
+                        . "Tồn lô dự án: {$lotAvailable}, tồn kho chung: {$avcoAvailable}, số lượng xuất: {$requestedQty}.";
                 }
             }
         } else {
@@ -254,11 +264,12 @@ class StockExitController extends Controller
     private function issuePurposesForDropdown(): array
     {
         return [
-            ['value' => 'project_cost',    'label' => 'Xuất cho dự án (Nợ 154)'],
-            ['value' => 'sale_delivery',   'label' => 'Xuất bán hàng (Nợ 632)'],
-            ['value' => 'selling_expense', 'label' => 'Chi phí bán hàng (Nợ 6421)'],
-            ['value' => 'admin_expense',   'label' => 'Chi phí QLDN (Nợ 6422)'],
-            ['value' => 'internal_use',    'label' => 'Dùng nội bộ (cần cấu hình TK)'],
+            ['value' => 'project_cost',     'label' => 'Xuất dùng cho dự án (Nợ 154)'],
+            ['value' => 'project_transfer', 'label' => 'Điều chuyển sang kho dự án (chuyển kho)'],
+            ['value' => 'sale_delivery',    'label' => 'Xuất bán hàng (Nợ 632)'],
+            ['value' => 'selling_expense',  'label' => 'Chi phí bán hàng (Nợ 6421)'],
+            ['value' => 'admin_expense',    'label' => 'Chi phí QLDN (Nợ 6422)'],
+            ['value' => 'internal_use',     'label' => 'Dùng nội bộ (cần cấu hình TK)'],
         ];
     }
 
@@ -332,7 +343,8 @@ class StockExitController extends Controller
             'purchase_order_ids'      => ['nullable', 'array'],
             'purchase_order_ids.*'    => ['integer', 'exists:purchase_orders,id'],
             'item_usage_type'         => ['required', 'string', 'in:commercial,project'],
-            'issue_purpose'           => ['nullable', 'string', 'in:project_cost,sale_delivery,selling_expense,admin_expense,internal_use'],
+            'issue_purpose'           => ['nullable', 'string', 'in:project_cost,project_transfer,sale_delivery,selling_expense,admin_expense,internal_use'],
+            'to_warehouse_id'         => ['nullable', 'exists:warehouses,id'],
             'cost_account'            => ['nullable', 'string', 'max:20'],
             'inventory_account'       => ['nullable', 'string', 'max:20'],
             'project_id'              => ['nullable', 'exists:projects,id'],
@@ -350,10 +362,19 @@ class StockExitController extends Controller
 
         $purpose = $data['issue_purpose'] ?? null;
 
-        // project_id bắt buộc khi issue_purpose=project_cost hoặc item_usage_type=project
-        $requiresProject = $purpose === 'project_cost' || $data['item_usage_type'] === 'project';
+        // project_id bắt buộc khi issue_purpose=project_cost/project_transfer hoặc item_usage_type=project
+        $requiresProject = in_array($purpose, ['project_cost', 'project_transfer']) || $data['item_usage_type'] === 'project';
         if ($requiresProject && empty($data['project_id'])) {
             return back()->withErrors(['project_id' => 'Vui lòng chọn dự án khi xuất hàng cho dự án.'])->withInput();
+        }
+
+        // to_warehouse_id bắt buộc khi project_transfer
+        if ($purpose === 'project_transfer' && empty($data['to_warehouse_id'])) {
+            return back()->withErrors(['to_warehouse_id' => 'Vui lòng chọn kho đích khi điều chuyển sang kho dự án.'])->withInput();
+        }
+        if ($purpose === 'project_transfer' && !empty($data['to_warehouse_id'])
+            && (int) $data['to_warehouse_id'] === (int) $data['warehouse_id']) {
+            return back()->withErrors(['to_warehouse_id' => 'Kho đích phải khác kho nguồn.'])->withInput();
         }
 
         // Validate serial (tùy chọn — không bắt buộc phải chọn đủ số lượng)
@@ -384,7 +405,7 @@ class StockExitController extends Controller
         }
 
         // Kiểm tra tồn kho (cảnh báo sớm trước khi confirm)
-        $isProjectExit = ($data['issue_purpose'] ?? null) === 'project_cost' || $data['item_usage_type'] === 'project';
+        $isProjectExit = in_array($purpose, ['project_cost', 'project_transfer']) || $data['item_usage_type'] === 'project';
         $stockErrors = $this->checkStockAvailability(
             $data['items'],
             (int) $data['warehouse_id'],
@@ -400,6 +421,7 @@ class StockExitController extends Controller
         $exit = StockExit::create([
             'code'              => $data['code'],
             'warehouse_id'      => $data['warehouse_id'],
+            'to_warehouse_id'   => $purpose === 'project_transfer' ? ($data['to_warehouse_id'] ?? null) : null,
             'customer_id'       => $data['customer_id'] ?? null,
             'order_id'          => $data['order_id'] ?? null,
             'purchase_order_id' => $poIds[0] ?? null,
@@ -511,6 +533,7 @@ class StockExitController extends Controller
                 'code'                 => $stockExit->code,
                 'exit_date'            => $stockExit->exit_date->format('Y-m-d'),
                 'warehouse_id'         => $stockExit->warehouse_id,
+                'to_warehouse_id'      => $stockExit->to_warehouse_id,
                 'customer_id'          => $stockExit->customer_id,
                 'customer_name'        => $stockExit->customer?->name ?? '',
                 'customer_code'        => $stockExit->customer?->code ?? '',
@@ -560,7 +583,8 @@ class StockExitController extends Controller
             'purchase_order_ids'      => ['nullable', 'array'],
             'purchase_order_ids.*'    => ['integer', 'exists:purchase_orders,id'],
             'item_usage_type'         => ['required', 'string', 'in:commercial,project'],
-            'issue_purpose'           => ['nullable', 'string', 'in:project_cost,sale_delivery,selling_expense,admin_expense,internal_use'],
+            'issue_purpose'           => ['nullable', 'string', 'in:project_cost,project_transfer,sale_delivery,selling_expense,admin_expense,internal_use'],
+            'to_warehouse_id'         => ['nullable', 'exists:warehouses,id'],
             'project_id'              => ['nullable', 'exists:projects,id'],
             'exit_date'               => ['required', 'date'],
             'reason'                  => ['nullable', 'string', 'max:255'],
@@ -574,8 +598,17 @@ class StockExitController extends Controller
             'items.*.serial_ids.*'    => ['integer', 'exists:product_serials,id'],
         ]);
 
-        if ($data['item_usage_type'] === 'project' && empty($data['project_id'])) {
+        $purpose = $data['issue_purpose'] ?? null;
+        $requiresProject = in_array($purpose, ['project_cost', 'project_transfer']) || $data['item_usage_type'] === 'project';
+        if ($requiresProject && empty($data['project_id'])) {
             return back()->withErrors(['project_id' => 'Vui lòng chọn dự án khi xuất hàng cho dự án.'])->withInput();
+        }
+        if ($purpose === 'project_transfer' && empty($data['to_warehouse_id'])) {
+            return back()->withErrors(['to_warehouse_id' => 'Vui lòng chọn kho đích khi điều chuyển sang kho dự án.'])->withInput();
+        }
+        if ($purpose === 'project_transfer' && !empty($data['to_warehouse_id'])
+            && (int) $data['to_warehouse_id'] === (int) $data['warehouse_id']) {
+            return back()->withErrors(['to_warehouse_id' => 'Kho đích phải khác kho nguồn.'])->withInput();
         }
 
         $allSerialIds = [];
@@ -605,7 +638,7 @@ class StockExitController extends Controller
         }
 
         // Kiểm tra tồn kho
-        $isProjectExit = $data['item_usage_type'] === 'project';
+        $isProjectExit = in_array($purpose, ['project_cost', 'project_transfer']) || $data['item_usage_type'] === 'project';
         $stockErrors = $this->checkStockAvailability(
             $data['items'],
             (int) $data['warehouse_id'],
@@ -616,7 +649,7 @@ class StockExitController extends Controller
             return back()->withErrors(['items' => implode(' | ', $stockErrors)])->withInput();
         }
 
-        DB::transaction(function () use ($data, $stockExit) {
+        DB::transaction(function () use ($data, $stockExit, $purpose) {
             $oldItemIds = $stockExit->items->pluck('id');
             ProductSerial::whereIn('stock_exit_item_id', $oldItemIds)
                 ->update(['stock_exit_item_id' => null]);
@@ -624,13 +657,13 @@ class StockExitController extends Controller
 
             $stockExit->items()->delete();
 
-            $isProject = $data['item_usage_type'] === 'project';
-            $poIds     = $isProject ? array_values(array_unique(array_filter($data['purchase_order_ids'] ?? []))) : [];
-            $purpose   = $data['issue_purpose'] ?? null;
+            $isProject = in_array($purpose, ['project_cost', 'project_transfer']) || $data['item_usage_type'] === 'project';
+            $poIds     = $purpose === 'project_cost' ? array_values(array_unique(array_filter($data['purchase_order_ids'] ?? []))) : [];
 
             $stockExit->update([
                 'code'              => $data['code'],
                 'warehouse_id'      => $data['warehouse_id'],
+                'to_warehouse_id'   => $purpose === 'project_transfer' ? ($data['to_warehouse_id'] ?? null) : null,
                 'customer_id'       => $data['customer_id'] ?? null,
                 'order_id'          => $data['order_id'] ?? null,
                 'purchase_order_id' => $poIds[0] ?? null,

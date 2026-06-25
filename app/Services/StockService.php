@@ -18,6 +18,7 @@ use App\Models\StockEntryItem;
 use App\Models\StockExit;
 use App\Models\StockExitItem;
 use App\Models\StockExitItemLotAllocation;
+use App\Models\InventoryBalance;
 use App\Models\StockMovement;
 use App\Services\AvcoService;
 use App\Services\ProjectWipService;
@@ -342,62 +343,32 @@ class StockService
             foreach ($exit->items as $item) {
                 $qty = (int) $item->quantity;
 
-                if ($this->isProjectScopedExit($exit)) {
-                    // ── Project-scoped: FIFO từ project_inventory_lots ──────────────────
-                    $lots = ProjectInventoryLot::where('project_id', $exit->project_id)
-                        ->where('product_id', $item->product_id)
-                        ->where('warehouse_id', $exit->warehouse_id)
-                        ->where('status', 'active')
-                        ->whereRaw('issued_qty < received_qty')
-                        ->orderBy('received_at', 'ASC')
-                        ->lockForUpdate()
-                        ->get();
+                if ($this->isProjectTransfer($exit)) {
+                    // ── Điều chuyển sang kho dự án: out khỏi kho nguồn, in vào kho đích + tạo project lot ──
+                    $toWarehouseId = $exit->to_warehouse_id;
+                    if (! $toWarehouseId) {
+                        throw new RuntimeException("Phiếu điều chuyển dự án [{$exit->code}] thiếu kho đích.");
+                    }
 
-                    $available = $lots->sum(fn($l) => (float)$l->received_qty - (float)$l->issued_qty);
-                    if ($available < $qty) {
+                    // Kiểm tra tồn kho AVCO (kho chung) tại nguồn
+                    $avcoQty = $this->getAvcoAvailableQty($item->product_id, $exit->warehouse_id);
+                    if ($avcoQty < $qty) {
                         throw new RuntimeException(
-                            "Sản phẩm [{$item->product->name}]: tồn kho dự án chỉ còn {$available} đơn vị, cần {$qty}."
+                            "Sản phẩm [{$item->product->name}] không đủ tồn AVCO kho chung. Hiện có: {$avcoQty}, cần: {$qty}."
                         );
                     }
 
-                    $remaining = $qty;
-                    $totalCost = 0.0;
-                    foreach ($lots as $lot) {
-                        if ($remaining <= 0) break;
-                        $lotAvail = (float)$lot->received_qty - (float)$lot->issued_qty;
-                        $allocQty = min($lotAvail, $remaining);
-                        $allocAmt = $allocQty * (float)$lot->unit_cost;
+                    $avgCost   = $this->avco->recordExit($item->product_id, $exit->warehouse_id, (float) $qty);
+                    $totalCost = $avgCost * (float) $qty;
 
-                        StockExitItemLotAllocation::create([
-                            'stock_exit_id'            => $exit->id,
-                            'stock_exit_item_id'       => $item->id,
-                            'project_inventory_lot_id' => $lot->id,
-                            'project_id'               => $exit->project_id,
-                            'product_id'               => $item->product_id,
-                            'warehouse_id'             => $exit->warehouse_id,
-                            'allocated_qty'            => $allocQty,
-                            'unit_cost'                => $lot->unit_cost,
-                            'amount'                   => $allocAmt,
-                        ]);
-
-                        $lot->issued_qty = (float)$lot->issued_qty + $allocQty;
-                        if ($lot->issued_qty >= (float)$lot->received_qty) {
-                            $lot->status = 'depleted';
-                        }
-                        $lot->save();
-
-                        $totalCost += $allocAmt;
-                        $remaining -= $allocQty;
-                    }
-
-                    $sourceCost = $qty > 0 ? $totalCost / $qty : 0;
                     $item->update([
                         'project_id'  => $exit->project_id,
-                        'source_cost' => $sourceCost,
+                        'source_cost' => $avgCost,
                         'total_cost'  => $totalCost,
-                        'cost_source' => 'fifo',
+                        'cost_source' => 'avco',
                     ]);
 
+                    // OUT từ kho nguồn
                     StockMovement::create([
                         'product_id'     => $item->product_id,
                         'warehouse_id'   => $exit->warehouse_id,
@@ -407,11 +378,159 @@ class StockService
                         'source_id'      => $exit->id,
                         'source_item_id' => $item->id,
                         'created_by'     => auth()->id(),
-                        'notes'          => "Xuất kho dự án từ phiếu {$exit->code}",
+                        'notes'          => "Điều chuyển sang kho dự án {$exit->code}",
                         'project_id'     => $exit->project_id,
-                        'unit_cost'      => $sourceCost,
+                        'unit_cost'      => $avgCost,
                         'amount'         => -$totalCost,
                     ]);
+
+                    // IN vào kho đích
+                    StockMovement::create([
+                        'product_id'     => $item->product_id,
+                        'warehouse_id'   => $toWarehouseId,
+                        'type'           => 'in',
+                        'quantity'       => $qty,
+                        'source_type'    => StockExit::class,
+                        'source_id'      => $exit->id,
+                        'source_item_id' => $item->id,
+                        'created_by'     => auth()->id(),
+                        'notes'          => "Nhận điều chuyển từ kho nguồn {$exit->code}",
+                        'project_id'     => $exit->project_id,
+                        'unit_cost'      => $avgCost,
+                        'amount'         => $totalCost,
+                    ]);
+
+                    // Cập nhật AVCO kho đích
+                    $this->avco->recordEntry($item->product_id, $toWarehouseId, (float) $qty, $avgCost);
+
+                    // Tạo project_inventory_lot ở kho đích để dùng FIFO khi xuất sau này
+                    ProjectInventoryLot::create([
+                        'project_id'          => $exit->project_id,
+                        'product_id'          => $item->product_id,
+                        'warehouse_id'        => $toWarehouseId,
+                        'stock_entry_id'      => null,
+                        'stock_entry_item_id' => null,
+                        'purchase_order_id'   => null,
+                        'received_qty'        => $qty,
+                        'issued_qty'          => 0,
+                        'unit_cost'           => $avgCost,
+                        'status'              => 'active',
+                        'received_at'         => $exit->exit_date,
+                    ]);
+                } elseif ($this->isProjectScopedExit($exit)) {
+                    // ── Project-scoped (project_cost): FIFO từ project_inventory_lots, fallback AVCO ──
+                    $lots = ProjectInventoryLot::where('project_id', $exit->project_id)
+                        ->where('product_id', $item->product_id)
+                        ->where('warehouse_id', $exit->warehouse_id)
+                        ->where('status', 'active')
+                        ->whereRaw('issued_qty < received_qty')
+                        ->orderBy('received_at', 'ASC')
+                        ->lockForUpdate()
+                        ->get();
+
+                    $lotAvailable = $lots->sum(fn($l) => (float)$l->received_qty - (float)$l->issued_qty);
+
+                    if ($lotAvailable === 0.0) {
+                        // Không có project lots — dùng hoàn toàn AVCO (hàng kho công ty)
+                        $avcoQty = $this->getAvcoAvailableQty($item->product_id, $exit->warehouse_id);
+                        if ($avcoQty < $qty) {
+                            throw new RuntimeException(
+                                "Sản phẩm [{$item->product->name}] không đủ tồn kho. Tồn AVCO: {$avcoQty}, cần: {$qty}."
+                            );
+                        }
+
+                        $avgCost   = $this->avco->recordExit($item->product_id, $exit->warehouse_id, (float) $qty);
+                        $totalCost = $avgCost * (float) $qty;
+
+                        $item->update([
+                            'project_id'  => $exit->project_id,
+                            'source_cost' => $avgCost,
+                            'total_cost'  => $totalCost,
+                            'cost_source' => 'avco',
+                        ]);
+
+                        StockMovement::create([
+                            'product_id'     => $item->product_id,
+                            'warehouse_id'   => $exit->warehouse_id,
+                            'type'           => 'out',
+                            'quantity'       => -$qty,
+                            'source_type'    => StockExit::class,
+                            'source_id'      => $exit->id,
+                            'source_item_id' => $item->id,
+                            'created_by'     => auth()->id(),
+                            'notes'          => "Xuất vật tư dự án từ kho chung {$exit->code}",
+                            'project_id'     => $exit->project_id,
+                            'unit_cost'      => $avgCost,
+                            'amount'         => -$totalCost,
+                        ]);
+                    } else {
+                        // Có project lots — dùng FIFO trước, AVCO cho phần còn lại nếu thiếu
+                        $remaining = $qty;
+                        $totalCost = 0.0;
+
+                        foreach ($lots as $lot) {
+                            if ($remaining <= 0) break;
+                            $lotAvail = (float)$lot->received_qty - (float)$lot->issued_qty;
+                            $allocQty = min($lotAvail, $remaining);
+                            $allocAmt = $allocQty * (float)$lot->unit_cost;
+
+                            StockExitItemLotAllocation::create([
+                                'stock_exit_id'            => $exit->id,
+                                'stock_exit_item_id'       => $item->id,
+                                'project_inventory_lot_id' => $lot->id,
+                                'project_id'               => $exit->project_id,
+                                'product_id'               => $item->product_id,
+                                'warehouse_id'             => $exit->warehouse_id,
+                                'allocated_qty'            => $allocQty,
+                                'unit_cost'                => $lot->unit_cost,
+                                'amount'                   => $allocAmt,
+                            ]);
+
+                            $lot->issued_qty = (float)$lot->issued_qty + $allocQty;
+                            if ($lot->issued_qty >= (float)$lot->received_qty) {
+                                $lot->status = 'depleted';
+                            }
+                            $lot->save();
+
+                            $totalCost += $allocAmt;
+                            $remaining -= $allocQty;
+                        }
+
+                        // Phần còn lại (sau khi hết FIFO lots) dùng AVCO kho chung
+                        if ($remaining > 0) {
+                            $avcoQty = $this->getAvcoAvailableQty($item->product_id, $exit->warehouse_id);
+                            if ($avcoQty < $remaining) {
+                                throw new RuntimeException(
+                                    "Sản phẩm [{$item->product->name}] không đủ tồn AVCO cho phần còn lại. AVCO: {$avcoQty}, cần: {$remaining}."
+                                );
+                            }
+                            $avgCost    = $this->avco->recordExit($item->product_id, $exit->warehouse_id, (float) $remaining);
+                            $totalCost += $avgCost * (float) $remaining;
+                        }
+
+                        $sourceCost = $qty > 0 ? $totalCost / $qty : 0;
+                        $item->update([
+                            'project_id'  => $exit->project_id,
+                            'source_cost' => $sourceCost,
+                            'total_cost'  => $totalCost,
+                            'cost_source' => 'fifo',
+                        ]);
+
+                        StockMovement::create([
+                            'product_id'     => $item->product_id,
+                            'warehouse_id'   => $exit->warehouse_id,
+                            'type'           => 'out',
+                            'quantity'       => -$qty,
+                            'source_type'    => StockExit::class,
+                            'source_id'      => $exit->id,
+                            'source_item_id' => $item->id,
+                            'created_by'     => auth()->id(),
+                            'notes'          => "Xuất vật tư dự án từ phiếu {$exit->code}",
+                            'project_id'     => $exit->project_id,
+                            'unit_cost'      => $sourceCost,
+                            'amount'         => -$totalCost,
+                        ]);
+                    }
                 } else {
                     // ── Non-project: kiểm tra tổng kho warehouse ───────────────────────
                     StockMovement::where('product_id', $item->product_id)
@@ -715,25 +834,60 @@ class StockService
         }
 
         return match($purpose) {
-            'project_cost'    => AccountingSettings::get('project_wip_account', '154'),
-            'sale_delivery'   => AccountingSettings::get('default_cogs_account', '632'),
-            'selling_expense' => AccountingSettings::get('selling_expense_account', '6421'),
-            'admin_expense'   => AccountingSettings::get('admin_expense_account', '6422'),
-            'internal_use'    => throw new RuntimeException(
+            'project_cost'     => AccountingSettings::get('project_wip_account', '154'),
+            'project_transfer' => throw new RuntimeException(
+                "project_transfer không tạo bút toán — không gọi resolveDebitAccount."
+            ),
+            'sale_delivery'    => AccountingSettings::get('default_cogs_account', '632'),
+            'selling_expense'  => AccountingSettings::get('selling_expense_account', '6421'),
+            'admin_expense'    => AccountingSettings::get('admin_expense_account', '6422'),
+            'internal_use'     => throw new RuntimeException(
                 "Xuất kho mục đích internal_use phải cấu hình cost_account."
             ),
             default => throw new RuntimeException("issue_purpose '{$purpose}' không hợp lệ."),
         };
     }
 
+    /**
+     * Lấy tồn kho AVCO (kho chung, không tính lot dự án).
+     * Ưu tiên inventory_balances; fallback về sum(movements) không có project_id.
+     */
+    private function getAvcoAvailableQty(int $productId, int $warehouseId): float
+    {
+        $balance = InventoryBalance::where('product_id', $productId)
+            ->where('warehouse_id', $warehouseId)
+            ->value('qty_on_hand');
+
+        if ($balance !== null) {
+            return (float) $balance;
+        }
+
+        // Chưa có AVCO balance → tính từ non-project stock movements
+        return (float) StockMovement::where('product_id', $productId)
+            ->where('warehouse_id', $warehouseId)
+            ->whereNull('project_id')
+            ->sum('quantity');
+    }
+
     private function isProjectScopedExit(StockExit $exit): bool
     {
+        // project_transfer chỉ tạo stock movements, không tạo N154/WIP — không tính là "project scoped" cho JE
         return $exit->issue_purpose === 'project_cost'
-            || $exit->item_usage_type === ItemUsageType::Project;
+            || ($exit->item_usage_type === ItemUsageType::Project && $exit->issue_purpose !== 'project_transfer');
+    }
+
+    private function isProjectTransfer(StockExit $exit): bool
+    {
+        return $exit->issue_purpose === 'project_transfer';
     }
 
     private function postExitJournal(StockExit $exit): void
     {
+        // Điều chuyển kho dự án không tạo bút toán kế toán
+        if ($this->isProjectTransfer($exit)) {
+            return;
+        }
+
         $exit->load('items.product');
 
         $debitAccount = $this->resolveDebitAccount($exit);

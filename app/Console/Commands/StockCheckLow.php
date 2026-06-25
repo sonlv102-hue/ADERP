@@ -2,8 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\Models\InventoryBalance;
 use App\Models\Product;
-use App\Models\StockMovement;
 use Illuminate\Console\Command;
 
 class StockCheckLow extends Command
@@ -20,7 +20,7 @@ class StockCheckLow extends Command
         $lowStock = [];
 
         foreach ($products as $product) {
-            $qty = (int) StockMovement::where('product_id', $product->id)->sum('quantity');
+            $qty = InventoryBalance::stockForProduct($product->id);
             if ($qty < $product->min_stock) {
                 $lowStock[] = [
                     'Mã SP' => $product->code,
