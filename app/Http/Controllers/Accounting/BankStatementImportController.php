@@ -20,7 +20,7 @@ class BankStatementImportController extends Controller
 
         $request->validate([
             'files'   => 'required|array|min:1|max:20',
-            'files.*' => 'required|file|mimes:xlsx,xls|max:10240',
+            'files.*' => 'required|file|extensions:xlsx,xls|max:10240',
         ]);
 
         try {
