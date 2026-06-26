@@ -97,11 +97,13 @@
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1">Đơn hàng</label>
-              <select v-model="form.order_id"
-                class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-                <option :value="null">-- Không --</option>
-                <option v-for="o in orders" :key="o.id" :value="o.id">{{ o.code }}</option>
-              </select>
+              <RemoteSearchSelect
+                v-model="form.order_id"
+                :display-text="form.order_code"
+                :search-url="route('search.orders')"
+                placeholder="Tìm mã đơn hàng..."
+                @change="(opt) => form.order_code = opt ? opt.label : ''"
+              />
             </div>
             <div>
               <label class="block text-xs text-gray-500 mb-1">Dự án</label>
@@ -145,8 +147,6 @@ const props = defineProps({
   commission: Object,
   nextCode:   String,
   types:      Array,
-  customers:  { type: Array, default: () => [] },
-  orders:     Array,
   projects:   Array,
 });
 
@@ -156,6 +156,7 @@ const form = useForm({
   customer_id:    props.commission?.customer_id    ?? null,
   customer_name:  props.commission?.customer?.name ?? '',
   order_id:       props.commission?.order_id       ?? null,
+  order_code:     props.commission?.order?.code    ?? '',
   project_id:     props.commission?.project_id     ?? null,
   recipient_name: props.commission?.recipient_name ?? '',
   recipient_info: props.commission?.recipient_info ?? '',

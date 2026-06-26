@@ -6,8 +6,6 @@ use App\Enums\CommissionStatus;
 use App\Enums\CommissionType;
 use App\Http\Controllers\Controller;
 use App\Models\Commission;
-use App\Models\Customer;
-use App\Models\Order;
 use App\Models\Project;
 use App\Services\CommissionService;
 use Illuminate\Http\RedirectResponse;
@@ -21,9 +19,10 @@ class CommissionController extends Controller
 
     public function index(): Response
     {
-        $search = request('search');
-        $status = request('status');
-        $type   = request('type');
+        $search    = request('search');
+        $status    = request('status');
+        $type      = request('type');
+        $orderCode = request('order_code');
 
         return Inertia::render('Sales/Commissions/Index', [
             'commissions' => Commission::with(['creator', 'customer', 'order', 'project'])
@@ -31,13 +30,15 @@ class CommissionController extends Controller
                     $q2->where('code', 'ilike', "%{$search}%")
                        ->orWhere('recipient_name', 'ilike', "%{$search}%")
                 ))
-                ->when($status, fn ($q) => $q->where('status', $status))
-                ->when($type,   fn ($q) => $q->where('type', $type))
+                ->when($status,    fn ($q) => $q->where('status', $status))
+                ->when($type,      fn ($q) => $q->where('type', $type))
+                ->when($orderCode, fn ($q) => $q->whereHas('order', fn ($o) => $o->where('code', 'ilike', "%{$orderCode}%")))
                 ->orderByDesc('id')
                 ->paginate(20)
                 ->through(fn ($c) => $this->formatRow($c)),
             'types'    => collect(CommissionType::cases())->map(fn ($t) => ['value' => $t->value, 'label' => $t->label()]),
             'statuses' => collect(CommissionStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
+            'filters'  => ['search' => $search, 'status' => $status, 'type' => $type, 'order_code' => $orderCode],
         ]);
     }
 
@@ -46,7 +47,6 @@ class CommissionController extends Controller
         return Inertia::render('Sales/Commissions/Form', [
             'nextCode' => Commission::generateCode(),
             'types'    => collect(CommissionType::cases())->map(fn ($t) => ['value' => $t->value, 'label' => $t->label()]),
-            'orders'   => Order::orderByDesc('id')->get(['id', 'code']),
             'projects' => Project::orderByDesc('id')->get(['id', 'code', 'name']),
         ]);
     }
@@ -91,11 +91,10 @@ class CommissionController extends Controller
     {
         abort_unless($commission->status === CommissionStatus::Draft, 403, 'Chỉ có thể sửa khi ở trạng thái Nháp.');
 
-        $commission->loadMissing('customer');
+        $commission->loadMissing(['customer', 'order']);
         return Inertia::render('Sales/Commissions/Form', [
             'commission' => $commission,
             'types'      => collect(CommissionType::cases())->map(fn ($t) => ['value' => $t->value, 'label' => $t->label()]),
-            'orders'     => Order::orderByDesc('id')->get(['id', 'code']),
             'projects'   => Project::orderByDesc('id')->get(['id', 'code', 'name']),
         ]);
     }

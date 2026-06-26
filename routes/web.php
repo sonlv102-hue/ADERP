@@ -781,5 +781,6 @@ Route::middleware('auth')->group(function () {
         Route::get('services',           [SearchController::class, 'services'])->name('services');
         Route::get('warehouse-products',      [SearchController::class, 'warehouseProducts'])->name('warehouse-products');
         Route::get('project-purchase-orders', [SearchController::class, 'projectPurchaseOrders'])->name('project-purchase-orders');
+        Route::get('orders',                  [SearchController::class, 'orders'])->name('orders');
     });
 });

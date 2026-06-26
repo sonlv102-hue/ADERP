@@ -12,7 +12,9 @@
       <!-- Filters -->
       <div class="flex gap-3 flex-wrap">
         <input v-model="search" @keyup.enter="applyFilters" type="text" placeholder="Tìm mã, tên người nhận..."
-          class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-primary-500" />
+        <input v-model="orderCodeFilter" @keyup.enter="applyFilters" type="text" placeholder="Lọc theo đơn hàng..."
+          class="border border-gray-300 rounded-lg px-3 py-2 text-sm w-44 focus:outline-none focus:ring-2 focus:ring-primary-500" />
         <select v-model="statusFilter" @change="applyFilters"
           class="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
           <option value="">Tất cả trạng thái</option>
@@ -23,7 +25,7 @@
           <option value="">Tất cả loại</option>
           <option v-for="t in types" :key="t.value" :value="t.value">{{ t.label }}</option>
         </select>
-        <button v-if="search || statusFilter || typeFilter" @click="clearFilters"
+        <button v-if="search || orderCodeFilter || statusFilter || typeFilter" @click="clearFilters"
           class="text-gray-500 hover:text-gray-700 px-3 py-2 text-sm">Xóa lọc</button>
       </div>
 
@@ -87,26 +89,29 @@ const props = defineProps({
   commissions: Object,
   types:       Array,
   statuses:    Array,
+  filters:     { type: Object, default: () => ({}) },
 });
 
 const { hasPermission } = usePermission();
 const can = hasPermission;
 const { formatVnd: fmt } = useCurrency();
 
-const search       = ref('');
-const statusFilter = ref('');
-const typeFilter   = ref('');
+const search          = ref(props.filters.search      ?? '');
+const orderCodeFilter = ref(props.filters.order_code  ?? '');
+const statusFilter    = ref(props.filters.status      ?? '');
+const typeFilter      = ref(props.filters.type        ?? '');
 
 function applyFilters() {
   router.get(route('sales.commissions.index'), {
-    search: search.value || undefined,
-    status: statusFilter.value || undefined,
-    type:   typeFilter.value || undefined,
+    search:     search.value          || undefined,
+    order_code: orderCodeFilter.value || undefined,
+    status:     statusFilter.value    || undefined,
+    type:       typeFilter.value      || undefined,
   }, { preserveState: true, replace: true });
 }
 
 function clearFilters() {
-  search.value = statusFilter.value = typeFilter.value = '';
+  search.value = orderCodeFilter.value = statusFilter.value = typeFilter.value = '';
   applyFilters();
 }
 

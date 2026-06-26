@@ -6,6 +6,7 @@ use App\Models\AccountCode;
 use App\Models\Customer;
 use App\Models\Employee;
 use App\Models\InventoryBalance;
+use App\Models\Order;
 use App\Models\Product;
 use App\Models\Project;
 use App\Models\ProjectInventoryLot;
@@ -439,6 +440,28 @@ class SearchController extends Controller
                 'sell_price' => (float) ($p->sell_price ?? 0),
             ];
         })->values();
+
+        return response()->json(['data' => $items]);
+    }
+
+    public function orders(Request $request): JsonResponse
+    {
+        $q     = $this->q($request);
+        $limit = min((int) $request->input('limit', 20), 50);
+
+        $items = Order::with('customer')
+            ->when($q, fn ($b) => $b->where(fn ($b2) =>
+                $b2->whereRaw('LOWER(orders.code) LIKE ?', ['%' . strtolower($q) . '%'])
+                   ->orWhereHas('customer', fn ($c) => $c->whereRaw('LOWER(name) LIKE ?', ['%' . strtolower($q) . '%']))
+            ))
+            ->orderByDesc('id')
+            ->limit($limit)
+            ->get(['id', 'code', 'customer_id'])
+            ->map(fn ($o) => [
+                'value' => $o->id,
+                'label' => $o->code,
+                'meta'  => $o->customer?->name ?? '',
+            ]);
 
         return response()->json(['data' => $items]);
     }
