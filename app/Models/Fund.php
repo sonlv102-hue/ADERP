@@ -57,8 +57,8 @@ class Fund extends Model
             ->where('status', 'confirmed')
             ->sum('amount');
 
-        $arReceived = $this->payments()->sum('amount');
-        $apPaid     = $this->purchaseInvoicePayments()->where('status', '!=', 'voided')->sum('amount');
+        $arReceived = $this->payments()->whereNull('cash_voucher_id')->sum('amount');
+        $apPaid     = $this->purchaseInvoicePayments()->where('status', '!=', 'voided')->whereNull('cash_voucher_id')->sum('amount');
 
         $transfersIn  = $this->fundTransfersIn()->where('status', 'posted')->sum('amount');
         $transfersOut = $this->fundTransfersOut()->where('status', 'posted')->sum('amount');
