@@ -32,6 +32,7 @@ class InventoryReportController extends Controller
                 $join->on('sm.source_id', '=', 'sx.id')
                      ->where('sm.source_type', '=', 'App\\Models\\StockExit');
             })
+            ->whereRaw("(sm.status IS NULL OR sm.status = 'active')")
             ->when($warehouseId, fn ($q) => $q->where('sm.warehouse_id', $warehouseId))
             ->selectRaw(
                 "sm.product_id,
@@ -119,6 +120,7 @@ class InventoryReportController extends Controller
                 $join->on('sm.source_id', '=', 'sx.id')
                      ->where('sm.source_type', '=', 'App\\Models\\StockExit');
             })
+            ->whereRaw("(sm.status IS NULL OR sm.status = 'active')")
             ->when($warehouseId, fn ($q) => $q->where('sm.warehouse_id', $warehouseId))
             ->selectRaw(
                 "sm.product_id,
@@ -205,6 +207,7 @@ class InventoryReportController extends Controller
                     $join->on('sm.source_id', '=', 'sx.id')
                          ->where('sm.source_type', '=', 'App\\Models\\StockExit');
                 })
+                ->whereRaw("(sm.status IS NULL OR sm.status = 'active')")
                 ->where('sm.product_id', $productId)
                 ->when($warehouseId, fn ($q) => $q->where('sm.warehouse_id', $warehouseId))
                 ->where(DB::raw("COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at))"), '<', $dateFrom)
@@ -220,6 +223,7 @@ class InventoryReportController extends Controller
                     $join->on('sm.source_id', '=', 'sx.id')
                          ->where('sm.source_type', '=', 'App\\Models\\StockExit');
                 })
+                ->whereRaw("(sm.status IS NULL OR sm.status = 'active')")
                 ->where('sm.product_id', $productId)
                 ->when($warehouseId, fn ($q) => $q->where('sm.warehouse_id', $warehouseId))
                 ->where(DB::raw("COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at))"), '<', $dateFrom)
@@ -237,6 +241,7 @@ class InventoryReportController extends Controller
                     $join->on('sm.source_id', '=', 'sx.id')
                          ->where('sm.source_type', '=', 'App\\Models\\StockExit');
                 })
+                ->whereRaw("(sm.status IS NULL OR sm.status = 'active')")
                 ->where('sm.product_id', $productId)
                 ->when($warehouseId, fn ($q) => $q->where('sm.warehouse_id', $warehouseId))
                 ->whereBetween(DB::raw("COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at))"), [$dateFrom, $dateTo])
@@ -250,43 +255,47 @@ class InventoryReportController extends Controller
                     'warehouses.name as warehouse_name',
                     'sm.unit_cost',
                     'sm.amount',
+                    'se.code as entry_code',
+                    'sx.code as exit_code',
                 ])
                 ->orderBy(DB::raw("COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at))"))
                 ->orderBy('sm.id')
                 ->get();
 
             $runningBalance = $openingBalance;
-            $rows = $movements->map(function ($m) use (&$runningBalance, $product) {
+            $runningValue   = $openingValue;
+            $rows = $movements->map(function ($m) use (&$runningBalance, &$runningValue) {
                 $qty     = (float) $m->quantity;
                 $qtyIn   = $qty > 0 ? $qty : 0;
                 $qtyOut  = $qty < 0 ? abs($qty) : 0;
+                $amount  = (float) ($m->amount ?? 0);
                 $runningBalance += $qty;
-                $unitCost        = (float) ($m->unit_cost ?? $product->cost_price ?? 0);
+                $runningValue   += $amount;
+                $unitCost        = (float) ($m->unit_cost ?? 0);
 
-                // Derive description from reference_type
                 $refType = class_basename($m->reference_type ?? '');
                 $desc    = match ($refType) {
-                    'StockEntry'    => "Nhập kho NK-{$m->reference_id}",
-                    'StockExit'     => "Xuất kho XK-{$m->reference_id}",
-                    'StockTransfer' => "Chuyển kho CK-{$m->reference_id}",
-                    'SalesReturn'   => "Trả hàng bán TH-{$m->reference_id}",
-                    'PurchaseReturn' => "Trả hàng mua THM-{$m->reference_id}",
-                    'InventoryCount' => "Điều chỉnh IK-{$m->reference_id}",
-                    'InventoryOpeningBalance' => "Tồn kho đầu kỳ",
-                    default         => $refType . " #{$m->reference_id}",
+                    'StockEntry'             => "Nhập kho " . ($m->entry_code ?? "NK-{$m->reference_id}"),
+                    'StockExit'              => "Xuất kho " . ($m->exit_code  ?? "XK-{$m->reference_id}"),
+                    'StockTransfer'          => "Chuyển kho CK-{$m->reference_id}",
+                    'SalesReturn'            => "Trả hàng bán TH-{$m->reference_id}",
+                    'PurchaseReturn'         => "Trả hàng mua THM-{$m->reference_id}",
+                    'InventoryCount'         => "Điều chỉnh IK-{$m->reference_id}",
+                    'InventoryOpeningBalance'=> "Tồn kho đầu kỳ",
+                    default                  => $refType . " #{$m->reference_id}",
                 };
 
                 return [
-                    'date'            => substr($m->date, 0, 10),
-                    'description'     => $desc,
-                    'warehouse'       => $m->warehouse_name,
-                    'qty_in'          => $qtyIn,
-                    'qty_out'         => $qtyOut,
-                    'balance'         => $runningBalance,
-                    'unit_cost'       => $unitCost,
-                    'value_in'        => $qtyIn  * $unitCost,
-                    'value_out'       => $qtyOut * $unitCost,
-                    'value_balance'   => $runningBalance * $unitCost,
+                    'date'          => substr($m->date, 0, 10),
+                    'description'   => $desc,
+                    'warehouse'     => $m->warehouse_name,
+                    'qty_in'        => $qtyIn,
+                    'qty_out'       => $qtyOut,
+                    'balance'       => $runningBalance,
+                    'unit_cost'     => $unitCost,
+                    'value_in'      => $amount > 0 ? $amount : 0,
+                    'value_out'     => $amount < 0 ? abs($amount) : 0,
+                    'value_balance' => $runningValue,
                 ];
             });
         }

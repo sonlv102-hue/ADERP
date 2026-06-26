@@ -137,6 +137,15 @@
             <span class="text-gray-500">Người tạo</span>
             <p class="font-medium text-gray-900 mt-0.5">{{ entry.creator ?? '—' }}</p>
           </div>
+          <div>
+            <span class="text-gray-500">Đơn mua hàng</span>
+            <p class="font-medium text-gray-900 mt-0.5">
+              <Link v-if="entry.purchase_order_id" :href="route('purchasing.purchase-orders.show', entry.purchase_order_id)" class="font-mono text-primary-600 hover:underline">
+                {{ entry.purchase_order_code }}
+              </Link>
+              <span v-else>—</span>
+            </p>
+          </div>
           <div class="sm:col-span-2">
             <span class="text-gray-500">Ghi chú</span>
             <p class="font-medium text-gray-900 mt-0.5 whitespace-pre-line">{{ entry.notes ?? '—' }}</p>

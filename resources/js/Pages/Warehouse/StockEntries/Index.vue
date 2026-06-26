@@ -45,6 +45,7 @@
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Ngày nhập</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Kho</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Nhà cung cấp</th>
+              <th class="text-left px-5 py-3 font-semibold text-gray-600">Đơn mua hàng</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Người tạo</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Số dòng</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Trạng thái</th>
@@ -57,6 +58,13 @@
               <td class="px-5 py-3 text-gray-600">{{ entry.entry_date }}</td>
               <td class="px-5 py-3 text-gray-600">{{ entry.warehouse ?? '—' }}</td>
               <td class="px-5 py-3 text-gray-600">{{ entry.supplier ?? '—' }}</td>
+              <td class="px-5 py-3 text-gray-600">
+                <span v-if="entry.purchase_order_id">
+                  <Link :href="route('purchasing.purchase-orders.show', entry.purchase_order_id)"
+                    class="font-mono text-primary-600 hover:underline">{{ entry.purchase_order_code }}</Link>
+                </span>
+                <span v-else>—</span>
+              </td>
               <td class="px-5 py-3 text-gray-600">{{ entry.creator ?? '—' }}</td>
               <td class="px-5 py-3 text-gray-600">{{ entry.items_count }}</td>
               <td class="px-5 py-3">

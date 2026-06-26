@@ -113,6 +113,10 @@ $grandTotal = $stockEntry->items->sum(fn($i) => $i->quantity * $i->unit_price);
       <div class="meta-row" style="color:#9ca3af">Không có nhà cung cấp</div>
       @endif
     </div>
+    <div class="meta-box">
+      <h3>Đơn mua hàng</h3>
+      <div class="meta-row"><strong>Mã PO:</strong> {{ $stockEntry->purchaseOrder?->code ?? '—' }}</div>
+    </div>
   </div>
 
   <table>

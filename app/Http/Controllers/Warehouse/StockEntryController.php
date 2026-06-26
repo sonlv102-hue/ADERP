@@ -44,14 +44,15 @@ class StockEntryController extends Controller
         $status = $request->input('status');
 
         return Inertia::render('Warehouse/StockEntries/Index', [
-            'entries' => StockEntry::with(['warehouse', 'supplier', 'creator'])
+            'entries' => StockEntry::with(['warehouse', 'supplier', 'creator', 'purchaseOrder'])
                 ->withCount('items')
                 ->when($q, fn ($query) => $query->where(function ($sq) use ($q) {
                     $sq->where('code', 'ilike', "%{$q}%")
                        ->orWhereHas('supplier', fn ($s) => $s->where('name', 'ilike', "%{$q}%")
                                                               ->orWhere('code', 'ilike', "%{$q}%"))
                        ->orWhereHas('warehouse', fn ($w) => $w->where('name', 'ilike', "%{$q}%"))
-                       ->orWhereHas('creator', fn ($u) => $u->where('name', 'ilike', "%{$q}%"));
+                       ->orWhereHas('creator', fn ($u) => $u->where('name', 'ilike', "%{$q}%"))
+                       ->orWhereHas('purchaseOrder', fn ($p) => $p->where('code', 'ilike', "%{$q}%"));
                 }))
                 ->when($status, fn ($query) => $query->where('status', $status))
                 ->orderByDesc('id')
@@ -67,6 +68,8 @@ class StockEntryController extends Controller
                     'warehouse' => $e->warehouse->name,
                     'supplier' => $e->supplier?->name,
                     'creator' => $e->creator->name,
+                    'purchase_order_id' => $e->purchaseOrder?->id,
+                    'purchase_order_code' => $e->purchaseOrder?->code,
                     'items_count' => $e->items_count,
                 ]),
             'filters'  => ['q' => $q, 'status' => $status],
@@ -431,6 +434,8 @@ class StockEntryController extends Controller
 
     public function show(StockEntry $stockEntry): Response
     {
+        $stockEntry->load('purchaseOrder');
+
         $pj = \App\Models\AccountingPostingJob::where('source_type', 'stock_entry')
             ->where('source_id', $stockEntry->id)
             ->where('posting_type', 'inbound')
@@ -447,6 +452,8 @@ class StockEntryController extends Controller
                 'warehouse' => $stockEntry->warehouse->name,
                 'supplier' => $stockEntry->supplier?->name,
                 'creator' => $stockEntry->creator->name,
+                'purchase_order_id' => $stockEntry->purchase_order_id,
+                'purchase_order_code' => $stockEntry->purchaseOrder?->code,
                 'notes' => $stockEntry->notes,
                 'posting_job' => $pj ? [
                     'status'        => $pj->status->value,
@@ -479,7 +486,7 @@ class StockEntryController extends Controller
 
     public function pdf(StockEntry $stockEntry)
     {
-        $stockEntry->load(['warehouse', 'supplier', 'creator', 'items.product', 'items.serials']);
+        $stockEntry->load(['warehouse', 'supplier', 'creator', 'purchaseOrder', 'items.product', 'items.serials']);
         $pdf = Pdf::loadView('pdf.stock_entry', compact('stockEntry'))->setPaper('a4', 'portrait');
         return $pdf->stream("PhieuNhapKho-{$stockEntry->code}.pdf");
     }

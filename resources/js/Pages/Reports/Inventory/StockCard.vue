@@ -74,7 +74,7 @@
               <td class="px-4 py-2.5 text-right" />
               <td class="px-4 py-2.5 text-right" />
               <td class="px-4 py-2.5 text-right font-mono">{{ fn(openingBalance) }}</td>
-              <td class="px-4 py-2.5 text-right font-mono">{{ fv(product?.cost_price ?? 0) }}</td>
+              <td class="px-4 py-2.5 text-right font-mono">{{ openingBalance ? fv(openingValue / openingBalance) : '—' }}</td>
               <td class="px-4 py-2.5 text-right font-mono">{{ fv(openingValue) }}</td>
             </tr>
 
@@ -106,7 +106,7 @@
               <td class="px-4 py-2.5 text-right font-mono">{{ fn(totalIn) }}</td>
               <td class="px-4 py-2.5 text-right font-mono">{{ fn(totalOut) }}</td>
               <td class="px-4 py-2.5 text-right font-mono">{{ fn(endBalance) }}</td>
-              <td class="px-4 py-2.5 text-right font-mono">{{ fv(product?.cost_price ?? 0) }}</td>
+              <td class="px-4 py-2.5 text-right font-mono">{{ endBalance ? fv(endValue / endBalance) : '—' }}</td>
               <td class="px-4 py-2.5 text-right font-mono">{{ fv(endValue) }}</td>
             </tr>
           </tfoot>
@@ -153,8 +153,10 @@ function applyFilters() {
   }, { preserveState: true });
 }
 
-const totalIn    = computed(() => props.rows.reduce((s, r) => s + r.qty_in,  0));
-const totalOut   = computed(() => props.rows.reduce((s, r) => s + r.qty_out, 0));
-const endBalance = computed(() => (props.openingBalance ?? 0) + totalIn.value - totalOut.value);
-const endValue   = computed(() => endBalance.value * (props.product?.cost_price ?? 0));
+const totalIn      = computed(() => props.rows.reduce((s, r) => s + r.qty_in,    0));
+const totalOut     = computed(() => props.rows.reduce((s, r) => s + r.qty_out,   0));
+const totalValueIn = computed(() => props.rows.reduce((s, r) => s + r.value_in,  0));
+const totalValueOut= computed(() => props.rows.reduce((s, r) => s + r.value_out, 0));
+const endBalance   = computed(() => (props.openingBalance ?? 0) + totalIn.value - totalOut.value);
+const endValue     = computed(() => (props.openingValue ?? 0) + totalValueIn.value - totalValueOut.value);
 </script>
