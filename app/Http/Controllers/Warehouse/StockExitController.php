@@ -20,6 +20,7 @@ use App\Models\ProjectInventoryLot;
 use App\Models\ProjectWipEntry;
 use App\Models\StockExitItemLotAllocation;
 use App\Models\StockExit;
+use App\Models\StockMovement;
 use App\Models\Warehouse;
 use App\Services\AccountingService;
 use App\Services\OrderService;
@@ -761,7 +762,7 @@ class StockExitController extends Controller
                 ->log("Admin xóa cưỡng chế phiếu xuất kho {$stockExit->code}");
 
             try {
-                $this->stock->cancelExit($stockExit, adminForce: true);
+                $this->stockService->cancelExit($stockExit, adminForce: true);
             } catch (\Exception $e) {
                 return back()->with('error', 'Không thể hủy phiếu trước khi xóa: ' . $e->getMessage());
             }
@@ -790,6 +791,17 @@ class StockExitController extends Controller
                 ->delete();
             StockExitItemLotAllocation::whereIn('stock_exit_item_id', $itemIds)->delete();
             $stockExit->items()->delete();
+
+            // Void tất cả movements còn active trước khi xóa exit để tránh orphan movements
+            // (cancelExit tạo reversal movements mới chứ không void originals, nên cả hai nhóm phải được void ở đây)
+            StockMovement::where('source_type', StockExit::class)
+                ->where('source_id', $stockExit->id)
+                ->where('status', 'active')
+                ->update([
+                    'status' => 'voided',
+                    'notes'  => DB::raw("COALESCE(notes, '') || ' [voided: parent exit deleted]'"),
+                ]);
+
             $stockExit->delete();
         });
 

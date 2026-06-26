@@ -2,7 +2,9 @@
 
 namespace Tests\Feature;
 
+use App\Enums\OrderStatus;
 use App\Models\Customer;
+use App\Models\Order;
 use App\Models\Product;
 use App\Models\ProductCategory;
 use App\Models\Supplier;
@@ -167,5 +169,62 @@ class SearchControllerTest extends TestCase
         $res = $this->getJson('/api/search/suppliers?q=&limit=999');
         $res->assertOk();
         $this->assertLessThanOrEqual(50, count($res->json('data')));
+    }
+
+    // ── Order search ─────────────────────────────────────────────────────
+
+    public function test_search_orders_by_code(): void
+    {
+        $customer = Customer::create(['code' => 'KH-SO01', 'name' => 'KH Search Order', 'is_active' => true]);
+        Order::create([
+            'code'        => 'DH-SRCH1',
+            'customer_id' => $customer->id,
+            'status'      => OrderStatus::Processing,
+            'created_by'  => $this->user->id,
+            'order_date'  => now()->toDateString(),
+        ]);
+
+        $res = $this->getJson('/api/search/orders?q=DH-SRCH1');
+        $res->assertOk();
+        $this->assertGreaterThanOrEqual(1, count($res->json('data')));
+        $this->assertEquals('DH-SRCH1', $res->json('data.0.label'));
+        $this->assertEquals($customer->name, $res->json('data.0.meta'));
+    }
+
+    public function test_search_orders_by_customer_name(): void
+    {
+        $customer = Customer::create(['code' => 'KH-SO02', 'name' => 'Khách Hàng Đặc Biệt', 'is_active' => true]);
+        Order::create([
+            'code'        => 'DH-SRCH2',
+            'customer_id' => $customer->id,
+            'status'      => OrderStatus::Processing,
+            'created_by'  => $this->user->id,
+            'order_date'  => now()->toDateString(),
+        ]);
+
+        $res = $this->getJson('/api/search/orders?q=Đặc Biệt');
+        $res->assertOk();
+        $this->assertGreaterThanOrEqual(1, count($res->json('data')));
+        $found = collect($res->json('data'))->firstWhere('label', 'DH-SRCH2');
+        $this->assertNotNull($found);
+    }
+
+    public function test_search_orders_returns_value_and_meta(): void
+    {
+        $customer = Customer::create(['code' => 'KH-SO03', 'name' => 'KH Meta Test', 'is_active' => true]);
+        $order = Order::create([
+            'code'        => 'DH-SRCH3',
+            'customer_id' => $customer->id,
+            'status'      => OrderStatus::Pending,
+            'created_by'  => $this->user->id,
+            'order_date'  => now()->toDateString(),
+        ]);
+
+        $res = $this->getJson('/api/search/orders?q=DH-SRCH3');
+        $res->assertOk();
+        $item = $res->json('data.0');
+        $this->assertEquals($order->id, $item['value']);
+        $this->assertEquals('DH-SRCH3', $item['label']);
+        $this->assertEquals('KH Meta Test', $item['meta']);
     }
 }

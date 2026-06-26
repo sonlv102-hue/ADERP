@@ -27,12 +27,12 @@ class CommissionController extends Controller
         return Inertia::render('Sales/Commissions/Index', [
             'commissions' => Commission::with(['creator', 'customer', 'order', 'project'])
                 ->when($search, fn ($q) => $q->where(fn ($q2) =>
-                    $q2->where('code', 'ilike', "%{$search}%")
-                       ->orWhere('recipient_name', 'ilike', "%{$search}%")
+                    $q2->whereRaw('LOWER(code) LIKE ?', ['%' . strtolower($search) . '%'])
+                       ->orWhereRaw('LOWER(recipient_name) LIKE ?', ['%' . strtolower($search) . '%'])
                 ))
                 ->when($status,    fn ($q) => $q->where('status', $status))
                 ->when($type,      fn ($q) => $q->where('type', $type))
-                ->when($orderCode, fn ($q) => $q->whereHas('order', fn ($o) => $o->where('code', 'ilike', "%{$orderCode}%")))
+                ->when($orderCode, fn ($q) => $q->whereHas('order', fn ($o) => $o->whereRaw('LOWER(code) LIKE ?', ['%' . strtolower($orderCode) . '%'])))
                 ->orderByDesc('id')
                 ->paginate(20)
                 ->through(fn ($c) => $this->formatRow($c)),
