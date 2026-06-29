@@ -22,7 +22,7 @@ class AuditStockExitLinkageCommand extends Command
             return 1;
         }
 
-        $exit = StockExit::with(['items.product', 'order', 'project', 'journalEntry'])
+        $exit = StockExit::with(['items.product', 'order', 'project'])
             ->where('code', $code)
             ->first();
 
