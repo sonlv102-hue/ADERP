@@ -114,8 +114,9 @@ class AuditDeliveryOrderCommand extends Command
                 };
 
                 $reason = '';
-                if ($remaining > 0 && $totalStock <= 0 && $exitQtyLive <= 0 && (float)$item->delivered_quantity <= 0) {
-                    $reason = "delivered_qty=0 (stale) + live_confirmed=0 (no order_item_id) + stock=0 → Mua hàng SAI";
+                if ($exitQtyByProduct > 0 && $exitQtyLive <= 0) {
+                    // Có exits theo product nhưng thiếu order_item_id link → "Mua hàng" là sai
+                    $reason = "Có phiếu xuất ({$exitQtyByProduct}) nhưng thiếu order_item_id → cần repair-sales-order-links";
                 } elseif ($remaining > 0 && $exitQtyLive >= (float)$item->quantity) {
                     $reason = "Đã xuất đủ qua live JOIN nhưng delivered_qty chưa sync — cần repair+recalculate";
                 }
