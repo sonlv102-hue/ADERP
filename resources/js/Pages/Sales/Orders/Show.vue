@@ -153,33 +153,76 @@
         </div>
         <div class="divide-y divide-gray-100">
           <div v-for="item in undeliveredItems" :key="item.id"
-            class="flex items-center justify-between px-5 py-3 gap-4">
+            class="flex items-start justify-between px-5 py-3 gap-4">
             <div class="flex-1 min-w-0">
               <p class="text-sm font-medium text-gray-800 truncate">{{ item.name }}</p>
-              <p class="text-xs text-gray-500 mt-0.5">
-                Còn lại: <strong class="text-orange-600">{{ item.remaining }}</strong> {{ item.unit ?? '' }}
-                &nbsp;·&nbsp;
-                Tồn kho:
-                <strong :class="item.current_stock >= item.remaining ? 'text-green-600' : item.current_stock > 0 ? 'text-yellow-600' : 'text-red-600'">
-                  {{ item.current_stock }}
-                </strong>
-              </p>
+              <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
+                <span class="text-xs text-gray-500">
+                  Còn lại: <strong class="text-orange-600">{{ item.remaining }}</strong> {{ item.unit ?? '' }}
+                </span>
+                <span v-if="(item.pending_exit_qty ?? 0) > 0" class="text-xs text-blue-600">
+                  Chờ duyệt xuất: <strong>{{ item.pending_exit_qty }}</strong>
+                </span>
+                <span class="text-xs text-gray-500">
+                  Tồn HT:
+                  <strong :class="item.current_stock >= item.remaining ? 'text-green-600' : item.current_stock > 0 ? 'text-yellow-600' : 'text-red-600'">
+                    {{ item.current_stock }}
+                  </strong>
+                </span>
+              </div>
+              <!-- Tồn theo kho -->
+              <div v-if="item.stock_by_warehouse?.length" class="flex flex-wrap gap-1.5 mt-1">
+                <span v-for="wh in item.stock_by_warehouse" :key="wh.warehouse_id"
+                  class="text-xs px-2 py-0.5 rounded-full"
+                  :class="wh.qty >= item.remaining ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-yellow-50 text-yellow-700 border border-yellow-200'">
+                  {{ wh.warehouse_name }}: {{ wh.qty }}
+                </span>
+              </div>
             </div>
-            <div class="flex gap-2 shrink-0">
-              <template v-if="item.current_stock >= item.remaining">
+            <div class="flex gap-2 shrink-0 flex-wrap justify-end items-start">
+              <!-- Pending: phiếu xuất nháp đang chờ duyệt -->
+              <template v-if="itemSuggestion(item).type === 'pending'">
+                <span class="text-xs px-2 py-1.5 bg-blue-50 border border-blue-200 text-blue-700 rounded-lg whitespace-nowrap">
+                  Đang có {{ itemSuggestion(item).qty }} chờ duyệt xuất
+                </span>
+                <Link :href="route('warehouse.stock-exits.index') + '?order_id=' + order.id"
+                  class="erp-btn-secondary text-xs py-1.5 px-3">
+                  Xem phiếu xuất
+                </Link>
+              </template>
+              <!-- Exit: kho nào đó đủ tồn -->
+              <template v-else-if="itemSuggestion(item).type === 'exit'">
                 <Link :href="route('warehouse.stock-exits.create') + '?order_id=' + order.id"
-                  class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg flex items-center gap-1">
+                  class="erp-btn-secondary text-xs py-1.5 px-3">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
                   </svg>
                   Xuất kho
                 </Link>
               </template>
-              <template v-else>
-                <span v-if="item.current_stock > 0"
-                  class="px-2 py-1.5 bg-yellow-50 border border-yellow-200 text-yellow-700 text-xs rounded-lg">
-                  Kho chỉ còn {{ item.current_stock }}
+              <!-- Transfer: tổng tồn đủ nhưng không kho nào đủ một mình -->
+              <template v-else-if="itemSuggestion(item).type === 'transfer'">
+                <span class="text-xs px-2 py-1.5 bg-yellow-50 border border-yellow-200 text-yellow-700 rounded-lg">
+                  Hàng ở {{ itemSuggestion(item).warehouses.map(w => `${w.warehouse_name}(${w.qty})`).join(', ') }}
                 </span>
+                <Link :href="route('warehouse.stock-exits.create') + '?order_id=' + order.id"
+                  class="erp-btn-secondary text-xs py-1.5 px-3">
+                  Xuất từ kho khác
+                </Link>
+              </template>
+              <!-- Partial: có tồn nhưng không đủ -->
+              <template v-else-if="itemSuggestion(item).type === 'partial'">
+                <Link :href="route('warehouse.stock-exits.create') + '?order_id=' + order.id"
+                  class="erp-btn-secondary text-xs py-1.5 px-3">
+                  Xuất {{ item.current_stock }} có sẵn
+                </Link>
+                <Link :href="route('purchasing.purchase-orders.create') + '?order_id=' + order.id"
+                  class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium rounded-lg whitespace-nowrap">
+                  Mua bổ sung {{ itemSuggestion(item).deficit }}
+                </Link>
+              </template>
+              <!-- Purchase: tổng tồn = 0 -->
+              <template v-else>
                 <Link :href="route('purchasing.purchase-orders.create') + '?order_id=' + order.id"
                   class="px-3 py-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-medium rounded-lg flex items-center gap-1">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -449,9 +492,41 @@ const undeliveredItems = computed(() =>
   (props.order.items ?? []).filter(i => i.product_id && i.remaining > 0)
 );
 
-// Có thể tạo phiếu xuất khi ít nhất 1 sản phẩm đủ tồn kho
+/**
+ * Gợi ý action cho từng dòng đơn hàng chưa giao đủ.
+ * Tiers:
+ *  'pending'  — phiếu xuất nháp đang chờ duyệt
+ *  'exit'     — 1 kho nào đó có đủ tồn
+ *  'transfer' — tổng tồn đủ nhưng không kho nào đủ một mình (cần phối hợp hoặc chọn kho khác)
+ *  'partial'  — có tồn nhưng không đủ (cần xuất phần + mua bổ sung)
+ *  'purchase' — tổng tồn = 0
+ */
+function itemSuggestion(item) {
+  if ((item.pending_exit_qty ?? 0) > 0) {
+    return { type: 'pending', qty: item.pending_exit_qty };
+  }
+  const remaining = item.remaining;
+  const warehouses = item.stock_by_warehouse ?? [];
+  // Nếu không có per-warehouse data, dùng current_stock làm fallback (AVCO chưa init)
+  const systemStock = warehouses.length
+    ? warehouses.reduce((s, w) => s + w.qty, 0)
+    : (item.current_stock ?? 0);
+  if (systemStock <= 0) return { type: 'purchase', deficit: remaining };
+  const hasSufficient = warehouses.some(w => w.qty >= remaining)
+    || (!warehouses.length && systemStock >= remaining);
+  if (hasSufficient) return { type: 'exit' };
+  if (systemStock >= remaining) {
+    return { type: 'transfer', warehouses: warehouses.filter(w => w.qty > 0) };
+  }
+  return { type: 'partial', warehouses: warehouses.filter(w => w.qty > 0), deficit: Math.ceil(remaining - systemStock) };
+}
+
+// Có thể tạo phiếu xuất khi ít nhất 1 sản phẩm có tồn (theo bất kỳ kho nào)
 const canCreateExit = computed(() =>
-  undeliveredItems.value.some(i => i.current_stock >= i.remaining)
+  undeliveredItems.value.some(i => {
+    const s = itemSuggestion(i);
+    return s.type === 'exit' || s.type === 'transfer' || s.type === 'partial';
+  })
 );
 
 const action = (act) => {

@@ -80,19 +80,20 @@ class StockExitController extends Controller
         ]);
     }
 
-    public function create(): Response
+    public function create(Request $request): Response
     {
         return Inertia::render('Warehouse/StockExits/Form', [
-            'nextCode'      => StockExit::generateCode(),
-            'warehouses'    => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'serials'       => ProductSerial::where('status', SerialStatus::InStock)
+            'nextCode'        => StockExit::generateCode(),
+            'warehouses'      => Warehouse::where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'serials'         => ProductSerial::where('status', SerialStatus::InStock)
                 ->get(['id', 'product_id', 'warehouse_id', 'serial_number']),
-            'orders'        => $this->pendingOrdersForDropdown(),
-            'usageTypes'    => collect(ItemUsageType::cases())->map(fn ($t) => [
+            'orders'          => $this->pendingOrdersForDropdown(),
+            'usageTypes'      => collect(ItemUsageType::cases())->map(fn ($t) => [
                 'value' => $t->value,
                 'label' => $t->label(),
             ])->all(),
-            'issuePurposes' => $this->issuePurposesForDropdown(),
+            'issuePurposes'   => $this->issuePurposesForDropdown(),
+            'prefillOrderId'  => $request->integer('order_id') ?: null,
         ]);
     }
 

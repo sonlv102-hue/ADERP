@@ -31,12 +31,15 @@ class OrderService
         $warnings = [];
 
         DB::transaction(function () use ($exit, $order, &$warnings) {
-            $orderItemsByProduct = $order->items
-                ->whereNotNull('product_id')
-                ->keyBy('product_id');
+            $orderItemsById      = $order->items->whereNotNull('product_id')->keyBy('id');
+            $orderItemsByProduct = $order->items->whereNotNull('product_id')->keyBy('product_id');
 
             foreach ($exit->items as $exitItem) {
-                $orderItem = $orderItemsByProduct[$exitItem->product_id] ?? null;
+                // Ưu tiên match theo order_item_id (chính xác), fallback về product_id (legacy)
+                $orderItem = ($exitItem->order_item_id && isset($orderItemsById[$exitItem->order_item_id]))
+                    ? $orderItemsById[$exitItem->order_item_id]
+                    : ($orderItemsByProduct[$exitItem->product_id] ?? null);
+
                 if (! $orderItem) {
                     continue;
                 }
@@ -97,12 +100,14 @@ class OrderService
         }
 
         DB::transaction(function () use ($exit, $order) {
-            $orderItemsByProduct = $order->items
-                ->whereNotNull('product_id')
-                ->keyBy('product_id');
+            $orderItemsById      = $order->items->whereNotNull('product_id')->keyBy('id');
+            $orderItemsByProduct = $order->items->whereNotNull('product_id')->keyBy('product_id');
 
             foreach ($exit->items as $exitItem) {
-                $orderItem = $orderItemsByProduct[$exitItem->product_id] ?? null;
+                $orderItem = ($exitItem->order_item_id && isset($orderItemsById[$exitItem->order_item_id]))
+                    ? $orderItemsById[$exitItem->order_item_id]
+                    : ($orderItemsByProduct[$exitItem->product_id] ?? null);
+
                 if (! $orderItem) {
                     continue;
                 }

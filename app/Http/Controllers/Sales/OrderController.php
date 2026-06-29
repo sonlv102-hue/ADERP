@@ -6,6 +6,8 @@ use App\Enums\CustomsStatus;
 use App\Enums\OrderStatus;
 use App\Enums\QuotationStatus;
 use App\Models\InventoryBalance;
+use App\Models\StockExitItem;
+use App\Models\StockMovement;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
@@ -170,6 +172,53 @@ class OrderController extends Controller
         $productIds = $order->items->whereNotNull('product_id')->pluck('product_id');
         $stocks = InventoryBalance::stockForProducts($productIds);
 
+        // Tồn kho theo từng kho từ AVCO (inventory_balances)
+        $avcoByWarehouse = InventoryBalance::whereIn('product_id', $productIds)
+            ->with('warehouse:id,name')
+            ->get(['product_id', 'warehouse_id', 'qty_on_hand'])
+            ->groupBy('product_id')
+            ->map(fn ($bs) => $bs
+                ->filter(fn ($b) => (float) $b->qty_on_hand > 0)
+                ->map(fn ($b) => [
+                    'warehouse_id'   => $b->warehouse_id,
+                    'warehouse_name' => $b->warehouse?->name ?? "Kho #{$b->warehouse_id}",
+                    'qty'            => (float) $b->qty_on_hand,
+                ])->values()
+            );
+
+        // Fallback: products không có inventory_balances → tính từ stock_movements
+        $productsWithBalance = $avcoByWarehouse->keys()->values()->toArray();
+        $productsNeedFallback = $productIds->diff($productsWithBalance)->values();
+        $movementByWarehouse = collect();
+        if ($productsNeedFallback->isNotEmpty()) {
+            $movementByWarehouse = StockMovement::active()
+                ->whereIn('product_id', $productsNeedFallback)
+                ->selectRaw('product_id, warehouse_id, SUM(quantity) as qty')
+                ->groupBy('product_id', 'warehouse_id')
+                ->havingRaw('SUM(quantity) > 0')
+                ->with('warehouse:id,name')
+                ->get()
+                ->groupBy('product_id')
+                ->map(fn ($group) => $group->map(fn ($m) => [
+                    'warehouse_id'   => $m->warehouse_id,
+                    'warehouse_name' => $m->warehouse?->name ?? "Kho #{$m->warehouse_id}",
+                    'qty'            => (float) $m->qty,
+                ])->values());
+        }
+        $stocksPerWarehouse = $avcoByWarehouse->union($movementByWarehouse);
+
+        // Phiếu xuất nháp đang chờ duyệt (per product_id)
+        $draftExitQtyByProduct = $productIds->isNotEmpty()
+            ? StockExitItem::whereHas(
+                'stockExit',
+                fn($q) => $q->where('order_id', $order->id)->where('status', 'draft')
+            )->whereIn('product_id', $productIds)
+             ->selectRaw('product_id, SUM(quantity) as qty')
+             ->groupBy('product_id')
+             ->pluck('qty', 'product_id')
+             ->map(fn($v) => (float) $v)
+            : collect();
+
         return Inertia::render('Sales/Orders/Show', [
             'order' => [
                 'id'                => $order->id,
@@ -194,7 +243,11 @@ class OrderController extends Controller
                     'quantity'           => $item->quantity,
                     'delivered_quantity' => $item->delivered_quantity,
                     'remaining'          => max(0, (float)$item->quantity - (float)$item->delivered_quantity),
-                    'current_stock'      => (int) ($stocks[$item->product_id] ?? 0),
+                    'current_stock'      => (float) ($stocks[$item->product_id] ?? 0),
+                    'stock_by_warehouse' => $item->product_id
+                        ? $stocksPerWarehouse->get($item->product_id, collect())->toArray()
+                        : [],
+                    'pending_exit_qty'   => (float) ($draftExitQtyByProduct[$item->product_id] ?? 0),
                     'unit_price'         => $item->unit_price,
                     'vat_rate'           => $item->vat_rate !== null ? (float) $item->vat_rate : null,
                     'discount_percent'   => (float) $item->discount_percent,

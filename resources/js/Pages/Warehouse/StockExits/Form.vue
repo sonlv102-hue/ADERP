@@ -476,7 +476,7 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, ref, watch, onMounted } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import FormField from '@/Components/Shared/FormField.vue';
@@ -493,6 +493,7 @@ const props = defineProps({
   usageTypes: { type: Array, default: () => [] },
   issuePurposes: { type: Array, default: () => [] },
   exit: { type: Object, default: null },
+  prefillOrderId: { type: Number, default: null },
 });
 
 // Kho đích cho project_transfer (lọc bỏ kho nguồn)
@@ -755,6 +756,19 @@ const fetchAndApplyAvcoCosts = async (productIds, forceQty = false) => {
     // silent fail — backend resolves at confirm time via AVCO
   }
 };
+
+// Auto-select đơn hàng khi mở tạo phiếu từ trang đơn hàng (?order_id=X)
+onMounted(async () => {
+  if (props.prefillOrderId && !props.exit) {
+    const order = props.orders.find(o => o.id === props.prefillOrderId);
+    if (order) {
+      form.order_id = order.id;
+      form.item_usage_type = 'commercial';
+      form.issue_purpose   = 'sale_delivery';
+      await onOrderChange();
+    }
+  }
+});
 
 const addRow = () => {
   form.items.push({ product_id: null, order_item_id: null, quantity: 1, unit_price: 0, serial_ids: [], _productDisplay: '', _unit: '', _qtyOnHand: null });
