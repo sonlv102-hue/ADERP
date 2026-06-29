@@ -389,10 +389,18 @@ class SearchController extends Controller
             return response()->json(['data' => $items]);
         }
 
-        // Fallback: inventory_balances chưa được khởi tạo → tính từ stock_movements + stock_entry_items
+        // Fallback: inventory_balances chưa khởi tạo → tính từ stock_movements (active only)
+        // Chỉ áp dụng cho sản phẩm chưa có AVCO record. Sản phẩm đã có record (dù qty=0) không
+        // được fallback — tránh hiển thị tồn sai khi AVCO đã ghi nhận stock = 0.
+        $productsWithAvco = InventoryBalance::where('warehouse_id', $warehouseId)
+            ->pluck('product_id')
+            ->toArray();
+
         $movQty = DB::table('stock_movements')
             ->where('warehouse_id', $warehouseId)
             ->whereNull('project_id')
+            ->where(fn ($q) => $q->whereNull('status')->orWhere('status', 'active'))
+            ->when(! empty($productsWithAvco), fn ($q) => $q->whereNotIn('product_id', $productsWithAvco))
             ->select('product_id', DB::raw('SUM(quantity) AS qty'))
             ->groupBy('product_id')
             ->having(DB::raw('SUM(quantity)'), '>', 0)
@@ -449,19 +457,31 @@ class SearchController extends Controller
         $q     = $this->q($request);
         $limit = min((int) $request->input('limit', 20), 50);
 
-        $items = Order::with('customer')
+        $items = Order::with(['customer', 'purchaseOrders.project'])
             ->when($q, fn ($b) => $b->where(fn ($b2) =>
                 $b2->whereRaw('LOWER(orders.code) LIKE ?', ['%' . strtolower($q) . '%'])
                    ->orWhereHas('customer', fn ($c) => $c->whereRaw('LOWER(name) LIKE ?', ['%' . strtolower($q) . '%']))
             ))
             ->orderByDesc('id')
             ->limit($limit)
-            ->get(['id', 'code', 'customer_id'])
-            ->map(fn ($o) => [
-                'value' => $o->id,
-                'label' => $o->code,
-                'meta'  => $o->customer?->name ?? '',
-            ]);
+            ->get(['id', 'code', 'customer_id', 'order_date'])
+            ->map(function ($o) {
+                $projectPo = $o->purchaseOrders->first(fn ($po) => $po->project_id !== null);
+                return [
+                    'value'        => $o->id,
+                    'label'        => $o->customer?->name ?? $o->code,
+                    'code'         => $o->code,
+                    'meta'         => collect([
+                        $o->order_date?->format('d/m/Y'),
+                        $projectPo?->project?->code,
+                    ])->filter()->implode(' · '),
+                    'customer_id'  => $o->customer_id,
+                    'customer_name'=> $o->customer?->name,
+                    'project_id'   => $projectPo?->project_id,
+                    'project_code' => $projectPo?->project?->code,
+                    'project_name' => $projectPo?->project?->name,
+                ];
+            });
 
         return response()->json(['data' => $items]);
     }

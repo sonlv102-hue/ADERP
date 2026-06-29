@@ -733,7 +733,8 @@ const onOrderChange = async () => {
 };
 
 // Gọi API lấy giá vốn AVCO cho danh sách sản phẩm tại kho đã chọn
-const fetchAndApplyAvcoCosts = async (productIds) => {
+// forceQty=true: luôn cập nhật _qtyOnHand (dùng khi đổi kho)
+const fetchAndApplyAvcoCosts = async (productIds, forceQty = false) => {
   if (!form.warehouse_id || !productIds.length) return;
   try {
     const params = new URLSearchParams({ warehouse_id: form.warehouse_id });
@@ -747,7 +748,7 @@ const fetchAndApplyAvcoCosts = async (productIds) => {
       const info = costs[item.product_id];
       if (info) {
         item.unit_price = info.avg_cost;
-        if (item._qtyOnHand === null) item._qtyOnHand = info.qty_on_hand;
+        if (forceQty || item._qtyOnHand === null) item._qtyOnHand = info.qty_on_hand ?? 0;
       }
     });
   } catch {
@@ -763,15 +764,18 @@ const removeRow = (index) => {
   form.items.splice(index, 1);
 };
 
-const onWarehouseChange = () => {
+const onWarehouseChange = async () => {
   if (form.items.some(i => i.product_id)) {
     warehouseChangedWithItems.value = true;
   }
   form.items.forEach(item => {
     item.serial_ids = [];
-    item._qtyOnHand = null; // Tồn kho chưa xác định ở kho mới
+    item._qtyOnHand = null;
   });
   availableLots.value = [];
+  // Reload tồn kho tại kho mới cho các dòng đã có sản phẩm
+  const pIds = form.items.filter(i => i.product_id).map(i => i.product_id);
+  if (pIds.length) await fetchAndApplyAvcoCosts(pIds, true);
 };
 
 const onProductSelect = (index, opt) => {

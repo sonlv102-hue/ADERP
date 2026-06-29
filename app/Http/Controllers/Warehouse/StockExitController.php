@@ -253,8 +253,28 @@ class StockExitController extends Controller
 
                 if ($balance && (float) $balance->qty_on_hand < $requestedQty) {
                     $product = Product::find($productId);
-                    $errors[] = "Không đủ tồn kho cho {$product->code} - {$product->name} tại kho {$warehouse->name}. "
-                        . "Tồn hiện có: {$balance->qty_on_hand}, số lượng xuất: {$requestedQty}.";
+
+                    // Tìm kho khác đang có tồn để gợi ý đổi kho
+                    $otherWarehouses = InventoryBalance::with('warehouse')
+                        ->where('product_id', $productId)
+                        ->where('warehouse_id', '!=', $warehouseId)
+                        ->where('qty_on_hand', '>', 0)
+                        ->orderByDesc('qty_on_hand')
+                        ->get();
+
+                    $totalAvailable = $otherWarehouses->sum('qty_on_hand') + (float) $balance->qty_on_hand;
+
+                    $msg = "Không đủ tồn kho cho {$product->code} - {$product->name} tại kho {$warehouse->name}. "
+                        . "Tồn tại kho đang chọn: {$balance->qty_on_hand}, số lượng xuất: {$requestedQty}.";
+
+                    if ($otherWarehouses->isNotEmpty()) {
+                        $warehouseList = $otherWarehouses
+                            ->map(fn ($b) => "{$b->warehouse->name}: {$b->qty_on_hand}")
+                            ->join(', ');
+                        $msg .= " Tồn toàn hệ thống: {$totalAvailable}. Kho khác có hàng: {$warehouseList}.";
+                    }
+
+                    $errors[] = $msg;
                 }
             }
         }

@@ -99,10 +99,10 @@
               <label class="block text-xs text-gray-500 mb-1">Đơn hàng</label>
               <RemoteSearchSelect
                 v-model="form.order_id"
-                :display-text="form.order_code"
+                :display-text="orderDisplayText"
                 :search-url="route('search.orders')"
                 placeholder="Tìm mã đơn hàng..."
-                @change="(opt) => form.order_code = opt ? opt.label : ''"
+                @change="onOrderChange"
               />
             </div>
             <div>
@@ -140,6 +140,7 @@
 
 <script setup>
 import { Link, useForm } from '@inertiajs/vue3';
+import { computed } from 'vue';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 
@@ -166,6 +167,29 @@ const form = useForm({
   planned_date:   props.commission?.planned_date   ?? '',
   notes:          props.commission?.notes          ?? '',
 });
+
+const orderDisplayText = computed(() => {
+  if (!form.order_code) return '';
+  return form.order_code + (form.customer_name ? ` - ${form.customer_name}` : '');
+});
+
+function onOrderChange(opt) {
+  if (!opt) {
+    form.order_code = '';
+    return;
+  }
+
+  form.order_code = opt.code ?? opt.label;
+
+  if (opt.customer_id) {
+    form.customer_id = opt.customer_id;
+    form.customer_name = opt.customer_name ?? form.customer_name;
+  }
+
+  if (opt.project_id) {
+    form.project_id = opt.project_id;
+  }
+}
 
 function submit() {
   if (props.commission) {

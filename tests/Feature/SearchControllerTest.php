@@ -187,8 +187,9 @@ class SearchControllerTest extends TestCase
         $res = $this->getJson('/api/search/orders?q=DH-SRCH1');
         $res->assertOk();
         $this->assertGreaterThanOrEqual(1, count($res->json('data')));
-        $this->assertEquals('DH-SRCH1', $res->json('data.0.label'));
-        $this->assertEquals($customer->name, $res->json('data.0.meta'));
+        // label = customer name; code = order code
+        $this->assertEquals('DH-SRCH1', $res->json('data.0.code'));
+        $this->assertEquals($customer->name, $res->json('data.0.label'));
     }
 
     public function test_search_orders_by_customer_name(): void
@@ -205,8 +206,10 @@ class SearchControllerTest extends TestCase
         $res = $this->getJson('/api/search/orders?q=Đặc Biệt');
         $res->assertOk();
         $this->assertGreaterThanOrEqual(1, count($res->json('data')));
-        $found = collect($res->json('data'))->firstWhere('label', 'DH-SRCH2');
+        // label = customer name khi tìm theo tên khách
+        $found = collect($res->json('data'))->firstWhere('code', 'DH-SRCH2');
         $this->assertNotNull($found);
+        $this->assertEquals('Khách Hàng Đặc Biệt', $found['label']);
     }
 
     public function test_search_orders_returns_value_and_meta(): void
@@ -224,7 +227,8 @@ class SearchControllerTest extends TestCase
         $res->assertOk();
         $item = $res->json('data.0');
         $this->assertEquals($order->id, $item['value']);
-        $this->assertEquals('DH-SRCH3', $item['label']);
-        $this->assertEquals('KH Meta Test', $item['meta']);
+        $this->assertEquals('DH-SRCH3', $item['code']);       // code = order code
+        $this->assertEquals('KH Meta Test', $item['label']);  // label = customer name
+        $this->assertEquals('KH Meta Test', $item['customer_name']);
     }
 }
