@@ -8,6 +8,7 @@ use App\Enums\QuotationStatus;
 use App\Models\InventoryBalance;
 use App\Models\StockExitItem;
 use App\Models\StockMovement;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
@@ -207,7 +208,30 @@ class OrderController extends Controller
         }
         $stocksPerWarehouse = $avcoByWarehouse->union($movementByWarehouse);
 
-        // Phiếu xuất nháp đang chờ duyệt (per product_id)
+        // Confirmed exit qty per order_item_id (live, authoritative)
+        $orderItemIds = $order->items->pluck('id');
+        $confirmedQtyByOrderItemId = $orderItemIds->isNotEmpty()
+            ? StockExitItem::select('stock_exit_items.order_item_id', DB::raw('SUM(stock_exit_items.quantity) as qty'))
+                ->join('stock_exits', 'stock_exits.id', '=', 'stock_exit_items.stock_exit_id')
+                ->whereIn('stock_exit_items.order_item_id', $orderItemIds)
+                ->where('stock_exits.status', 'confirmed')
+                ->groupBy('stock_exit_items.order_item_id')
+                ->pluck('qty', 'order_item_id')
+                ->map(fn($v) => (float) $v)
+            : collect();
+
+        // Pending exit qty per order_item_id (draft) — fallback to product_id if no link
+        $pendingQtyByOrderItemId = $orderItemIds->isNotEmpty()
+            ? StockExitItem::select('stock_exit_items.order_item_id', DB::raw('SUM(stock_exit_items.quantity) as qty'))
+                ->join('stock_exits', 'stock_exits.id', '=', 'stock_exit_items.stock_exit_id')
+                ->whereIn('stock_exit_items.order_item_id', $orderItemIds)
+                ->where('stock_exits.status', 'draft')
+                ->groupBy('stock_exit_items.order_item_id')
+                ->pluck('qty', 'order_item_id')
+                ->map(fn($v) => (float) $v)
+            : collect();
+
+        // Fallback: phiếu xuất nháp theo product_id (cho exit chưa có order_item_id)
         $draftExitQtyByProduct = $productIds->isNotEmpty()
             ? StockExitItem::whereHas(
                 'stockExit',
@@ -241,13 +265,14 @@ class OrderController extends Controller
                     'name'               => $item->name,
                     'unit'               => $item->unit,
                     'quantity'           => $item->quantity,
-                    'delivered_quantity' => $item->delivered_quantity,
-                    'remaining'          => max(0, (float)$item->quantity - (float)$item->delivered_quantity),
+                    'delivered_quantity'  => $item->delivered_quantity,
+                    'confirmed_exit_qty' => (float) ($confirmedQtyByOrderItemId[$item->id] ?? $item->delivered_quantity),
+                    'remaining'          => max(0, (float)$item->quantity - max((float)$item->delivered_quantity, (float)($confirmedQtyByOrderItemId[$item->id] ?? 0))),
                     'current_stock'      => (float) ($stocks[$item->product_id] ?? 0),
                     'stock_by_warehouse' => $item->product_id
                         ? $stocksPerWarehouse->get($item->product_id, collect())->toArray()
                         : [],
-                    'pending_exit_qty'   => (float) ($draftExitQtyByProduct[$item->product_id] ?? 0),
+                    'pending_exit_qty'   => (float) ($pendingQtyByOrderItemId[$item->id] ?? $draftExitQtyByProduct[$item->product_id] ?? 0),
                     'unit_price'         => $item->unit_price,
                     'vat_rate'           => $item->vat_rate !== null ? (float) $item->vat_rate : null,
                     'discount_percent'   => (float) $item->discount_percent,

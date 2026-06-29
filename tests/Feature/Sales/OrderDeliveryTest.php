@@ -328,6 +328,192 @@ class OrderDeliveryTest extends TestCase
         $this->assertEquals(190.0, $whEntry['qty']);
     }
 
+    // TC10: confirmed exit có order_item_id, delivered_qty chưa sync → controller tính confirmed_exit_qty từ live JOIN
+    // Đây là test chính cho bug XK-0003: stale delivered_qty nhưng live query trả đúng
+    public function test_tc10_confirmed_exit_with_order_item_id_live_query_remaining_zero(): void
+    {
+        $order = $this->makeOrder([190]);
+        $item  = $order->items->first();
+        // KHÔNG gọi syncDelivery → delivered_quantity vẫn = 0
+
+        $exit = StockExit::create([
+            'code' => 'XK-DLV-TC10', 'status' => 'confirmed',
+            'warehouse_id' => $this->warehouseA->id,
+            'order_id'     => $order->id,
+            'exit_date'    => now()->toDateString(),
+            'created_by'   => $this->user->id,
+            'issue_purpose' => 'sale_delivery',
+            'item_usage_type' => 'commercial',
+        ]);
+        StockExitItem::create([
+            'stock_exit_id' => $exit->id,
+            'product_id'    => $item->product_id,
+            'order_item_id' => $item->id, // có link → live query hoạt động
+            'quantity'      => 190,
+            'unit_price'    => 0,
+        ]);
+
+        // delivered_quantity vẫn = 0 (stale)
+        $this->assertEquals(0, (float) $item->delivered_quantity);
+
+        $res = $this->get(route('sales.orders.show', $order->id));
+        $res->assertOk();
+
+        $items = $res->original->getData()['page']['props']['order']['items'];
+        $i = collect($items)->first();
+
+        // confirmed_exit_qty từ live JOIN phải = 190
+        $this->assertEquals(190.0, $i['confirmed_exit_qty'], 'confirmed_exit_qty phải = 190 từ live JOIN');
+        // remaining phải = 0 dù delivered_quantity field = 0
+        $this->assertEquals(0.0, $i['remaining'], 'remaining phải = 0 dù delivered_quantity chưa sync');
+    }
+
+    // TC11: confirmed exit QTY chỉ một phần (100/190) → confirmed_exit_qty=100, remaining=90
+    public function test_tc11_partial_confirmed_exit_qty_remaining_correct(): void
+    {
+        $order = $this->makeOrder([190]);
+        $item  = $order->items->first();
+
+        $exit = StockExit::create([
+            'code' => 'XK-DLV-TC11', 'status' => 'confirmed',
+            'warehouse_id' => $this->warehouseA->id,
+            'order_id'     => $order->id,
+            'exit_date'    => now()->toDateString(),
+            'created_by'   => $this->user->id,
+            'issue_purpose' => 'sale_delivery',
+            'item_usage_type' => 'commercial',
+        ]);
+        StockExitItem::create([
+            'stock_exit_id' => $exit->id,
+            'product_id'    => $item->product_id,
+            'order_item_id' => $item->id,
+            'quantity'      => 100,
+            'unit_price'    => 0,
+        ]);
+
+        $res = $this->get(route('sales.orders.show', $order->id));
+        $res->assertOk();
+
+        $items = $res->original->getData()['page']['props']['order']['items'];
+        $i = collect($items)->first();
+
+        $this->assertEquals(100.0, $i['confirmed_exit_qty']);
+        $this->assertEquals(90.0,  $i['remaining'], 'remaining = 190 - 100 = 90');
+    }
+
+    // TC12: confirmed exit, stock giảm về 0 sau xuất → remaining=0 → không gợi ý Mua hàng
+    public function test_tc12_after_confirm_stock_zero_no_purchase_suggestion(): void
+    {
+        $order = $this->makeOrder([190]);
+        $item  = $order->items->first();
+
+        // Tạo exit confirmed với order_item_id
+        $exit = StockExit::create([
+            'code' => 'XK-DLV-TC12', 'status' => 'confirmed',
+            'warehouse_id' => $this->warehouseA->id,
+            'order_id'     => $order->id,
+            'exit_date'    => now()->toDateString(),
+            'created_by'   => $this->user->id,
+            'issue_purpose' => 'sale_delivery',
+            'item_usage_type' => 'commercial',
+        ]);
+        StockExitItem::create([
+            'stock_exit_id' => $exit->id,
+            'product_id'    => $item->product_id,
+            'order_item_id' => $item->id,
+            'quantity'      => 190,
+            'unit_price'    => 0,
+        ]);
+
+        // Inventory balance sau xuất = 0
+        InventoryBalance::create([
+            'product_id' => $item->product_id, 'warehouse_id' => $this->warehouseA->id,
+            'qty_on_hand' => 0, 'value_on_hand' => 0, 'avg_cost' => 0,
+        ]);
+
+        $res = $this->get(route('sales.orders.show', $order->id));
+        $res->assertOk();
+
+        $items = $res->original->getData()['page']['props']['order']['items'];
+        $i = collect($items)->first();
+
+        // Tồn = 0 nhưng confirmed_exit_qty=190 → remaining=0 → không gợi ý Mua hàng
+        $this->assertEquals(0.0, $i['current_stock'], 'stock=0 sau khi xuất');
+        $this->assertEquals(190.0, $i['confirmed_exit_qty']);
+        $this->assertEquals(0.0, $i['remaining'], 'remaining=0 dù stock=0');
+    }
+
+    // TC13: exit KHÔNG có order_item_id (như XK-0003 trước repair) → live query miss → fallback delivered_qty
+    public function test_tc13_exit_without_order_item_id_falls_back_to_delivered_qty(): void
+    {
+        $order = $this->makeOrder([190]);
+        $item  = $order->items->first();
+
+        // Giả lập XK-0003: project exit, order_id=NULL, order_item_id=NULL — chưa repair
+        $exit = StockExit::create([
+            'code' => 'XK-DLV-TC13', 'status' => 'confirmed',
+            'warehouse_id' => $this->warehouseA->id,
+            'order_id'     => null, // ← giống XK-0003: không có link đơn hàng
+            'exit_date'    => now()->toDateString(),
+            'created_by'   => $this->user->id,
+            'issue_purpose' => 'project_cost',
+            'item_usage_type' => 'commercial',
+        ]);
+        StockExitItem::create([
+            'stock_exit_id' => $exit->id,
+            'product_id'    => $item->product_id,
+            'order_item_id' => null, // ← không có link → live query miss
+            'quantity'      => 190,
+            'unit_price'    => 0,
+        ]);
+
+        $res = $this->get(route('sales.orders.show', $order->id));
+        $res->assertOk();
+
+        $items = $res->original->getData()['page']['props']['order']['items'];
+        $i = collect($items)->first();
+
+        // Live query theo order_item_id miss → confirmed_exit_qty fallback = delivered_quantity = 0
+        $this->assertEquals(0.0, $i['confirmed_exit_qty'],
+            'confirmed_exit_qty=0 khi thiếu order_item_id — cần chạy repair command');
+        $this->assertEquals(190.0, $i['remaining'],
+            'remaining=190 (vẫn hiện Mua hàng) cho đến khi chạy repair+recalculate');
+    }
+
+    // TC14: draft exit với order_item_id → pending_exit_qty được tính qua query order_item_id
+    public function test_tc14_draft_exit_with_order_item_id_pending_qty(): void
+    {
+        $order = $this->makeOrder([50]);
+        $item  = $order->items->first();
+
+        $exit = StockExit::create([
+            'code' => 'XK-DLV-TC14', 'status' => 'draft',
+            'warehouse_id' => $this->warehouseA->id,
+            'order_id'     => $order->id,
+            'exit_date'    => now()->toDateString(),
+            'created_by'   => $this->user->id,
+            'issue_purpose' => 'sale_delivery',
+            'item_usage_type' => 'commercial',
+        ]);
+        StockExitItem::create([
+            'stock_exit_id' => $exit->id,
+            'product_id'    => $item->product_id,
+            'order_item_id' => $item->id, // có link
+            'quantity'      => 50,
+            'unit_price'    => 0,
+        ]);
+
+        $res = $this->get(route('sales.orders.show', $order->id));
+        $res->assertOk();
+
+        $items = $res->original->getData()['page']['props']['order']['items'];
+        $i = collect($items)->first();
+
+        // pending_exit_qty được lấy từ query theo order_item_id
+        $this->assertEquals(50.0, $i['pending_exit_qty'], 'pending_exit_qty = 50 từ draft exit với order_item_id');
+        $this->assertEquals(50.0, $i['remaining'], 'remaining = 50 (chưa confirmed)');
+    }
+
     // TC9: có phiếu xuất nháp → pending_exit_qty > 0 → không hiện Mua hàng
     public function test_tc9_draft_exit_shows_pending_not_purchase(): void
     {

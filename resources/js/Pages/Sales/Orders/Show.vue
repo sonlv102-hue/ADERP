@@ -158,6 +158,12 @@
               <p class="text-sm font-medium text-gray-800 truncate">{{ item.name }}</p>
               <div class="flex flex-wrap items-center gap-x-3 gap-y-0.5 mt-0.5">
                 <span class="text-xs text-gray-500">
+                  Đặt: <strong>{{ item.quantity }}</strong>
+                </span>
+                <span v-if="(item.confirmed_exit_qty ?? 0) > 0" class="text-xs text-green-600">
+                  Đã xuất XN: <strong>{{ item.confirmed_exit_qty }}</strong>
+                </span>
+                <span class="text-xs text-gray-500">
                   Còn lại: <strong class="text-orange-600">{{ item.remaining }}</strong> {{ item.unit ?? '' }}
                 </span>
                 <span v-if="(item.pending_exit_qty ?? 0) > 0" class="text-xs text-blue-600">
