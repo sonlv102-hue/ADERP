@@ -324,6 +324,7 @@ class StockExitController extends Controller
                 'id'           => $o->id,
                 'code'         => $o->code,
                 'customer_id'  => $o->customer_id,
+                'project_id'   => $o->project_id,
                 'status'       => $o->status->value,
                 'status_label' => $o->status->label(),
                 'has_contract' => isset($contractOrderIds[$o->id]),

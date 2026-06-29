@@ -712,6 +712,11 @@ const onOrderChange = async () => {
   const order = props.orders.find(o => o.id === form.order_id);
   if (!order) return;
   form.customer_id = order.customer_id;
+  if (order.project_id) {
+    form.project_id = order.project_id;
+    form.issue_purpose = 'project_cost';
+    form.item_usage_type = 'project';
+  }
   const filled = order.items
     .filter(i => i.remaining > 0)
     .map(i => ({
