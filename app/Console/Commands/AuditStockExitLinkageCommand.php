@@ -39,8 +39,8 @@ class AuditStockExitLinkageCommand extends Command
         $this->table(['Field', 'Value'], [
             ['id', $exit->id],
             ['code', $exit->code],
-            ['status', $exit->status],
-            ['issue_purpose', $exit->issue_purpose ?? 'null'],
+            ['status', $exit->status instanceof \BackedEnum ? $exit->status->value : ($exit->status ?? 'null')],
+            ['issue_purpose', $exit->issue_purpose instanceof \BackedEnum ? $exit->issue_purpose->value : ($exit->issue_purpose ?? 'null')],
             ['warehouse_id', $exit->warehouse_id ?? 'null'],
             ['customer_id', $exit->customer_id ?? 'null'],
             ['order_id', $exit->order_id ? "{$exit->order_id} ({$exit->order?->code})" : 'NULL ⚠'],
