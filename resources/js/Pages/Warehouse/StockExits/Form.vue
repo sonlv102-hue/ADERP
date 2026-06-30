@@ -383,9 +383,17 @@
                         type="number"
                         min="0"
                         step="any"
-                        class="w-full rounded-lg border border-gray-200 bg-white px-2.5 py-1.5 text-xs text-right outline-none transition focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
-                        :class="form.errors[`items.${index}.unit_price`] && 'border-red-400 bg-red-50/40'"
+                        class="w-full rounded-lg border px-2.5 py-1.5 text-xs text-right outline-none transition focus:ring-2"
+                        :class="form.errors[`items.${index}.unit_price`]
+                          ? 'border-red-400 bg-red-50/40 focus:border-red-400 focus:ring-red-100'
+                          : item._stockSource === 'movement_fallback' && item.unit_price === 0
+                            ? 'border-amber-400 bg-amber-50/40 focus:border-amber-400 focus:ring-amber-100'
+                            : 'border-gray-200 bg-white focus:border-primary-500 focus:ring-primary-100'"
                       />
+                      <p v-if="item._stockSource === 'movement_fallback' && item.unit_price === 0"
+                         class="mt-0.5 text-right text-xs font-semibold text-amber-600">
+                        Chưa xác định giá vốn
+                      </p>
                     </td>
                     <td class="px-3 py-2.5 text-right">
                       <p class="text-sm font-semibold text-gray-800">
@@ -505,6 +513,7 @@ const props = defineProps({
   prefillOrderId: { type: Number, default: null },
   prefillWarehouseId: { type: Number, default: null },
   prefillProjectId: { type: Number, default: null },
+  prefillIssuePurpose: { type: String, default: null },
 });
 
 // Kho đích cho project_transfer (lọc bỏ kho nguồn)
@@ -525,10 +534,14 @@ const warehouseOptions = computed(() =>
   (props.warehouses ?? []).map(w => ({ value: w.id, code: w.code ?? '', label: w.name }))
 );
 
+// Populated dynamically when order is prefilled from backend API
+const selectedCustomerDisplay = ref('');
+
 const initialCustomerDisplay = computed(() =>
-  props.exit?.customer_code && props.exit?.customer_name
+  selectedCustomerDisplay.value
+  || (props.exit?.customer_code && props.exit?.customer_name
     ? `${props.exit.customer_code} - ${props.exit.customer_name}`
-    : (props.exit?.customer_name ?? '')
+    : (props.exit?.customer_name ?? ''))
 );
 
 // Populated when project is auto-filled from order or prefillProjectId
@@ -782,8 +795,63 @@ const fetchAndApplyAvcoCosts = async (productIds, forceQty = false) => {
   }
 };
 
+/**
+ * Gọi backend API để lấy dữ liệu prefill cho phiếu xuất từ đơn hàng + kho cụ thể.
+ * Dùng cùng logic AVCO + movement fallback như Order Show để đảm bảo tồn kho khớp.
+ */
+const fetchPrefillFromOrder = async () => {
+  try {
+    const params = new URLSearchParams({
+      order_id:     props.prefillOrderId,
+      warehouse_id: props.prefillWarehouseId,
+    });
+    if (props.prefillProjectId) params.set('project_id', props.prefillProjectId);
+    if (props.prefillIssuePurpose) params.set('issue_purpose', props.prefillIssuePurpose);
+    const url = route('warehouse.stock-exits.prefill-from-order') + '?' + params.toString();
+    const res = await fetch(url, { headers: { Accept: 'application/json', 'X-Requested-With': 'XMLHttpRequest' } });
+    if (!res.ok) return;
+    const data = await res.json();
+
+    // Điền header từ response
+    form.order_id        = data.order_id;
+    form.customer_id     = data.customer_id;
+    form.project_id      = data.project_id ?? null;
+    form.issue_purpose   = data.issue_purpose ?? 'sale_delivery';
+    form.item_usage_type = (data.issue_purpose === 'project_cost' || data.issue_purpose === 'project_transfer')
+      ? 'project'
+      : 'commercial';
+
+    // Display text cho RemoteSearchSelect
+    selectedCustomerDisplay.value = data.customer_code
+      ? `${data.customer_code} - ${data.customer_name}`
+      : (data.customer_name ?? '');
+    if (data.project_id) {
+      selectedProjectDisplay.value = data.project_code
+        ? `${data.project_code} - ${data.project_name}`
+        : (data.project_name ?? '');
+    }
+
+    // Điền items — service đã tính suggested_exit_qty = min(remaining, available_at_warehouse)
+    if (data.items?.length) {
+      form.items = data.items.map(i => ({
+        product_id:      i.product_id,
+        order_item_id:   i.sales_order_item_id,
+        quantity:        i.suggested_exit_qty,
+        unit_price:      i.unit_cost,
+        serial_ids:      [],
+        _productDisplay: i.product_code ? `${i.product_code} - ${i.product_name}` : (i.product_name ?? ''),
+        _unit:           i.unit ?? '',
+        _qtyOnHand:      i.available_qty_at_selected_warehouse,
+        _stockSource:    i.stock_source,
+      }));
+    }
+  } catch {
+    // silent fail — user can add items manually
+  }
+};
+
 // Auto-select kho/đơn hàng/dự án khi mở tạo phiếu từ gợi ý giao hàng
-// URL params: ?order_id=X&warehouse_id=Y&project_id=P
+// URL params: ?order_id=X&warehouse_id=Y&project_id=P&issue_purpose=project_cost
 onMounted(async () => {
   if (props.prefillWarehouseId && !props.exit) {
     form.warehouse_id = props.prefillWarehouseId;
@@ -795,22 +863,19 @@ onMounted(async () => {
     form.item_usage_type = 'project';
   }
   if (props.prefillOrderId && !props.exit) {
-    const order = props.orders.find(o => o.id === props.prefillOrderId);
-    if (order) {
-      form.order_id = order.id;
-      // Nếu đơn không có dự án thì mặc định sale_delivery; có dự án thì onOrderChange sẽ override
-      if (!order.project_id) {
-        form.item_usage_type = 'commercial';
-        form.issue_purpose   = 'sale_delivery';
-      }
-      await onOrderChange();
-      // Khi kho nguồn đã được chỉ định trước (prefillWarehouseId), chỉ giữ items có tồn AVCO
-      // tại kho đó (_qtyOnHand được populate bởi fetchAndApplyAvcoCosts bên trong onOrderChange)
-      // _qtyOnHand = null → sản phẩm không có AVCO tại kho này → loại bỏ
-      // _qtyOnHand = 0   → AVCO init nhưng hết hàng → loại bỏ
-      if (props.prefillWarehouseId && form.items.length > 1) {
-        const withStock = form.items.filter(i => (i._qtyOnHand ?? 0) > 0);
-        if (withStock.length > 0) form.items = withStock;
+    if (props.prefillWarehouseId) {
+      // Kho nguồn đã xác định → dùng backend API (cùng logic tồn kho với Order Show)
+      await fetchPrefillFromOrder();
+    } else {
+      // Chỉ prefill order (không rõ kho) → dùng client-side onOrderChange
+      const order = props.orders.find(o => o.id === props.prefillOrderId);
+      if (order) {
+        form.order_id = order.id;
+        if (!order.project_id) {
+          form.item_usage_type = 'commercial';
+          form.issue_purpose   = 'sale_delivery';
+        }
+        await onOrderChange();
       }
     }
   }

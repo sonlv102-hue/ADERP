@@ -199,7 +199,7 @@
               <!-- Exit: kho nào đó đủ tồn -->
               <template v-else-if="itemSuggestion(item).type === 'exit'">
                 <Link
-                  :href="route('warehouse.stock-exits.create') + '?order_id=' + order.id + (itemSuggestion(item).warehouse_id ? '&warehouse_id=' + itemSuggestion(item).warehouse_id : '') + (order.project_id ? '&project_id=' + order.project_id : '')"
+                  :href="route('warehouse.stock-exits.create') + '?order_id=' + order.id + (itemSuggestion(item).warehouse_id ? '&warehouse_id=' + itemSuggestion(item).warehouse_id : '') + (order.project_id ? '&project_id=' + order.project_id + '&issue_purpose=project_cost' : '')"
                   class="erp-btn-secondary text-xs py-1.5 px-3">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
@@ -571,7 +571,7 @@ const warehouseExitGroups = computed(() => {
 
 function warehouseExitUrl(warehouseId) {
   let url = route('warehouse.stock-exits.create') + '?order_id=' + props.order.id;
-  if (props.order.project_id) url += '&project_id=' + props.order.project_id;
+  if (props.order.project_id) url += '&project_id=' + props.order.project_id + '&issue_purpose=project_cost';
   url += '&warehouse_id=' + warehouseId;
   return url;
 }
@@ -582,7 +582,7 @@ const bulkExitUrl = computed(() => {
     return warehouseExitUrl(warehouseExitGroups.value[0].warehouse_id);
   }
   let url = route('warehouse.stock-exits.create') + '?order_id=' + props.order.id;
-  if (props.order.project_id) url += '&project_id=' + props.order.project_id;
+  if (props.order.project_id) url += '&project_id=' + props.order.project_id + '&issue_purpose=project_cost';
   return url;
 });
 

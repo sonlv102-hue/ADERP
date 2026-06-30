@@ -23,6 +23,7 @@ use App\Models\StockExit;
 use App\Models\StockMovement;
 use App\Models\Warehouse;
 use App\Services\AccountingService;
+use App\Services\StockExitPrefillFromOrderService;
 use App\Services\StockService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
@@ -91,10 +92,36 @@ class StockExitController extends Controller
                 'label' => $t->label(),
             ])->all(),
             'issuePurposes'   => $this->issuePurposesForDropdown(),
-            'prefillOrderId'     => $request->integer('order_id') ?: null,
-            'prefillWarehouseId' => $request->integer('warehouse_id') ?: null,
-            'prefillProjectId'   => $request->integer('project_id') ?: null,
+            'prefillOrderId'       => $request->integer('order_id') ?: null,
+            'prefillWarehouseId'   => $request->integer('warehouse_id') ?: null,
+            'prefillProjectId'     => $request->integer('project_id') ?: null,
+            'prefillIssuePurpose'  => $request->input('issue_purpose') ?: null,
         ]);
+    }
+
+    /**
+     * API: prefill data for creating a stock exit from a sales order at a specific warehouse.
+     * Shares the same AVCO + movement-fallback logic as OrderController@show so that
+     * Order Show and the Stock Exit Form always agree on which items have available stock.
+     * GET /warehouse/stock-exits-prefill-from-order?order_id=X&warehouse_id=Y&project_id=Z&issue_purpose=project_cost
+     */
+    public function prefillFromOrder(Request $request, StockExitPrefillFromOrderService $service): JsonResponse
+    {
+        $request->validate([
+            'order_id'      => ['required', 'integer', 'exists:orders,id'],
+            'warehouse_id'  => ['required', 'integer', 'exists:warehouses,id'],
+            'project_id'    => ['nullable', 'integer', 'exists:projects,id'],
+            'issue_purpose' => ['nullable', 'string'],
+        ]);
+
+        $data = $service->getPrefillData(
+            $request->integer('order_id'),
+            $request->integer('warehouse_id'),
+            $request->integer('project_id') ?: null,
+            $request->input('issue_purpose'),
+        );
+
+        return response()->json($data);
     }
 
     /**
