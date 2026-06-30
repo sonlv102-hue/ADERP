@@ -21,6 +21,7 @@ use App\Http\Controllers\Warehouse\StockTransferController;
 use App\Http\Controllers\Warehouse\InventoryCountController;
 use App\Http\Controllers\Warehouse\InventoryOpeningBalanceController;
 use App\Http\Controllers\Warehouse\ProjectInventoryController;
+use App\Http\Controllers\Warehouse\ReconcileAvcoController;
 use App\Http\Controllers\Sales\QuotationController;
 use App\Http\Controllers\Sales\OrderController;
 use App\Http\Controllers\Reports\ProfitController;
@@ -220,6 +221,8 @@ Route::middleware('auth')->group(function () {
         Route::get('stock-exits-available-lots', [StockExitController::class, 'availableLots'])->name('stock-exits.available-lots');
         Route::get('stock-exits-avco-costs', [StockExitController::class, 'avcoCosts'])->name('stock-exits.avco-costs');
         Route::get('stock-exits-prefill-from-order', [StockExitController::class, 'prefillFromOrder'])->name('stock-exits.prefill-from-order');
+        Route::post('stock-exits/reconcile-avco-preview', [ReconcileAvcoController::class, 'preview'])->name('stock-exits.reconcile-avco-preview')->middleware('can:warehouse.manage');
+        Route::post('stock-exits/reconcile-avco-apply', [ReconcileAvcoController::class, 'apply'])->name('stock-exits.reconcile-avco-apply')->middleware('can:warehouse.manage');
         Route::get('project-inventory', [ProjectInventoryController::class, 'index'])->name('project-inventory.index');
 
         Route::resource('stock-transfers', StockTransferController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);

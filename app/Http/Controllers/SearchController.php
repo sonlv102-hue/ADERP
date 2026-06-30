@@ -351,6 +351,7 @@ class SearchController extends Controller
                     'qty'        => $totalQty,
                     'avg_cost'   => $avgCost,
                     'sell_price' => (float) ($product->sell_price ?? 0),
+                    'has_serial' => (bool) ($product->has_serial ?? false),
                 ];
             })->filter()->values()->take(30);
 
@@ -385,6 +386,7 @@ class SearchController extends Controller
                 'qty'        => (float) $ib->qty_on_hand,
                 'avg_cost'   => (float) $ib->avg_cost,
                 'sell_price' => (float) ($ib->product->sell_price ?? 0),
+                'has_serial' => (bool) ($ib->product->has_serial ?? false),
             ]);
             return response()->json(['data' => $items]);
         }
@@ -446,6 +448,7 @@ class SearchController extends Controller
                 'qty'        => $qty,
                 'avg_cost'   => round($avgCost, 2),
                 'sell_price' => (float) ($p->sell_price ?? 0),
+                'has_serial' => (bool) ($p->has_serial ?? false),
             ];
         })->values();
 

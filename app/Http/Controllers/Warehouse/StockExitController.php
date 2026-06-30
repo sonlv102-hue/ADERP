@@ -143,10 +143,16 @@ class StockExitController extends Controller
             ->whereIn('product_id', $productIds)
             ->get(['product_id', 'avg_cost', 'qty_on_hand']);
 
+        // has_serial per product
+        $hasSerialMap = Product::whereIn('id', $productIds)
+            ->pluck('has_serial', 'id')
+            ->map(fn ($v) => (bool) $v);
+
         $result = $balances->mapWithKeys(fn ($b) => [
             $b->product_id => [
                 'avg_cost'    => (float) $b->avg_cost,
                 'qty_on_hand' => (float) $b->qty_on_hand,
+                'has_serial'  => $hasSerialMap->get($b->product_id, false),
             ],
         ]);
 
@@ -170,6 +176,7 @@ class StockExitController extends Controller
                 $result[$row->product_id] = [
                     'avg_cost'    => round((float) $row->avg_cost, 2),
                     'qty_on_hand' => null,
+                    'has_serial'  => $hasSerialMap->get($row->product_id, false),
                 ];
             }
         }
@@ -620,6 +627,7 @@ class StockExitController extends Controller
                     'product_name'    => $item->product?->name ?? '',
                     'product_code'    => $item->product?->code ?? '',
                     'product_unit'    => $item->product?->unit ?? '',
+                    'has_serial'      => (bool) ($item->product?->has_serial ?? false),
                     'quantity'        => $item->quantity,
                     'unit_price'      => (float) $item->unit_price,
                     'serial_ids'      => $item->serials->pluck('id')->toArray(),

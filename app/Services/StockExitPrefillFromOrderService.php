@@ -92,6 +92,7 @@ class StockExitPrefillFromOrderService
                 'product_code'                       => $orderItem->product?->code ?? '',
                 'product_name'                       => $orderItem->name,
                 'unit'                               => $orderItem->unit ?? '',
+                'has_serial'                         => (bool) ($orderItem->product?->has_serial ?? false),
                 'ordered_qty'                        => (float) $orderItem->quantity,
                 'confirmed_exit_qty'                 => $confirmedQty,
                 'remaining_qty'                      => $remaining,

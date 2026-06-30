@@ -414,15 +414,15 @@
                     </td>
                   </tr>
 
-                  <!-- Serial picker -->
-                  <tr v-if="item.product_id && form.warehouse_id" class="bg-blue-50/40">
+                  <!-- Serial picker: chỉ hiển thị khi product.has_serial = true -->
+                  <tr v-if="item._hasSerial && form.warehouse_id" class="bg-blue-50/40">
                     <td colspan="6" class="px-5 py-3">
                       <div class="flex items-start gap-3">
                         <span class="mt-0.5 shrink-0 text-xs font-semibold text-blue-700">
                           Serial <span class="font-normal text-gray-400">({{ item.serial_ids.length }}/{{ item.quantity }})</span>
                         </span>
                         <div v-if="availableSerials(index).length === 0" class="text-xs italic text-orange-600">
-                          Không có serial nào trong kho cho sản phẩm này
+                          Sản phẩm quản lý serial nhưng chưa có serial khả dụng tại kho này
                         </div>
                         <div v-else class="flex flex-wrap gap-1.5">
                           <label
@@ -469,18 +469,34 @@
 
         <!-- AVCO sync warning -->
         <div v-if="hasFallbackItems"
-             class="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+             class="flex flex-wrap items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
           <svg class="mt-0.5 h-5 w-5 shrink-0 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
               d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
           </svg>
-          <div>
+          <div class="flex-1 min-w-0">
             <p class="text-sm font-semibold text-amber-800">Cần đồng bộ tồn kho/AVCO trước khi xuất</p>
             <p class="mt-0.5 text-xs text-amber-700">
               Một số sản phẩm có tồn kho thực tế nhưng chưa có bản ghi AVCO tại kho này.
-              Liên hệ kế toán chạy lệnh <code class="font-mono">inventory:reconcile-balances</code> để khởi tạo AVCO, sau đó tạo phiếu xuất.
+              Bấm nút bên cạnh để xem chi tiết và đồng bộ ngay.
             </p>
           </div>
+          <button
+            type="button"
+            @click="openAvcoSyncModal"
+            :disabled="avcoPreviewLoading"
+            class="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:opacity-60"
+          >
+            <svg v-if="avcoPreviewLoading" class="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+            </svg>
+            <svg v-else class="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            Đồng bộ AVCO cho kho này
+          </button>
         </div>
 
         <!-- Action bar -->
@@ -505,6 +521,113 @@
         </div>
       </form>
     </div>
+
+    <!-- AVCO Sync Modal -->
+    <Modal :show="showAvcoModal" max-width="2xl" @close="showAvcoModal = false">
+      <template #title>
+        Đồng bộ AVCO — {{ avcoPreview?.warehouse ?? '...' }}
+      </template>
+
+      <!-- Loading -->
+      <div v-if="avcoPreviewLoading" class="flex items-center justify-center py-10 text-sm text-gray-500">
+        <svg class="mr-2 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+        </svg>
+        Đang kiểm tra tồn kho...
+      </div>
+
+      <!-- Preview table -->
+      <template v-else-if="avcoPreview?.items?.length">
+        <p class="mb-3 text-sm text-gray-600">
+          Hệ thống sẽ rebuild <strong>inventory_balances</strong> cho {{ avcoPreview.items.length }} sản phẩm bên dưới
+          dựa trên lịch sử phiếu nhập kho đã xác nhận. Không sửa chứng từ gốc.
+        </p>
+
+        <div class="overflow-x-auto rounded-xl border border-gray-200">
+          <table class="min-w-full text-xs">
+            <thead class="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th class="text-left px-3 py-2 font-semibold text-gray-600">Mã SP</th>
+                <th class="text-left px-3 py-2 font-semibold text-gray-600">Tên SP</th>
+                <th class="text-right px-3 py-2 font-semibold text-gray-600">SL movement</th>
+                <th class="text-right px-3 py-2 font-semibold text-gray-600">SL AVCO hiện tại</th>
+                <th class="text-right px-3 py-2 font-semibold text-gray-600">Giá vốn đề xuất</th>
+                <th class="text-right px-3 py-2 font-semibold text-gray-600">Giá trị đề xuất</th>
+                <th class="text-center px-3 py-2 font-semibold text-gray-600">Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="item in avcoPreview.items" :key="item.product_id"
+                  :class="item.can_apply ? 'bg-white' : 'bg-red-50'">
+                <td class="px-3 py-2 font-mono text-primary-700">{{ item.product_code }}</td>
+                <td class="px-3 py-2 text-gray-800">{{ item.product_name }}</td>
+                <td class="px-3 py-2 text-right">{{ item.movement_qty.toLocaleString('vi-VN') }}</td>
+                <td class="px-3 py-2 text-right text-gray-400">{{ item.balance_qty_before.toLocaleString('vi-VN') }}</td>
+                <td class="px-3 py-2 text-right font-medium">
+                  {{ item.can_apply ? new Intl.NumberFormat('vi-VN').format(item.suggested_avg_cost) + ' ₫' : '—' }}
+                </td>
+                <td class="px-3 py-2 text-right font-medium">
+                  {{ item.can_apply ? new Intl.NumberFormat('vi-VN').format(item.suggested_value) + ' ₫' : '—' }}
+                </td>
+                <td class="px-3 py-2 text-center">
+                  <span v-if="item.can_apply"
+                    class="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                    Có thể áp dụng
+                  </span>
+                  <span v-else
+                    class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700"
+                    :title="item.warnings.join('; ')">
+                    Không áp dụng được
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Warnings -->
+        <div v-if="avcoPreview.items.some(i => i.warnings.length)" class="mt-3 space-y-1">
+          <template v-for="item in avcoPreview.items.filter(i => i.warnings.length)" :key="item.product_id">
+            <p class="text-xs text-red-600">
+              <strong>{{ item.product_code }}:</strong> {{ item.warnings.join('; ') }}
+            </p>
+          </template>
+        </div>
+
+        <!-- Apply result -->
+        <div v-if="avcoApplyResult" class="mt-3 rounded-lg border px-4 py-3 text-sm"
+             :class="avcoApplyResult.success ? 'border-green-200 bg-green-50 text-green-800' : 'border-red-200 bg-red-50 text-red-800'">
+          <span v-if="avcoApplyResult.success">
+            ✓ Đã rebuild {{ avcoApplyResult.rebuilt }} sản phẩm thành công.
+            <span v-if="avcoApplyResult.failed"> {{ avcoApplyResult.failed }} sản phẩm bỏ qua.</span>
+          </span>
+          <span v-else>Đồng bộ thất bại — kiểm tra log để biết chi tiết.</span>
+        </div>
+      </template>
+
+      <!-- No items -->
+      <div v-else-if="avcoPreview && !avcoPreview.items?.length" class="py-8 text-center text-sm text-gray-400">
+        Không có sản phẩm nào cần đồng bộ.
+      </div>
+
+      <template #footer>
+        <button type="button" @click="showAvcoModal = false" class="erp-btn-secondary">Đóng</button>
+        <button
+          v-if="avcoPreview?.can_apply && !avcoApplyResult?.success"
+          type="button"
+          @click="applyAvcoSync"
+          :disabled="avcoApplyLoading"
+          class="erp-btn-primary"
+        >
+          <svg v-if="avcoApplyLoading" class="mr-1.5 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+          </svg>
+          {{ avcoApplyLoading ? 'Đang áp dụng...' : 'Áp dụng đồng bộ' }}
+        </button>
+      </template>
+    </Modal>
   </AppLayout>
 </template>
 
@@ -517,6 +640,7 @@ import ProductSearch from '@/Components/Shared/ProductSearch.vue';
 import SearchableSelect from '@/Components/Shared/SearchableSelect.vue';
 import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 import { useCurrency } from '@/composables/useCurrency';
+import Modal from '@/Components/Shared/Modal.vue';
 
 const props = defineProps({
   nextCode: String,
@@ -594,6 +718,8 @@ const form = useForm({
     _productDisplay: item.product_code ? `${item.product_code} - ${item.product_name}` : (item.product_name ?? ''),
     _unit:           item.product_unit ?? '',
     _qtyOnHand:      null,
+    _hasSerial:      item.has_serial ?? false,
+    _stockSource:    null,
   })) ?? [],
 });
 
@@ -639,6 +765,89 @@ const hasOrderContract = computed(() =>
 const hasFallbackItems = computed(() =>
   form.items.some(i => i._stockSource === 'movement_fallback')
 );
+
+// Product IDs cần đồng bộ AVCO (movement_fallback, chưa có giá vốn)
+const fallbackProductIds = computed(() => {
+  const ids = form.items
+    .filter(i => i._stockSource === 'movement_fallback' && i.product_id)
+    .map(i => i.product_id);
+  return [...new Set(ids)];
+});
+
+// AVCO sync modal state
+const showAvcoModal      = ref(false);
+const avcoPreview        = ref(null);
+const avcoPreviewLoading = ref(false);
+const avcoApplyLoading   = ref(false);
+const avcoApplyResult    = ref(null);
+
+const csrfToken = () => document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+
+const openAvcoSyncModal = async () => {
+  if (!form.warehouse_id || fallbackProductIds.value.length === 0) return;
+  showAvcoModal.value      = true;
+  avcoPreviewLoading.value = true;
+  avcoPreview.value        = null;
+  avcoApplyResult.value    = null;
+  try {
+    const res = await fetch(route('warehouse.stock-exits.reconcile-avco-preview'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': csrfToken(),
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify({ warehouse_id: form.warehouse_id, product_ids: fallbackProductIds.value }),
+    });
+    avcoPreview.value = await res.json();
+  } catch {
+    avcoPreview.value = { success: false, items: [], can_apply: false };
+  } finally {
+    avcoPreviewLoading.value = false;
+  }
+};
+
+const applyAvcoSync = async () => {
+  if (!avcoPreview.value?.can_apply) return;
+  avcoApplyLoading.value = true;
+  avcoApplyResult.value  = null;
+  try {
+    const res = await fetch(route('warehouse.stock-exits.reconcile-avco-apply'), {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'X-CSRF-TOKEN': csrfToken(),
+        'X-Requested-With': 'XMLHttpRequest',
+      },
+      body: JSON.stringify({ warehouse_id: form.warehouse_id, product_ids: fallbackProductIds.value }),
+    });
+    const data = await res.json();
+    avcoApplyResult.value = data;
+
+    if (data.success) {
+      // Reload AVCO costs → cập nhật unit_price + _hasSerial cho tất cả items
+      const pIds = form.items.map(i => i.product_id).filter(Boolean);
+      await fetchAndApplyAvcoCosts(pIds, true);
+
+      // Cập nhật _stockSource cho sản phẩm đã rebuild thành công
+      const rebuilt = data.results ?? {};
+      form.items.forEach(item => {
+        if (item._stockSource === 'movement_fallback' && rebuilt[item.product_id]?.success) {
+          item._stockSource = 'avco';
+        }
+      });
+
+      // Đóng modal nếu không còn lỗi
+      if (data.failed === 0) showAvcoModal.value = false;
+    }
+  } catch {
+    avcoApplyResult.value = { success: false, rebuilt: 0, failed: 1 };
+  } finally {
+    avcoApplyLoading.value = false;
+  }
+};
 
 // POs duy nhất có sẵn trong các lô dự án (dùng để hiển thị bộ lọc)
 const availablePurchaseOrders = computed(() => {
@@ -809,6 +1018,7 @@ const fetchAndApplyAvcoCosts = async (productIds, forceQty = false) => {
       if (info) {
         item.unit_price = info.avg_cost;
         if (forceQty || item._qtyOnHand === null) item._qtyOnHand = info.qty_on_hand ?? 0;
+        if (info.has_serial !== undefined) item._hasSerial = info.has_serial;
       }
     });
   } catch {
@@ -864,6 +1074,7 @@ const fetchPrefillFromOrder = async () => {
         _unit:           i.unit ?? '',
         _qtyOnHand:      i.available_qty_at_selected_warehouse,
         _stockSource:    i.stock_source,
+        _hasSerial:      i.has_serial ?? false,
       }));
     }
   } catch {
@@ -903,7 +1114,7 @@ onMounted(async () => {
 });
 
 const addRow = () => {
-  form.items.push({ product_id: null, order_item_id: null, quantity: 1, unit_price: 0, serial_ids: [], _productDisplay: '', _unit: '', _qtyOnHand: null });
+  form.items.push({ product_id: null, order_item_id: null, quantity: 1, unit_price: 0, serial_ids: [], _productDisplay: '', _unit: '', _qtyOnHand: null, _hasSerial: false, _stockSource: null });
 };
 
 const removeRow = (index) => {
@@ -935,6 +1146,7 @@ const onProductSelect = (index, opt) => {
   // Giá vốn bình quân (AVCO hoặc tính từ lô dự án) — không dùng giá bán
   form.items[index].unit_price = Number(opt.avg_cost ?? 0);
   form.items[index].serial_ids = [];
+  form.items[index]._hasSerial = opt.has_serial ?? false;
 };
 
 const onQuantityChange = (index) => {
