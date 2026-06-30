@@ -93,7 +93,9 @@ class StockExitController extends Controller
                 'label' => $t->label(),
             ])->all(),
             'issuePurposes'   => $this->issuePurposesForDropdown(),
-            'prefillOrderId'  => $request->integer('order_id') ?: null,
+            'prefillOrderId'     => $request->integer('order_id') ?: null,
+            'prefillWarehouseId' => $request->integer('warehouse_id') ?: null,
+            'prefillProjectId'   => $request->integer('project_id') ?: null,
         ]);
     }
 
@@ -316,7 +318,7 @@ class StockExitController extends Controller
             ContractStatus::Completed->value,
         ])->whereNotNull('order_id')->pluck('order_id')->flip()->toArray();
 
-        return Order::with('items')
+        return Order::with(['items', 'project:id,code,name'])
             ->where('status', '!=', OrderStatus::Cancelled->value)
             ->orderByDesc('id')
             ->get()
@@ -325,6 +327,8 @@ class StockExitController extends Controller
                 'code'         => $o->code,
                 'customer_id'  => $o->customer_id,
                 'project_id'   => $o->project_id,
+                'project_code' => $o->project?->code,
+                'project_name' => $o->project?->name,
                 'status'       => $o->status->value,
                 'status_label' => $o->status->label(),
                 'has_contract' => isset($contractOrderIds[$o->id]),
@@ -466,7 +470,7 @@ class StockExitController extends Controller
         foreach ($data['items'] as $itemData) {
             $exitItem = $exit->items()->create([
                 'product_id'    => $itemData['product_id'],
-                'order_item_id' => $purpose === 'sale_delivery' ? ($itemData['order_item_id'] ?? null) : null,
+                'order_item_id' => in_array($purpose, ['sale_delivery', 'project_cost']) ? ($itemData['order_item_id'] ?? null) : null,
                 'quantity'      => $itemData['quantity'],
                 'unit_price'    => $itemData['unit_price'],
             ]);
@@ -703,7 +707,7 @@ class StockExitController extends Controller
             foreach ($data['items'] as $itemData) {
                 $exitItem = $stockExit->items()->create([
                     'product_id'    => $itemData['product_id'],
-                    'order_item_id' => $purpose === 'sale_delivery' ? ($itemData['order_item_id'] ?? null) : null,
+                    'order_item_id' => in_array($purpose, ['sale_delivery', 'project_cost']) ? ($itemData['order_item_id'] ?? null) : null,
                     'quantity'      => $itemData['quantity'],
                     'unit_price'    => $itemData['unit_price'],
                 ]);

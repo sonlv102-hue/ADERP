@@ -256,6 +256,7 @@ class OrderController extends Controller
                 'status_label'      => $order->status->label(),
                 'status_color'      => $order->status->color(),
                 'notes'             => $order->notes,
+                'project_id'        => $order->project_id,
                 'creator'           => $order->creator->name,
                 'created_at'        => $order->created_at->format('d/m/Y'),
                 'total'             => $order->total(),

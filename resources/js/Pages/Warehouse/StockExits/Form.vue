@@ -102,7 +102,7 @@
                 />
               </FormField>
 
-              <!-- Đơn hàng liên kết (sale_delivery) -->
+              <!-- Đơn hàng liên kết (sale_delivery hoặc project_cost) -->
               <template v-if="form.issue_purpose !== 'project_cost'">
                 <FormField label="Đơn hàng liên kết" optional :error="form.errors.order_id">
                   <select
@@ -124,6 +124,15 @@
                       </span>
                     </div>
                   </div>
+                </FormField>
+              </template>
+              <!-- Đơn hàng liên kết (read-only) khi xuất cho dự án -->
+              <template v-else-if="form.order_id && selectedOrder">
+                <FormField label="Đơn hàng liên kết" optional>
+                  <div class="w-full rounded-xl border border-gray-200 bg-gray-50 px-3.5 py-2.5 text-sm text-gray-600 select-none">
+                    {{ selectedOrder.code }} — {{ selectedOrder.status_label }}
+                  </div>
+                  <p class="mt-1 text-xs text-gray-400">Xuất cho dự án từ đơn hàng này. Số lượng xuất sẽ cập nhật đơn hàng.</p>
                 </FormField>
               </template>
 
@@ -211,7 +220,7 @@
                     </div>
                   </div>
                   <div v-else class="rounded-xl border border-blue-100 bg-blue-50 px-4 py-2.5 text-xs text-blue-700">
-                    Dự án chưa có lô FIFO riêng trong kho này. Bạn có thể thêm sản phẩm trực tiếp từ tồn kho chung bằng nút "Thêm dòng".
+                    Kho này không có lô FIFO cho dự án — hệ thống sẽ xuất theo AVCO tồn kho chung. Bấm "Thêm dòng" để thêm sản phẩm. Lưu ý: dự án chỉ là nơi nhận chi phí, kho xuất phải là kho đang có hàng thực tế (thường là kho công ty, không phải kho dự án).
                   </div>
                 </div>
               </template>
@@ -494,6 +503,8 @@ const props = defineProps({
   issuePurposes: { type: Array, default: () => [] },
   exit: { type: Object, default: null },
   prefillOrderId: { type: Number, default: null },
+  prefillWarehouseId: { type: Number, default: null },
+  prefillProjectId: { type: Number, default: null },
 });
 
 // Kho đích cho project_transfer (lọc bỏ kho nguồn)
@@ -519,10 +530,15 @@ const initialCustomerDisplay = computed(() =>
     ? `${props.exit.customer_code} - ${props.exit.customer_name}`
     : (props.exit?.customer_name ?? '')
 );
+
+// Populated when project is auto-filled from order or prefillProjectId
+const selectedProjectDisplay = ref('');
+
 const initialProjectDisplay = computed(() =>
-  props.exit?.project_code && props.exit?.project_name
+  selectedProjectDisplay.value
+  || (props.exit?.project_code && props.exit?.project_name
     ? `${props.exit.project_code} - ${props.exit.project_name}`
-    : (props.exit?.project_name ?? '')
+    : (props.exit?.project_name ?? ''))
 );
 
 const today = new Date().toISOString().slice(0, 10);
@@ -687,6 +703,7 @@ const onIssuePurposeChange = () => {
   form.item_usage_type = isProject ? 'project' : 'commercial';
   if (!isProject) {
     form.project_id = null;
+    selectedProjectDisplay.value = '';
     form.to_warehouse_id = null;
     form.purchase_order_ids = [];
     selectedPoIds.value = [];
@@ -716,6 +733,9 @@ const onOrderChange = async () => {
     form.project_id = order.project_id;
     form.issue_purpose = 'project_cost';
     form.item_usage_type = 'project';
+    selectedProjectDisplay.value = order.project_code
+      ? `${order.project_code} - ${order.project_name}`
+      : (order.project_name ?? '');
   }
   const filled = order.items
     .filter(i => i.remaining > 0)
@@ -762,15 +782,36 @@ const fetchAndApplyAvcoCosts = async (productIds, forceQty = false) => {
   }
 };
 
-// Auto-select đơn hàng khi mở tạo phiếu từ trang đơn hàng (?order_id=X)
+// Auto-select kho/đơn hàng/dự án khi mở tạo phiếu từ gợi ý giao hàng
+// URL params: ?order_id=X&warehouse_id=Y&project_id=P
 onMounted(async () => {
+  if (props.prefillWarehouseId && !props.exit) {
+    form.warehouse_id = props.prefillWarehouseId;
+  }
+  if (props.prefillProjectId && !props.exit && !props.prefillOrderId) {
+    // Prefill project trực tiếp (không qua order) — đặt mục đích project_cost
+    form.project_id = props.prefillProjectId;
+    form.issue_purpose = 'project_cost';
+    form.item_usage_type = 'project';
+  }
   if (props.prefillOrderId && !props.exit) {
     const order = props.orders.find(o => o.id === props.prefillOrderId);
     if (order) {
       form.order_id = order.id;
-      form.item_usage_type = 'commercial';
-      form.issue_purpose   = 'sale_delivery';
+      // Nếu đơn không có dự án thì mặc định sale_delivery; có dự án thì onOrderChange sẽ override
+      if (!order.project_id) {
+        form.item_usage_type = 'commercial';
+        form.issue_purpose   = 'sale_delivery';
+      }
       await onOrderChange();
+      // Khi kho nguồn đã được chỉ định trước (prefillWarehouseId), chỉ giữ items có tồn AVCO
+      // tại kho đó (_qtyOnHand được populate bởi fetchAndApplyAvcoCosts bên trong onOrderChange)
+      // _qtyOnHand = null → sản phẩm không có AVCO tại kho này → loại bỏ
+      // _qtyOnHand = 0   → AVCO init nhưng hết hàng → loại bỏ
+      if (props.prefillWarehouseId && form.items.length > 1) {
+        const withStock = form.items.filter(i => (i._qtyOnHand ?? 0) > 0);
+        if (withStock.length > 0) form.items = withStock;
+      }
     }
   }
 });

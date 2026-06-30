@@ -198,7 +198,8 @@
               </template>
               <!-- Exit: kho nào đó đủ tồn -->
               <template v-else-if="itemSuggestion(item).type === 'exit'">
-                <Link :href="route('warehouse.stock-exits.create') + '?order_id=' + order.id"
+                <Link
+                  :href="route('warehouse.stock-exits.create') + '?order_id=' + order.id + (itemSuggestion(item).warehouse_id ? '&warehouse_id=' + itemSuggestion(item).warehouse_id : '') + (order.project_id ? '&project_id=' + order.project_id : '')"
                   class="erp-btn-secondary text-xs py-1.5 px-3">
                   <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
@@ -240,15 +241,30 @@
             </div>
           </div>
         </div>
-        <div v-if="canCreateExit" class="px-5 py-3 bg-gray-50 border-t border-gray-100 flex justify-end">
-          <Link :href="route('warehouse.stock-exits.create') + '?order_id=' + order.id"
-            class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg flex items-center gap-2">
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 4m0 0l-3-4m3 4V4" />
-            </svg>
-            Tạo phiếu xuất kho cho đơn này
-          </Link>
+        <div v-if="canCreateExit" class="px-5 py-3 bg-gray-50 border-t border-gray-100">
+          <!-- 1 kho có đủ hàng: 1 nút -->
+          <div v-if="warehouseExitGroups.length <= 1" class="flex justify-end">
+            <Link :href="bulkExitUrl"
+              class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 4m0 0l-3-4m3 4V4" />
+              </svg>
+              Tạo phiếu xuất kho cho đơn này
+            </Link>
+          </div>
+          <!-- Nhiều kho: 1 nút riêng cho mỗi kho nguồn -->
+          <div v-else class="flex flex-wrap items-center justify-end gap-2">
+            <span class="text-xs text-gray-500 mr-1">Hàng ở {{ warehouseExitGroups.length }} kho — tạo phiếu riêng:</span>
+            <Link v-for="g in warehouseExitGroups" :key="g.warehouse_id"
+              :href="warehouseExitUrl(g.warehouse_id)"
+              class="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium rounded-lg flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+              </svg>
+              Xuất từ {{ g.warehouse_name }}
+            </Link>
+          </div>
         </div>
       </div>
 
@@ -518,9 +534,9 @@ function itemSuggestion(item) {
     ? warehouses.reduce((s, w) => s + w.qty, 0)
     : (item.current_stock ?? 0);
   if (systemStock <= 0) return { type: 'purchase', deficit: remaining };
-  const hasSufficient = warehouses.some(w => w.qty >= remaining)
-    || (!warehouses.length && systemStock >= remaining);
-  if (hasSufficient) return { type: 'exit' };
+  const sufficientWh = warehouses.find(w => w.qty >= remaining);
+  if (sufficientWh) return { type: 'exit', warehouse_id: sufficientWh.warehouse_id };
+  if (!warehouses.length && systemStock >= remaining) return { type: 'exit' };
   if (systemStock >= remaining) {
     return { type: 'transfer', warehouses: warehouses.filter(w => w.qty > 0) };
   }
@@ -534,6 +550,41 @@ const canCreateExit = computed(() =>
     return s.type === 'exit' || s.type === 'transfer' || s.type === 'partial';
   })
 );
+
+// Nhóm item chưa giao theo kho nguồn (chỉ type='exit' — có đủ tồn tại 1 kho duy nhất)
+// Mỗi group = 1 phiếu xuất riêng với warehouse_id nguồn chính xác
+const warehouseExitGroups = computed(() => {
+  const groups = new Map();
+  for (const item of undeliveredItems.value) {
+    const s = itemSuggestion(item);
+    if (s.type !== 'exit' || !s.warehouse_id) continue;
+    if (!groups.has(s.warehouse_id)) {
+      const whData = item.stock_by_warehouse?.find(w => w.warehouse_id === s.warehouse_id);
+      groups.set(s.warehouse_id, {
+        warehouse_id: s.warehouse_id,
+        warehouse_name: whData?.warehouse_name ?? `Kho #${s.warehouse_id}`,
+      });
+    }
+  }
+  return [...groups.values()];
+});
+
+function warehouseExitUrl(warehouseId) {
+  let url = route('warehouse.stock-exits.create') + '?order_id=' + props.order.id;
+  if (props.order.project_id) url += '&project_id=' + props.order.project_id;
+  url += '&warehouse_id=' + warehouseId;
+  return url;
+}
+
+// URL cho trường hợp 1 kho duy nhất (tiện dùng trong template)
+const bulkExitUrl = computed(() => {
+  if (warehouseExitGroups.value.length === 1) {
+    return warehouseExitUrl(warehouseExitGroups.value[0].warehouse_id);
+  }
+  let url = route('warehouse.stock-exits.create') + '?order_id=' + props.order.id;
+  if (props.order.project_id) url += '&project_id=' + props.order.project_id;
+  return url;
+});
 
 const action = (act) => {
   router.post(route(`sales.orders.${act}`, props.order.id));
