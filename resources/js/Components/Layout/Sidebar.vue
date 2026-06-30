@@ -78,6 +78,8 @@
           <NavItem :href="route('warehouse.warehouses.index')" icon="office-building" sub>Kho hàng</NavItem>
           <NavItem :href="route('warehouse.stock-entries.index')" icon="inbox" sub>Nhập kho</NavItem>
           <NavItem :href="route('warehouse.stock-exits.index')" icon="arrow-circle-right" sub>Xuất kho</NavItem>
+          <NavItem :href="route('reports.stock_entry_details')" icon="document-text" sub>Báo cáo nhập kho</NavItem>
+          <NavItem :href="route('reports.stock_exit_details')" icon="document-text" sub>Báo cáo xuất kho</NavItem>
           <NavItem :href="route('reports.inventory')" icon="cube" sub>Tồn kho</NavItem>
           <NavItem :href="route('warehouse.inventory-counts.index')" icon="clipboard-list" sub>Kiểm kê kho</NavItem>
           <NavItem :href="route('warehouse.project-inventory.index')" icon="collection" sub>Tồn kho dự án</NavItem>
