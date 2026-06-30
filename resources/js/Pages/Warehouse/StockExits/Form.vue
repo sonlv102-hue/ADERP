@@ -540,9 +540,16 @@
       <!-- Preview table -->
       <template v-else-if="avcoPreview?.items?.length">
         <p class="mb-3 text-sm text-gray-600">
-          Hệ thống sẽ rebuild <strong>inventory_balances</strong> cho {{ avcoPreview.items.length }} sản phẩm bên dưới
-          dựa trên lịch sử phiếu nhập kho đã xác nhận. Không sửa chứng từ gốc.
+          Hệ thống sẽ rebuild <strong>inventory_balances</strong> cho {{ avcoPreview.items.length }} sản phẩm bên dưới.
+          Nguồn giá vốn theo thứ tự: phiếu nhập kho → tồn đầu kỳ → giá vốn sản phẩm. Không sửa chứng từ gốc.
         </p>
+        <!-- Amber warning nếu có sản phẩm dùng giá vốn từ danh mục -->
+        <div v-if="avcoPreview.needs_confirm" class="mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          <svg class="mt-0.5 h-3.5 w-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
+          </svg>
+          <span>Một số sản phẩm dùng <strong>giá vốn từ danh mục sản phẩm (cost_price)</strong> — đây là giá đã gồm VAT, không phải từ chứng từ nhập kho thực tế. Kiểm tra lại giá vốn đề xuất trước khi áp dụng.</span>
+        </div>
 
         <div class="overflow-x-auto rounded-xl border border-gray-200">
           <table class="min-w-full text-xs">
@@ -554,6 +561,7 @@
                 <th class="text-right px-3 py-2 font-semibold text-gray-600">SL AVCO hiện tại</th>
                 <th class="text-right px-3 py-2 font-semibold text-gray-600">Giá vốn đề xuất</th>
                 <th class="text-right px-3 py-2 font-semibold text-gray-600">Giá trị đề xuất</th>
+                <th class="text-left px-3 py-2 font-semibold text-gray-600">Nguồn giá vốn</th>
                 <th class="text-center px-3 py-2 font-semibold text-gray-600">Trạng thái</th>
               </tr>
             </thead>
@@ -570,10 +578,30 @@
                 <td class="px-3 py-2 text-right font-medium">
                   {{ item.can_apply ? new Intl.NumberFormat('vi-VN').format(item.suggested_value) + ' ₫' : '—' }}
                 </td>
+                <td class="px-3 py-2">
+                  <span v-if="item.source_type === 'stock_entry'"
+                    class="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                    Phiếu nhập kho
+                  </span>
+                  <span v-else-if="item.source_type === 'opening_balance'"
+                    class="inline-flex items-center rounded-full bg-purple-50 px-2 py-0.5 text-xs font-medium text-purple-700">
+                    Tồn đầu kỳ
+                  </span>
+                  <span v-else-if="item.source_type === 'product_cost'"
+                    class="inline-flex items-center rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
+                    Giá vốn SP
+                  </span>
+                  <span v-else class="text-gray-400">—</span>
+                </td>
                 <td class="px-3 py-2 text-center">
-                  <span v-if="item.can_apply"
+                  <span v-if="item.can_apply && !item.needs_confirm"
                     class="inline-flex items-center rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
                     Có thể áp dụng
+                  </span>
+                  <span v-else-if="item.can_apply && item.needs_confirm"
+                    class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700"
+                    :title="item.warnings.join('; ')">
+                    Cần xác nhận
                   </span>
                   <span v-else
                     class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700"
@@ -589,7 +617,7 @@
         <!-- Warnings -->
         <div v-if="avcoPreview.items.some(i => i.warnings.length)" class="mt-3 space-y-1">
           <template v-for="item in avcoPreview.items.filter(i => i.warnings.length)" :key="item.product_id">
-            <p class="text-xs text-red-600">
+            <p :class="item.needs_confirm ? 'text-xs text-amber-700' : 'text-xs text-red-600'">
               <strong>{{ item.product_code }}:</strong> {{ item.warnings.join('; ') }}
             </p>
           </template>
@@ -618,13 +646,15 @@
           type="button"
           @click="applyAvcoSync"
           :disabled="avcoApplyLoading"
-          class="erp-btn-primary"
+          :class="avcoPreview?.needs_confirm
+            ? 'inline-flex items-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-amber-700 disabled:opacity-60'
+            : 'erp-btn-primary'"
         >
           <svg v-if="avcoApplyLoading" class="mr-1.5 h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
           </svg>
-          {{ avcoApplyLoading ? 'Đang áp dụng...' : 'Áp dụng đồng bộ' }}
+          {{ avcoApplyLoading ? 'Đang áp dụng...' : (avcoPreview?.needs_confirm ? 'Áp dụng (xác nhận dùng giá vốn SP)' : 'Áp dụng đồng bộ') }}
         </button>
       </template>
     </Modal>
