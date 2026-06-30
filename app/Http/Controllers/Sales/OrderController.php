@@ -187,9 +187,10 @@ class OrderController extends Controller
                 ])->values()
             );
 
-        // Fallback: products không có inventory_balances → tính từ stock_movements
-        $productsWithBalance = $avcoByWarehouse->keys()->values()->toArray();
-        $productsNeedFallback = $productIds->diff($productsWithBalance)->values();
+        // Fallback: products không có AVCO dương tại bất kỳ kho nào → tính từ stock_movements
+        // Lưu ý: products có AVCO rows nhưng tất cả qty=0 vẫn cần fallback để show đúng kho nguồn
+        $productsWithPositiveBalance = $avcoByWarehouse->filter(fn ($wh) => $wh->isNotEmpty())->keys()->values()->toArray();
+        $productsNeedFallback = $productIds->diff($productsWithPositiveBalance)->values();
         $movementByWarehouse = collect();
         if ($productsNeedFallback->isNotEmpty()) {
             $movementByWarehouse = StockMovement::active()
@@ -206,7 +207,8 @@ class OrderController extends Controller
                     'qty'            => (float) $m->qty,
                 ])->values());
         }
-        $stocksPerWarehouse = $avcoByWarehouse->union($movementByWarehouse);
+        // movement data ưu tiên cao hơn khi AVCO chỉ có rows qty=0
+        $stocksPerWarehouse = $movementByWarehouse->union($avcoByWarehouse);
 
         // Confirmed exit qty per order_item_id (live, authoritative)
         $orderItemIds = $order->items->pluck('id');
