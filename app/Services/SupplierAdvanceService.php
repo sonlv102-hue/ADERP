@@ -441,6 +441,39 @@ class SupplierAdvanceService
     }
 
     /**
+     * Xóa mềm khoản trả trước NCC.
+     * - cancelled: chỉ soft delete, không cần đảo JE.
+     * - open: hủy CashVoucher/JE trước rồi mới soft delete.
+     * - partially_applied / fully_applied: từ chối.
+     */
+    public function deleteSafely(SupplierOpeningAdvance $advance, ?string $reason = null): void
+    {
+        if ($advance->activeAllocations()->exists()) {
+            throw new \RuntimeException('Không thể xóa khi còn đối trừ đang hoạt động. Thu hồi đối trừ trước.');
+        }
+
+        if (in_array($advance->status, ['fully_applied', 'partially_applied'])) {
+            throw new \RuntimeException('Không thể xóa khoản đã đối trừ vào hóa đơn. Chỉ có thể xem lịch sử.');
+        }
+
+        DB::transaction(function () use ($advance, $reason) {
+            // Nếu còn dư, cần hủy CashVoucher + đảo JE trước khi xóa
+            if ($advance->status === 'open') {
+                $this->cancel($advance, $reason ?? 'Xóa khoản trả trước');
+                $advance->refresh();
+            }
+
+            $advance->update([
+                'deleted_by'    => auth()->id(),
+                'delete_reason' => $reason,
+            ]);
+            $advance->delete();
+
+            Log::info("SupplierAdvance #{$advance->id} soft-deleted by user " . auth()->id() . ". Reason: {$reason}");
+        });
+    }
+
+    /**
      * Danh sách ứng trước còn dư của một NCC.
      */
     public function getAvailable(int $supplierId): Collection

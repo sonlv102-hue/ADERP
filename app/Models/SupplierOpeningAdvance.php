@@ -5,15 +5,19 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class SupplierOpeningAdvance extends Model
 {
+    use SoftDeletes;
+
     protected $fillable = [
         'supplier_id', 'advance_type', 'source_type', 'source_id',
         'fiscal_year', 'opening_date', 'account_code',
         'amount', 'remaining_amount', 'refunded_amount', 'currency', 'reference_no',
         'bank_transaction_ref', 'original_payment_date', 'original_payment_note',
         'status', 'notes', 'created_by',
+        'deleted_by', 'delete_reason',
     ];
 
     protected $casts = [

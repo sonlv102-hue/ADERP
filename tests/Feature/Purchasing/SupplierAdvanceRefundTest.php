@@ -297,6 +297,6 @@ class SupplierAdvanceRefundTest extends TestCase
             ->delete(route('purchasing.supplier-advances.destroy', $adv->id))
             ->assertRedirect(route('purchasing.supplier-advances.index'));
 
-        $this->assertDatabaseMissing('supplier_opening_advances', ['id' => $id]);
+        $this->assertSoftDeleted('supplier_opening_advances', ['id' => $id]);
     }
 }

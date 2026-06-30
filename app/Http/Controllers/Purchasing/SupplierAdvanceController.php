@@ -64,7 +64,7 @@ class SupplierAdvanceController extends Controller
                 'status_label'     => $adv->statusLabel(),
                 'can_refund'       => in_array($adv->status, ['open', 'partially_applied']) && (float) $adv->remaining_amount > 0,
                 'can_cancel'       => $adv->status !== 'cancelled' && $adv->active_allocations_count === 0 && (float) $adv->refunded_amount <= 0,
-                'can_delete'       => $adv->advance_type === 'opening_balance' && $adv->status === 'open' && $adv->active_allocations_count === 0,
+                'can_delete'       => in_array($adv->status, ['open', 'cancelled']) && $adv->active_allocations_count === 0,
             ]),
             'filters'        => $request->only(['search', 'supplier_id', 'status', 'fiscal_year', 'advance_type']),
             'suppliers'      => Supplier::orderBy('name')->get(['id', 'name', 'code']),
@@ -189,8 +189,7 @@ class SupplierAdvanceController extends Controller
                 'can_cancel'       => $supplierAdvance->status !== 'cancelled'
                     && ! $supplierAdvance->activeAllocations()->exists()
                     && (float) $supplierAdvance->refunded_amount <= 0,
-                'can_delete'       => $supplierAdvance->advance_type === 'opening_balance'
-                    && $supplierAdvance->status === 'open'
+                'can_delete'       => in_array($supplierAdvance->status, ['open', 'cancelled'])
                     && ! $supplierAdvance->activeAllocations()->exists(),
                 'allocations'      => $supplierAdvance->allocations->map(fn ($a) => [
                     'id'                  => $a->id,
@@ -283,21 +282,19 @@ class SupplierAdvanceController extends Controller
             ($data['refund_method'] === 'cash' ? '1111' : '1121') . ' / Cr 331UT đã được tạo.');
     }
 
-    public function destroy(SupplierOpeningAdvance $supplierAdvance)
+    public function destroy(Request $request, SupplierOpeningAdvance $supplierAdvance)
     {
-        if ($supplierAdvance->advance_type !== 'opening_balance') {
-            return back()->withErrors(['general' => 'Chỉ xóa được khoản số dư đầu kỳ. Dùng Hủy cho khoản trả trước trong kỳ.']);
-        }
-        if ($supplierAdvance->status === 'cancelled') {
-            return back()->withErrors(['general' => 'Khoản đã hủy không thể xóa.']);
-        }
-        if ($supplierAdvance->activeAllocations()->exists()) {
-            return back()->withErrors(['general' => 'Không thể xóa khi đã có đối trừ đang hoạt động.']);
-        }
+        $data = $request->validate([
+            'reason' => ['nullable', 'string', 'max:500'],
+        ]);
 
-        $supplierAdvance->delete();
+        try {
+            $this->service->deleteSafely($supplierAdvance, $data['reason'] ?? null);
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['general' => $e->getMessage()]);
+        }
 
         return redirect()->route('purchasing.supplier-advances.index')
-            ->with('success', 'Đã xóa khoản ứng trước đầu kỳ.');
+            ->with('success', 'Đã xóa khoản trả trước NCC. Bút toán liên quan đã được xử lý.');
     }
 }

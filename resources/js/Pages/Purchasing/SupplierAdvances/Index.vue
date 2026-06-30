@@ -120,6 +120,31 @@
 
       <Pagination :links="advances.links" class="mt-2" />
     </div>
+
+    <!-- Modal xác nhận xóa -->
+    <Modal :show="showDeleteModal" max-width="md" @close="closeDeleteModal">
+      <template #title>Xóa khoản trả trước NCC</template>
+      <div class="space-y-4">
+        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+          <p class="font-semibold">{{ deleteTarget?.supplier }}</p>
+          <p class="mt-0.5 text-xs">Ngày: {{ deleteTarget?.opening_date }} · {{ fmt(deleteTarget?.amount) }} đ · {{ deleteTarget?.status_label }}</p>
+        </div>
+        <p v-if="deleteTarget?.status === 'open'" class="text-xs text-orange-700 bg-orange-50 rounded p-2 border border-orange-200">
+          Khoản này có phiếu chi/bút toán liên quan. Hệ thống sẽ hủy phiếu chi và tạo bút toán đảo trước khi xóa mềm.
+        </p>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Lý do xóa</label>
+          <input v-model="deleteReason" type="text" class="erp-input"
+            placeholder="Nhập lý do (tùy chọn)..." maxlength="500" />
+        </div>
+      </div>
+      <template #footer>
+        <button @click="closeDeleteModal" class="erp-btn-secondary">Hủy</button>
+        <button @click="submitDelete" :disabled="deleting" class="erp-btn-danger">
+          {{ deleting ? 'Đang xử lý...' : 'Xác nhận xóa' }}
+        </button>
+      </template>
+    </Modal>
   </AppLayout>
 </template>
 
@@ -129,6 +154,7 @@ import { router, Link } from '@inertiajs/vue3'
 import AppLayout from '@/Components/Layout/AppLayout.vue'
 import StatusBadge from '@/Components/Shared/StatusBadge.vue'
 import Pagination from '@/Components/Shared/Pagination.vue'
+import Modal from '@/Components/Shared/Modal.vue'
 
 const props = defineProps({
   advances:      Object,
@@ -165,9 +191,32 @@ function goto(id) {
   router.visit(route('purchasing.supplier-advances.show', id))
 }
 
+const showDeleteModal = ref(false)
+const deleteTarget = ref(null)
+const deleteReason = ref('')
+const deleting = ref(false)
+
 function confirmDelete(adv) {
-  if (!confirm(`Xóa khoản ứng trước đầu kỳ của "${adv.supplier}"? Hành động này không thể hoàn tác.`)) return
-  router.delete(route('purchasing.supplier-advances.destroy', adv.id))
+  deleteTarget.value = adv
+  deleteReason.value = ''
+  showDeleteModal.value = true
+}
+
+function closeDeleteModal() {
+  showDeleteModal.value = false
+  deleteTarget.value = null
+}
+
+function submitDelete() {
+  if (!deleteTarget.value) return
+  deleting.value = true
+  router.delete(
+    route('purchasing.supplier-advances.destroy', deleteTarget.value.id),
+    {
+      data: { reason: deleteReason.value || null },
+      onFinish: () => { deleting.value = false; closeDeleteModal() },
+    }
+  )
 }
 
 function fmt(val) {
