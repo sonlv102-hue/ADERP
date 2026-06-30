@@ -2,7 +2,7 @@
 
 namespace App\Exports\Reports;
 
-use Illuminate\Support\Facades\DB;
+use App\Services\Reports\InventoryReportService;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
 use Maatwebsite\Excel\Concerns\WithMapping;
@@ -18,33 +18,8 @@ class InventoryReportExport implements FromCollection, WithHeadings, WithMapping
 
     public function collection()
     {
-        $search      = $this->filters['search']       ?? null;
-        $dateFrom    = $this->filters['date_from']    ?? now()->startOfYear()->toDateString();
-        $dateTo      = $this->filters['date_to']      ?? now()->toDateString();
-        $warehouseId = $this->filters['warehouse_id'] ?? null;
-        $categoryId  = $this->filters['category_id'] ?? null;
-
-        $wh      = $warehouseId ? " AND sm.warehouse_id = {$warehouseId}" : "";
-        $joins   = "LEFT JOIN stock_entries se ON sm.source_id = se.id AND sm.source_type = 'App\Models\StockEntry'
-                    LEFT JOIN stock_exits sx ON sm.source_id = sx.id AND sm.source_type = 'App\Models\StockExit'";
-        $docDate = "COALESCE(se.entry_date, sx.exit_date, DATE(sm.created_at))";
-
-        return DB::table('products')
-            ->leftJoin('product_categories', 'product_categories.id', '=', 'products.category_id')
-            ->select([
-                'products.code', 'products.name', 'products.unit', 'products.cost_price',
-                'product_categories.name as category',
-                DB::raw("COALESCE((SELECT SUM(sm.quantity) FROM stock_movements sm {$joins} WHERE sm.product_id = products.id AND {$docDate} < '{$dateFrom}'{$wh}), 0) as stock_begin"),
-                DB::raw("COALESCE((SELECT SUM(sm.quantity) FROM stock_movements sm {$joins} WHERE sm.product_id = products.id AND sm.quantity > 0 AND {$docDate} BETWEEN '{$dateFrom}' AND '{$dateTo}'{$wh}), 0) as stock_in"),
-                DB::raw("COALESCE((SELECT ABS(SUM(sm.quantity)) FROM stock_movements sm {$joins} WHERE sm.product_id = products.id AND sm.quantity < 0 AND {$docDate} BETWEEN '{$dateFrom}' AND '{$dateTo}'{$wh}), 0) as stock_out"),
-                DB::raw("(SELECT MAX({$docDate}) FROM stock_movements sm {$joins} WHERE sm.product_id = products.id AND sm.quantity > 0 AND {$docDate} BETWEEN '{$dateFrom}' AND '{$dateTo}'{$wh}) as last_in_date"),
-                DB::raw("(SELECT MAX({$docDate}) FROM stock_movements sm {$joins} WHERE sm.product_id = products.id AND sm.quantity < 0 AND {$docDate} BETWEEN '{$dateFrom}' AND '{$dateTo}'{$wh}) as last_out_date"),
-            ])
-            ->whereNull('products.deleted_at')
-            ->when($search, fn ($q) => $q->where(fn ($q2) => $q2->where('products.code', 'ilike', "%{$search}%")->orWhere('products.name', 'ilike', "%{$search}%")))
-            ->when($categoryId, fn ($q) => $q->where('products.category_id', $categoryId))
-            ->orderBy('products.code')
-            ->get();
+        // Dùng cùng service và cùng query logic với UI — không tự query lại
+        return (new InventoryReportService())->buildAllRows($this->filters);
     }
 
     public function headings(): array
@@ -60,18 +35,22 @@ class InventoryReportExport implements FromCollection, WithHeadings, WithMapping
 
     public function map($row): array
     {
-        $begin = (float) $row->stock_begin;
-        $in    = (float) $row->stock_in;
-        $out   = (float) $row->stock_out;
-        $end   = $begin + $in - $out;
-        $cost  = (float) $row->cost_price;
-
+        // $row đã là array từ InventoryReportService::mapRow() — map trực tiếp
         return [
-            $row->code, $row->name, $row->unit, $row->category ?? '—',
-            $begin, $begin * $cost,
-            $in, $row->last_in_date ?? '', $in * $cost,
-            $out, $row->last_out_date ?? '', $out * $cost,
-            $end, $end * $cost,
+            $row['code'],
+            $row['name'],
+            $row['unit'],
+            $row['category'],
+            $row['stock_begin'],
+            $row['value_begin'],      // SUM(sm.amount) — không tính lại bằng cost_price
+            $row['stock_in'],
+            $row['last_in_date'] ?? '',
+            $row['value_in'],
+            $row['stock_out'],
+            $row['last_out_date'] ?? '',
+            $row['value_out'],
+            $row['stock_end'],
+            $row['value_end'],
         ];
     }
 
