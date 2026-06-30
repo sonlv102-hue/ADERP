@@ -23,7 +23,6 @@ use App\Models\StockExit;
 use App\Models\StockMovement;
 use App\Models\Warehouse;
 use App\Services\AccountingService;
-use App\Services\OrderService;
 use App\Services\StockService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
@@ -38,7 +37,6 @@ class StockExitController extends Controller
 {
     public function __construct(
         private StockService $stockService,
-        private OrderService $orderService,
         private AccountingService $accounting,
     ) {}
 
@@ -733,12 +731,10 @@ class StockExitController extends Controller
     public function confirm(StockExit $stockExit): RedirectResponse
     {
         try {
-            $this->stockService->confirmExit($stockExit);
-        } catch (\RuntimeException $e) {
+            $warnings = $this->stockService->confirmExit($stockExit);
+        } catch (\Exception $e) {
             return back()->with('error', $e->getMessage());
         }
-
-        $warnings = $this->orderService->syncDelivery($stockExit);
 
         if ($warnings) {
             $warningMsg = 'Đã xác nhận xuất kho. Cảnh báo: ' . implode(' | ', $warnings);

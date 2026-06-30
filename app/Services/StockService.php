@@ -331,13 +331,15 @@ class StockService
         Cache::forget('dashboard.stats');
     }
 
-    public function confirmExit(StockExit $exit): void
+    public function confirmExit(StockExit $exit): array
     {
         if ($exit->status !== StockExitStatus::Draft) {
             throw new RuntimeException('Chỉ có thể xác nhận phiếu ở trạng thái nháp.');
         }
 
-        DB::transaction(function () use ($exit) {
+        $warnings = [];
+
+        DB::transaction(function () use ($exit, &$warnings) {
             $exit->load('items.product', 'items.serials');
 
             foreach ($exit->items as $item) {
@@ -588,6 +590,9 @@ class StockService
 
             // Hạch toán xuất kho trong cùng transaction — nếu JE fail, toàn bộ rollback
             $this->postExitJournal($exit);
+
+            // syncDelivery nằm trong transaction — nếu fail thì rollback toàn bộ (kho + JE + WIP + order)
+            $warnings = $this->orderService->syncDelivery($exit);
         });
 
         Cache::forget('dashboard.stock_overview');
@@ -603,6 +608,8 @@ class StockService
                 dispatch(new NotifyLowStockJob($item->product_id, (int) $currentStock));
             }
         }
+
+        return $warnings;
     }
 
     public function cancelExit(StockExit $exit, bool $adminForce = false): void
@@ -942,11 +949,23 @@ class StockService
                 : "Giá vốn hàng bán {$exit->code}",
         };
 
-        $journalEntry = $this->accounting->tryPost(
-            $description,
-            Carbon::parse($exit->exit_date),
-            $lines, 'stock_exit', $exit->id, 'outbound'
-        );
+        if ($isProject) {
+            // Project exits: fail-fast — thiếu TK hoặc kỳ đóng → exception → rollback toàn bộ
+            $journalEntry = $this->accounting->post(
+                $description,
+                Carbon::parse($exit->exit_date),
+                $lines,
+                'stock_exit', $exit->id,
+                true, // isAuto
+            );
+        } else {
+            // Non-project: tryPost() — non-blocking, có thể retry qua AccountingPostingJob
+            $journalEntry = $this->accounting->tryPost(
+                $description,
+                Carbon::parse($exit->exit_date),
+                $lines, 'stock_exit', $exit->id, 'outbound'
+            );
+        }
 
         // Tạo WIP entry nếu xuất cho dự án
         if ($isProject && $journalEntry) {
