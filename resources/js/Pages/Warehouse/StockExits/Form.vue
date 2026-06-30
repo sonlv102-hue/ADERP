@@ -467,11 +467,27 @@
           </p>
         </div>
 
+        <!-- AVCO sync warning -->
+        <div v-if="hasFallbackItems"
+             class="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <svg class="mt-0.5 h-5 w-5 shrink-0 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+              d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+          </svg>
+          <div>
+            <p class="text-sm font-semibold text-amber-800">Cần đồng bộ tồn kho/AVCO trước khi xuất</p>
+            <p class="mt-0.5 text-xs text-amber-700">
+              Một số sản phẩm có tồn kho thực tế nhưng chưa có bản ghi AVCO tại kho này.
+              Liên hệ kế toán chạy lệnh <code class="font-mono">inventory:reconcile-balances</code> để khởi tạo AVCO, sau đó tạo phiếu xuất.
+            </p>
+          </div>
+        </div>
+
         <!-- Action bar -->
         <div class="flex items-center gap-3 pb-2">
           <button
             type="submit"
-            :disabled="form.processing"
+            :disabled="form.processing || hasFallbackItems"
             class="inline-flex items-center gap-2 rounded-xl bg-primary-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             <svg v-if="form.processing" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -617,6 +633,11 @@ const selectedOrderItems = computed(() => selectedOrder.value?.items ?? []);
 
 const hasOrderContract = computed(() =>
   !form.order_id || (selectedOrder.value?.has_contract ?? true)
+);
+
+// Items được prefill từ movement fallback (AVCO chưa init tại kho này)
+const hasFallbackItems = computed(() =>
+  form.items.some(i => i._stockSource === 'movement_fallback')
 );
 
 // POs duy nhất có sẵn trong các lô dự án (dùng để hiển thị bộ lọc)
