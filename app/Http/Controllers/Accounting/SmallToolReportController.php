@@ -5,7 +5,6 @@ namespace App\Http\Controllers\Accounting;
 use App\Enums\SmallToolStatus;
 use App\Http\Controllers\Controller;
 use App\Models\SmallTool;
-use App\Models\SmallToolAllocation;
 use App\Models\SmallToolCategory;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -60,34 +59,43 @@ class SmallToolReportController extends Controller
         ]);
     }
 
-    // Bảng phân bổ CCDC
+    // Bảng phân bổ CCDC — lịch phân bổ từng CCDC qua các kỳ
     public function allocationSchedule(Request $request): Response
     {
         $this->authorize('reports.view');
 
-        $period = $request->period ?? now()->format('Y-m');
+        $toolFilter = $request->input('tool');
 
-        $allocations = SmallToolAllocation::with('tool')
-            ->where('period', $period)
-            ->orderBy('small_tool_id')
+        $schedule = SmallTool::with(['allocations' => fn ($q) => $q->orderBy('period')])
+            ->whereHas('allocations')
+            ->when($toolFilter, fn ($q) => $q->where(function ($sq) use ($toolFilter) {
+                $sq->where('code', 'ilike', "%{$toolFilter}%")
+                   ->orWhere('name', 'ilike', "%{$toolFilter}%");
+            }))
+            ->orderBy('code')
             ->get()
-            ->map(fn ($a) => [
-                'tool_code'          => $a->tool->code,
-                'tool_name'          => $a->tool->name,
-                'period'             => $a->period,
-                'amount'             => (float) $a->amount,
-                'accumulated_before' => (float) $a->accumulated_before,
-                'remaining_after'    => (float) $a->remaining_after,
-                'debit_account'      => $a->debit_account,
-                'credit_account'     => $a->credit_account,
-                'status'             => $a->status,
-                'posted_at'          => $a->posted_at?->format('Y-m-d'),
+            ->map(fn (SmallTool $t) => [
+                'id'                   => $t->id,
+                'code'                 => $t->code,
+                'name'                 => $t->name,
+                'department'           => $t->department,
+                'original_cost'        => (float) $t->original_cost,
+                'expense_account_code' => $t->expense_account_code,
+                'allocations'          => $t->allocations->map(fn ($a) => [
+                    'id'               => $a->id,
+                    'period'           => $a->period,
+                    'amount'           => (float) $a->amount,
+                    'accumulated'      => (float) $a->accumulated_before + (float) $a->amount,
+                    'remaining'        => (float) $a->remaining_after,
+                    'status'           => $a->status,
+                    'journal_entry_id' => $a->journal_entry_id,
+                ])->values(),
             ]);
 
         return Inertia::render('Accounting/SmallTools/Reports/AllocationSchedule', [
-            'period'      => $period,
-            'allocations' => $allocations,
-            'total'       => $allocations->sum('amount'),
+            'schedule'      => $schedule->values(),
+            'currentPeriod' => now()->format('Y-m'),
+            'filters'       => ['tool' => $toolFilter],
         ]);
     }
 
