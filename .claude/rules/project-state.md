@@ -49,11 +49,12 @@ Dự án đang ở giai đoạn **vận hành và cải tiến**. Các module co
 | Admin sửa ngày xuất kho (StockExit confirmed) — StockExitDateService | Hoàn thành (2026-07-01) |
 | B02-DNN Income Statement lọc theo Tháng/Quý/Năm/Tùy chọn + so sánh kỳ | Hoàn thành (2026-07-01) |
 | B03-DNN Cash Flow Statement lọc theo Tháng/Quý/Năm/Tùy chọn + so sánh kỳ | Hoàn thành (2026-07-01) |
+| HRM Employee Export/Import (Excel/PDF/Print + import preview/confirm) | Hoàn thành (2026-07-01) |
 
 ## Migration sequence hiện tại
 
-- **Last 900xxx:** `2026_06_22_900210` (cash_flow_code trên cash_vouchers)
-- **Next:** `2026_06_23_900211`
+- **Last 900xxx:** `2026_07_01_900215` (thêm 8 cột hồ sơ nhân viên: CCCD, hợp đồng, BHXH, ngân hàng)
+- **Next:** `2026_07_01_900216`
 - Last Phase E / bank: `2026_06_05_100006` — Next (cùng chủ đề bank): `100007`
 
 ## TK hệ thống (accounting_settings)

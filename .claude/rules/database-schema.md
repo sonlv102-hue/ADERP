@@ -101,7 +101,7 @@ Complete schema for 100+ tables, grouped by module. Cập nhật: 2026-06-23.
 ## HR / Payroll
 | Table | Purpose | Key columns |
 |---|---|---|
-| employees | Employee master | id, code, name, email, phone, department, position, allowance_breakdown (JSON), status (active/inactive/terminated) |
+| employees | Employee master | id, code, name, email, phone, department (string, no master table), position (string), status (active/probation/resigned/terminated), employment_type (full_time/part_time/contract/seasonal), national_id, national_id_issue_date/place, contract_start_date/end_date, social_insurance_no, bank_account_no, bank_name, pit_tax_code, base_salary, allowance + allowance_responsibility/lunch/phone/transport |
 | attendance_sheets | Monthly attendance batch | id, code (CC-), period (YYYY-MM), status (draft/locked), notes, created_by |
 | attendance_records | Per-employee per-day record | id, attendance_sheet_id, employee_id, work_date, status (present/absent/half/leave/holiday), hours_worked |
 | payrolls | Monthly payroll batch | id, period (YYYY-MM), status (draft/confirmed), is_locked, total_adjustment, created_by |

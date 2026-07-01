@@ -3,13 +3,18 @@
     <div class="space-y-5">
       <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-gray-900">Cán bộ công nhân viên</h1>
-        <Link :href="route('admin.employees.create')"
-          class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-          </svg>
-          Thêm cán bộ
-        </Link>
+        <div class="flex gap-2 flex-wrap">
+          <ExportExcelButton :endpoint="route('admin.employees.export.excel')" :filters="exportFilters" label="Xuất Excel" />
+          <a :href="route('admin.employees.import.template')" class="erp-btn-secondary">Tải mẫu Excel</a>
+          <button @click="showImportModal = true" class="erp-btn-secondary">Upload Excel</button>
+          <Link :href="route('admin.employees.create')"
+            class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Thêm cán bộ
+          </Link>
+        </div>
       </div>
 
       <!-- Filters -->
@@ -49,11 +54,15 @@
               <td class="px-5 py-3">
                 <StatusBadge :color="e.status_color">{{ e.status_label }}</StatusBadge>
               </td>
-              <td class="px-5 py-3 text-right flex items-center justify-end gap-3">
+              <td class="px-5 py-3 text-right whitespace-nowrap">
                 <Link :href="route('admin.employees.show', e.id)"
-                  class="text-primary-600 hover:text-primary-800 font-medium">Xem</Link>
+                  class="text-primary-600 hover:text-primary-800 text-xs font-medium mr-3">Xem</Link>
                 <Link :href="route('admin.employees.edit', e.id)"
-                  class="text-gray-500 hover:text-gray-700 font-medium">Sửa</Link>
+                  class="text-gray-500 hover:text-gray-700 text-xs font-medium mr-3">Sửa</Link>
+                <a :href="route('admin.employees.export.pdf', e.id)" target="_blank"
+                  class="text-gray-500 hover:text-gray-700 text-xs font-medium mr-3">Xuất PDF</a>
+                <a :href="route('admin.employees.print', e.id)" target="_blank"
+                  class="text-gray-500 hover:text-gray-700 text-xs font-medium">In hồ sơ</a>
               </td>
             </tr>
             <tr v-if="!employees.data?.length">
@@ -65,15 +74,19 @@
 
       <Pagination :links="employees.links" :meta="employees.meta" />
     </div>
+
+    <EmployeeImportModal v-if="showImportModal" @close="showImportModal = false" @imported="showImportModal = false" />
   </AppLayout>
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
+import ExportExcelButton from '@/Components/Shared/ExportExcelButton.vue';
+import EmployeeImportModal from './EmployeeImportModal.vue';
 
 const props = defineProps({
   employees: Object,
@@ -83,6 +96,12 @@ const props = defineProps({
 
 const search = ref(props.filters?.q ?? '');
 const statusFilter = ref(props.filters?.status ?? '');
+const showImportModal = ref(false);
+
+const exportFilters = computed(() => ({
+  q: search.value || undefined,
+  status: statusFilter.value || undefined,
+}));
 
 let timer;
 const doSearch = () => {

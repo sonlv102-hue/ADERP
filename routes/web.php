@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\Admin\EmployeeController;
+use App\Http\Controllers\Admin\EmployeeImportController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SettingsController;
@@ -144,7 +145,14 @@ Route::middleware('auth')->group(function () {
         Route::get('roles', [RoleController::class, 'index'])->name('roles.index');
         Route::put('roles/{role}', [RoleController::class, 'update'])->name('roles.update');
         Route::get('activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
+        Route::get('employees/export/excel', [EmployeeController::class, 'exportExcel'])->name('employees.export.excel');
+        Route::get('employees/import/template', [EmployeeImportController::class, 'template'])->name('employees.import.template');
+        Route::post('employees/import/preview', [EmployeeImportController::class, 'preview'])->name('employees.import.preview');
+        Route::post('employees/import/confirm', [EmployeeImportController::class, 'confirm'])->name('employees.import.confirm');
+        Route::get('employees/import/errors/{errorFileId}', [EmployeeImportController::class, 'downloadErrors'])->name('employees.import.errors');
         Route::resource('employees', EmployeeController::class);
+        Route::get('employees/{employee}/export/pdf', [EmployeeController::class, 'exportPdf'])->name('employees.export.pdf');
+        Route::get('employees/{employee}/print', [EmployeeController::class, 'printProfile'])->name('employees.print');
 
         // Chấm công
         Route::get('attendance', [AttendanceController::class, 'index'])->name('attendance.index');

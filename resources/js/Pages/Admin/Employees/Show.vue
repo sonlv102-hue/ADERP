@@ -17,7 +17,9 @@
             <p class="text-sm text-gray-500 font-mono mt-0.5">{{ employee.code }}</p>
           </div>
         </div>
-        <div class="flex gap-2">
+        <div class="flex gap-2 flex-wrap">
+          <a :href="route('admin.employees.export.pdf', employee.id)" target="_blank" class="erp-btn-secondary">Xuất PDF</a>
+          <a :href="route('admin.employees.print', employee.id)" target="_blank" class="erp-btn-secondary">In hồ sơ</a>
           <Link :href="route('admin.employees.edit', employee.id)"
             class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50">
             Sửa
@@ -54,6 +56,9 @@
           <span>{{ employee.created_at }}</span>
         </div>
       </div>
+
+      <FileAttachments :attachments="attachments ?? []"
+        :upload-url="route('attachments.store', { type: 'employee', id: employee.id })" />
     </div>
   </AppLayout>
 </template>
@@ -62,8 +67,9 @@
 import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
+import FileAttachments from '@/Components/Shared/FileAttachments.vue';
 
-const props = defineProps({ employee: Object });
+const props = defineProps({ employee: Object, attachments: Array });
 
 const deleteEmployee = () => {
   if (confirm(`Xóa cán bộ ${props.employee.name}? Thao tác không thể hoàn tác.`)) {

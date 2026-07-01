@@ -6,11 +6,13 @@ use App\Enums\EmployeeStatus;
 use App\Enums\EmploymentType;
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
+use App\Services\EmployeeExportService;
 use App\Services\PayrollService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
 
 class EmployeeController extends Controller
 {
@@ -20,13 +22,7 @@ class EmployeeController extends Controller
         $status = $request->input('status');
 
         $employees = Employee::with('creator')
-            ->when($q, fn ($query) => $query->where(function ($sq) use ($q) {
-                $sq->where('name', 'ilike', "%{$q}%")
-                  ->orWhere('code', 'ilike', "%{$q}%")
-                  ->orWhere('department', 'ilike', "%{$q}%")
-                  ->orWhere('position', 'ilike', "%{$q}%");
-            }))
-            ->when($status, fn ($query) => $query->where('status', $status))
+            ->filter(['q' => $q, 'status' => $status])
             ->orderBy('name')
             ->paginate(20)
             ->withQueryString()
@@ -99,9 +95,33 @@ class EmployeeController extends Controller
 
     public function show(Employee $employee): Response
     {
+        $employee->loadMissing('attachments');
+
         return Inertia::render('Admin/Employees/Show', [
-            'employee' => $this->employeeDTO($employee, true),
+            'employee'    => $this->employeeDTO($employee, true),
+            'attachments' => $employee->attachments->map(fn ($a) => [
+                'id' => $a->id, 'file_name' => $a->file_name, 'file_path' => $a->file_path,
+                'file_size' => $a->file_size, 'created_at' => $a->created_at->format('d/m/Y'),
+            ]),
         ]);
+    }
+
+    public function exportExcel(Request $request, EmployeeExportService $service)
+    {
+        $filters = $request->only(['q', 'status']);
+        $export  = $service->exportListExcel($filters);
+
+        return Excel::download($export, $service->listExcelFilename());
+    }
+
+    public function exportPdf(Employee $employee, EmployeeExportService $service)
+    {
+        return $service->exportProfilePdf($employee)->download("Ho-so-{$employee->code}.pdf");
+    }
+
+    public function printProfile(Employee $employee, EmployeeExportService $service)
+    {
+        return $service->renderPrintProfile($employee);
     }
 
     private function employeeDTO(Employee $employee, bool $forShow = false): array
