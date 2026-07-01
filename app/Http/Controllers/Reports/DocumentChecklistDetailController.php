@@ -1,0 +1,349 @@
+<?php
+
+namespace App\Http\Controllers\Reports;
+
+use App\Exports\Reports\VoucherListingDetailExport;
+use App\Models\Setting;
+use App\Http\Controllers\Controller;
+use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Inertia\Inertia;
+use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+
+/**
+ * Bảng kê chứng từ chi tiết — như DocumentChecklistController nhưng mở rộng:
+ * nhiều TK cách nhau bằng dấu phẩy, object_type gồm cả project, thêm cột
+ * account_name/project_name/created_by_name/posted_at/status.
+ *
+ * "Loại chứng từ" dùng je.reference_type (không dùng je.source_type — cột này
+ * trong DB chỉ có 5 giá trị rời rạc, không đủ phân loại toàn bộ chứng từ).
+ */
+class DocumentChecklistDetailController extends Controller
+{
+    private const SOURCE_LABELS = [
+        'invoice'              => 'Hóa đơn bán hàng',
+        'purchase_invoice'     => 'Hóa đơn đầu vào',
+        'cash_voucher'         => 'Phiếu thu/chi',
+        'stock_entry'          => 'Nhập kho',
+        'stock_exit'           => 'Xuất kho',
+        'payroll'              => 'Lương',
+        'project_expense'      => 'Chi phí dự án',
+        'ar_ap_opening_balance'=> 'Số dư đầu kỳ',
+        'opening_balance'      => 'Số dư đầu kỳ',
+    ];
+
+    private const SOURCE_TYPES = [
+        'invoice', 'purchase_invoice', 'cash_voucher',
+        'stock_entry', 'stock_exit', 'payroll',
+        'project_expense', 'manual',
+    ];
+
+    private const SOURCE_ROUTES = [
+        'invoice'          => 'sales.invoices.show',
+        'purchase_invoice' => 'purchasing.purchase-invoices.show',
+        'cash_voucher'     => 'accounting.cash-vouchers.show',
+        'stock_entry'      => 'warehouse.stock-entries.show',
+        'stock_exit'       => 'warehouse.stock-exits.show',
+        'payroll'          => 'hr.payrolls.show',
+    ];
+
+    public function index(Request $request): Response
+    {
+        $filters = $this->normalizeFilters($request);
+        $perPage = 100;
+        $page    = max(1, (int) $request->input('page', 1));
+
+        [$rows, $totals, $isBalanced] = $this->buildReport($filters);
+
+        $total = count($rows);
+        $paged = array_slice($rows, ($page - 1) * $perPage, $perPage);
+
+        return Inertia::render('Reports/DocumentChecklistDetail/Index', [
+            'rows'        => array_values($paged),
+            'totals'      => $totals,
+            'isBalanced'  => $isBalanced,
+            'total'       => $total,
+            'currentPage' => $page,
+            'lastPage'    => (int) ceil(max(1, $total) / $perPage),
+            'filters'     => $filters,
+            'sourceTypes' => self::SOURCE_TYPES,
+        ]);
+    }
+
+    public function export(Request $request): BinaryFileResponse
+    {
+        $filters = $this->normalizeFilters($request);
+        $from    = str_replace('-', '', $filters['date_from']);
+        $to      = str_replace('-', '', $filters['date_to']);
+        return Excel::download(new VoucherListingDetailExport($filters), "bang-ke-chung-tu-chi-tiet-{$from}-{$to}.xlsx");
+    }
+
+    public function exportPdf(Request $request)
+    {
+        $filters = $this->normalizeFilters($request);
+        [$rows, $totals, $isBalanced] = $this->buildReport($filters);
+        $company = Setting::getGroup('company');
+        $from    = str_replace('-', '', $filters['date_from']);
+        return Pdf::loadView('pdf.voucher-listing-detail', compact('rows', 'totals', 'isBalanced', 'filters', 'company'))
+            ->setPaper('a4', 'landscape')
+            ->download("bang-ke-chung-tu-chi-tiet-{$from}.pdf");
+    }
+
+    // ── Core builder ─────────────────────────────────────────────────────
+
+    public function buildReport(array $filters): array
+    {
+        $rows        = $this->getRows($filters);
+        $totalDebit  = array_sum(array_column($rows, 'debit'));
+        $totalCredit = array_sum(array_column($rows, 'credit'));
+        $totals      = ['debit' => $totalDebit, 'credit' => $totalCredit];
+        $isBalanced  = abs($totalDebit - $totalCredit) < 1;
+        return [$rows, $totals, $isBalanced];
+    }
+
+    public function getRows(array $filters): array
+    {
+        // ── 1. Fetch matching journal_entries ────────────────────────────
+        $q = DB::table('journal_entries as je')
+            ->leftJoin('users as u', 'u.id', '=', 'je.created_by')
+            ->whereIn('je.status', $this->allowedStatuses($filters))
+            ->whereBetween('je.entry_date', [$filters['date_from'], $filters['date_to']]);
+
+        if ($refNo = $filters['ref_no'] ?? null) {
+            $q->where('je.code', 'ilike', '%' . $refNo . '%');
+        }
+
+        if ($src = $filters['source_type'] ?? null) {
+            if ($src === 'manual') {
+                $q->whereNull('je.reference_type');
+            } else {
+                $q->where('je.reference_type', $src);
+            }
+        }
+
+        $entries = $q->orderBy('je.entry_date')->orderBy('je.id')
+            ->select('je.id', 'je.code', 'je.entry_date', 'je.description',
+                     'je.reference_type', 'je.reference_id', 'je.status', 'je.posted_at',
+                     'u.name as created_by_name')
+            ->get();
+
+        if ($entries->isEmpty()) {
+            return [];
+        }
+
+        $entryIds = $entries->pluck('id');
+
+        // ── 2. Fetch all lines (one query, no N+1) ───────────────────────
+        $lineQ = DB::table('journal_entry_lines as jel')
+            ->leftJoin('account_codes as coa', 'coa.code', '=', 'jel.account_code')
+            ->leftJoin('projects as prj', 'prj.id', '=', 'jel.project_id')
+            ->whereIn('jel.journal_entry_id', $entryIds);
+
+        $accountCodes = $this->splitCsv($filters['account_code'] ?? null);
+        if ($accountCodes) {
+            $lineQ->whereIn('jel.account_code', $accountCodes);
+        }
+
+        $allLines = $lineQ
+            ->orderBy('jel.journal_entry_id')
+            ->orderBy('jel.sort_order')
+            ->select('jel.journal_entry_id', 'jel.account_code', 'coa.name as account_name',
+                     'jel.description as line_desc', 'jel.debit', 'jel.credit',
+                     'jel.partner_type', 'jel.partner_id', 'jel.project_id',
+                     'prj.code as project_code', 'prj.name as project_name')
+            ->get()
+            ->groupBy('journal_entry_id');
+
+        // ── 3. Batch resolve partner names ───────────────────────────────
+        $partnerNames = $this->resolvePartnerNames($allLines->flatten());
+
+        // ── 4. Build per-line rows ────────────────────────────────────────
+        $rows          = [];
+        $entryMap      = $entries->keyBy('id');
+        $counterFilter = $filters['counter_account'] ?? null;
+        $objectType    = $filters['object_type'] ?? null;
+
+        foreach ($entryIds as $jeId) {
+            $e     = $entryMap[$jeId] ?? null;
+            $lines = $allLines->get($jeId, collect());
+            if (!$e || $lines->isEmpty()) {
+                continue;
+            }
+
+            // NOTE: this must be computed from ALL lines of the entry (before the
+            // account_code filter narrows $allLines), otherwise counter-account
+            // resolution would be wrong when filtering by account. Since $lines
+            // here is already the (possibly account-filtered) set, we re-derive
+            // debit/credit codes from the full entry via a second lookup only
+            // when an account filter is active.
+            $fullLines   = $accountCodes ? $this->fullLinesFor($jeId) : $lines;
+            $debitCodes  = $fullLines->where('debit',  '>', 0)->pluck('account_code')->unique()->values();
+            $creditCodes = $fullLines->where('credit', '>', 0)->pluck('account_code')->unique()->values();
+
+            $sourceLabel = self::SOURCE_LABELS[$e->reference_type ?? ''] ?? 'Bút toán thủ công';
+            $sourceUrl   = $this->sourceUrl($e->reference_type, $e->reference_id ? (int) $e->reference_id : null);
+            $objectName  = $this->resolveObjectName($e, $fullLines, $partnerNames);
+
+            foreach ($lines as $line) {
+                $isDebit = (float) $line->debit > 0;
+                $counter = $isDebit
+                    ? ($creditCodes->count() === 1 ? $creditCodes->first() : 'Nhiều TK')
+                    : ($debitCodes->count()  === 1 ? $debitCodes->first()  : 'Nhiều TK');
+
+                if ($counterFilter && $counter !== $counterFilter) {
+                    continue;
+                }
+
+                if ($objectType && !$this->matchesObjectType($line, $objectType)) {
+                    continue;
+                }
+
+                $rows[] = [
+                    'journal_entry_id' => (int) $e->id,
+                    'je_code'          => $e->code,
+                    'date'             => $e->entry_date,
+                    'object_name'      => $objectName,
+                    'description'      => $line->line_desc ?: $e->description,
+                    'account_code'     => $line->account_code,
+                    'account_name'     => $line->account_name ?? '',
+                    'counter_account'  => $counter,
+                    'debit'            => (float) $line->debit,
+                    'credit'           => (float) $line->credit,
+                    'source_label'     => $sourceLabel,
+                    'source_url'       => $sourceUrl,
+                    'partner_type'     => $line->partner_type,
+                    'partner_id'       => $line->partner_id ? (int) $line->partner_id : null,
+                    'project_name'     => $line->project_name ? "{$line->project_code} - {$line->project_name}" : '',
+                    'status'           => $e->status,
+                    'created_by_name'  => $e->created_by_name ?? '',
+                    'posted_at'        => $e->posted_at,
+                ];
+            }
+        }
+
+        return $rows;
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+
+    private array $fullLinesCache = [];
+
+    private function fullLinesFor(int $journalEntryId)
+    {
+        if (!isset($this->fullLinesCache[$journalEntryId])) {
+            $this->fullLinesCache[$journalEntryId] = DB::table('journal_entry_lines')
+                ->where('journal_entry_id', $journalEntryId)
+                ->select('account_code', 'debit', 'credit', 'partner_type', 'partner_id')
+                ->get();
+        }
+        return $this->fullLinesCache[$journalEntryId];
+    }
+
+    private function matchesObjectType(object $line, string $objectType): bool
+    {
+        if ($objectType === 'project') {
+            return !empty($line->project_id);
+        }
+        if (in_array($objectType, ['customer', 'supplier', 'employee'], true)) {
+            return $line->partner_type === $objectType;
+        }
+        // 'other': không phải KH/NCC/NV và không gắn dự án
+        return empty($line->partner_type) && empty($line->project_id);
+    }
+
+    private function splitCsv(?string $value): array
+    {
+        if (!$value) {
+            return [];
+        }
+        return array_values(array_filter(array_map('trim', explode(',', $value))));
+    }
+
+    private function normalizeFilters(Request $request): array
+    {
+        $year = now()->year;
+        return [
+            'date_from'       => $request->input('date_from', "{$year}-01-01"),
+            'date_to'         => $request->input('date_to',   "{$year}-12-31"),
+            'ref_no'          => $request->input('ref_no'),
+            'source_type'     => $request->input('source_type'),
+            'account_code'    => $request->input('account_code'),
+            'counter_account' => $request->input('counter_account'),
+            'object_type'     => $request->input('object_type'),
+            'include_reversed'=> $request->boolean('include_reversed'),
+        ];
+    }
+
+    private function allowedStatuses(array $filters): array
+    {
+        $statuses = ['posted'];
+        if ($filters['include_reversed'] ?? false) {
+            $statuses[] = 'reversed';
+        }
+        return $statuses;
+    }
+
+    private function sourceUrl(?string $refType, ?int $refId): ?string
+    {
+        if (!$refType || !$refId || !isset(self::SOURCE_ROUTES[$refType])) {
+            return null;
+        }
+        try {
+            return route(self::SOURCE_ROUTES[$refType], $refId);
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function resolvePartnerNames(\Illuminate\Support\Collection $lines): array
+    {
+        $supplierIds = $lines->where('partner_type', 'supplier')->pluck('partner_id')->filter()->unique();
+        $customerIds = $lines->where('partner_type', 'customer')->pluck('partner_id')->filter()->unique();
+        $employeeIds = $lines->where('partner_type', 'employee')->pluck('partner_id')->filter()->unique();
+
+        return [
+            'supplier' => $supplierIds->isNotEmpty()
+                ? DB::table('suppliers')->whereIn('id', $supplierIds)->pluck('name', 'id')->toArray() : [],
+            'customer' => $customerIds->isNotEmpty()
+                ? DB::table('customers')->whereIn('id', $customerIds)->pluck('name', 'id')->toArray() : [],
+            'employee' => $employeeIds->isNotEmpty()
+                ? DB::table('employees')->whereIn('id', $employeeIds)->pluck('name', 'id')->toArray() : [],
+        ];
+    }
+
+    private function resolveObjectName(object $entry, \Illuminate\Support\Collection $lines, array $partnerNames): string
+    {
+        foreach ($lines as $line) {
+            if (($line->partner_type ?? null) && ($line->partner_id ?? null)) {
+                $name = $partnerNames[$line->partner_type][(int) $line->partner_id] ?? null;
+                if ($name) {
+                    return $name;
+                }
+            }
+        }
+
+        if ($entry->reference_type && $entry->reference_id) {
+            return $this->lookupRefEntityName($entry->reference_type, (int) $entry->reference_id);
+        }
+
+        return '';
+    }
+
+    private function lookupRefEntityName(string $refType, int $refId): string
+    {
+        return match ($refType) {
+            'invoice'          => (string) (DB::table('invoices as i')
+                ->join('customers as c', 'c.id', '=', 'i.customer_id')
+                ->where('i.id', $refId)->value('c.name') ?? ''),
+            'purchase_invoice' => (string) (DB::table('purchase_invoices as pi')
+                ->join('suppliers as s', 's.id', '=', 'pi.supplier_id')
+                ->where('pi.id', $refId)->value('s.name') ?? ''),
+            'cash_voucher'     => (string) (DB::table('cash_vouchers')
+                ->where('id', $refId)->value('counterparty') ?? ''),
+            default            => '',
+        };
+    }
+}

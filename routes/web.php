@@ -93,10 +93,12 @@ use App\Http\Controllers\Documents\DocumentTypeController;
 use App\Http\Controllers\Reports\BalanceSheetController;
 use App\Http\Controllers\Reports\TrialBalanceController;
 use App\Http\Controllers\Reports\GeneralJournalController;
+use App\Http\Controllers\Reports\GeneralJournalDetailController;
 use App\Http\Controllers\Reports\AccountLedgerController;
 use App\Http\Controllers\Reports\ExpenseDetailController;
 use App\Http\Controllers\Reports\FixedAssetReportController;
 use App\Http\Controllers\Reports\DocumentChecklistController;
+use App\Http\Controllers\Reports\DocumentChecklistDetailController;
 use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\SystemHealthController;
@@ -754,6 +756,11 @@ Route::middleware('auth')->group(function () {
         Route::get('document-checklist',        [DocumentChecklistController::class,'index'])->name('document_checklist');
         Route::get('document-checklist/export', [DocumentChecklistController::class,'export'])->name('document_checklist.export');
         Route::get('document-checklist/pdf',    [DocumentChecklistController::class,'exportPdf'])->name('document_checklist.pdf');
+        Route::get('general-journal-detail',        [GeneralJournalDetailController::class, 'index'])->name('general_journal_detail');
+        Route::get('general-journal-detail/export', [GeneralJournalDetailController::class, 'export'])->name('general_journal_detail.export');
+        Route::get('document-checklist-detail',        [DocumentChecklistDetailController::class,'index'])->name('document_checklist_detail');
+        Route::get('document-checklist-detail/export', [DocumentChecklistDetailController::class,'export'])->name('document_checklist_detail.export');
+        Route::get('document-checklist-detail/pdf',    [DocumentChecklistDetailController::class,'exportPdf'])->name('document_checklist_detail.pdf');
     });
 
     // Documents - quản lý hồ sơ chứng từ

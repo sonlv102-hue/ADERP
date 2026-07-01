@@ -157,8 +157,10 @@
             <NavItem v-if="can('accounting.manage')" :href="route('accounting.period-close.index')" icon="check-circle" sub>Kết chuyển cuối kỳ</NavItem>
             <NavItem v-if="can('accounting.manage')" :href="route('accounting.journal-audit.index')" icon="magnifying-glass" sub>Kiểm toán bút toán</NavItem>
             <NavItem :href="route('reports.general_journal')" icon="book-open" sub>Sổ nhật ký chung</NavItem>
+            <NavItem :href="route('reports.general_journal_detail')" icon="book-open" sub>Sổ nhật ký chung chi tiết</NavItem>
             <NavItem :href="route('reports.account_ledger')" icon="document-text" sub>Sổ chi tiết TK</NavItem>
             <NavItem :href="route('reports.document_checklist')" icon="clipboard-check" sub>Bảng kê chứng từ</NavItem>
+            <NavItem :href="route('reports.document_checklist_detail')" icon="clipboard-check" sub>Bảng kê chứng từ chi tiết</NavItem>
             <NavItem v-if="can('documents.view')" :href="route('documents.documents.index')" icon="document-text" sub>Tất cả chứng từ</NavItem>
           </NavGroup>
 
