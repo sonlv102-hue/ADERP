@@ -60,10 +60,21 @@ tr.summary-row td { background: #F0FDF4; font-weight: bold; }
         </div>
     </div>
 
+    @php
+        $period          = $report['period'] ?? null;
+        $comparison      = $report['comparison_period'] ?? null;
+        $periodLabel     = $period['label'] ?? ('Năm ' . $report['year']);
+        $comparisonLabel = $comparison['label'] ?? 'Kỳ so sánh';
+        $fmtDate         = fn($d) => $d ? \Carbon\Carbon::parse($d)->format('d/m/Y') : '';
+    @endphp
+
     {{-- Title --}}
     <div class="title-block">
         <div class="title-main">Báo cáo kết quả hoạt động kinh doanh</div>
-        <div class="title-sub">Năm {{ $report['year'] }}</div>
+        <div class="title-sub">{{ $periodLabel }}</div>
+        @if($period)
+            <div class="title-sub">Kỳ báo cáo: Từ ngày {{ $fmtDate($period['date_from']) }} đến ngày {{ $fmtDate($period['date_to']) }}</div>
+        @endif
     </div>
 
     @php
@@ -77,7 +88,7 @@ tr.summary-row td { background: #F0FDF4; font-weight: bold; }
         $rows = collect($report['rows'])->keyBy('code');
     @endphp
 
-    <div class="unit-label">Đơn vị tính: {{ $unitLbl }}</div>
+    <div class="unit-label">Đơn vị tính: {{ $unitLbl }} · Nguồn số liệu: Bút toán GL đã posted</div>
 
     {{-- Table --}}
     <table>
@@ -86,8 +97,8 @@ tr.summary-row td { background: #F0FDF4; font-weight: bold; }
                 <th style="width:42%">CHỈ TIÊU</th>
                 <th style="width:7%">Mã số</th>
                 <th style="width:9%">Thuyết minh</th>
-                <th style="width:21%">Năm nay</th>
-                <th style="width:21%">Năm trước</th>
+                <th style="width:21%">{{ $periodLabel }}</th>
+                <th style="width:21%">{{ $comparisonLabel }}</th>
             </tr>
         </thead>
         <tbody>

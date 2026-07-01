@@ -24,24 +24,75 @@
       </div>
 
       <!-- Filters -->
-      <div class="flex items-center gap-3 flex-wrap bg-white rounded-xl border border-gray-200 px-4 py-3">
-        <div class="flex items-center gap-2">
-          <label class="text-sm font-medium text-gray-600">Năm:</label>
-          <select v-model="year" @change="applyFilters" class="erp-input text-sm w-24">
-            <option v-for="y in availableYears" :key="y" :value="y">{{ y }}</option>
-          </select>
-        </div>
-        <div class="flex items-center gap-2">
-          <label class="text-sm font-medium text-gray-600">Đơn vị tính:</label>
-          <select v-model="unit" @change="applyFilters" class="erp-input text-sm w-36">
-            <option value="dong">Đồng</option>
-            <option value="nghin_dong">Nghìn đồng</option>
-            <option value="trieu_dong">Triệu đồng</option>
-          </select>
-        </div>
-        <div class="flex items-center gap-2 ml-2">
-          <input id="hideEmpty" v-model="hideEmpty" type="checkbox" class="rounded border-gray-300 text-primary-600">
-          <label for="hideEmpty" class="text-sm text-gray-600">Ẩn dòng không có số liệu</label>
+      <div class="flex flex-col gap-3 bg-white rounded-xl border border-gray-200 px-4 py-3">
+        <div class="flex items-center gap-3 flex-wrap">
+          <div class="flex items-center gap-2">
+            <label class="text-sm font-medium text-gray-600">Kỳ báo cáo:</label>
+            <select v-model="periodType" @change="applyFilters" class="erp-input text-sm w-32">
+              <option value="month">Tháng</option>
+              <option value="quarter">Quý</option>
+              <option value="year">Năm</option>
+              <option value="custom">Tùy chọn</option>
+            </select>
+          </div>
+
+          <div v-if="periodType !== 'custom'" class="flex items-center gap-2">
+            <label class="text-sm font-medium text-gray-600">Năm:</label>
+            <select v-model="year" @change="applyFilters" class="erp-input text-sm w-24">
+              <option v-for="y in availableYears" :key="y" :value="y">{{ y }}</option>
+            </select>
+          </div>
+
+          <div v-if="periodType === 'month'" class="flex items-center gap-2">
+            <label class="text-sm font-medium text-gray-600">Tháng:</label>
+            <select v-model="month" @change="applyFilters" class="erp-input text-sm w-20">
+              <option v-for="m in 12" :key="m" :value="m">{{ String(m).padStart(2, '0') }}</option>
+            </select>
+          </div>
+
+          <div v-if="periodType === 'quarter'" class="flex items-center gap-2">
+            <label class="text-sm font-medium text-gray-600">Quý:</label>
+            <select v-model="quarter" @change="applyFilters" class="erp-input text-sm w-24">
+              <option :value="1">I</option>
+              <option :value="2">II</option>
+              <option :value="3">III</option>
+              <option :value="4">IV</option>
+            </select>
+          </div>
+
+          <template v-if="periodType === 'custom'">
+            <div class="flex items-center gap-2">
+              <label class="text-sm font-medium text-gray-600">Từ ngày:</label>
+              <input type="date" v-model="dateFrom" @change="applyFilters" class="erp-input text-sm">
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="text-sm font-medium text-gray-600">Đến ngày:</label>
+              <input type="date" v-model="dateTo" @change="applyFilters" class="erp-input text-sm">
+            </div>
+          </template>
+
+          <div class="flex items-center gap-2">
+            <label class="text-sm font-medium text-gray-600">So sánh:</label>
+            <select v-model="compareType" @change="applyFilters" class="erp-input text-sm w-44">
+              <option value="none">Không</option>
+              <option value="same_period_last_year">Cùng kỳ năm trước</option>
+              <option value="previous_period">Kỳ liền trước</option>
+            </select>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <label class="text-sm font-medium text-gray-600">Đơn vị tính:</label>
+            <select v-model="unit" @change="applyFilters" class="erp-input text-sm w-36">
+              <option value="dong">Đồng</option>
+              <option value="nghin_dong">Nghìn đồng</option>
+              <option value="trieu_dong">Triệu đồng</option>
+            </select>
+          </div>
+
+          <div class="flex items-center gap-2 ml-2">
+            <input id="hideEmpty" v-model="hideEmpty" type="checkbox" class="rounded border-gray-300 text-primary-600">
+            <label for="hideEmpty" class="text-sm text-gray-600">Ẩn dòng không có số liệu</label>
+          </div>
         </div>
       </div>
 
@@ -74,14 +125,17 @@
             </div>
           </div>
           <h2 class="text-center text-xl font-bold uppercase tracking-wide mb-1">Báo cáo kết quả hoạt động kinh doanh</h2>
-          <p class="text-center text-sm italic mb-1">Năm {{ report.year }}</p>
-          <p class="text-right text-xs italic">Đơn vị tính: {{ unitLabel }}</p>
+          <p class="text-center text-sm italic mb-1">{{ report.period?.label }}</p>
+          <p class="text-center text-xs text-gray-500 mb-1">Kỳ báo cáo: Từ ngày {{ fmtDate(report.period?.date_from) }} đến ngày {{ fmtDate(report.period?.date_to) }}</p>
+          <p class="text-right text-xs italic">Đơn vị tính: {{ unitLabel }} · Nguồn số liệu: Bút toán GL đã posted</p>
         </div>
 
         <!-- Screen header -->
-        <div class="print:hidden bg-gray-50 border-b border-gray-200 px-5 py-3 flex items-center justify-between">
-          <h2 class="font-semibold text-gray-800">Báo cáo KQHĐKD — Năm {{ report.year }}</h2>
-          <span class="text-xs text-gray-400">Đơn vị: {{ unitLabel }}</span>
+        <div class="print:hidden bg-gray-50 border-b border-gray-200 px-5 py-3 flex items-center justify-between flex-wrap gap-1">
+          <h2 class="font-semibold text-gray-800">Báo cáo KQHĐKD — {{ report.period?.label }}</h2>
+          <span class="text-xs text-gray-400">
+            Từ {{ fmtDate(report.period?.date_from) }} đến {{ fmtDate(report.period?.date_to) }} · Đơn vị: {{ unitLabel }}
+          </span>
         </div>
 
         <table class="min-w-full text-sm">
@@ -90,8 +144,8 @@
               <th class="text-left px-4 py-2.5 font-medium text-xs w-[42%]">CHỈ TIÊU</th>
               <th class="text-center px-2 py-2.5 font-medium text-xs w-[7%]">Mã số</th>
               <th class="text-center px-2 py-2.5 font-medium text-xs w-[9%]">Thuyết minh</th>
-              <th class="text-right px-4 py-2.5 font-medium text-xs w-[21%]">Năm nay</th>
-              <th class="text-right px-4 py-2.5 font-medium text-xs w-[21%]">Năm trước</th>
+              <th class="text-right px-4 py-2.5 font-medium text-xs w-[21%]">{{ report.period?.label ?? 'Kỳ này' }}</th>
+              <th class="text-right px-4 py-2.5 font-medium text-xs w-[21%]">{{ report.comparison_period?.label ?? 'Kỳ so sánh' }}</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
@@ -128,7 +182,7 @@
 
         <!-- Signature block -->
         <div class="px-6 py-6 border-t border-gray-200 print:mt-8">
-          <p class="text-sm italic text-right mb-6">Lập, ngày &nbsp;&nbsp;&nbsp; tháng &nbsp;&nbsp;&nbsp; năm {{ report.year }}</p>
+          <p class="text-sm italic text-right mb-6">Lập, ngày &nbsp;&nbsp;&nbsp; tháng &nbsp;&nbsp;&nbsp; năm {{ new Date(report.period?.date_to ?? '').getFullYear() || report.year }}</p>
           <div class="grid grid-cols-3 gap-4 text-center">
             <div>
               <p class="font-semibold text-xs uppercase">Người lập biểu</p>
@@ -155,7 +209,7 @@
       <div class="bg-white rounded-xl shadow-xl w-full max-w-5xl max-h-[80vh] flex flex-col">
         <div class="flex items-center justify-between px-5 py-4 border-b border-gray-200 flex-shrink-0">
           <h3 class="font-semibold text-gray-800">
-            Chi tiết mã {{ detailModal.code }} — {{ codeLabel(detailModal.code) }} — Năm {{ report.year }}
+            Chi tiết mã {{ detailModal.code }} — {{ codeLabel(detailModal.code) }} — {{ report.period?.label }}
           </h3>
           <button @click="detailModal.open = false" class="text-gray-400 hover:text-gray-600">
             <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
@@ -216,9 +270,23 @@ const props = defineProps({
 
 const { formatVnd: fmt } = useCurrency();
 
-const year      = ref(props.filters?.year ?? props.report?.year ?? new Date().getFullYear());
-const unit      = ref(props.filters?.unit ?? 'dong');
-const hideEmpty = ref(false);
+const currentYear = new Date().getFullYear();
+
+const periodType = ref(props.filters?.period_type ?? 'year');
+const year       = ref(Number(props.filters?.year ?? props.report?.year ?? currentYear));
+const month      = ref(Number(props.filters?.month ?? new Date().getMonth() + 1));
+const quarter    = ref(Number(props.filters?.quarter ?? Math.ceil((new Date().getMonth() + 1) / 3)));
+const dateFrom   = ref(props.filters?.date_from ?? props.report?.period?.date_from ?? '');
+const dateTo     = ref(props.filters?.date_to ?? props.report?.period?.date_to ?? '');
+const compareType = ref(props.filters?.compare_type ?? 'same_period_last_year');
+const unit        = ref(props.filters?.unit ?? 'dong');
+const hideEmpty   = ref(false);
+
+function fmtDate(d) {
+  if (!d) return '';
+  const [y, m, day] = String(d).split('-');
+  return `${day}/${m}/${y}`;
+}
 
 const detailModal = ref({ open: false, code: '', loading: false, entries: [] });
 
@@ -261,9 +329,12 @@ function codeLabel(code) {
 async function openDetail(code) {
   detailModal.value = { open: true, code, loading: true, entries: [] };
   try {
-    const res = await fetch(
-      route('reports.income_statement.line_detail') + `?code=${code}&year=${props.report.year}`
-    );
+    const p = new URLSearchParams({
+      code,
+      date_from: props.report.period?.date_from ?? '',
+      date_to:   props.report.period?.date_to ?? '',
+    });
+    const res = await fetch(route('reports.income_statement.line_detail') + '?' + p.toString());
     const data = await res.json();
     detailModal.value.entries = data.entries ?? [];
   } catch {
@@ -273,18 +344,31 @@ async function openDetail(code) {
   }
 }
 
+function periodParams() {
+  const params = { period_type: periodType.value, unit: unit.value, compare_type: compareType.value };
+  if (periodType.value === 'custom') {
+    params.date_from = dateFrom.value;
+    params.date_to = dateTo.value;
+  } else {
+    params.year = year.value;
+    if (periodType.value === 'month') params.month = month.value;
+    if (periodType.value === 'quarter') params.quarter = quarter.value;
+  }
+  return params;
+}
+
 const exportExcelUrl = computed(() => {
-  const p = new URLSearchParams({ year: year.value, unit: unit.value });
+  const p = new URLSearchParams(periodParams());
   return route('reports.income_statement.export') + '?' + p.toString();
 });
 
 const exportPdfUrl = computed(() => {
-  const p = new URLSearchParams({ year: year.value, unit: unit.value });
+  const p = new URLSearchParams(periodParams());
   return route('reports.income_statement.pdf') + '?' + p.toString();
 });
 
 function applyFilters() {
-  router.get(route('reports.income_statement'), { year: year.value, unit: unit.value }, {
+  router.get(route('reports.income_statement'), periodParams(), {
     preserveState: true, replace: true,
   });
 }

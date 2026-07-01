@@ -345,4 +345,142 @@ class IncomeStatementTest extends TestCase
         $response->assertStatus(200);
         $this->assertStringContainsString('pdf', strtolower($response->headers->get('Content-Type') ?? ''));
     }
+
+    // ─── IS-S20: period_type=month tính đúng khoảng ngày + label ─────────────
+    /** @test */
+    public function period_type_month_computes_correct_range_and_label(): void
+    {
+        $this->makeJe('2026-01-15', '131', '511', 3_000_000);
+        $this->makeJe('2026-02-15', '131', '511', 9_000_000); // ngoài tháng 1, không được tính
+
+        $this->get(route('reports.income_statement', ['period_type' => 'month', 'year' => 2026, 'month' => 1]))
+            ->assertInertia(fn ($p) => $p
+                ->where('report.period.type', 'month')
+                ->where('report.period.date_from', '2026-01-01')
+                ->where('report.period.date_to', '2026-01-31')
+                ->where('report.period.label', 'Tháng 01/2026')
+                ->where('report.rows.0.curr', 3_000_000)
+            );
+    }
+
+    // ─── IS-S21: period_type=quarter tính đúng khoảng ngày ────────────────────
+    /** @test */
+    public function period_type_quarter_computes_correct_range(): void
+    {
+        $this->get(route('reports.income_statement', ['period_type' => 'quarter', 'year' => 2026, 'quarter' => 2]))
+            ->assertInertia(fn ($p) => $p
+                ->where('report.period.type', 'quarter')
+                ->where('report.period.date_from', '2026-04-01')
+                ->where('report.period.date_to', '2026-06-30')
+                ->where('report.period.label', 'Quý II/2026')
+            );
+    }
+
+    // ─── IS-S22: period_type=custom nhận date_from/date_to trực tiếp ──────────
+    /** @test */
+    public function period_type_custom_uses_given_date_range(): void
+    {
+        $this->get(route('reports.income_statement', [
+            'period_type' => 'custom', 'date_from' => '2026-02-10', 'date_to' => '2026-03-05',
+        ]))->assertInertia(fn ($p) => $p
+            ->where('report.period.type', 'custom')
+            ->where('report.period.date_from', '2026-02-10')
+            ->where('report.period.date_to', '2026-03-05')
+        );
+    }
+
+    // ─── IS-S23: compare_type=none không có comparison_period ─────────────────
+    /** @test */
+    public function compare_type_none_returns_null_comparison_period(): void
+    {
+        $this->get(route('reports.income_statement', ['year' => self::YEAR, 'compare_type' => 'none']))
+            ->assertInertia(fn ($p) => $p->where('report.comparison_period', null));
+    }
+
+    // ─── IS-S24: Regression — getReport(year) khớp 100% getReportForRange tương đương ──
+    /** @test */
+    public function legacy_get_report_matches_explicit_range_for_full_year(): void
+    {
+        $this->makeJe(self::DATE, '131', '511', 7_000_000);
+        $this->makeJe(self::DATE, '632', '156', 4_000_000);
+        $this->makeJe(self::DATE, '642', '1121', 1_200_000);
+
+        $svc    = app(IncomeStatementService::class);
+        $legacy = $svc->getReport(self::YEAR);
+
+        $from = \Carbon\Carbon::create(self::YEAR, 1, 1)->startOfDay();
+        $to   = \Carbon\Carbon::create(self::YEAR, 12, 31)->endOfDay();
+        $explicit = $svc->getReportForRange($from, $to, 'dong', [
+            'type'      => 'year',
+            'date_from' => $from->toDateString(),
+            'date_to'   => $to->toDateString(),
+            'label'     => 'Năm ' . self::YEAR,
+        ], [
+            'date_from' => \Carbon\Carbon::create(self::YEAR - 1, 1, 1)->toDateString(),
+            'date_to'   => \Carbon\Carbon::create(self::YEAR - 1, 12, 31)->toDateString(),
+            'label'     => 'Cùng kỳ năm trước',
+        ]);
+
+        $this->assertEquals(
+            collect($legacy['rows'])->pluck('curr', 'code')->toArray(),
+            collect($explicit['rows'])->pluck('curr', 'code')->toArray()
+        );
+        $this->assertEquals(
+            collect($legacy['rows'])->pluck('prev', 'code')->toArray(),
+            collect($explicit['rows'])->pluck('prev', 'code')->toArray()
+        );
+    }
+
+    // ─── IS-S25: Cảnh báo unposted tính theo kỳ đang xem, không phải cả năm ───
+    /** @test */
+    public function unposted_warning_scopes_to_selected_period_not_whole_year(): void
+    {
+        // Draft JE trong tháng 2 — ngoài kỳ tháng 1 đang xem
+        $this->makeJe('2026-02-10', '131', '511', 1_000_000, 'draft');
+
+        $svc  = app(IncomeStatementService::class);
+        $from = \Carbon\Carbon::create(2026, 1, 1)->startOfDay();
+        $to   = \Carbon\Carbon::create(2026, 1, 31)->endOfDay();
+
+        $warnings = $svc->validateDataQualityForRange($from, $to);
+        $this->assertFalse(collect($warnings)->contains(fn ($w) => str_contains($w['message'], 'chưa posted')));
+
+        // Draft JE trong đúng tháng 1 → phải cảnh báo, ghi rõ khoảng ngày của kỳ
+        $this->makeJe('2026-01-20', '131', '511', 2_000_000, 'draft');
+        $warnings2 = $svc->validateDataQualityForRange($from, $to);
+        $this->assertTrue(collect($warnings2)->contains(fn ($w) => str_contains($w['message'], '01/01/2026 - 31/01/2026')));
+    }
+
+    // ─── IS-S26: compare_type=previous_period không được lệch ngày ────────────
+    /** @test */
+    public function compare_type_previous_period_has_no_off_by_one_day(): void
+    {
+        $this->get(route('reports.income_statement', [
+            'year' => 2026, 'compare_type' => 'previous_period',
+        ]))->assertInertia(fn ($p) => $p
+            ->where('report.comparison_period.date_from', '2025-01-01')
+            ->where('report.comparison_period.date_to', '2025-12-31')
+        );
+
+        $this->get(route('reports.income_statement', [
+            'period_type' => 'quarter', 'year' => 2026, 'quarter' => 1, 'compare_type' => 'previous_period',
+        ]))->assertInertia(fn ($p) => $p
+            ->where('report.comparison_period.date_from', '2025-10-01')
+            ->where('report.comparison_period.date_to', '2025-12-31')
+        );
+    }
+
+    // ─── IS-S27: compare_type=same_period_last_year với tháng 2 năm nhuận ─────
+    /** @test */
+    public function compare_type_same_period_last_year_handles_leap_february(): void
+    {
+        $this->get(route('reports.income_statement', [
+            'period_type' => 'month', 'year' => 2028, 'month' => 2,
+        ]))->assertInertia(fn ($p) => $p
+            ->where('report.period.date_from', '2028-02-01')
+            ->where('report.period.date_to', '2028-02-29')
+            ->where('report.comparison_period.date_from', '2027-02-01')
+            ->where('report.comparison_period.date_to', '2027-02-28')
+        );
+    }
 }

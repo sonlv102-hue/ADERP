@@ -29,9 +29,9 @@ class IncomeStatementExport implements WithMultipleSheets
 
 class IncomeStatementSheet implements FromArray, WithTitle, WithColumnWidths, WithEvents
 {
-    private int $headerRows = 8;   // rows before table header
-    private int $tableHeader = 9;  // row number of column headers
-    private int $dataStart  = 10;  // first data row
+    private int $headerRows = 9;   // rows before table header
+    private int $tableHeader = 10; // row number of column headers
+    private int $dataStart  = 11;  // first data row
 
     public function __construct(
         private array $report,
@@ -40,6 +40,11 @@ class IncomeStatementSheet implements FromArray, WithTitle, WithColumnWidths, Wi
 
     public function title(): string { return 'B02-DNN'; }
 
+    private function fmtDate(?string $date): string
+    {
+        return $date ? \Carbon\Carbon::parse($date)->format('d/m/Y') : '';
+    }
+
     public function columnWidths(): array
     {
         return ['A' => 52, 'B' => 10, 'C' => 14, 'D' => 18, 'E' => 18];
@@ -47,7 +52,10 @@ class IncomeStatementSheet implements FromArray, WithTitle, WithColumnWidths, Wi
 
     public function array(): array
     {
-        $year    = $this->report['year'];
+        $period    = $this->report['period'] ?? null;
+        $comparison = $this->report['comparison_period'] ?? null;
+        $periodLabel     = $period['label'] ?? ('Năm ' . $this->report['year']);
+        $comparisonLabel = $comparison['label'] ?? 'Kỳ so sánh';
         $unitLbl = match ($this->report['unit']) {
             'nghin_dong'  => 'Nghìn đồng',
             'trieu_dong'  => 'Triệu đồng',
@@ -60,12 +68,16 @@ class IncomeStatementSheet implements FromArray, WithTitle, WithColumnWidths, Wi
         $rows[] = ['', '', '', 'ngày 26/8/2016 của Bộ Tài chính)', ''];
         $rows[] = ['', '', '', '', ''];
         $rows[] = ['BÁO CÁO KẾT QUẢ HOẠT ĐỘNG KINH DOANH', '', '', '', ''];
-        $rows[] = ["Năm {$year}", '', '', '', ''];
-        $rows[] = ['', '', '', "Đơn vị tính: {$unitLbl}", ''];
+        $rows[] = [$periodLabel, '', '', '', ''];
+        $rows[] = [
+            $period ? "Kỳ báo cáo: Từ ngày {$this->fmtDate($period['date_from'])} đến ngày {$this->fmtDate($period['date_to'])}" : '',
+            '', '', "Đơn vị tính: {$unitLbl}", '',
+        ];
+        $rows[] = ['Nguồn số liệu: Bút toán GL đã posted', '', '', '', ''];
         $rows[] = ['', '', '', '', ''];
 
         // Table header
-        $rows[] = ['CHỈ TIÊU', 'Mã số', 'Thuyết minh', 'Năm nay', 'Năm trước'];
+        $rows[] = ['CHỈ TIÊU', 'Mã số', 'Thuyết minh', $periodLabel, $comparisonLabel];
 
         // Data rows
         foreach ($this->report['rows'] as $row) {
@@ -81,7 +93,7 @@ class IncomeStatementSheet implements FromArray, WithTitle, WithColumnWidths, Wi
         // Signature block
         $rows[] = ['', '', '', '', ''];
         $rows[] = ['', '', '', '', ''];
-        $rows[] = ["Lập, ngày ... tháng ... năm {$year}", '', '', '', ''];
+        $rows[] = ['Lập, ngày ... tháng ... năm ' . substr($this->report['period']['date_to'] ?? (string) $this->report['year'], 0, 4), '', '', '', ''];
         $rows[] = ['', '', '', '', ''];
         $rows[] = ['Người lập biểu', '', '', 'Kế toán trưởng', 'Người đại diện theo pháp luật'];
         $rows[] = ['(Ký, họ tên)', '', '', '(Ký, họ tên)', '(Ký, họ tên, đóng dấu)'];
@@ -106,6 +118,9 @@ class IncomeStatementSheet implements FromArray, WithTitle, WithColumnWidths, Wi
                 $sheet->mergeCells('D3:E3');
                 $sheet->mergeCells('A5:E5');
                 $sheet->mergeCells('A6:E6');
+                $sheet->mergeCells('A7:C7');
+                $sheet->mergeCells('D7:E7');
+                $sheet->mergeCells('A8:E8');
 
                 $sheet->getStyle('A5')->applyFromArray([
                     'font'      => ['bold' => true, 'size' => 13],
@@ -115,9 +130,11 @@ class IncomeStatementSheet implements FromArray, WithTitle, WithColumnWidths, Wi
                     'font'      => ['italic' => true],
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
                 ]);
+                $sheet->getStyle('A7:E8')->applyFromArray([
+                    'font' => ['italic' => true, 'size' => 8],
+                ]);
                 $sheet->getStyle('D7:E7')->applyFromArray([
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_RIGHT],
-                    'font'      => ['italic' => true],
                 ]);
                 $sheet->getStyle('D1:E3')->applyFromArray([
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_RIGHT],

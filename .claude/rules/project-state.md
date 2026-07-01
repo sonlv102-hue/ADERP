@@ -47,6 +47,7 @@ Dự án đang ở giai đoạn **vận hành và cải tiến**. Các module co
 | Mobile Responsive (118 tables, 39 form grids, 83 page headers, Modal) | Hoàn thành (2026-06-19) |
 | Period Filter cho Internal Transfer Report | Hoàn thành (2026-06-22) |
 | Admin sửa ngày xuất kho (StockExit confirmed) — StockExitDateService | Hoàn thành (2026-07-01) |
+| B02-DNN Income Statement lọc theo Tháng/Quý/Năm/Tùy chọn + so sánh kỳ | Hoàn thành (2026-07-01) |
 
 ## Migration sequence hiện tại
 

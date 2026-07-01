@@ -43,9 +43,37 @@ class IncomeStatementService
 
     public function getReport(int $year, string $unit = 'dong'): array
     {
-        $currValues = $this->buildRows($year);
-        $prevValues = $this->buildRows($year - 1);
-        $divisor    = match ($unit) {
+        $from = Carbon::create($year, 1, 1)->startOfDay();
+        $to   = Carbon::create($year, 12, 31)->endOfDay();
+
+        return $this->getReportForRange($from, $to, $unit, [
+            'type'      => 'year',
+            'date_from' => $from->toDateString(),
+            'date_to'   => $to->toDateString(),
+            'label'     => "Năm {$year}",
+        ], [
+            'date_from' => Carbon::create($year - 1, 1, 1)->toDateString(),
+            'date_to'   => Carbon::create($year - 1, 12, 31)->toDateString(),
+            'label'     => 'Cùng kỳ năm trước',
+        ]);
+    }
+
+    /**
+     * Bản tổng quát của getReport() — nhận trực tiếp khoảng ngày thay vì cả năm,
+     * dùng cho lọc theo tháng/quý/tùy chọn. getReport(int $year) delegate về đây.
+     */
+    public function getReportForRange(
+        Carbon $from,
+        Carbon $to,
+        string $unit,
+        array $period,
+        ?array $comparisonPeriod = null,
+    ): array {
+        $currValues = $this->buildRowsForRange($from, $to);
+        $prevValues = $comparisonPeriod
+            ? $this->buildRowsForRange(Carbon::parse($comparisonPeriod['date_from'])->startOfDay(), Carbon::parse($comparisonPeriod['date_to'])->endOfDay())
+            : [];
+        $divisor = match ($unit) {
             'nghin_dong'  => 1_000,
             'trieu_dong'  => 1_000_000,
             default       => 1,
@@ -66,18 +94,28 @@ class IncomeStatementService
         }
 
         return [
-            'year'     => $year,
-            'unit'     => $unit,
-            'rows'     => $rows,
-            'warnings' => $this->validateDataQuality($year),
+            'year'              => (int) $to->format('Y'),
+            'unit'              => $unit,
+            'rows'              => $rows,
+            'period'            => $period,
+            'comparison_period' => $comparisonPeriod,
+            'warnings'          => $this->validateDataQualityForRange($from, $to),
         ];
     }
 
     public function buildRows(int $year): array
     {
-        $from = Carbon::create($year, 1, 1)->startOfDay();
-        $to   = Carbon::create($year, 12, 31)->endOfDay();
+        return $this->buildRowsForRange(
+            Carbon::create($year, 1, 1)->startOfDay(),
+            Carbon::create($year, 12, 31)->endOfDay()
+        );
+    }
 
+    /**
+     * Bản tổng quát của buildRows() — nhận trực tiếp khoảng ngày.
+     */
+    public function buildRowsForRange(Carbon $from, Carbon $to): array
+    {
         $bal = $this->periodBalances($from, $to);
         $b   = fn(string $prefix) => $this->sumPrefix($bal, $prefix);
 
@@ -126,13 +164,23 @@ class IncomeStatementService
 
     public function getDetailEntries(string $code, int $year): Collection
     {
+        return $this->getDetailEntriesForRange(
+            $code,
+            Carbon::create($year, 1, 1)->startOfDay(),
+            Carbon::create($year, 12, 31)->endOfDay()
+        );
+    }
+
+    /**
+     * Bản tổng quát của getDetailEntries() — nhận trực tiếp khoảng ngày.
+     */
+    public function getDetailEntriesForRange(string $code, Carbon $from, Carbon $to): Collection
+    {
         $map = self::ACCOUNT_MAP[$code] ?? null;
         if ($map === null) {
             return collect();
         }
         [$direction, $prefixes] = $map;
-        $from = Carbon::create($year, 1, 1)->startOfDay();
-        $to   = Carbon::create($year, 12, 31)->endOfDay();
 
         $like = collect($prefixes)
             ->map(fn($p) => "jel.account_code LIKE '{$p}%'")
@@ -200,11 +248,21 @@ class IncomeStatementService
 
     public function validateDataQuality(int $year): array
     {
-        $from     = "{$year}-01-01";
-        $to       = "{$year}-12-31";
+        return $this->validateDataQualityForRange(
+            Carbon::create($year, 1, 1)->startOfDay(),
+            Carbon::create($year, 12, 31)->endOfDay()
+        );
+    }
+
+    /**
+     * Bản tổng quát của validateDataQuality() — cảnh báo unposted tính theo
+     * đúng khoảng ngày đang xem (tháng/quý/tùy chọn), không cố định cả năm.
+     */
+    public function validateDataQualityForRange(Carbon $from, Carbon $to): array
+    {
         $warnings = [];
 
-        $bal     = $this->periodBalances(Carbon::parse($from), Carbon::parse($to));
+        $bal     = $this->periodBalances($from, $to);
         $revenue = $this->sumPrefix($bal, '511');
         $cogs    = $this->sumPrefix($bal, '632');
 
@@ -214,16 +272,16 @@ class IncomeStatementService
 
         $draftCount = DB::table('journal_entries')
             ->where('status', 'draft')
-            ->whereBetween('entry_date', [$from, $to])
+            ->whereBetween('entry_date', [$from->toDateString(), $to->toDateString()])
             ->count();
         if ($draftCount > 0) {
-            $warnings[] = ['level' => 'warning', 'message' => "Có {$draftCount} bút toán chưa posted trong năm {$year} — số liệu chưa đầy đủ."];
+            $warnings[] = ['level' => 'warning', 'message' => "Có {$draftCount} bút toán chưa posted trong kỳ {$from->format('d/m/Y')} - {$to->format('d/m/Y')} — số liệu chưa đầy đủ."];
         }
 
         $has911 = DB::table('journal_entry_lines as jel')
             ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
             ->where('je.status', 'posted')
-            ->whereBetween('je.entry_date', [$from, $to])
+            ->whereBetween('je.entry_date', [$from->toDateString(), $to->toDateString()])
             ->where('jel.account_code', '911')
             ->exists();
         if ($has911) {
