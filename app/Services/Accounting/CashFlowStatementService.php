@@ -74,22 +74,50 @@ class CashFlowStatementService
 
     public function getReport(int $year, string $unit = 'dong'): array
     {
+        $from = Carbon::create($year, 1, 1)->startOfDay();
+        $to   = Carbon::create($year, 12, 31)->endOfDay();
+
+        return $this->getReportForRange($from, $to, $unit, [
+            'type'      => 'year',
+            'date_from' => $from->toDateString(),
+            'date_to'   => $to->toDateString(),
+            'label'     => "Năm {$year}",
+        ], [
+            'date_from' => Carbon::create($year - 1, 1, 1)->toDateString(),
+            'date_to'   => Carbon::create($year - 1, 12, 31)->toDateString(),
+            'label'     => 'Cùng kỳ năm trước',
+        ]);
+    }
+
+    /**
+     * Bản tổng quát của getReport() — nhận trực tiếp khoảng ngày thay vì cả năm.
+     * getReport(int $year) delegate về đây. $comparisonPeriod=null → không so sánh (prev=0).
+     */
+    public function getReportForRange(
+        Carbon $from,
+        Carbon $to,
+        string $unit,
+        array $period,
+        ?array $comparisonPeriod = null,
+    ): array {
         $divisor = match ($unit) {
             'nghin_dong'  => 1000,
             'trieu_dong'  => 1000000,
             default       => 1,
         };
 
-        $currFrom = Carbon::create($year, 1, 1)->startOfDay();
-        $currTo   = Carbon::create($year, 12, 31)->endOfDay();
-        $prevFrom = Carbon::create($year - 1, 1, 1)->startOfDay();
-        $prevTo   = Carbon::create($year - 1, 12, 31)->endOfDay();
+        $currAmounts = $this->computeAllLines($from, $to);
+        $prevAmounts = $comparisonPeriod
+            ? $this->computeAllLines(
+                Carbon::parse($comparisonPeriod['date_from'])->startOfDay(),
+                Carbon::parse($comparisonPeriod['date_to'])->endOfDay()
+            )
+            : array_fill_keys(array_keys(self::LINES), 0.0);
 
-        $currAmounts = $this->computeAllLines($currFrom, $currTo);
-        $prevAmounts = $this->computeAllLines($prevFrom, $prevTo);
-
-        $currBeg = $this->getBeginningCashBalance($year);
-        $prevBeg = $this->getBeginningCashBalance($year - 1);
+        $currBeg = $this->getBeginningCashBalanceAsOf($from);
+        $prevBeg = $comparisonPeriod
+            ? $this->getBeginningCashBalanceAsOf(Carbon::parse($comparisonPeriod['date_from'])->startOfDay())
+            : 0.0;
 
         $currAmounts['60'] = $currBeg;
         $prevAmounts['60'] = $prevBeg;
@@ -104,8 +132,10 @@ class CashFlowStatementService
             }
         }
 
-        $currEnding = $this->getEndingCashBalance($year);
-        $prevEnding = $this->getEndingCashBalance($year - 1);
+        $currEnding = $this->getEndingCashBalanceAsOf($to);
+        $prevEnding = $comparisonPeriod
+            ? $this->getEndingCashBalanceAsOf(Carbon::parse($comparisonPeriod['date_to'])->endOfDay())
+            : 0.0;
 
         $rows = [];
         foreach (self::LINES as $code => $def) {
@@ -122,15 +152,17 @@ class CashFlowStatementService
             ];
         }
 
-        $reconciliation = $this->validateReconciliation($year, $currAmounts['70'] ?? 0.0);
+        $reconciliation = $this->validateReconciliationForRange($to, $currAmounts['70'] ?? 0.0);
 
         return [
-            'year'           => $year,
-            'unit'           => $unit,
-            'rows'           => $rows,
-            'curr_ending'    => round($currEnding / $divisor),
-            'prev_ending'    => round($prevEnding / $divisor),
-            'reconciliation' => $reconciliation,
+            'year'              => (int) $to->format('Y'),
+            'unit'              => $unit,
+            'rows'              => $rows,
+            'curr_ending'       => round($currEnding / $divisor),
+            'prev_ending'       => round($prevEnding / $divisor),
+            'reconciliation'    => $reconciliation,
+            'period'            => $period,
+            'comparison_period' => $comparisonPeriod,
         ];
     }
 
@@ -159,15 +191,22 @@ class CashFlowStatementService
 
     public function getBeginningCashBalance(int $year): float
     {
+        return $this->getBeginningCashBalanceAsOf(Carbon::create($year, 1, 1)->startOfDay());
+    }
+
+    /**
+     * Bản tổng quát của getBeginningCashBalance() — nhận trực tiếp mốc ngày bắt đầu kỳ.
+     */
+    public function getBeginningCashBalanceAsOf(Carbon $before): float
+    {
         $cashAccounts = $this->resolveCashAccounts();
         if (empty($cashAccounts)) {
             return 0.0;
         }
-        $before = Carbon::create($year, 1, 1)->startOfDay()->toDateTimeString();
         $result = DB::table('journal_entry_lines as jel')
             ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
             ->where('je.status', 'posted')
-            ->where('je.entry_date', '<', $before)
+            ->where('je.entry_date', '<', $before->toDateTimeString())
             ->whereIn('jel.account_code', $cashAccounts)
             ->selectRaw('COALESCE(SUM(jel.debit),0) as dr, COALESCE(SUM(jel.credit),0) as cr')
             ->first();
@@ -176,15 +215,22 @@ class CashFlowStatementService
 
     public function getEndingCashBalance(int $year): float
     {
+        return $this->getEndingCashBalanceAsOf(Carbon::create($year, 12, 31)->endOfDay());
+    }
+
+    /**
+     * Bản tổng quát của getEndingCashBalance() — nhận trực tiếp mốc ngày cuối kỳ.
+     */
+    public function getEndingCashBalanceAsOf(Carbon $through): float
+    {
         $cashAccounts = $this->resolveCashAccounts();
         if (empty($cashAccounts)) {
             return 0.0;
         }
-        $through = Carbon::create($year, 12, 31)->endOfDay()->toDateTimeString();
         $result = DB::table('journal_entry_lines as jel')
             ->join('journal_entries as je', 'je.id', '=', 'jel.journal_entry_id')
             ->where('je.status', 'posted')
-            ->where('je.entry_date', '<=', $through)
+            ->where('je.entry_date', '<=', $through->toDateTimeString())
             ->whereIn('jel.account_code', $cashAccounts)
             ->selectRaw('COALESCE(SUM(jel.debit),0) as dr, COALESCE(SUM(jel.credit),0) as cr')
             ->first();
@@ -193,11 +239,22 @@ class CashFlowStatementService
 
     public function getUnclassifiedCashVouchers(int $year): Collection
     {
+        return $this->getUnclassifiedCashVouchersForRange(
+            Carbon::create($year, 1, 1)->startOfDay(),
+            Carbon::create($year, 12, 31)->endOfDay()
+        );
+    }
+
+    /**
+     * Bản tổng quát của getUnclassifiedCashVouchers() — nhận trực tiếp khoảng ngày.
+     */
+    public function getUnclassifiedCashVouchersForRange(Carbon $from, Carbon $to): Collection
+    {
         return DB::table('cash_vouchers as cv')
             ->leftJoin('funds as f', 'f.id', '=', 'cv.fund_id')
             ->whereNull('cv.cash_flow_code')
             ->where('cv.status', 'confirmed')
-            ->whereYear('cv.voucher_date', $year)
+            ->whereBetween('cv.voucher_date', [$from->toDateString(), $to->toDateString()])
             ->select(
                 'cv.id', 'cv.code', 'cv.type', 'cv.voucher_date',
                 'cv.amount', 'cv.description', 'cv.counterparty', 'cv.business_type',
@@ -209,7 +266,15 @@ class CashFlowStatementService
 
     public function validateReconciliation(int $year, float $reportedClosing): array
     {
-        $actualClosing = $this->getEndingCashBalance($year);
+        return $this->validateReconciliationForRange(Carbon::create($year, 12, 31)->endOfDay(), $reportedClosing);
+    }
+
+    /**
+     * Bản tổng quát của validateReconciliation() — nhận trực tiếp mốc ngày cuối kỳ.
+     */
+    public function validateReconciliationForRange(Carbon $through, float $reportedClosing): array
+    {
+        $actualClosing = $this->getEndingCashBalanceAsOf($through);
         $diff          = $reportedClosing - $actualClosing;
         return [
             'reported_closing' => round($reportedClosing),
@@ -221,12 +286,22 @@ class CashFlowStatementService
 
     public function getLineDetail(string $code, int $year): Collection
     {
+        return $this->getLineDetailForRange(
+            $code,
+            Carbon::create($year, 1, 1)->startOfDay(),
+            Carbon::create($year, 12, 31)->endOfDay()
+        );
+    }
+
+    /**
+     * Bản tổng quát của getLineDetail() — nhận trực tiếp khoảng ngày.
+     */
+    public function getLineDetailForRange(string $code, Carbon $from, Carbon $to): Collection
+    {
         $cashAccounts = $this->resolveCashAccounts();
         if (empty($cashAccounts)) {
             return collect();
         }
-        $from = Carbon::create($year, 1, 1)->startOfDay();
-        $to   = Carbon::create($year, 12, 31)->endOfDay();
 
         $movements    = $this->getCashMovements($cashAccounts, $from, $to);
         $jeIds        = $movements->pluck('je_id')->unique();

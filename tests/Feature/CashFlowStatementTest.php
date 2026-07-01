@@ -321,4 +321,141 @@ class CashFlowStatementTest extends TestCase
         $this->assertEquals('02', $rows->firstWhere('code', '02')['code']);
         $this->assertEquals('70', $rows->firstWhere('code', '70')['code']);
     }
+
+    // ─── CF-S16: period_type=month tính đúng khoảng ngày + label ──────────────
+    /** @test */
+    public function period_type_month_computes_correct_range_and_label(): void
+    {
+        $this->makeJe('2026-01-15', '1121', '131', 3_000_000);
+        $this->makeJe('2026-02-15', '1121', '131', 9_000_000); // ngoài tháng 1, không được tính
+
+        $this->get(route('reports.cash_flow_statement', ['period_type' => 'month', 'year' => 2026, 'month' => 1]))
+            ->assertInertia(fn ($p) => $p
+                ->where('report.period.type', 'month')
+                ->where('report.period.date_from', '2026-01-01')
+                ->where('report.period.date_to', '2026-01-31')
+                ->where('report.period.label', 'Tháng 01/2026')
+                ->where('report.rows.0.curr', 3_000_000)
+            );
+    }
+
+    // ─── CF-S17: period_type=quarter tính đúng khoảng ngày ────────────────────
+    /** @test */
+    public function period_type_quarter_computes_correct_range(): void
+    {
+        $this->get(route('reports.cash_flow_statement', ['period_type' => 'quarter', 'year' => 2026, 'quarter' => 2]))
+            ->assertInertia(fn ($p) => $p
+                ->where('report.period.type', 'quarter')
+                ->where('report.period.date_from', '2026-04-01')
+                ->where('report.period.date_to', '2026-06-30')
+                ->where('report.period.label', 'Quý II/2026')
+            );
+    }
+
+    // ─── CF-S18: period_type=custom nhận date_from/date_to trực tiếp ──────────
+    /** @test */
+    public function period_type_custom_uses_given_date_range(): void
+    {
+        $this->get(route('reports.cash_flow_statement', [
+            'period_type' => 'custom', 'date_from' => '2026-02-10', 'date_to' => '2026-03-05',
+        ]))->assertInertia(fn ($p) => $p
+            ->where('report.period.type', 'custom')
+            ->where('report.period.date_from', '2026-02-10')
+            ->where('report.period.date_to', '2026-03-05')
+        );
+    }
+
+    // ─── CF-S19: compare_type=none không có comparison_period, prev=0 ─────────
+    /** @test */
+    public function compare_type_none_returns_null_comparison_and_zero_prev(): void
+    {
+        $this->makeJe(self::DATE, '1121', '131', 5_000_000);
+
+        $this->get(route('reports.cash_flow_statement', ['year' => self::YEAR, 'compare_type' => 'none']))
+            ->assertInertia(fn ($p) => $p
+                ->where('report.comparison_period', null)
+                ->where('report.rows.0.prev', 0)
+            );
+    }
+
+    // ─── CF-S20: compare_type=previous_period không lệch ngày (quý) ───────────
+    /** @test */
+    public function compare_type_previous_period_has_no_off_by_one_day(): void
+    {
+        $this->get(route('reports.cash_flow_statement', [
+            'period_type' => 'quarter', 'year' => 2026, 'quarter' => 1, 'compare_type' => 'previous_period',
+        ]))->assertInertia(fn ($p) => $p
+            ->where('report.comparison_period.date_from', '2025-10-01')
+            ->where('report.comparison_period.date_to', '2025-12-31')
+        );
+    }
+
+    // ─── CF-S21: same_period_last_year với tháng 2 năm nhuận ──────────────────
+    /** @test */
+    public function compare_type_same_period_last_year_handles_leap_february(): void
+    {
+        $this->get(route('reports.cash_flow_statement', [
+            'period_type' => 'month', 'year' => 2028, 'month' => 2,
+        ]))->assertInertia(fn ($p) => $p
+            ->where('report.period.date_from', '2028-02-01')
+            ->where('report.period.date_to', '2028-02-29')
+            ->where('report.comparison_period.date_from', '2027-02-01')
+            ->where('report.comparison_period.date_to', '2027-02-28')
+        );
+    }
+
+    // ─── CF-S22: Regression — getReport(year) khớp 100% getReportForRange tương đương ──
+    /** @test */
+    public function legacy_get_report_matches_explicit_range_for_full_year(): void
+    {
+        $this->makeJe('2025-12-31', '1121', '131', 20_000_000); // opening
+        $this->makeJe(self::DATE, '1121', '131', 5_000_000);
+        $this->makeJe(self::DATE, '331', '1121', 2_000_000);
+
+        $svc    = app(CashFlowStatementService::class);
+        $legacy = $svc->getReport(self::YEAR);
+
+        $from = \Carbon\Carbon::create(self::YEAR, 1, 1)->startOfDay();
+        $to   = \Carbon\Carbon::create(self::YEAR, 12, 31)->endOfDay();
+        $explicit = $svc->getReportForRange($from, $to, 'dong', [
+            'type'      => 'year',
+            'date_from' => $from->toDateString(),
+            'date_to'   => $to->toDateString(),
+            'label'     => 'Năm ' . self::YEAR,
+        ], [
+            'date_from' => \Carbon\Carbon::create(self::YEAR - 1, 1, 1)->toDateString(),
+            'date_to'   => \Carbon\Carbon::create(self::YEAR - 1, 12, 31)->toDateString(),
+            'label'     => 'Cùng kỳ năm trước',
+        ]);
+
+        $this->assertEquals(
+            collect($legacy['rows'])->pluck('curr', 'code')->toArray(),
+            collect($explicit['rows'])->pluck('curr', 'code')->toArray()
+        );
+        $this->assertEquals(
+            collect($legacy['rows'])->pluck('prev', 'code')->toArray(),
+            collect($explicit['rows'])->pluck('prev', 'code')->toArray()
+        );
+        $this->assertEquals($legacy['curr_ending'], $explicit['curr_ending']);
+        $this->assertEquals($legacy['reconciliation'], $explicit['reconciliation']);
+    }
+
+    // ─── CF-S23: Cảnh báo phiếu chưa phân loại tính theo kỳ đang xem ──────────
+    /** @test */
+    public function unclassified_vouchers_scope_to_selected_period_not_whole_year(): void
+    {
+        DB::table('funds')->insert(['id' => 1, 'code' => 'QTM', 'name' => 'Quỹ tiền mặt', 'type' => 'cash', 'account_code' => '1111', 'opening_balance' => 0, 'is_active' => true, 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('cash_vouchers')->insert([
+            'code' => 'PT-0001', 'fund_id' => 1, 'type' => 'receipt', 'business_type' => 'other',
+            'voucher_date' => '2026-02-10', 'amount' => 1_000_000, 'description' => 'test',
+            'status' => 'confirmed', 'cash_flow_code' => null, 'created_by' => $this->getUserId(),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->get(route('reports.cash_flow_statement', ['period_type' => 'month', 'year' => 2026, 'month' => 1]))
+            ->assertInertia(fn ($p) => $p->where('unclassifiedCount', 0));
+
+        $this->get(route('reports.cash_flow_statement', ['period_type' => 'month', 'year' => 2026, 'month' => 2]))
+            ->assertInertia(fn ($p) => $p->where('unclassifiedCount', 1));
+    }
 }

@@ -64,11 +64,22 @@ tr.cash-row td { background: #FEF9C3; font-weight: bold; }
         </div>
     </div>
 
+    @php
+        $period          = $report['period'] ?? null;
+        $comparison      = $report['comparison_period'] ?? null;
+        $periodLabel     = $period['label'] ?? ('Năm ' . $report['year']);
+        $comparisonLabel = $comparison['label'] ?? 'Kỳ so sánh';
+        $fmtDate         = fn($d) => $d ? \Carbon\Carbon::parse($d)->format('d/m/Y') : '';
+    @endphp
+
     {{-- Title --}}
     <div class="title-block">
         <div class="title-main">Báo cáo lưu chuyển tiền tệ</div>
         <div class="title-sub">(Theo phương pháp trực tiếp)</div>
-        <div class="title-year">Năm {{ $year }}</div>
+        <div class="title-year">{{ $periodLabel }}</div>
+        @if($period)
+            <div class="title-year">Kỳ báo cáo: Từ ngày {{ $fmtDate($period['date_from']) }} đến ngày {{ $fmtDate($period['date_to']) }}</div>
+        @endif
     </div>
     @php
         $unitLabel = match($unit) {
@@ -82,7 +93,7 @@ tr.cash-row td { background: #FEF9C3; font-weight: bold; }
         }
         $rows = $report['rows'];
     @endphp
-    <div class="unit-label">Đơn vị tính: {{ $unitLabel }}</div>
+    <div class="unit-label">Đơn vị tính: {{ $unitLabel }} · Nguồn số liệu: Bút toán GL đã posted</div>
 
     {{-- Table --}}
     <table>
@@ -91,8 +102,8 @@ tr.cash-row td { background: #FEF9C3; font-weight: bold; }
                 <th style="width:46%">Chỉ tiêu</th>
                 <th style="width:8%">Mã số</th>
                 <th style="width:10%">Thuyết minh</th>
-                <th style="width:18%">Năm nay</th>
-                <th style="width:18%">Năm trước</th>
+                <th style="width:18%">{{ $periodLabel }}</th>
+                <th style="width:18%">{{ $comparisonLabel }}</th>
             </tr>
         </thead>
         <tbody>
@@ -144,7 +155,7 @@ tr.cash-row td { background: #FEF9C3; font-weight: bold; }
 
     {{-- Signature --}}
     <div class="sign-section">
-        <div class="sign-date">Lập, ngày &nbsp;&nbsp;&nbsp; tháng &nbsp;&nbsp;&nbsp; năm {{ $year }}</div>
+        <div class="sign-date">Lập, ngày &nbsp;&nbsp;&nbsp; tháng &nbsp;&nbsp;&nbsp; năm {{ substr($period['date_to'] ?? (string) $report['year'], 0, 4) }}</div>
         <div class="sign-row">
             <div class="sign-box">
                 <div class="sign-title">Người lập biểu</div>

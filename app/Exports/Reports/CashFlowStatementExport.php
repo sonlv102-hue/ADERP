@@ -42,9 +42,17 @@ class CashFlowStatementSheet implements FromArray, WithTitle, WithStyles, WithCo
 
     public function title(): string { return 'B03-DNN'; }
 
+    private function fmtDate(?string $date): string
+    {
+        return $date ? \Carbon\Carbon::parse($date)->format('d/m/Y') : '';
+    }
+
     public function array(): array
     {
-        $year       = $this->report['year'];
+        $period          = $this->report['period'] ?? null;
+        $comparison      = $this->report['comparison_period'] ?? null;
+        $periodLabel     = $period['label'] ?? ('Năm ' . $this->report['year']);
+        $comparisonLabel = $comparison['label'] ?? 'Kỳ so sánh';
         $rows       = $this->report['rows'];
         $unitLabel  = match ($this->report['unit']) {
             'nghin_dong'  => 'Nghìn đồng',
@@ -66,14 +74,16 @@ class CashFlowStatementSheet implements FromArray, WithTitle, WithStyles, WithCo
         // Row 6
         $data[] = ['(Theo phương pháp trực tiếp)', '', '', '', ''];
         // Row 7
-        $data[] = ["Năm {$year}", '', '', '', ''];
+        $data[] = [$periodLabel, '', '', '', ''];
         // Row 8
-        $data[] = ["Đơn vị tính: {$unitLabel}", '', '', '', ''];
-        // Row 9: blank
+        $data[] = [$period ? ('Kỳ báo cáo: Từ ngày ' . $this->fmtDate($period['date_from']) . ' đến ngày ' . $this->fmtDate($period['date_to'])) : '', '', '', "Đơn vị tính: {$unitLabel}", ''];
+        // Row 9
+        $data[] = ['Nguồn số liệu: Bút toán GL đã posted', '', '', '', ''];
+        // Row 10: blank
         $data[] = [''];
 
-        // Row 10: table header
-        $data[] = ['Chỉ tiêu', 'Mã số', 'Thuyết minh', 'Năm nay', 'Năm trước'];
+        // Row 11: table header
+        $data[] = ['Chỉ tiêu', 'Mã số', 'Thuyết minh', $periodLabel, $comparisonLabel];
         $this->dataStartRow = count($data); // 1-based
 
         $sectionHeaderCodes = ['I', 'II', 'III'];
@@ -112,7 +122,7 @@ class CashFlowStatementSheet implements FromArray, WithTitle, WithStyles, WithCo
         // Spacer + signature
         $data[] = [''];
         $sigRow = count($data) + 1;
-        $data[] = ['', "Lập, ngày ... tháng ... năm {$year}", '', '', ''];
+        $data[] = ['', 'Lập, ngày ... tháng ... năm ' . substr($this->report['period']['date_to'] ?? (string) $this->report['year'], 0, 4), '', '', ''];
         $data[] = [''];
         $data[] = ['Người lập biểu', '', 'Kế toán trưởng', '', 'Người đại diện theo pháp luật'];
         $data[] = ['(Ký, họ tên)', '', '(Ký, họ tên)', '', '(Ký, họ tên, đóng dấu)'];
@@ -171,13 +181,18 @@ class CashFlowStatementSheet implements FromArray, WithTitle, WithStyles, WithCo
         $sheet->getStyle('A6')->getFont()->setItalic(true);
         $sheet->getStyle('A7')->getFont()->setItalic(true);
 
-        // Unit label row 8
-        $sheet->mergeCells('A8:E8');
-        $sheet->getStyle('A8')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
-        $sheet->getStyle('A8')->getFont()->setItalic(true)->setSize(9);
+        // Row 8: kỳ báo cáo (trái) + đơn vị tính (phải)
+        $sheet->mergeCells('A8:C8');
+        $sheet->mergeCells('D8:E8');
+        $sheet->getStyle('D8')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_RIGHT);
+        $sheet->getStyle('A8:E8')->getFont()->setItalic(true)->setSize(9);
 
-        // Table header row 10
-        $headerRow = 10;
+        // Row 9: nguồn số liệu
+        $sheet->mergeCells('A9:E9');
+        $sheet->getStyle('A9')->getFont()->setItalic(true)->setSize(8);
+
+        // Table header row 11
+        $headerRow = 11;
         $sheet->getStyle("A{$headerRow}:E{$headerRow}")->applyFromArray([
             'font'      => ['bold' => true, 'size' => 10],
             'fill'      => ['fillType' => Fill::FILL_SOLID, 'color' => ['rgb' => 'D0E4F7']],

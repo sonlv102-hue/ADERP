@@ -48,6 +48,7 @@ Dự án đang ở giai đoạn **vận hành và cải tiến**. Các module co
 | Period Filter cho Internal Transfer Report | Hoàn thành (2026-06-22) |
 | Admin sửa ngày xuất kho (StockExit confirmed) — StockExitDateService | Hoàn thành (2026-07-01) |
 | B02-DNN Income Statement lọc theo Tháng/Quý/Năm/Tùy chọn + so sánh kỳ | Hoàn thành (2026-07-01) |
+| B03-DNN Cash Flow Statement lọc theo Tháng/Quý/Năm/Tùy chọn + so sánh kỳ | Hoàn thành (2026-07-01) |
 
 ## Migration sequence hiện tại
 
@@ -81,6 +82,7 @@ Tất cả services dùng `AccountingSettings::get('key', 'fallback')` — khôn
 6. B03-DNN classify dominant counterpart có thể sai với JE phức tạp nhiều TK đối ứng.
 7. **H1 backfill estimated:** `order_items.unit_cogs_source='backfill_estimated'` nghĩa là COGS chỉ là ước tính. Kế toán cần rà soát.
 8. Non-project stock exit **BLOCKS** nếu không có `inventory_balances` (AVCO chưa init). Project exit vẫn dùng FIFO.
+9. `resolvePeriod()`/`resolveComparison()`/`previousCalendarPeriod()`/`fileSlug()` duplicate y hệt giữa `IncomeStatementController` và `CashFlowStatementController` (lọc kỳ báo cáo tháng/quý/năm/tùy chọn). Nếu sửa lỗi ở 1 nơi (VD: date-math cho `previous_period`/`same_period_last_year`) phải sửa cả 2 file — chưa tách thành service dùng chung.
 
 ## Accounting — JE FSM
 
