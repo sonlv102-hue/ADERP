@@ -36,6 +36,14 @@
             class="px-4 py-2 border border-orange-300 text-orange-700 rounded-lg text-sm font-medium hover:bg-orange-50">
             Hủy phiếu
           </button>
+          <button v-if="isAdmin && exit.status === 'confirmed'" @click="openEditDateModal"
+            class="flex items-center gap-1.5 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            Sửa ngày xuất kho
+          </button>
           <button v-if="['draft','cancelled'].includes(exit.status) || isAdmin" @click="showDeleteModal = true"
             class="px-4 py-2 border border-red-400 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50">
             Xóa
@@ -86,6 +94,36 @@
                 class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Quay lại</button>
               <button @click="doConfirmExit"
                 class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium">Vẫn xác nhận</button>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="showEditDateModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div class="bg-white rounded-xl shadow-xl w-full max-w-md mx-4 p-6">
+            <h3 class="text-base font-semibold text-gray-900 mb-2">Sửa ngày xuất kho</h3>
+            <p class="text-sm text-gray-600 mb-4">
+              Phiếu <strong>{{ exit.code }}</strong> hiện tại: <strong>{{ exit.exit_date }}</strong>.
+              Thao tác này sẽ đồng bộ ngày trên bút toán kế toán và chi phí dự án liên quan (nếu có).
+            </p>
+            <div class="space-y-3">
+              <div>
+                <label class="block text-sm text-gray-600 mb-1">Ngày mới <span class="text-red-500">*</span></label>
+                <input v-model="editDateForm.new_date" type="date" class="erp-input" />
+              </div>
+              <div>
+                <label class="block text-sm text-gray-600 mb-1">Lý do sửa <span class="text-red-500">*</span></label>
+                <textarea v-model="editDateForm.reason" rows="2" maxlength="255" class="erp-input"
+                  placeholder="VD: Sửa lại đúng ngày giao hàng thực tế"></textarea>
+              </div>
+              <p v-if="editDateError" class="text-xs text-red-600">{{ editDateError }}</p>
+            </div>
+            <div class="flex justify-end gap-2 mt-5">
+              <button @click="showEditDateModal = false"
+                class="px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">Hủy</button>
+              <button @click="submitEditDate" :disabled="editDateSubmitting"
+                class="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+                Lưu
+              </button>
             </div>
           </div>
         </div>
@@ -243,6 +281,10 @@ const page    = usePage();
 const isAdmin = computed(() => page.props.auth?.roles?.includes('admin') ?? false);
 const showDeleteModal  = ref(false);
 const showConfirmModal = ref(false);
+const showEditDateModal = ref(false);
+const editDateForm = ref({ new_date: '', reason: '' });
+const editDateError = ref('');
+const editDateSubmitting = ref(false);
 
 const grandTotal = computed(() =>
   (props.exit.items ?? []).reduce((sum, item) => sum + item.total, 0)
@@ -270,5 +312,25 @@ const cancelExit = () => {
 const doDelete   = () => {
   showDeleteModal.value = false;
   router.delete(route('warehouse.stock-exits.destroy', props.exit.id));
+};
+
+const openEditDateModal = () => {
+  editDateForm.value = { new_date: props.exit.exit_date_raw ?? '', reason: '' };
+  editDateError.value = '';
+  showEditDateModal.value = true;
+};
+
+const submitEditDate = () => {
+  if (!editDateForm.value.new_date || !editDateForm.value.reason.trim()) {
+    editDateError.value = 'Vui lòng nhập đầy đủ ngày mới và lý do sửa.';
+    return;
+  }
+  editDateSubmitting.value = true;
+  router.post(route('warehouse.stock-exits.edit-date', props.exit.id), editDateForm.value, {
+    preserveScroll: true,
+    onSuccess: () => { showEditDateModal.value = false; },
+    onError: (errors) => { editDateError.value = Object.values(errors)[0] ?? 'Có lỗi xảy ra.'; },
+    onFinish: () => { editDateSubmitting.value = false; },
+  });
 };
 </script>

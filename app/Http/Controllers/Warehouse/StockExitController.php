@@ -23,6 +23,7 @@ use App\Models\StockExit;
 use App\Models\StockMovement;
 use App\Models\Warehouse;
 use App\Services\AccountingService;
+use App\Services\StockExitDateService;
 use App\Services\StockExitPrefillFromOrderService;
 use App\Services\StockService;
 use Barryvdh\DomPDF\Facade\Pdf;
@@ -543,6 +544,7 @@ class StockExitController extends Controller
                 'id'           => $stockExit->id,
                 'code'         => $stockExit->code,
                 'exit_date'    => $stockExit->exit_date->format('d/m/Y'),
+                'exit_date_raw' => $stockExit->exit_date->format('Y-m-d'),
                 'status'       => $stockExit->status->value,
                 'status_label' => $stockExit->status->label(),
                 'status_color' => $stockExit->status->color(),
@@ -804,6 +806,22 @@ class StockExitController extends Controller
         }
 
         return back()->with('success', 'Đã hủy phiếu xuất kho.');
+    }
+
+    public function editDate(Request $request, StockExit $stockExit, StockExitDateService $service): RedirectResponse
+    {
+        $data = $request->validate([
+            'new_date' => ['required', 'date'],
+            'reason'   => ['required', 'string', 'max:255'],
+        ]);
+
+        try {
+            $service->updateExitDate($stockExit, $data['new_date'], $data['reason'], $request->user());
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Đã cập nhật ngày xuất kho.');
     }
 
     public function destroy(StockExit $stockExit): RedirectResponse

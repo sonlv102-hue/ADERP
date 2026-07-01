@@ -219,6 +219,7 @@ Route::middleware('auth')->group(function () {
         Route::resource('stock-exits', StockExitController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
         Route::post('stock-exits/{stockExit}/confirm', [StockExitController::class, 'confirm'])->name('stock-exits.confirm');
         Route::post('stock-exits/{stockExit}/cancel', [StockExitController::class, 'cancel'])->name('stock-exits.cancel');
+        Route::post('stock-exits/{stockExit}/edit-date', [StockExitController::class, 'editDate'])->name('stock-exits.edit-date')->middleware('role:admin');
         Route::get('stock-exits/{stockExit}/pdf', [StockExitController::class, 'pdf'])->name('stock-exits.pdf');
         Route::get('stock-exits-available-lots', [StockExitController::class, 'availableLots'])->name('stock-exits.available-lots');
         Route::get('stock-exits-avco-costs', [StockExitController::class, 'avcoCosts'])->name('stock-exits.avco-costs');
