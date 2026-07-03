@@ -30,9 +30,14 @@ fi
 # ─── 3. Build Docker images ───────────────────────────────────────────────────
 # Dùng --build-arg CACHE_BUST thay --no-cache để cache PHP extension layers
 # (biên dịch intl/gd/... rất nặng, không cần rebuild nếu không đổi)
+# Build tuần tự từng image (không song song) — VPS RAM hạn chế (1.9GB),
+# build song song 3 image từng bị OOM-killed giữa chừng.
 step "3/9" "Rebuilding Docker images..."
 docker image prune -f
-$COMPOSE build --build-arg CACHE_BUST=$(date +%s) app scheduler queue
+CACHE_BUST=$(date +%s)
+$COMPOSE build --build-arg CACHE_BUST=$CACHE_BUST app
+$COMPOSE build --build-arg CACHE_BUST=$CACHE_BUST scheduler
+$COMPOSE build --build-arg CACHE_BUST=$CACHE_BUST queue
 
 # ─── 4. Extract frontend assets ──────────────────────────────────────────────
 step "4/9" "Extracting frontend assets to host..."
