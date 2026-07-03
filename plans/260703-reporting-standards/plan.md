@@ -75,4 +75,4 @@ Phân loại theo mục 13 tài liệu chuẩn: **(3) Đang viết riêng, cần
 
 ## Rollback
 
-Đợt 1 là 1 commit riêng (xem git log message "feat: shared report signature-section infra..."). Rollback: `git revert <commit-hash>` — không có migration schema (chỉ thêm 1 setting key qua seeder, an toàn revert vì seeder dùng `updateOrInsert`, revert code không tự xóa key khỏi DB nhưng key thừa vô hại nếu không dùng).
+Đợt 1: commit `60d5b2c` ("feat: add shared report signature-section standard and infra"). Rollback: `git revert 60d5b2c` — không có migration schema (chỉ thêm 1 setting key qua seeder, an toàn revert vì seeder dùng `updateOrInsert`, revert code không tự xóa key khỏi DB nhưng key thừa vô hại nếu không dùng).
