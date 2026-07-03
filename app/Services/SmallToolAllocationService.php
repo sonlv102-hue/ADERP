@@ -29,13 +29,15 @@ class SmallToolAllocationService
         $periods    = (int) $tool->allocation_periods;
         $startDate  = Carbon::parse($tool->allocation_start_date ?? $tool->in_service_date ?? now());
         $perPeriod  = (int) floor($totalCost / $periods);
-        $accumulated = 0;
+        // Số dư đầu kỳ: bắt đầu từ trạng thái đã phân bổ sẵn (từ hệ thống cũ), không tính lại từ đầu.
+        $accumulated = (int) ($tool->total_allocated ?? 0);
+        $startIndex  = (int) ($tool->periods_allocated ?? 0);
 
         // Xóa lịch pending cũ nếu có
         $tool->allocations()->where('status', 'pending')->delete();
 
         $rows = [];
-        for ($i = 0; $i < $periods; $i++) {
+        for ($i = $startIndex; $i < $periods; $i++) {
             $periodDate  = $startDate->copy()->addMonths($i);
             $periodStr   = $periodDate->format('Y-m');
             $periodStart = $periodDate->startOfMonth()->format('Y-m-d');
@@ -80,6 +82,8 @@ class SmallToolAllocationService
 
         $rows = [];
         foreach ($tools as $tool) {
+            if ($this->isPausedForPeriod($tool, $period)) continue;
+
             $alloc = $tool->allocations->where('period', $period)->where('status', 'pending')->first();
             if (! $alloc) continue;
 
@@ -125,6 +129,8 @@ class SmallToolAllocationService
             $batchItems = [];
 
             foreach ($tools as $tool) {
+                if ($this->isPausedForPeriod($tool, $period)) { $skipped++; continue; }
+
                 $alloc = $tool->allocations->where('period', $period)->where('status', 'pending')->first();
                 if (! $alloc) { $skipped++; continue; }
 
@@ -165,6 +171,7 @@ class SmallToolAllocationService
                     'status'            => $isFullyDone
                         ? SmallToolStatus::FullyAllocated->value
                         : SmallToolStatus::Allocating->value,
+                    'allocation_status' => $isFullyDone ? 'completed' : $tool->allocation_status,
                 ]);
 
                 $processed[] = ['tool_code' => $tool->code, 'amount' => (float) $alloc->amount];
@@ -212,8 +219,62 @@ class SmallToolAllocationService
                 'total_allocated'   => $newAllocated,
                 'periods_allocated' => $newPeriods,
                 'status'            => SmallToolStatus::Allocating->value,
+                'allocation_status' => $tool->allocation_status === 'completed' ? 'active' : $tool->allocation_status,
             ]);
         });
+    }
+
+    // -------------------------------------------------------
+    // Tạm dừng / Tiếp tục phân bổ
+    // -------------------------------------------------------
+
+    public function pause(SmallTool $tool, ?string $reason): void
+    {
+        if (! $tool->canPauseAllocation()) {
+            throw new \RuntimeException('CCDC này không ở trạng thái có thể tạm dừng phân bổ.');
+        }
+
+        $currentPeriod = now()->format('Y-m');
+        $hasPostedCurrentPeriod = $tool->allocations()
+            ->where('period', $currentPeriod)->where('status', 'posted')->exists();
+
+        $effective = $hasPostedCurrentPeriod
+            ? now()->addMonth()->format('Y-m')
+            : $currentPeriod;
+
+        $tool->update([
+            'allocation_status'      => 'paused',
+            'paused_at'              => now(),
+            'paused_by'              => auth()->id(),
+            'pause_effective_period' => $effective,
+            'pause_reason'           => $reason,
+        ]);
+    }
+
+    public function resume(SmallTool $tool): array
+    {
+        if (! $tool->canResumeAllocation()) {
+            throw new \RuntimeException('CCDC này không ở trạng thái tạm dừng.');
+        }
+
+        $tool->update([
+            'allocation_status' => 'active',
+            'resumed_at'        => now(),
+            'resumed_by'        => auth()->id(),
+        ]);
+
+        $nextPending = $tool->allocations()->where('status', 'pending')->orderBy('period')->first();
+
+        return [
+            'next_period' => $nextPending?->period,
+            'amount'      => $nextPending ? (float) $nextPending->amount : 0,
+        ];
+    }
+
+    private function isPausedForPeriod(SmallTool $tool, string $period): bool
+    {
+        if (! $tool->isPaused()) return false;
+        return ! $tool->pause_effective_period || $period >= $tool->pause_effective_period;
     }
 
     // -------------------------------------------------------
@@ -222,7 +283,8 @@ class SmallToolAllocationService
 
     private function checkPeriodNotClosed(string $period): void
     {
-        $ap = AccountingPeriod::where('period', $period)->first();
+        [$year, $month] = explode('-', $period);
+        $ap = AccountingPeriod::where('year', (int) $year)->where('month', (int) $month)->first();
         if ($ap && in_array($ap->status, ['closed', 'locked'])) {
             throw new \RuntimeException("Kỳ kế toán {$period} đã khóa, không thể tạo/hủy phân bổ.");
         }

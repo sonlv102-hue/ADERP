@@ -58,6 +58,7 @@ use App\Http\Controllers\Accounting\ArApOpeningBalanceController;
 use App\Http\Controllers\Accounting\OpeningBalanceController;
 use App\Http\Controllers\Accounting\PaymentController;
 use App\Http\Controllers\Accounting\PrepaidExpenseController;
+use App\Http\Controllers\Accounting\PrepaidExpenseOpeningBalanceController;
 use App\Http\Controllers\Accounting\PaymentTermController;
 use App\Http\Controllers\Accounting\BankAccountController;
 use App\Http\Controllers\Accounting\BankTransactionController;
@@ -117,6 +118,7 @@ use App\Http\Controllers\Accounting\SmallToolAllocationController;
 use App\Http\Controllers\Accounting\SmallToolTransferController;
 use App\Http\Controllers\Accounting\SmallToolDisposalController;
 use App\Http\Controllers\Accounting\SmallToolReportController;
+use App\Http\Controllers\Accounting\SmallToolOpeningBalanceController;
 use App\Http\Controllers\AttachmentController;
 use App\Http\Controllers\SearchController;
 use Illuminate\Support\Facades\Route;
@@ -504,6 +506,13 @@ Route::middleware('auth')->group(function () {
         Route::resource('prepaid-expenses', PrepaidExpenseController::class)->only(['index', 'create', 'store', 'show'])->middleware('can:accounting.view');
         Route::post('prepaid-expenses/{prepaidExpense}/amortize', [PrepaidExpenseController::class, 'amortize'])->name('prepaid-expenses.amortize')->middleware('can:accounting.manage');
         Route::post('prepaid-expenses/run-batch', [PrepaidExpenseController::class, 'runBatch'])->name('prepaid-expenses.run-batch')->middleware('can:accounting.manage');
+        Route::post('prepaid-expenses/{prepaidExpense}/pause', [PrepaidExpenseController::class, 'pause'])->name('prepaid-expenses.pause')->middleware('can:accounting.manage');
+        Route::post('prepaid-expenses/{prepaidExpense}/resume', [PrepaidExpenseController::class, 'resume'])->name('prepaid-expenses.resume')->middleware('can:accounting.manage');
+        Route::get('prepaid-expenses/reports/gl-reconcile', [PrepaidExpenseController::class, 'glReconcile'])->name('prepaid-expenses.reports.gl-reconcile')->middleware('can:accounting.view');
+        // Số dư đầu kỳ CPTT — đặt trước resource {prepaidExpense} để tránh xung đột segment
+        Route::get('prepaid-expenses/opening-balance/create', [PrepaidExpenseOpeningBalanceController::class, 'create'])->name('prepaid-expenses.opening-balance.create')->middleware('can:accounting.manage');
+        Route::post('prepaid-expenses/opening-balance', [PrepaidExpenseOpeningBalanceController::class, 'store'])->name('prepaid-expenses.opening-balance.store')->middleware('can:accounting.manage');
+        Route::delete('prepaid-expenses/{prepaidExpense}/opening-balance', [PrepaidExpenseOpeningBalanceController::class, 'destroy'])->name('prepaid-expenses.opening-balance.destroy')->middleware('can:accounting.manage');
 
         // Điều khoản thanh toán (Payment Terms)
         Route::resource('payment-terms', PaymentTermController::class)->only(['index', 'create', 'store', 'edit', 'update'])->middleware('can:accounting.manage');
@@ -611,6 +620,11 @@ Route::middleware('auth')->group(function () {
             Route::get('create',[SmallToolController::class, 'create'])->name('create')->middleware('can:ccdc.manage');
             Route::post('',     [SmallToolController::class, 'store'])->name('store')->middleware('can:ccdc.manage');
 
+            // Số dư đầu kỳ CCDC
+            Route::get('opening-balance/create', [SmallToolOpeningBalanceController::class, 'create'])->name('opening-balance.create')->middleware('can:ccdc.manage');
+            Route::post('opening-balance',       [SmallToolOpeningBalanceController::class, 'store'])->name('opening-balance.store')->middleware('can:ccdc.manage');
+            Route::delete('{tool}/opening-balance', [SmallToolOpeningBalanceController::class, 'destroy'])->name('opening-balance.destroy')->middleware('can:ccdc.manage')->whereNumber('tool');
+
             // Receipts (CCNK-)
             Route::get('receipts',                   [SmallToolReceiptController::class, 'index'])->name('receipts.index')->middleware('can:ccdc.view');
             Route::get('receipts/create',            [SmallToolReceiptController::class, 'create'])->name('receipts.create')->middleware('can:ccdc.manage');
@@ -631,6 +645,8 @@ Route::middleware('auth')->group(function () {
             Route::get('allocations',                      [SmallToolAllocationController::class, 'index'])->name('allocations.index')->middleware('can:ccdc.view');
             Route::post('allocations/run',                 [SmallToolAllocationController::class, 'run'])->name('allocations.run')->middleware('can:ccdc.allocate');
             Route::post('allocations/{allocation}/reverse',[SmallToolAllocationController::class, 'reverse'])->name('allocations.reverse')->middleware('can:ccdc.allocate');
+            Route::post('{tool}/allocation/pause',  [SmallToolAllocationController::class, 'pause'])->name('allocation.pause')->middleware('can:ccdc.allocate')->whereNumber('tool');
+            Route::post('{tool}/allocation/resume', [SmallToolAllocationController::class, 'resume'])->name('allocation.resume')->middleware('can:ccdc.allocate')->whereNumber('tool');
 
             // Reports
             Route::get('reports/ledger',              [SmallToolReportController::class, 'ledger'])->name('reports.ledger')->middleware('can:ccdc.view');

@@ -8,6 +8,7 @@ use App\Models\Supplier;
 use App\Services\PrepaidExpenseService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -26,20 +27,22 @@ class PrepaidExpenseController extends Controller
 
         return Inertia::render('Accounting/PrepaidExpenses/Index', [
             'expenses' => $query->paginate(20)->through(fn($e) => [
-                'id'               => $e->id,
-                'code'             => $e->code,
-                'description'      => $e->description,
-                'supplier_name'    => $e->supplier?->name,
-                'account_code'     => $e->account_code,
-                'total_amount'     => (float) $e->total_amount,
-                'amortized_amount' => (float) $e->amortized_amount,
-                'remaining_amount' => $e->remainingAmount(),
-                'months'           => $e->months,
-                'start_date'       => $e->start_date->format('Y-m-d'),
-                'end_date'         => $e->endDate()->format('Y-m-d'),
-                'status'           => $e->status->value,
-                'status_label'     => $e->status->label(),
-                'status_color'     => $e->status->color(),
+                'id'                 => $e->id,
+                'code'               => $e->code,
+                'description'        => $e->description,
+                'supplier_name'      => $e->supplier?->name,
+                'account_code'       => $e->account_code,
+                'total_amount'       => (float) $e->total_amount,
+                'amortized_amount'   => (float) $e->amortized_amount,
+                'remaining_amount'   => $e->remainingAmount(),
+                'months'             => $e->months,
+                'start_date'         => $e->start_date->format('Y-m-d'),
+                'end_date'           => $e->endDate()->format('Y-m-d'),
+                'status'             => $e->status->value,
+                'status_label'       => $e->status->label(),
+                'status_color'       => $e->status->color(),
+                'allocation_status'  => $e->allocation_status,
+                'is_opening_balance' => $e->is_opening_balance,
             ]),
             'filters' => $request->only(['search', 'status']),
         ]);
@@ -89,29 +92,49 @@ class PrepaidExpenseController extends Controller
 
     public function show(PrepaidExpense $prepaidExpense): Response
     {
-        $prepaidExpense->load(['supplier', 'allocations.journalEntry', 'creator']);
+        $prepaidExpense->load(['supplier', 'allocations.journalEntry', 'creator', 'pausedByUser', 'resumedByUser']);
+
+        $history = \Spatie\Activitylog\Models\Activity::forSubject($prepaidExpense)
+            ->with('causer')->latest()->get()->map(fn ($log) => [
+                'description' => $log->description,
+                'causer_name' => $log->causer?->name ?? 'Hệ thống',
+                'created_at'  => $log->created_at->format('d/m/Y H:i'),
+                'properties'  => $log->properties->toArray(),
+            ]);
 
         return Inertia::render('Accounting/PrepaidExpenses/Show', [
             'expense' => [
-                'id'               => $prepaidExpense->id,
-                'code'             => $prepaidExpense->code,
-                'description'      => $prepaidExpense->description,
-                'supplier_name'    => $prepaidExpense->supplier?->name,
-                'account_code'     => $prepaidExpense->account_code,
-                'expense_account'  => $prepaidExpense->expense_account,
-                'total_amount'     => (float) $prepaidExpense->total_amount,
-                'monthly_amount'   => (float) $prepaidExpense->monthly_amount,
-                'amortized_amount' => (float) $prepaidExpense->amortized_amount,
-                'remaining_amount' => $prepaidExpense->remainingAmount(),
-                'months'           => $prepaidExpense->months,
-                'start_date'       => $prepaidExpense->start_date->format('Y-m-d'),
-                'end_date'         => $prepaidExpense->endDate()->format('Y-m-d'),
-                'status'           => $prepaidExpense->status->value,
-                'status_label'     => $prepaidExpense->status->label(),
-                'status_color'     => $prepaidExpense->status->color(),
-                'notes'            => $prepaidExpense->notes,
-                'creator'          => $prepaidExpense->creator?->name,
-                'allocations'      => $prepaidExpense->allocations->map(fn($a) => [
+                'id'                      => $prepaidExpense->id,
+                'code'                    => $prepaidExpense->code,
+                'description'             => $prepaidExpense->description,
+                'supplier_name'           => $prepaidExpense->supplier?->name,
+                'account_code'            => $prepaidExpense->account_code,
+                'expense_account'         => $prepaidExpense->expense_account,
+                'total_amount'            => (float) $prepaidExpense->total_amount,
+                'monthly_amount'          => (float) $prepaidExpense->monthly_amount,
+                'amortized_amount'        => (float) $prepaidExpense->amortized_amount,
+                'remaining_amount'        => $prepaidExpense->remainingAmount(),
+                'months'                  => $prepaidExpense->months,
+                'start_date'              => $prepaidExpense->start_date->format('Y-m-d'),
+                'end_date'                => $prepaidExpense->endDate()->format('Y-m-d'),
+                'status'                  => $prepaidExpense->status->value,
+                'status_label'            => $prepaidExpense->status->label(),
+                'status_color'            => $prepaidExpense->status->color(),
+                'notes'                   => $prepaidExpense->notes,
+                'creator'                 => $prepaidExpense->creator?->name,
+                'is_opening_balance'      => $prepaidExpense->is_opening_balance,
+                'opening_balance_period'  => $prepaidExpense->opening_balance_period,
+                'opening_journal_entry_id'=> $prepaidExpense->opening_journal_entry_id,
+                'allocation_status'       => $prepaidExpense->allocation_status,
+                'pause_reason'            => $prepaidExpense->pause_reason,
+                'pause_effective_period'  => $prepaidExpense->pause_effective_period,
+                'paused_at'               => $prepaidExpense->paused_at?->format('d/m/Y H:i'),
+                'paused_by_name'          => $prepaidExpense->pausedByUser?->name,
+                'resumed_at'              => $prepaidExpense->resumed_at?->format('d/m/Y H:i'),
+                'resumed_by_name'         => $prepaidExpense->resumedByUser?->name,
+                'can_pause'               => $prepaidExpense->canPauseAllocation(),
+                'can_resume'              => $prepaidExpense->canResumeAllocation(),
+                'allocations'             => $prepaidExpense->allocations->map(fn($a) => [
                     'id'               => $a->id,
                     'period'           => $a->period,
                     'amount'           => (float) $a->amount,
@@ -119,6 +142,7 @@ class PrepaidExpenseController extends Controller
                     'journal_entry_id'   => $a->journal_entry_id,
                 ])->all(),
             ],
+            'history'       => $history,
             'currentPeriod' => now()->format('Y-m'),
         ]);
     }
@@ -146,5 +170,77 @@ class PrepaidExpenseController extends Controller
             "Phân bổ hàng loạt kỳ {$data['period']}: {$results['success']} thành công, {$results['skipped']} bỏ qua."
             . (count($results['errors']) ? ' Lỗi: ' . implode('; ', $results['errors']) : '')
         );
+    }
+
+    public function pause(PrepaidExpense $prepaidExpense, Request $request): RedirectResponse
+    {
+        $this->authorize('accounting.manage');
+
+        $data = $request->validate(['reason' => 'required|string|max:500']);
+
+        try {
+            $this->service->pause($prepaidExpense, $data['reason']);
+            return back()->with('success', "Đã tạm dừng phân bổ {$prepaidExpense->code}.");
+        } catch (\Throwable $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
+    public function resume(PrepaidExpense $prepaidExpense): RedirectResponse
+    {
+        $this->authorize('accounting.manage');
+
+        try {
+            $this->service->resume($prepaidExpense);
+            return back()->with('success', "Đã tiếp tục phân bổ {$prepaidExpense->code}.");
+        } catch (\Throwable $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
+    // Đối soát GL — TK 142/242, cộng đại số theo dấu (không dùng abs)
+    public function glReconcile(Request $request): Response
+    {
+        $this->authorize('accounting.view');
+
+        $asOf = $request->input('as_of', now()->toDateString());
+
+        $glBalance = function (string $account) use ($asOf): float {
+            return (float) (DB::table('journal_entry_lines')
+                ->join('journal_entries', 'journal_entries.id', '=', 'journal_entry_lines.journal_entry_id')
+                ->where('journal_entry_lines.account_code', $account)
+                ->where('journal_entries.status', 'posted')
+                ->where('journal_entries.entry_date', '<=', $asOf)
+                ->selectRaw('COALESCE(SUM(debit), 0) - COALESCE(SUM(credit), 0) as balance')
+                ->value('balance') ?? 0);
+        };
+
+        $expenses = PrepaidExpense::whereIn('status', ['active', 'fully_amortized'])->get();
+        $accounts = $expenses->pluck('account_code')->unique()->values();
+
+        $byAccount = $accounts->map(function ($code) use ($expenses, $glBalance) {
+            $bookRemaining = $expenses->where('account_code', $code)->sum(fn ($e) => $e->remainingAmount());
+            $gl            = $glBalance($code);
+            return [
+                'account'        => $code,
+                'gl_balance'     => $gl,
+                'book_remaining' => $bookRemaining,
+                'diff'           => round($gl - $bookRemaining, 2),
+            ];
+        })->values();
+
+        return Inertia::render('Accounting/PrepaidExpenses/GlReconcile', [
+            'asOf'      => $asOf,
+            'byAccount' => $byAccount,
+            'expenses'  => $expenses->map(fn ($e) => [
+                'code'             => $e->code,
+                'description'      => $e->description,
+                'account_code'     => $e->account_code,
+                'total_amount'     => (float) $e->total_amount,
+                'amortized_amount' => (float) $e->amortized_amount,
+                'remaining_amount' => $e->remainingAmount(),
+                'status'           => $e->status->value,
+            ])->values(),
+        ]);
     }
 }

@@ -58,7 +58,7 @@ class PrepaidExpenseService
 
     /**
      * Phân bổ 1 tháng cho một chi phí trả trước.
-     * Dr expense_account / Cr 142/242
+     * Dr expense_account / Cr 142/242 (số dương). Đảo chiều nếu amount âm (điều chỉnh đầu kỳ).
      */
     public function amortize(PrepaidExpense $expense, string $period): PrepaidExpenseAllocation
     {
@@ -66,18 +66,22 @@ class PrepaidExpenseService
             throw new \RuntimeException('Chỉ có thể phân bổ chi phí đang hoạt động.');
         }
 
+        if ($expense->isPaused() && (! $expense->pause_effective_period || $period >= $expense->pause_effective_period)) {
+            throw new \RuntimeException("Chi phí đang tạm dừng phân bổ từ kỳ {$expense->pause_effective_period}.");
+        }
+
         if ($expense->allocations()->where('period', $period)->exists()) {
             throw new \RuntimeException("Kỳ {$period} đã được phân bổ.");
         }
 
-        // Tháng cuối: lấy số dư còn lại để tránh sai lệch làm tròn
-        $allocatedCount    = $expense->allocatedMonths();
+        // Tháng cuối: lấy số dư còn lại để tránh sai lệch làm tròn. Trừ cả số kỳ đã qua trước khi nhập số dư đầu kỳ.
+        $allocatedCount    = $expense->allocatedMonths() + $expense->opening_periods_elapsed;
         $remainingMonths   = $expense->months - $allocatedCount;
         $amount = $remainingMonths === 1
             ? (int) $expense->remainingAmount()
             : (int) $expense->monthly_amount;
 
-        return DB::transaction(function () use ($expense, $period, $amount) {
+        return DB::transaction(function () use ($expense, $period, $amount, $remainingMonths) {
             $allocation = PrepaidExpenseAllocation::create([
                 'prepaid_expense_id' => $expense->id,
                 'period'             => $period,
@@ -85,14 +89,21 @@ class PrepaidExpenseService
                 'journal_entry_id'   => null,
             ]);
 
-            $date = Carbon::createFromFormat('Y-m', $period)->startOfMonth();
+            $date  = Carbon::createFromFormat('Y-m', $period)->startOfMonth();
+            $lines = $amount >= 0
+                ? [
+                    ['account' => $expense->expense_account, 'debit' => $amount, 'credit' => 0],
+                    ['account' => $expense->account_code,    'debit' => 0, 'credit' => $amount],
+                ]
+                : [
+                    ['account' => $expense->account_code,    'debit' => abs($amount), 'credit' => 0],
+                    ['account' => $expense->expense_account, 'debit' => 0, 'credit' => abs($amount)],
+                ];
+
             $je = $this->accounting->tryPost(
                 description: "Phân bổ chi phí trả trước {$period}: " . $expense->description,
                 date: $date,
-                lines: [
-                    ['account' => $expense->expense_account, 'debit' => $amount, 'credit' => 0],
-                    ['account' => $expense->account_code,    'debit' => 0, 'credit' => $amount],
-                ],
+                lines: $lines,
                 sourceType: 'prepaid_expense_allocation',
                 sourceId: $allocation->id,
                 postingType: 'amortization',
@@ -103,13 +114,16 @@ class PrepaidExpenseService
             }
 
             $newAmortized = (float) $expense->amortized_amount + $amount;
-            $newStatus    = $newAmortized >= (float) $expense->total_amount
+            // Kỳ cuối (remainingMonths===1) luôn nhận đúng phần dư còn lại → hết kỳ là hoàn thành,
+            // bất kể remaining ban đầu dương hay âm (không dùng >= vì sai với trường hợp âm).
+            $newStatus = $remainingMonths <= 1
                 ? PrepaidExpenseStatus::FullyAmortized
                 : PrepaidExpenseStatus::Active;
 
             $expense->update([
-                'amortized_amount' => $newAmortized,
-                'status'           => $newStatus,
+                'amortized_amount'  => $newAmortized,
+                'status'            => $newStatus,
+                'allocation_status' => $newStatus === PrepaidExpenseStatus::FullyAmortized ? 'completed' : $expense->allocation_status,
             ]);
 
             return $allocation;
@@ -126,6 +140,11 @@ class PrepaidExpenseService
         $results  = ['success' => 0, 'skipped' => 0, 'errors' => []];
 
         foreach ($expenses as $expense) {
+            if ($expense->isPaused() && (! $expense->pause_effective_period || $period >= $expense->pause_effective_period)) {
+                $results['skipped']++;
+                continue;
+            }
+
             // Kiểm tra kỳ $period có nằm trong phạm vi phân bổ không
             $periodDate = Carbon::createFromFormat('Y-m', $period)->startOfMonth();
             $endDate    = $expense->endDate();
@@ -148,5 +167,45 @@ class PrepaidExpenseService
         }
 
         return $results;
+    }
+
+    /**
+     * Tạm dừng / Tiếp tục phân bổ — không đụng amortized_amount, allocations đã tồn tại.
+     */
+    public function pause(PrepaidExpense $expense, ?string $reason): void
+    {
+        if (! $expense->canPauseAllocation()) {
+            throw new \RuntimeException('Chi phí này không ở trạng thái có thể tạm dừng phân bổ.');
+        }
+
+        $currentPeriod = now()->format('Y-m');
+        $hasPostedCurrentPeriod = $expense->allocations()->where('period', $currentPeriod)->exists();
+
+        $effective = $hasPostedCurrentPeriod
+            ? now()->addMonth()->format('Y-m')
+            : $currentPeriod;
+
+        $expense->update([
+            'allocation_status'      => 'paused',
+            'paused_at'              => now(),
+            'paused_by'              => auth()->id(),
+            'pause_effective_period' => $effective,
+            'pause_reason'           => $reason,
+        ]);
+    }
+
+    public function resume(PrepaidExpense $expense): array
+    {
+        if (! $expense->canResumeAllocation()) {
+            throw new \RuntimeException('Chi phí này không ở trạng thái tạm dừng.');
+        }
+
+        $expense->update([
+            'allocation_status' => 'active',
+            'resumed_at'        => now(),
+            'resumed_by'        => auth()->id(),
+        ]);
+
+        return ['remaining' => $expense->remainingAmount(), 'monthly_amount' => (float) $expense->monthly_amount];
     }
 }

@@ -126,6 +126,8 @@
 
           <NavGroup label="Chi phí & Giá vốn" icon="currency-dollar" prefix="/accounting/prepaid">
             <NavItem :href="route('accounting.prepaid-expenses.index')" icon="clock" sub>Chi phí trả trước</NavItem>
+            <NavItem v-if="can('accounting.manage')" :href="route('accounting.prepaid-expenses.opening-balance.create')" icon="database" sub>Số dư đầu kỳ CPTT</NavItem>
+            <NavItem :href="route('accounting.prepaid-expenses.reports.gl-reconcile')" icon="check-circle" sub>Đối soát GL (CPTT)</NavItem>
             <NavItem :href="route('reports.expense_detail')" icon="currency-dollar" sub>Chi tiết chi phí</NavItem>
             <NavItem :href="route('reports.profit.orders')" icon="trending-up" sub>Lợi nhuận đơn hàng</NavItem>
             <NavItem :href="route('reports.profit.projects')" icon="trending-up" sub>Lợi nhuận dự án</NavItem>
@@ -140,6 +142,7 @@
 
           <NavGroup v-if="can('ccdc.view')" label="Công cụ dụng cụ" icon="wrench" prefix="/accounting/small-tools">
             <NavItem :href="route('accounting.small-tools.index')" icon="view-list" sub>Danh sách CCDC</NavItem>
+            <NavItem v-if="can('ccdc.manage')" :href="route('accounting.small-tools.opening-balance.create')" icon="database" sub>Số dư đầu kỳ CCDC</NavItem>
             <NavItem :href="route('accounting.small-tools.receipts.index')" icon="inbox" sub>Phiếu nhập CCDC</NavItem>
             <NavItem :href="route('accounting.small-tools.issues.index')" icon="share" sub>Phiếu xuất dùng</NavItem>
             <NavItem :href="route('accounting.small-tools.allocations.index')" icon="refresh" sub>Phân bổ hàng tháng</NavItem>

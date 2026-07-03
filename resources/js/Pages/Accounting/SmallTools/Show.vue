@@ -13,10 +13,34 @@
           :class="`bg-${tool.status_color}-100 text-${tool.status_color}-700`">
           {{ tool.status_label }}
         </span>
+        <span v-if="tool.allocation_periods" class="px-2 py-0.5 rounded-full text-xs font-medium" :class="allocStatusClass(tool.allocation_status)">
+          {{ allocStatusLabel(tool.allocation_status) }}
+        </span>
+      </div>
+
+      <!-- Opening balance banner -->
+      <div v-if="tool.is_opening_balance" class="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800 mb-4">
+        Đây là bản ghi <strong>số dư đầu kỳ</strong> chuyển từ hệ thống cũ, kỳ chuyển đổi
+        <strong>{{ tool.opening_balance_period }}</strong>.
+        <Link v-if="tool.acquisition_journal_entry_id" :href="route('accounting.journal-entries.show', tool.acquisition_journal_entry_id)"
+          class="underline ml-1">Xem bút toán đầu kỳ</Link>
+      </div>
+
+      <div v-if="tool.allocation_status === 'paused'" class="bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3 text-sm text-yellow-800 mb-4">
+        Tạm dừng từ kỳ <strong>{{ tool.pause_effective_period }}</strong> bởi {{ tool.paused_by_name }} lúc {{ tool.paused_at }}.
+        Lý do: {{ tool.pause_reason }}
       </div>
 
       <!-- Actions -->
       <div class="flex gap-2 mb-6 flex-wrap">
+        <button v-if="can('ccdc.allocate') && tool.can_pause" @click="showPause = true"
+          class="px-4 py-2 bg-yellow-50 border border-yellow-300 text-yellow-800 rounded-lg text-sm hover:bg-yellow-100">
+          Tạm dừng phân bổ
+        </button>
+        <button v-if="can('ccdc.allocate') && tool.can_resume" @click="resumeAllocation"
+          class="px-4 py-2 bg-green-50 border border-green-300 text-green-800 rounded-lg text-sm hover:bg-green-100">
+          Tiếp tục phân bổ
+        </button>
         <Link v-if="can('ccdc.manage') && tool.status === 'draft'"
           :href="route('accounting.small-tools.edit', tool.id)"
           class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg text-sm hover:bg-gray-50">
@@ -180,22 +204,48 @@
               <p class="text-red-500">{{ d.reason }}</p>
             </div>
           </div>
+
+          <!-- Pause/Resume history -->
+          <div v-if="history.length" class="bg-white rounded-xl border border-gray-200 p-5">
+            <h3 class="text-sm font-semibold text-gray-700 mb-3">Lịch sử tạm dừng / tiếp tục</h3>
+            <div v-for="(h, i) in history" :key="i" class="text-xs text-gray-600 mb-2 border-b border-gray-50 pb-2 last:border-0">
+              <p class="text-gray-800">{{ h.description }} — <span class="text-gray-500">{{ h.causer_name }}</span></p>
+              <p class="text-gray-400">{{ h.created_at }}</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
+
+    <Modal :show="showPause" max-width="md" @close="showPause = false">
+      <template #title>Tạm dừng phân bổ — {{ tool.code }}</template>
+      <div class="space-y-3">
+        <p class="text-sm text-gray-600">Giá trị còn lại ({{ formatVnd(tool.total_remaining) }}) sẽ được giữ nguyên.</p>
+        <FormField label="Lý do tạm dừng" required :error="pauseForm.errors.reason">
+          <textarea v-model="pauseForm.reason" rows="2" class="erp-input" />
+        </FormField>
+      </div>
+      <template #footer>
+        <button @click="showPause = false" class="erp-btn-secondary">Hủy</button>
+        <button @click="submitPause" :disabled="pauseForm.processing" class="erp-btn-primary">Xác nhận tạm dừng</button>
+      </template>
+    </Modal>
   </AppLayout>
 </template>
 
 <script setup>
-import { router, Link } from '@inertiajs/vue3';
+import { ref } from 'vue';
+import { router, Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
+import Modal from '@/Components/Shared/Modal.vue';
+import FormField from '@/Components/Shared/FormField.vue';
 import { usePermission } from '@/composables/usePermission';
 import { useCurrency } from '@/composables/useCurrency';
 
 const { hasPermission: can } = usePermission();
 const { formatVnd } = useCurrency();
 
-const props = defineProps({ tool: Object, allocations: Array, transfers: Array, disposals: Array, statuses: Array });
+const props = defineProps({ tool: Object, allocations: Array, transfers: Array, disposals: Array, statuses: Array, history: { type: Array, default: () => [] } });
 
 const currentPeriod = new Date().toISOString().slice(0, 7);
 
@@ -204,6 +254,28 @@ const recognitionLabel  = { immediate: 'Chi phí một lần', allocation: 'Phâ
 
 function confirm() {
   router.post(route('accounting.small-tools.confirm', props.tool.id));
+}
+
+function allocStatusLabel(s) {
+  return { active: 'Đang phân bổ', paused: 'Tạm dừng', completed: 'Đã hoàn thành', not_started: 'Chưa bắt đầu' }[s] ?? (s || 'Đang phân bổ');
+}
+function allocStatusClass(s) {
+  return {
+    active: 'bg-green-100 text-green-700', paused: 'bg-yellow-100 text-yellow-700',
+    completed: 'bg-blue-100 text-blue-700', not_started: 'bg-gray-100 text-gray-500',
+  }[s] || 'bg-green-100 text-green-700';
+}
+
+const showPause = ref(false);
+const pauseForm = useForm({ reason: '' });
+function submitPause() {
+  pauseForm.post(route('accounting.small-tools.allocation.pause', props.tool.id), {
+    onSuccess: () => { showPause.value = false; },
+  });
+}
+
+function resumeAllocation() {
+  router.post(route('accounting.small-tools.allocation.resume', props.tool.id));
 }
 
 function statusClass(status) {

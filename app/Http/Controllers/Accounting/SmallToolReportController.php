@@ -64,7 +64,8 @@ class SmallToolReportController extends Controller
     {
         $this->authorize('reports.view');
 
-        $toolFilter = $request->input('tool');
+        $toolFilter   = $request->input('tool');
+        $statusFilter = $request->input('allocation_status');
 
         $schedule = SmallTool::with(['allocations' => fn ($q) => $q->orderBy('period')])
             ->whereHas('allocations')
@@ -72,6 +73,7 @@ class SmallToolReportController extends Controller
                 $sq->where('code', 'ilike', "%{$toolFilter}%")
                    ->orWhere('name', 'ilike', "%{$toolFilter}%");
             }))
+            ->when($statusFilter, fn ($q) => $q->where('allocation_status', $statusFilter))
             ->orderBy('code')
             ->get()
             ->map(fn (SmallTool $t) => [
@@ -81,6 +83,7 @@ class SmallToolReportController extends Controller
                 'department'           => $t->department,
                 'original_cost'        => (float) $t->original_cost,
                 'expense_account_code' => $t->expense_account_code,
+                'allocation_status'    => $t->allocation_status,
                 'allocations'          => $t->allocations->map(fn ($a) => [
                     'id'               => $a->id,
                     'period'           => $a->period,
@@ -95,7 +98,7 @@ class SmallToolReportController extends Controller
         return Inertia::render('Accounting/SmallTools/Reports/AllocationSchedule', [
             'schedule'      => $schedule->values(),
             'currentPeriod' => now()->format('Y-m'),
-            'filters'       => ['tool' => $toolFilter],
+            'filters'       => ['tool' => $toolFilter, 'allocation_status' => $statusFilter],
         ]);
     }
 

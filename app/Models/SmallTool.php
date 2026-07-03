@@ -7,9 +7,21 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Casts\Attribute;
+use Spatie\Activitylog\LogOptions;
+use Spatie\Activitylog\Traits\LogsActivity;
 
 class SmallTool extends Model
 {
+    use LogsActivity;
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly(['allocation_status', 'paused_at', 'pause_reason', 'resumed_at', 'resumed_by'])
+            ->logOnlyDirty()
+            ->dontSubmitEmptyLogs();
+    }
+
     protected $fillable = [
         'code', 'name', 'category_id', 'unit', 'quantity',
         'original_cost', 'vat_amount', 'total_cost',
@@ -22,6 +34,9 @@ class SmallTool extends Model
         'periods_allocated', 'total_allocated',
         'acquisition_journal_entry_id', 'issue_journal_entry_id',
         'status', 'notes', 'created_by', 'updated_by',
+        'is_opening_balance', 'opening_balance_period', 'opening_balance_note',
+        'allocation_status', 'paused_at', 'paused_by', 'pause_effective_period', 'pause_reason',
+        'resumed_at', 'resumed_by',
     ];
 
     protected function casts(): array
@@ -35,6 +50,9 @@ class SmallTool extends Model
             'total_cost'             => 'decimal:2',
             'total_allocated'        => 'decimal:2',
             'status'                 => SmallToolStatus::class,
+            'is_opening_balance'     => 'boolean',
+            'paused_at'              => 'datetime',
+            'resumed_at'             => 'datetime',
         ];
     }
 
@@ -107,6 +125,16 @@ class SmallTool extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    public function pausedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'paused_by');
+    }
+
+    public function resumedByUser(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'resumed_by');
+    }
+
     // -------------------------------------------------------
     // Computed attributes
     // -------------------------------------------------------
@@ -139,4 +167,9 @@ class SmallTool extends Model
     public function isAllocating(): bool     { return $this->status === SmallToolStatus::Allocating; }
     public function canIssue(): bool         { return $this->status === SmallToolStatus::InStock; }
     public function canCancel(): bool        { return in_array($this->status, [SmallToolStatus::Draft, SmallToolStatus::InStock]); }
+
+    public function isPaused(): bool               { return $this->allocation_status === 'paused'; }
+    public function isAllocationCompleted(): bool  { return $this->allocation_status === 'completed'; }
+    public function canPauseAllocation(): bool     { return $this->status === SmallToolStatus::Allocating && $this->allocation_status === 'active'; }
+    public function canResumeAllocation(): bool    { return $this->allocation_status === 'paused'; }
 }

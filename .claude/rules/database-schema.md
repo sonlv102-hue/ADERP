@@ -132,7 +132,7 @@ Complete schema for 100+ tables, grouped by module. Cập nhật: 2026-06-23.
 | cash_vouchers | Thu/chi quỹ tiền mặt | id, code (PT-/PC-), fund_id, type (receipt/payment), business_type, partner_type, partner_id, amount, description, cash_flow_code, status (draft/confirmed/cancelled) |
 | funds | Quỹ tiền mặt | id, code, name, account_code, balance |
 | fund_transfers | Luân chuyển quỹ (LCQ-) | id, transfer_no, transfer_date, from_fund_id, to_fund_id, amount, status (draft/posted/reversed), journal_entry_id |
-| prepaid_expenses | Chi phí trả trước (CPT-) | id, code, description, total_amount, start_date, end_date, monthly_amount, status |
+| prepaid_expenses | Chi phí trả trước (CPT-) | id, code, description, total_amount, start_date, monthly_amount, amortized_amount, status, is_opening_balance, opening_balance_period, opening_periods_elapsed, opening_journal_entry_id, allocation_status (active\|paused\|completed\|not_started), paused_at/by, pause_effective_period, pause_reason, resumed_at/by — LƯU Ý: `end_date` KHÔNG phải cột DB, chỉ là method tính động `endDate()` |
 | prepaid_expense_allocations | Phân bổ hàng tháng | id, prepaid_expense_id, period (YYYY-MM), amount, journal_entry_id |
 | payment_terms | Điều khoản thanh toán | id, name, days, discount_percent |
 | fixed_asset_categories | Nhóm TSCĐ | id, name, code, useful_life_months, depreciation_account, accumulated_account, expense_account |
@@ -155,7 +155,7 @@ Complete schema for 100+ tables, grouped by module. Cập nhật: 2026-06-23.
 | Table | Purpose | Key columns |
 |---|---|---|
 | small_tool_categories | Nhóm CCDC | id, name, code, description |
-| small_tools | CCDC master | id, code, name, category_id, unit, quantity, original_cost, vat_amount, total_cost, acquisition_type (stock\|direct), recognition_method (immediate\|allocation), allocation_periods, allocation_start_date, stock_account_code, expense_account_code, payable_account_code, periods_allocated, total_allocated, status (draft\|in_stock\|in_use\|allocating\|fully_allocated\|disposed\|cancelled) |
+| small_tools | CCDC master | id, code, name, category_id, unit, quantity, original_cost, vat_amount, total_cost, acquisition_type (stock\|direct), recognition_method (immediate\|allocation), allocation_periods, allocation_start_date, stock_account_code, expense_account_code, payable_account_code, periods_allocated, total_allocated, status (draft\|in_stock\|in_use\|allocating\|fully_allocated\|disposed\|cancelled), is_opening_balance, opening_balance_period, opening_balance_note, allocation_status (active\|paused\|completed\|not_started), paused_at/by, pause_effective_period, pause_reason, resumed_at/by |
 | small_tool_receipts | Nhập CCDC vào kho | id, small_tool_id, receipt_date, quantity, warehouse_id, journal_entry_id |
 | small_tool_issues | Xuất CCDC | id, small_tool_id, issue_date, quantity, department, project_id, journal_entry_id |
 | small_tool_allocations | Phân bổ chi phí CCDC | id, small_tool_id, period (YYYY-MM), amount, journal_entry_id |

@@ -83,11 +83,19 @@ class SmallToolController extends Controller
             'supplier', 'purchaseInvoice', 'fund',
             'allocations', 'transfers.fromEmployee', 'transfers.toEmployee',
             'transfers.fromProject', 'transfers.toProject',
-            'disposals',
+            'disposals', 'pausedByUser', 'resumedByUser',
         ]);
+
+        $history = \Spatie\Activitylog\Models\Activity::forSubject($tool)
+            ->with('causer')->latest()->get()->map(fn ($log) => [
+                'description' => $log->description,
+                'causer_name' => $log->causer?->name ?? 'Hệ thống',
+                'created_at'  => $log->created_at->format('d/m/Y H:i'),
+            ]);
 
         return Inertia::render('Accounting/SmallTools/Show', [
             'tool'        => $this->toDto($tool),
+            'history'     => $history,
             'allocations' => $tool->allocations->map(fn ($a) => [
                 'id'                 => $a->id,
                 'period'             => $a->period,
@@ -202,6 +210,17 @@ class SmallToolController extends Controller
             'status_label'                 => $t->status->label(),
             'status_color'                 => $t->status->color(),
             'notes'                        => $t->notes,
+            'is_opening_balance'           => $t->is_opening_balance,
+            'opening_balance_period'       => $t->opening_balance_period,
+            'allocation_status'            => $t->allocation_status,
+            'pause_reason'                 => $t->pause_reason,
+            'pause_effective_period'       => $t->pause_effective_period,
+            'paused_at'                    => $t->paused_at?->format('d/m/Y H:i'),
+            'paused_by_name'               => $t->pausedByUser?->name,
+            'resumed_at'                   => $t->resumed_at?->format('d/m/Y H:i'),
+            'resumed_by_name'              => $t->resumedByUser?->name,
+            'can_pause'                    => $t->canPauseAllocation(),
+            'can_resume'                   => $t->canResumeAllocation(),
         ];
     }
 

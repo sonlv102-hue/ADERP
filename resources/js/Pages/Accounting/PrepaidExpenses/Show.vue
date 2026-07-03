@@ -14,7 +14,36 @@
             <p class="text-sm text-gray-500">{{ expense.description }}</p>
           </div>
         </div>
-        <StatusBadge :color="expense.status_color">{{ expense.status_label }}</StatusBadge>
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-0.5 rounded-full text-xs font-medium" :class="allocStatusClass(expense.allocation_status)">
+            {{ allocStatusLabel(expense.allocation_status) }}
+          </span>
+          <StatusBadge :color="expense.status_color">{{ expense.status_label }}</StatusBadge>
+        </div>
+      </div>
+
+      <!-- Opening balance banner -->
+      <div v-if="expense.is_opening_balance" class="bg-blue-50 border border-blue-200 rounded-lg px-4 py-3 text-sm text-blue-800">
+        Đây là bản ghi <strong>số dư đầu kỳ</strong> chuyển từ hệ thống cũ, kỳ chuyển đổi
+        <strong>{{ expense.opening_balance_period }}</strong>.
+        <Link v-if="expense.opening_journal_entry_id" :href="route('accounting.journal-entries.show', expense.opening_journal_entry_id)"
+          class="underline ml-1">Xem bút toán đầu kỳ</Link>
+      </div>
+
+      <!-- Pause/Resume actions -->
+      <div v-if="can('accounting.manage') && (expense.can_pause || expense.can_resume)" class="flex gap-2">
+        <button v-if="expense.can_pause" @click="showPause = true"
+          class="px-4 py-2 text-sm border border-yellow-300 bg-yellow-50 text-yellow-800 rounded-lg hover:bg-yellow-100">
+          Tạm dừng phân bổ
+        </button>
+        <button v-if="expense.can_resume" @click="resume"
+          class="px-4 py-2 text-sm border border-green-300 bg-green-50 text-green-800 rounded-lg hover:bg-green-100">
+          Tiếp tục phân bổ
+        </button>
+      </div>
+      <div v-if="expense.allocation_status === 'paused'" class="bg-yellow-50 border border-yellow-200 rounded-lg px-4 py-3 text-sm text-yellow-800">
+        Tạm dừng từ kỳ <strong>{{ expense.pause_effective_period }}</strong> bởi {{ expense.paused_by_name }} lúc {{ expense.paused_at }}.
+        Lý do: {{ expense.pause_reason }}
       </div>
 
       <!-- Info -->
@@ -58,7 +87,8 @@
           </div>
           <div class="flex justify-between text-xs text-gray-500 mt-1">
             <span>{{ expense.allocations.length }} / {{ expense.months }} kỳ</span>
-            <span class="font-medium" :class="expense.remaining_amount > 0 ? 'text-blue-600' : 'text-green-600'">
+            <span class="font-medium"
+              :class="expense.remaining_amount < 0 ? 'text-orange-600' : (expense.remaining_amount > 0 ? 'text-blue-600' : 'text-green-600')">
               Còn lại: {{ fmt(expense.remaining_amount) }}
             </span>
           </div>
@@ -106,19 +136,48 @@
           </tbody>
         </table>
       </div>
+
+      <!-- History -->
+      <div v-if="history.length" class="bg-white rounded-xl border border-gray-200 p-6">
+        <h3 class="font-semibold text-gray-700 mb-3">Lịch sử tạm dừng / tiếp tục</h3>
+        <div class="space-y-3 text-sm">
+          <div v-for="(h, i) in history" :key="i" class="border-b border-gray-50 pb-2 last:border-0">
+            <p class="text-gray-800">{{ h.description }} — <span class="text-gray-500">{{ h.causer_name }}</span></p>
+            <p class="text-xs text-gray-400">{{ h.created_at }}</p>
+          </div>
+        </div>
+      </div>
     </div>
+
+    <Modal :show="showPause" max-width="md" @close="showPause = false">
+      <template #title>Tạm dừng phân bổ — {{ expense.code }}</template>
+      <div class="space-y-3">
+        <p class="text-sm text-gray-600">Số dư còn lại ({{ fmt(expense.remaining_amount) }}) sẽ được giữ nguyên.</p>
+        <FormField label="Lý do tạm dừng" required :error="pauseForm.errors.reason">
+          <textarea v-model="pauseForm.reason" rows="2" class="erp-input" />
+        </FormField>
+      </div>
+      <template #footer>
+        <button @click="showPause = false" class="erp-btn-secondary">Hủy</button>
+        <button @click="submitPause" :disabled="pauseForm.processing" class="erp-btn-primary">Xác nhận tạm dừng</button>
+      </template>
+    </Modal>
   </AppLayout>
 </template>
 
 <script setup>
-import { computed } from 'vue';
-import { Link, useForm } from '@inertiajs/vue3';
+import { computed, ref } from 'vue';
+import { Link, useForm, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
+import Modal from '@/Components/Shared/Modal.vue';
+import FormField from '@/Components/Shared/FormField.vue';
+import { usePermission } from '@/composables/usePermission';
 import { useCurrency } from '@/composables/useCurrency';
 
-const props = defineProps({ expense: Object, currentPeriod: String });
+const props = defineProps({ expense: Object, currentPeriod: String, history: { type: Array, default: () => [] } });
 const { formatVnd: fmt } = useCurrency();
+const { hasPermission: can } = usePermission();
 
 const progressPct = computed(() =>
   props.expense.total_amount > 0
@@ -132,5 +191,27 @@ function submitAmortize() {
   amortizeForm.post(route('accounting.prepaid-expenses.amortize', props.expense.id), {
     onSuccess: () => amortizeForm.reset('period'),
   });
+}
+
+function allocStatusLabel(s) {
+  return { active: 'Đang phân bổ', paused: 'Tạm dừng', completed: 'Đã hoàn thành', not_started: 'Chưa bắt đầu' }[s] ?? (s || 'Đang phân bổ');
+}
+function allocStatusClass(s) {
+  return {
+    active: 'bg-green-100 text-green-700', paused: 'bg-yellow-100 text-yellow-700',
+    completed: 'bg-blue-100 text-blue-700', not_started: 'bg-gray-100 text-gray-500',
+  }[s] || 'bg-green-100 text-green-700';
+}
+
+const showPause = ref(false);
+const pauseForm = useForm({ reason: '' });
+function submitPause() {
+  pauseForm.post(route('accounting.prepaid-expenses.pause', props.expense.id), {
+    onSuccess: () => { showPause.value = false; },
+  });
+}
+
+function resume() {
+  router.post(route('accounting.prepaid-expenses.resume', props.expense.id));
 }
 </script>

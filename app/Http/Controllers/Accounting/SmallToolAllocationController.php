@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Accounting;
 
 use App\Http\Controllers\Controller;
+use App\Models\SmallTool;
 use App\Models\SmallToolAllocation;
 use App\Services\SmallToolAllocationService;
 use Illuminate\Http\RedirectResponse;
@@ -50,6 +51,35 @@ class SmallToolAllocationController extends Controller
         try {
             $this->service->reverseAllocation($allocation);
             return back()->with('success', "Đã đảo phân bổ kỳ {$allocation->period}.");
+        } catch (\Throwable $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
+    public function pause(SmallTool $tool, Request $request): RedirectResponse
+    {
+        $this->authorize('ccdc.allocate');
+
+        $data = $request->validate(['reason' => 'required|string|max:500']);
+
+        try {
+            $this->service->pause($tool, $data['reason']);
+            return back()->with('success', "Đã tạm dừng phân bổ CCDC {$tool->code}.");
+        } catch (\Throwable $e) {
+            return back()->withErrors(['error' => $e->getMessage()]);
+        }
+    }
+
+    public function resume(SmallTool $tool): RedirectResponse
+    {
+        $this->authorize('ccdc.allocate');
+
+        try {
+            $result = $this->service->resume($tool);
+            $msg = $result['next_period']
+                ? "Đã tiếp tục phân bổ CCDC {$tool->code}, kỳ tới: {$result['next_period']}."
+                : "Đã tiếp tục phân bổ CCDC {$tool->code}.";
+            return back()->with('success', $msg);
         } catch (\Throwable $e) {
             return back()->withErrors(['error' => $e->getMessage()]);
         }

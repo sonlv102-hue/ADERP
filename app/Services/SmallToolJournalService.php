@@ -211,6 +211,46 @@ class SmallToolJournalService
     }
 
     // --------------------------------------------------
+    // 4b. Số dư đầu kỳ CCDC — ghi nhận giá trị còn lại (không phải nguyên giá), đối ứng 4111
+    // --------------------------------------------------
+
+    public function createOpeningBalanceJournal(SmallTool $tool): \App\Models\JournalEntry
+    {
+        $remaining = (float) $tool->totalRemaining;
+        $account   = $tool->pending_account_code ?: '2422';
+        $date      = Carbon::createFromFormat('Y-m', $tool->opening_balance_period)->startOfMonth()->subDay();
+
+        $this->assertDetail($account);
+
+        $lines = [
+            [
+                'account'     => $account,
+                'debit'       => $remaining,
+                'credit'      => 0,
+                'description' => "Số dư đầu kỳ CCDC: {$tool->name}",
+            ],
+            [
+                'account'     => '4111',
+                'debit'       => 0,
+                'credit'      => $remaining,
+                'description' => "Số dư đầu kỳ CCDC {$tool->opening_balance_period}",
+            ],
+        ];
+
+        return $this->accounting->post(
+            description: "Số dư đầu kỳ CCDC: {$tool->code} - {$tool->name}",
+            date: $date,
+            lines: $lines,
+            referenceType: 'small_tool_opening_balance',
+            referenceId: $tool->id,
+            isAuto: false,
+            journalSourceType: 'small_tool_opening_balance',
+            excludeFromPeriodMovement: true,
+            fiscalPeriod: $tool->opening_balance_period,
+        );
+    }
+
+    // --------------------------------------------------
     // 5. Bút toán batch phân bổ nhiều CCDC trong 1 kỳ
     // --------------------------------------------------
 
