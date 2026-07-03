@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\Accounting;
 
 use App\Enums\SmallToolStatus;
+use App\Exports\SmallToolListExport;
+use App\Exports\TemplateExport;
 use App\Http\Controllers\Controller;
+use App\Imports\SmallToolImport;
 use App\Models\Employee;
 use App\Models\Fund;
 use App\Models\Project;
@@ -18,16 +21,15 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
 
 class SmallToolController extends Controller
 {
     public function __construct(protected SmallToolService $service) {}
 
-    public function index(Request $request): Response
+    private function filteredQuery(Request $request)
     {
-        $this->authorize('ccdc.view');
-
-        $query = SmallTool::with(['category', 'responsibleEmployee', 'warehouse'])
+        return SmallTool::with(['category', 'responsibleEmployee', 'warehouse', 'project', 'supplier'])
             ->when($request->search, fn ($q, $s) =>
                 $q->where(fn ($q2) => $q2->where('code', 'ilike', "%{$s}%")->orWhere('name', 'ilike', "%{$s}%"))
             )
@@ -37,16 +39,13 @@ class SmallToolController extends Controller
             ->when($request->project_id,  fn ($q) => $q->where('project_id', $request->project_id))
             ->when($request->warehouse_id, fn ($q) => $q->where('warehouse_id', $request->warehouse_id))
             ->orderByDesc('id');
+    }
 
-        $tools = $query->paginate(50)->through(fn (SmallTool $t) => $this->toDto($t));
+    public function index(Request $request): Response
+    {
+        $this->authorize('ccdc.view');
 
-        return Inertia::render('Accounting/SmallTools/Index', [
-            'tools'       => $tools,
-            'categories'  => SmallToolCategory::orderBy('name')->get(['id', 'name']),
-            'statuses'    => collect(SmallToolStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
-            'warehouses'  => Warehouse::orderBy('name')->get(['id', 'name']),
-            'filters'     => $request->only(['search', 'status', 'category_id', 'department', 'project_id', 'warehouse_id']),
-        ]);
+        return Inertia::render('Accounting/SmallTools/Index', $this->indexProps($request));
     }
 
     public function create(): Response
@@ -222,6 +221,170 @@ class SmallToolController extends Controller
         });
 
         return redirect()->route('accounting.small-tools.index')->with('success', "Đã xóa CCDC {$tool->code}.");
+    }
+
+    public function exportExcel(Request $request)
+    {
+        $this->authorize('ccdc.view');
+
+        $tools = $this->filteredQuery($request)->get();
+
+        return Excel::download(
+            new SmallToolListExport($tools, $request->only(['search', 'status', 'department'])),
+            'danh-sach-ccdc_' . now()->format('Y-m-d') . '.xlsx'
+        );
+    }
+
+    public function exportPdf(Request $request)
+    {
+        $this->authorize('ccdc.view');
+
+        $tools = $this->filteredQuery($request)->get();
+
+        $rows = $tools->map(fn (SmallTool $t) => [
+            'code'            => $t->code,
+            'name'            => $t->name,
+            'category_name'   => $t->category?->name,
+            'department'      => $t->department,
+            'status_label'    => $t->status->label(),
+            'original_cost'   => (float) $t->original_cost,
+            'total_allocated' => (float) $t->total_allocated,
+            'total_remaining' => (float) $t->total_remaining,
+        ])->all();
+
+        $totals = [
+            'original_cost'   => array_sum(array_column($rows, 'original_cost')),
+            'total_allocated' => array_sum(array_column($rows, 'total_allocated')),
+            'total_remaining' => array_sum(array_column($rows, 'total_remaining')),
+        ];
+
+        $parts = [];
+        if ($request->search)     $parts[] = 'Từ khóa: "' . $request->search . '"';
+        if ($request->status)     $parts[] = 'Trạng thái: ' . $request->status;
+        if ($request->department) $parts[] = 'Bộ phận: ' . $request->department;
+        $filterDescription = $parts ? implode(' | ', $parts) : 'Tất cả CCDC';
+
+        $company = \App\Models\Setting::getGroup('company');
+
+        return \Barryvdh\DomPDF\Facade\Pdf::loadView('pdf.small-tools-list', compact('rows', 'totals', 'filterDescription', 'company'))
+            ->setPaper('a4', 'landscape')
+            ->download('danh-sach-ccdc_' . now()->format('Y-m-d') . '.pdf');
+    }
+
+    public function importTemplate()
+    {
+        $this->authorize('ccdc.manage');
+
+        $headers = [
+            'name', 'category_code', 'unit', 'quantity', 'original_cost', 'vat_amount',
+            'acquisition_type', 'recognition_method', 'allocation_periods',
+            'department', 'employee_code', 'warehouse', 'project_code', 'supplier_code',
+            'purchase_date', 'in_service_date', 'notes',
+        ];
+
+        $sampleRows = [
+            ['[Hướng dẫn] Bắt buộc: name, original_cost. acquisition_type = stock|direct (mặc định stock). recognition_method = immediate|allocation (mặc định immediate).'],
+            ['allocation_periods bắt buộc > 0 nếu recognition_method = allocation. Các mã category_code/employee_code/project_code/supplier_code/warehouse không tìm thấy sẽ bị bỏ trống (cảnh báo), không chặn import.'],
+            ['Xóa 2 dòng hướng dẫn này trước khi import. CCDC nhập vào luôn ở trạng thái nháp — cần vào từng bản ghi để xác nhận/nhập kho như bình thường.'],
+            ['Máy đếm tiền 701', 'DC', 'cái', 1, 5453704, 436296, 'direct', 'allocation', 24, 'Kế toán', '', '', '', '2026-07-01', '2026-07-01', ''],
+            ['Máy tính Casio', 'DC', 'cái', 5, 500000, 0, 'stock', 'immediate', '', 'Kinh doanh', '', 'Kho chính', '', 'NCC-0001', '', '', ''],
+        ];
+
+        return Excel::download(new TemplateExport($headers, 'CCDC', $sampleRows), 'mau-nhap-ccdc.xlsx');
+    }
+
+    public function importPreview(Request $request): Response
+    {
+        $this->authorize('ccdc.manage');
+
+        $request->validate([
+            'file' => ['required', 'file', 'extensions:xlsx,xls,csv', 'max:10240'],
+        ]);
+
+        $categories = SmallToolCategory::all(['id', 'code', 'name']);
+        $employees  = Employee::where('status', 'active')->get(['id', 'code', 'name']);
+        $warehouses = Warehouse::all(['id', 'name']);
+        $projects   = Project::all(['id', 'code', 'name']);
+        $suppliers  = Supplier::where('is_active', true)->get(['id', 'code', 'name']);
+
+        $import = new SmallToolImport($categories, $employees, $warehouses, $projects, $suppliers);
+        Excel::import($import, $request->file('file'));
+
+        session(['ccdc_import' => $import->parsedTools]);
+
+        return Inertia::render('Accounting/SmallTools/Index', array_merge(
+            $this->indexProps($request),
+            [
+                'preview' => [
+                    'total_rows'  => $import->totalRows,
+                    'valid_tools' => count($import->parsedTools),
+                    'error_count' => count($import->errors),
+                    'warning_count' => count($import->warnings),
+                    'tools'       => $import->parsedTools,
+                    'errors'      => $import->errors,
+                    'warnings'    => $import->warnings,
+                ],
+            ]
+        ));
+    }
+
+    public function importConfirm(Request $request): RedirectResponse
+    {
+        $this->authorize('ccdc.manage');
+
+        $parsedTools = session('ccdc_import', []);
+        if (empty($parsedTools)) {
+            return back()->with('error', 'Phiên import đã hết hạn. Vui lòng upload lại file.');
+        }
+
+        $created = 0;
+
+        DB::transaction(function () use ($parsedTools, &$created) {
+            foreach ($parsedTools as $row) {
+                SmallTool::create([
+                    'code'                    => SmallTool::generateCode(),
+                    'name'                    => $row['name'],
+                    'category_id'             => $row['category_id'],
+                    'unit'                    => $row['unit'],
+                    'quantity'                => $row['quantity'],
+                    'original_cost'           => $row['original_cost'],
+                    'vat_amount'              => $row['vat_amount'],
+                    'total_cost'              => $row['total_cost'],
+                    'acquisition_type'        => $row['acquisition_type'],
+                    'recognition_method'      => $row['recognition_method'],
+                    'allocation_periods'      => $row['allocation_periods'],
+                    'department'              => $row['department'],
+                    'responsible_employee_id' => $row['responsible_employee_id'],
+                    'warehouse_id'            => $row['warehouse_id'],
+                    'project_id'              => $row['project_id'],
+                    'supplier_id'             => $row['supplier_id'],
+                    'purchase_date'           => $row['purchase_date'],
+                    'in_service_date'         => $row['in_service_date'],
+                    'notes'                   => $row['notes'],
+                    'status'                  => 'draft',
+                    'created_by'              => auth()->id(),
+                ]);
+                $created++;
+            }
+        });
+
+        session()->forget('ccdc_import');
+
+        return redirect()->route('accounting.small-tools.index')
+            ->with('success', "Đã import {$created} CCDC (trạng thái nháp) — vào từng bản ghi để xác nhận/nhập kho như bình thường.");
+    }
+
+    private function indexProps(Request $request): array
+    {
+        $tools = $this->filteredQuery($request)->paginate(50)->through(fn (SmallTool $t) => $this->toDto($t));
+
+        return [
+            'tools'       => $tools,
+            'categories'  => SmallToolCategory::orderBy('name')->get(['id', 'name']),
+            'statuses'    => collect(SmallToolStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
+            'warehouses'  => Warehouse::orderBy('name')->get(['id', 'name']),
+            'filters'     => $request->only(['search', 'status', 'category_id', 'department', 'project_id', 'warehouse_id']),
+        ];
     }
 
     private function toDto(SmallTool $t): array

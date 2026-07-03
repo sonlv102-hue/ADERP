@@ -620,6 +620,13 @@ Route::middleware('auth')->group(function () {
             Route::get('create',[SmallToolController::class, 'create'])->name('create')->middleware('can:ccdc.manage');
             Route::post('',     [SmallToolController::class, 'store'])->name('store')->middleware('can:ccdc.manage');
 
+            // Export / Import
+            Route::get('export-excel', [SmallToolController::class, 'exportExcel'])->name('export-excel')->middleware('can:ccdc.view');
+            Route::get('export-pdf',   [SmallToolController::class, 'exportPdf'])->name('export-pdf')->middleware('can:ccdc.view');
+            Route::get('import/template', [SmallToolController::class, 'importTemplate'])->name('import.template')->middleware('can:ccdc.manage');
+            Route::post('import/preview', [SmallToolController::class, 'importPreview'])->name('import.preview')->middleware('can:ccdc.manage');
+            Route::post('import/confirm', [SmallToolController::class, 'importConfirm'])->name('import.confirm')->middleware('can:ccdc.manage');
+
             // Số dư đầu kỳ CCDC
             Route::get('opening-balance/create', [SmallToolOpeningBalanceController::class, 'create'])->name('opening-balance.create')->middleware('can:ccdc.manage');
             Route::post('opening-balance',       [SmallToolOpeningBalanceController::class, 'store'])->name('opening-balance.store')->middleware('can:ccdc.manage');
