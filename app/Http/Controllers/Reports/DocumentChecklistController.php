@@ -83,9 +83,11 @@ class DocumentChecklistController extends Controller
     {
         $filters  = $this->normalizeFilters($request);
         [$rows, $totals, $isBalanced] = $this->buildReport($filters);
-        $company  = Setting::getGroup('company');
+        $company      = Setting::getGroup('company');
+        $signingPlace = Setting::get('report_signing_place');
+        $signingDate  = now();
         $from     = str_replace('-', '', $filters['date_from']);
-        return Pdf::loadView('pdf.voucher-listing', compact('rows', 'totals', 'isBalanced', 'filters', 'company'))
+        return Pdf::loadView('pdf.voucher-listing', compact('rows', 'totals', 'isBalanced', 'filters', 'company', 'signingPlace', 'signingDate'))
             ->setPaper('a4', 'landscape')
             ->download("bang-ke-chung-tu-{$from}.pdf");
     }

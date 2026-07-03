@@ -46,6 +46,7 @@ Các rule chi tiết nằm trong `.claude/rules/`. Không import toàn bộ rule
 | PHP/Laravel, Controller, Model, Service, Enum | `.claude/rules/php-patterns.md` |
 | Vue/JS, page, composable, component | `.claude/rules/vue-patterns.md` |
 | **UI/UX — button, badge, form, table, modal, icon, layout** | **`.claude/rules/ui-style-guide.md` — bắt buộc đọc trước khi sửa bất kỳ Vue file nào** |
+| **Báo cáo, PDF, Excel export, bản in — đặc biệt phần chữ ký** | **`.claude/rules/reporting-standards.md` — bắt buộc đọc trước khi tạo/sửa báo cáo có phần ký** |
 | Migration, model, schema, relation | `.claude/rules/database-schema.md` |
 | Seeder, routes, admin, permission | `.claude/rules/rbac.md` |
 | Module map, service map, FSM, migration prefix | `.claude/rules/phase-history.md` |

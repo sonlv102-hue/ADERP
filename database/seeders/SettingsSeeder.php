@@ -21,6 +21,7 @@ class SettingsSeeder extends Seeder
             ['key' => 'company_bank_name',    'value' => '',                                  'group' => 'company'],
             ['key' => 'company_bank_account', 'value' => '',                                  'group' => 'company'],
             ['key' => 'company_bank_branch',  'value' => '',                                  'group' => 'company'],
+            ['key' => 'report_signing_place', 'value' => '',                                  'group' => 'company'],
         ];
 
         foreach ($settings as $setting) {

@@ -85,6 +85,13 @@
             <textarea v-model="form.company_address" rows="2"
               class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"></textarea>
           </div>
+
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Địa danh ký báo cáo</label>
+            <input v-model="form.report_signing_place" type="text" placeholder="Vd: Hải Phòng"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+            <p class="mt-1 text-xs text-gray-500">Dùng cho dòng "Địa danh, ngày ... tháng ... năm ..." ở phần chữ ký của báo cáo/PDF. Chỉ điền tên tỉnh/thành, không điền địa chỉ đầy đủ.</p>
+          </div>
         </div>
 
         <!-- Thông tin ngân hàng -->
@@ -145,6 +152,7 @@ const form = useForm({
   company_bank_name:    props.settings.company_bank_name   ?? '',
   company_bank_account: props.settings.company_bank_account ?? '',
   company_bank_branch:  props.settings.company_bank_branch  ?? '',
+  report_signing_place: props.settings.report_signing_place ?? '',
   logo: null,
 });
 

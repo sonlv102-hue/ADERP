@@ -234,4 +234,17 @@ class VoucherListingReportTest extends TestCase
         $res->assertOk();
         $this->assertStringContainsString('spreadsheetml', $res->headers->get('Content-Type') ?? '');
     }
+
+    // ── Test 10: Export PDF (dùng shared signature component) ─────────────
+
+    public function test_export_pdf_returns_pdf_and_uses_shared_signature_component(): void
+    {
+        $this->makeJe([], [['6422', 100_000]], [['1111', 100_000]]);
+        \App\Models\Setting::set('report_signing_place', 'Hải Phòng', 'company');
+
+        $res = $this->get(route('reports.document_checklist.pdf') . '?date_from=2026-01-01&date_to=2026-01-31');
+
+        $res->assertOk();
+        $this->assertSame('application/pdf', $res->headers->get('Content-Type'));
+    }
 }

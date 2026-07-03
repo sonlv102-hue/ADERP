@@ -2,6 +2,7 @@
 
 namespace App\Exports\Reports;
 
+use App\Exports\Concerns\HasSignatureBlock;
 use App\Http\Controllers\Reports\DocumentChecklistController;
 use App\Models\Setting;
 use Illuminate\Support\Collection;
@@ -16,6 +17,8 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 
 class VoucherListingExport implements FromCollection, WithTitle, WithColumnWidths, WithEvents
 {
+    use HasSignatureBlock;
+
     private array $rows;
     private array $totals;
     private array $filters;
@@ -164,31 +167,21 @@ class VoucherListingExport implements FromCollection, WithTitle, WithColumnWidth
                 $sheet->getStyle("G{$totalRow}:H{$totalRow}")->getAlignment()
                     ->setHorizontal(Alignment::HORIZONTAL_RIGHT);
 
-                // ── Signature section ─────────────────────────────────────────
+                // ── Signature section (shared component — see docs/REPORTING_STANDARDS.md) ──
                 $signRow = $totalRow + 2;
-                $today   = now()->format('d/m/Y');
-                $sheet->mergeCells("F{$signRow}:H{$signRow}");
-                $sheet->setCellValue("F{$signRow}", "Ngày {$today}");
-                $sheet->getStyle("F{$signRow}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
-                $sheet->getStyle("F{$signRow}")->getFont()->setItalic(true)->setSize(9);
-
-                $signRow2 = $signRow + 1;
-                $sheet->setCellValue("A{$signRow2}", 'Người lập biểu');
-                $sheet->setCellValue("D{$signRow2}", 'Kế toán trưởng');
-                $sheet->setCellValue("G{$signRow2}", 'Giám đốc');
-                foreach (['A', 'D', 'G'] as $col) {
-                    $sheet->getStyle("{$col}{$signRow2}")->applyFromArray([
-                        'font'      => ['bold' => true, 'size' => 9],
-                        'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER],
-                    ]);
-                }
-                $noteRow = $signRow2 + 1;
-                foreach (['A', 'D', 'G'] as $col) {
-                    $sheet->setCellValue("{$col}{$noteRow}", '(Ký, họ tên)');
-                    $sheet->getStyle("{$col}{$noteRow}")->getFont()->setItalic(true)->setSize(8);
-                    $sheet->getStyle("{$col}{$noteRow}")->getAlignment()
-                        ->setHorizontal(Alignment::HORIZONTAL_CENTER);
-                }
+                $this->writeSignatureBlock(
+                    $sheet,
+                    $signRow,
+                    [
+                        ['title' => 'Người lập biểu', 'instruction' => '(Ký, họ tên)'],
+                        ['title' => 'Kế toán trưởng', 'instruction' => '(Ký, họ tên)'],
+                        ['title' => 'Giám đốc',        'instruction' => '(Ký, họ tên, đóng dấu)'],
+                    ],
+                    Setting::get('report_signing_place'),
+                    'ngày ' . now()->format('d') . ' tháng ' . now()->format('m') . ' năm ' . now()->format('Y'),
+                    'A',
+                    'H',
+                );
 
                 // Row heights
                 $sheet->getRowDimension($headerRow1)->setRowHeight(18);

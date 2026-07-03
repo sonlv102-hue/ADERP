@@ -179,11 +179,17 @@
         </div>
       </div>
 
-      <!-- Signature row (print) -->
-      <div class="hidden print:flex mt-8 justify-between text-center text-xs text-gray-600 px-4">
-        <div><p class="font-semibold">Người lập bảng</p><p class="mt-12 border-t border-gray-400 pt-1">(Ký, ghi rõ họ tên)</p></div>
-        <div><p class="font-semibold">Phòng Kế Toán</p><p class="mt-12 border-t border-gray-400 pt-1">(Ký, ghi rõ họ tên)</p></div>
-        <div><p class="font-semibold">Giám Đốc</p><p class="mt-12 border-t border-gray-400 pt-1">(Ký, đóng dấu)</p></div>
+      <!-- Signature row (print) — shared component, see docs/REPORTING_STANDARDS.md -->
+      <div class="hidden print:block mt-8 px-4">
+        <ReportSignatureSection
+          :signing-place="company?.report_signing_place"
+          :signing-date="printDate"
+          :signers="[
+            { title: 'Người lập bảng', instruction: '(Ký, ghi rõ họ tên)', name: sheet.creator },
+            { title: 'Phòng Kế Toán',  instruction: '(Ký, ghi rõ họ tên)' },
+            { title: 'Giám Đốc',       instruction: '(Ký, ghi rõ họ tên, đóng dấu)' },
+          ]"
+        />
       </div>
     </div>
 
@@ -276,6 +282,10 @@ import { ref, computed, reactive } from 'vue';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
+import ReportSignatureSection from '@/Components/Shared/ReportSignatureSection.vue';
+
+const company = computed(() => usePage().props.company);
+const printDate = new Date();
 
 const props = defineProps({
   sheet:       Object,

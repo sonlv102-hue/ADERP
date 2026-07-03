@@ -32,6 +32,7 @@ class SettingsController extends Controller
             'company_bank_name'   => 'nullable|string|max:200',
             'company_bank_account'=> 'nullable|string|max:50',
             'company_bank_branch' => 'nullable|string|max:200',
+            'report_signing_place'=> 'nullable|string|max:100',
             'logo'                => 'nullable|image|mimes:png,jpg,jpeg,svg|max:2048',
         ]);
 
@@ -39,6 +40,7 @@ class SettingsController extends Controller
             'company_name', 'company_address', 'company_phone', 'company_email',
             'company_tax_code', 'company_website', 'company_description',
             'company_bank_name', 'company_bank_account', 'company_bank_branch',
+            'report_signing_place',
         ];
 
         foreach ($fields as $field) {

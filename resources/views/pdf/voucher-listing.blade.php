@@ -41,14 +41,6 @@ tr.total-row td { background: #EFF6FF; font-weight: bold; border: 0.5pt solid #9
         padding: 4px 8px; border-radius: 3px; margin-bottom: 5px;
         font-size: 8.5px; border: 0.5pt solid #FCA974; }
 
-.sign-section { margin-top: 12px; }
-.sign-date    { text-align: right; font-size: 8px; font-style: italic; margin-bottom: 8px; }
-.sign-row     { display: flex; justify-content: space-between; }
-.sign-box     { text-align: center; width: 30%; }
-.sign-title   { font-size: 8.5px; font-weight: bold; text-transform: uppercase; }
-.sign-note    { font-size: 7.5px; font-style: italic; color: #555; }
-.sign-name    { font-size: 8px; margin-top: 28px; }
-
 @page { size: A4 landscape; margin: 0; }
 </style>
 </head>
@@ -124,27 +116,16 @@ tr.total-row td { background: #EFF6FF; font-weight: bold; border: 0.5pt solid #9
     </tbody>
   </table>
 
-  {{-- Signature --}}
-  <div class="sign-section">
-    <div class="sign-date">Ngày {{ now()->format('d') }} tháng {{ now()->format('m') }} năm {{ now()->format('Y') }}</div>
-    <div class="sign-row">
-      <div class="sign-box">
-        <div class="sign-title">Người lập biểu</div>
-        <div class="sign-note">(Ký, họ tên)</div>
-        <div class="sign-name"></div>
-      </div>
-      <div class="sign-box">
-        <div class="sign-title">Kế toán trưởng</div>
-        <div class="sign-note">(Ký, họ tên)</div>
-        <div class="sign-name"></div>
-      </div>
-      <div class="sign-box">
-        <div class="sign-title">Giám đốc</div>
-        <div class="sign-note">(Ký, họ tên, đóng dấu)</div>
-        <div class="sign-name"></div>
-      </div>
-    </div>
-  </div>
+  {{-- Signature (shared component — see docs/REPORTING_STANDARDS.md) --}}
+  @include('pdf.partials.signature-section', [
+      'signingPlace' => $signingPlace ?? null,
+      'signingDate'  => $signingDate ?? now(),
+      'signers' => [
+          ['title' => 'Người lập biểu', 'instruction' => '(Ký, họ tên)'],
+          ['title' => 'Kế toán trưởng', 'instruction' => '(Ký, họ tên)'],
+          ['title' => 'Giám đốc',        'instruction' => '(Ký, họ tên, đóng dấu)'],
+      ],
+  ])
 
 </div>
 </body>
