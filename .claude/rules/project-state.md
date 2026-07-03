@@ -53,6 +53,7 @@ Dự án đang ở giai đoạn **vận hành và cải tiến**. Các module co
 | CCDC/CPTT: Nhập số dư đầu kỳ + Tạm dừng/Tiếp tục phân bổ | Hoàn thành (2026-07-02) |
 | CCDC: Xóa hồ sơ (destroy) — chặn nếu có receipt/issue/transfer/disposal/posted allocation/JE, bắt buộc lý do + activity log | Hoàn thành (2026-07-03) |
 | CCDC: Export Excel/PDF + Import từ file mẫu Excel (Danh sách CCDC) — import luôn tạo draft, không tự ghi bút toán | Hoàn thành (2026-07-03) |
+| Bảng chấm công: Export Excel (cột ngày động theo số ngày trong tháng + tổng hợp Công/NghỉHL/NghỉKL/OT/Tổng) | Hoàn thành (2026-07-03) |
 
 ## Migration sequence hiện tại
 

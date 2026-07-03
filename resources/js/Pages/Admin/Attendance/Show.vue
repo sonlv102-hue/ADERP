@@ -17,6 +17,13 @@
           <p class="text-xs text-gray-400 mt-1">{{ sheet.creator }} lập ngày {{ sheet.created_at }}</p>
         </div>
         <div class="flex items-center gap-2 print:hidden flex-wrap">
+          <a :href="route('admin.attendance.export-excel', sheet.id)"
+            class="inline-flex items-center gap-1 px-3 py-1.5 border border-gray-300 text-sm rounded-lg hover:bg-gray-50">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+            </svg>
+            Xuất Excel
+          </a>
           <button @click="printSheet"
             class="inline-flex items-center gap-1 px-3 py-1.5 border border-gray-300 text-sm rounded-lg hover:bg-gray-50">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

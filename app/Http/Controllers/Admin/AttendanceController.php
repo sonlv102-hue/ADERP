@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\AttendanceSheetStatus;
+use App\Exports\AttendanceSheetExport;
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceRecord;
 use App\Models\AttendanceSheet;
@@ -12,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
 use RuntimeException;
 
 class AttendanceController extends Controller
@@ -80,21 +82,7 @@ class AttendanceController extends Controller
     {
         $attendance->load('creator');
 
-        // Determine days in month
-        [$year, $month] = explode('-', $attendance->period);
-        $daysInMonth = (int) \Carbon\Carbon::createFromDate((int)$year, (int)$month, 1)->daysInMonth;
-
-        // Build day-of-week headers
-        $dayHeaders = [];
-        for ($d = 1; $d <= $daysInMonth; $d++) {
-            $dow = date('N', mktime(0, 0, 0, (int)$month, $d, (int)$year)); // 1=Mon..7=Sun
-            $dayHeaders[$d] = $dow; // 7 = Sunday
-        }
-
-        $records = $attendance->records()
-            ->with('employee')
-            ->get()
-            ->map(fn (AttendanceRecord $r) => $this->recordDTO($r, $daysInMonth));
+        [$daysInMonth, $dayHeaders, $records] = $this->buildSheetData($attendance);
 
         return Inertia::render('Admin/Attendance/Show', [
             'sheet' => [
@@ -112,6 +100,36 @@ class AttendanceController extends Controller
             'daysInMonth' => $daysInMonth,
             'dayHeaders'  => $dayHeaders, // day => dow (7=Sun)
         ]);
+    }
+
+    public function exportExcel(AttendanceSheet $attendance)
+    {
+        [$daysInMonth, , $records] = $this->buildSheetData($attendance);
+
+        return Excel::download(
+            new AttendanceSheetExport($attendance, $records, $daysInMonth),
+            'bang-cham-cong_' . $attendance->period . '.xlsx'
+        );
+    }
+
+    /** @return array{0:int,1:array,2:\Illuminate\Support\Collection} */
+    private function buildSheetData(AttendanceSheet $attendance): array
+    {
+        [$year, $month] = explode('-', $attendance->period);
+        $daysInMonth = (int) \Carbon\Carbon::createFromDate((int)$year, (int)$month, 1)->daysInMonth;
+
+        $dayHeaders = [];
+        for ($d = 1; $d <= $daysInMonth; $d++) {
+            $dow = date('N', mktime(0, 0, 0, (int)$month, $d, (int)$year)); // 1=Mon..7=Sun
+            $dayHeaders[$d] = $dow; // 7 = Sunday
+        }
+
+        $records = $attendance->records()
+            ->with('employee')
+            ->get()
+            ->map(fn (AttendanceRecord $r) => $this->recordDTO($r, $daysInMonth));
+
+        return [$daysInMonth, $dayHeaders, $records];
     }
 
     /** Save a single cell (one day symbol for one employee) */

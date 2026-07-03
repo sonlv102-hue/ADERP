@@ -160,6 +160,7 @@ Route::middleware('auth')->group(function () {
         Route::get('attendance', [AttendanceController::class, 'index'])->name('attendance.index');
         Route::post('attendance', [AttendanceController::class, 'store'])->name('attendance.store');
         Route::get('attendance/{attendance}', [AttendanceController::class, 'show'])->name('attendance.show');
+        Route::get('attendance/{attendance}/export-excel', [AttendanceController::class, 'exportExcel'])->name('attendance.export-excel');
         Route::post('attendance/{attendance}/lock', [AttendanceController::class, 'lock'])->name('attendance.lock');
         Route::post('attendance/{attendance}/unlock', [AttendanceController::class, 'unlock'])->name('attendance.unlock');
         Route::delete('attendance/{attendance}', [AttendanceController::class, 'destroy'])->name('attendance.destroy');
