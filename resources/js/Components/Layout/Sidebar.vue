@@ -116,6 +116,7 @@
           </NavGroup>
 
           <NavGroup label="Tiền lương" icon="clipboard-list" prefix="/accounting/payroll">
+            <NavItem v-if="isAdmin" :href="route('admin.attendance.index')" icon="calendar" sub>Bảng chấm công</NavItem>
             <NavItem :href="route('accounting.payrolls.index')" icon="clipboard-list" sub>Bảng lương</NavItem>
           </NavGroup>
 
@@ -181,7 +182,6 @@
           <p class="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Quản trị</p>
           <NavItem :href="route('admin.shareholders.index')" icon="briefcase">Cổ đông / Thành viên</NavItem>
           <NavItem :href="route('admin.employees.index')" icon="identification">Cán bộ CNV</NavItem>
-          <NavItem :href="route('admin.attendance.index')" icon="calendar">Bảng chấm công</NavItem>
           <NavItem :href="route('admin.users.index')" icon="users">Người dùng</NavItem>
           <NavItem :href="route('admin.roles.index')" icon="shield-check">Phân quyền</NavItem>
           <NavItem :href="route('admin.settings.index')" icon="cog">Cài đặt công ty</NavItem>
