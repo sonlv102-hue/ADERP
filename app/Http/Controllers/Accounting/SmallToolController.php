@@ -15,6 +15,7 @@ use App\Models\Warehouse;
 use App\Services\SmallToolService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -163,6 +164,64 @@ class SmallToolController extends Controller
         $this->authorize('ccdc.manage');
         $this->service->confirmDirectTool($tool);
         return back()->with('success', 'Đã ghi nhận bút toán CCDC dùng ngay.');
+    }
+
+    public function destroy(Request $request, SmallTool $tool): RedirectResponse
+    {
+        $this->authorize('ccdc.delete');
+
+        $data = $request->validate([
+            'reason' => 'required|string|max:500',
+        ]);
+
+        $blockers = [];
+
+        if (\App\Models\SmallToolReceiptItem::where('small_tool_id', $tool->id)->exists()) {
+            $blockers[] = 'phiếu nhập kho';
+        }
+        if (\App\Models\SmallToolIssueItem::where('small_tool_id', $tool->id)->exists()) {
+            $blockers[] = 'phiếu xuất dùng';
+        }
+        if ($tool->transfers()->exists()) {
+            $blockers[] = 'lịch sử điều chuyển';
+        }
+        if ($tool->disposals()->exists()) {
+            $blockers[] = 'phiếu ghi giảm/thanh lý';
+        }
+        if ($tool->allocations()->whereIn('status', ['posted', 'reversed'])->exists()) {
+            $blockers[] = 'kỳ phân bổ đã phát sinh bút toán (posted/reversed)';
+        }
+
+        if ($tool->acquisition_journal_entry_id) {
+            $blockers[] = 'bút toán tăng CCDC';
+        }
+        if ($tool->issue_journal_entry_id) {
+            $blockers[] = 'bút toán xuất dùng';
+        }
+
+        if ($blockers) {
+            return back()->with('error',
+                'Không thể xóa CCDC ' . $tool->code . ' — đã liên kết: ' . implode(', ', $blockers) .
+                '. Hãy hủy/đảo các chứng từ này trước khi xóa.'
+            );
+        }
+
+        DB::transaction(function () use ($tool, $data) {
+            activity('small_tool')
+                ->causedBy(auth()->user())
+                ->withProperties([
+                    'code'          => $tool->code,
+                    'name'          => $tool->name,
+                    'original_cost' => (float) $tool->original_cost,
+                    'reason'        => $data['reason'],
+                ])
+                ->log("Xóa CCDC {$tool->code} — Lý do: {$data['reason']}");
+
+            $tool->allocations()->delete();
+            $tool->delete();
+        });
+
+        return redirect()->route('accounting.small-tools.index')->with('success', "Đã xóa CCDC {$tool->code}.");
     }
 
     private function toDto(SmallTool $t): array

@@ -51,6 +51,7 @@ Dự án đang ở giai đoạn **vận hành và cải tiến**. Các module co
 | B03-DNN Cash Flow Statement lọc theo Tháng/Quý/Năm/Tùy chọn + so sánh kỳ | Hoàn thành (2026-07-01) |
 | HRM Employee Export/Import (Excel/PDF/Print + import preview/confirm) | Hoàn thành (2026-07-01) |
 | CCDC/CPTT: Nhập số dư đầu kỳ + Tạm dừng/Tiếp tục phân bổ | Hoàn thành (2026-07-02) |
+| CCDC: Xóa hồ sơ (destroy) — chặn nếu có receipt/issue/transfer/disposal/posted allocation/JE, bắt buộc lý do + activity log | Hoàn thành (2026-07-03) |
 
 ## Migration sequence hiện tại
 

@@ -65,6 +65,10 @@
           class="px-4 py-2 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm hover:bg-red-100">
           Hỏng/Mất/Thanh lý
         </Link>
+        <button v-if="can('ccdc.delete')" @click="showDelete = true"
+          class="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">
+          Xóa CCDC
+        </button>
       </div>
 
       <div class="grid grid-cols-3 gap-5">
@@ -230,6 +234,20 @@
         <button @click="submitPause" :disabled="pauseForm.processing" class="erp-btn-primary">Xác nhận tạm dừng</button>
       </template>
     </Modal>
+
+    <Modal :show="showDelete" max-width="md" @close="showDelete = false">
+      <template #title>Xóa CCDC — {{ tool.code }}</template>
+      <div class="space-y-3">
+        <p class="text-sm text-red-600">Thao tác này xóa hẳn hồ sơ CCDC, không thể khôi phục. Chỉ thực hiện được nếu chưa có phiếu nhập/xuất/điều chuyển/ghi giảm hoặc bút toán đã ghi sổ liên quan.</p>
+        <FormField label="Lý do xóa" required :error="deleteForm.errors.reason">
+          <textarea v-model="deleteForm.reason" rows="2" class="erp-input" placeholder="VD: Xóa CCDC tạo trùng" />
+        </FormField>
+      </div>
+      <template #footer>
+        <button @click="showDelete = false" class="erp-btn-secondary">Hủy</button>
+        <button @click="submitDelete" :disabled="deleteForm.processing" class="erp-btn-danger">Xác nhận xóa</button>
+      </template>
+    </Modal>
   </AppLayout>
 </template>
 
@@ -276,6 +294,14 @@ function submitPause() {
 
 function resumeAllocation() {
   router.post(route('accounting.small-tools.allocation.resume', props.tool.id));
+}
+
+const showDelete = ref(false);
+const deleteForm = useForm({ reason: '' });
+function submitDelete() {
+  deleteForm.delete(route('accounting.small-tools.destroy', props.tool.id), {
+    onSuccess: () => { showDelete.value = false; },
+  });
 }
 
 function statusClass(status) {

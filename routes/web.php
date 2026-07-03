@@ -658,6 +658,7 @@ Route::middleware('auth')->group(function () {
             Route::get('{tool}/edit',    [SmallToolController::class, 'edit'])->name('edit')->middleware('can:ccdc.manage')->whereNumber('tool');
             Route::put('{tool}',         [SmallToolController::class, 'update'])->name('update')->middleware('can:ccdc.manage')->whereNumber('tool');
             Route::post('{tool}/confirm',[SmallToolController::class, 'confirm'])->name('confirm')->middleware('can:ccdc.manage')->whereNumber('tool');
+            Route::delete('{tool}',      [SmallToolController::class, 'destroy'])->name('destroy')->middleware('can:ccdc.delete')->whereNumber('tool');
 
             // Transfers (CCCT-)
             Route::get('{tool}/transfers/create', [SmallToolTransferController::class, 'create'])->name('transfers.create')->middleware('can:ccdc.manage')->whereNumber('tool');
