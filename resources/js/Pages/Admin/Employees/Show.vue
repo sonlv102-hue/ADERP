@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <AppLayout>
     <div class="max-w-2xl mx-auto space-y-6">
       <!-- Header -->
@@ -42,6 +42,22 @@
           <InfoRow label="Giới tính" :value="employee.gender_label" />
           <InfoRow label="Ngày vào làm" :value="employee.hire_date" />
           <InfoRow label="Loại hợp đồng" :value="employee.employment_type_label" />
+        </div>
+
+        <!-- Định danh & Hợp đồng -->
+        <div class="px-6 py-4 grid grid-cols-2 gap-x-8 gap-y-3">
+          <InfoRow label="CCCD/CMND" :value="employee.national_id" />
+          <InfoRow label="Ngày cấp & Nơi cấp" :value="employee.national_id_issue_date ? employee.national_id_issue_date + (employee.national_id_issue_place ? ' tại ' + employee.national_id_issue_place : '') : '—'" />
+          <InfoRow label="Hợp đồng từ ngày" :value="employee.contract_start_date" />
+          <InfoRow label="Hợp đồng đến ngày" :value="employee.contract_end_date" />
+          <InfoRow label="Số sổ BHXH" :value="employee.social_insurance_no" />
+          <InfoRow label="Mã số thuế TNCN" :value="employee.pit_tax_code" />
+        </div>
+
+        <!-- Tài khoản ngân hàng -->
+        <div class="px-6 py-4 grid grid-cols-2 gap-x-8 gap-y-3">
+          <InfoRow label="Số tài khoản ngân hàng" :value="employee.bank_account_no" />
+          <InfoRow label="Ngân hàng" :value="employee.bank_name" />
         </div>
         <div v-if="employee.address" class="px-6 py-4">
           <p class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Địa chỉ</p>

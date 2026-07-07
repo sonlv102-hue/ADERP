@@ -106,6 +106,8 @@ use App\Http\Controllers\Admin\BackupController;
 use App\Http\Controllers\Admin\SystemHealthController;
 use App\Http\Controllers\Admin\AttendanceController;
 use App\Http\Controllers\Admin\ShareholderController;
+use App\Http\Controllers\Admin\DepartmentController;
+use App\Http\Controllers\Admin\PositionController;
 use App\Http\Controllers\Accounting\PersonalLoanController;
 use App\Http\Controllers\Accounting\PersonalExpenseController;
 use App\Http\Controllers\Accounting\JournalAuditController;
@@ -170,6 +172,10 @@ Route::middleware('auth')->group(function () {
         Route::post('backups', [BackupController::class, 'store'])->name('backups.store');
         Route::get('backups/{name}/download', [BackupController::class, 'download'])->name('backups.download');
         Route::delete('backups/{name}', [BackupController::class, 'destroy'])->name('backups.destroy');
+
+        // Bộ phận & Chức vụ
+        Route::resource('departments', DepartmentController::class)->except(['show']);
+        Route::resource('positions', PositionController::class)->except(['show']);
 
         // Thành viên / Cổ đông
         Route::resource('shareholders', ShareholderController::class)->except(['show']);

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <AppLayout>
     <div class="max-w-3xl mx-auto space-y-5">
 
@@ -61,15 +61,19 @@
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Phòng ban</label>
-                <input v-model="form.department" type="text"
-                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="VD: Kỹ thuật, Kinh doanh..." />
+                <select v-model="form.department"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                  <option value="">— Chọn phòng ban —</option>
+                  <option v-for="dept in departments" :key="dept" :value="dept">{{ dept }}</option>
+                </select>
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Chức vụ</label>
-                <input v-model="form.position" type="text"
-                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  placeholder="VD: Kỹ sư, Trưởng phòng..." />
+                <select v-model="form.position"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                  <option value="">— Chọn chức vụ —</option>
+                  <option v-for="pos in positions" :key="pos" :value="pos">{{ pos }}</option>
+                </select>
               </div>
             </div>
 
@@ -106,6 +110,26 @@
                 </select>
               </div>
             </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">Số CCCD / CMND</label>
+                <input v-model="form.national_id" type="text"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  placeholder="Số định danh" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">Ngày cấp</label>
+                <input v-model="form.national_id_issue_date" type="date"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">Nơi cấp</label>
+                <input v-model="form.national_id_issue_place" type="text"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  placeholder="Ví dụ: Cục CS QLHC về TTXH" />
+              </div>
+            </div>
           </div>
         </div>
 
@@ -120,7 +144,7 @@
             </span>
             <h2 class="text-sm font-semibold text-gray-700">Hợp đồng lao động</h2>
           </div>
-          <div class="p-5">
+          <div class="p-5 space-y-4">
             <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Ngày vào làm</label>
@@ -144,6 +168,19 @@
                   class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
                   <option v-for="s in statuses" :key="s.value" :value="s.value">{{ s.label }}</option>
                 </select>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">Hợp đồng từ ngày</label>
+                <input v-model="form.contract_start_date" type="date"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">Hợp đồng đến ngày</label>
+                <input v-model="form.contract_end_date" type="date"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent" />
               </div>
             </div>
           </div>
@@ -200,7 +237,7 @@
               </div>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Số người phụ thuộc (NPT)</label>
                 <input v-model.number="form.dependents_count" type="number" min="0" max="20"
@@ -211,9 +248,14 @@
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">Mã số thuế TNCN</label>
                 <input v-model="form.pit_tax_code" type="text" maxlength="20"
-                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono tracking-wider"
-                  placeholder="8 1 2 3 4 5 6 7 8 9" />
-                <p class="mt-1 text-xs text-gray-400">10 chữ số — theo đăng ký thuế cá nhân</p>
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
+                  placeholder="Mã số thuế" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">Số sổ bảo hiểm (BHXH)</label>
+                <input v-model="form.social_insurance_no" type="text" maxlength="20"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
+                  placeholder="Số sổ BHXH" />
               </div>
             </div>
 
@@ -223,6 +265,35 @@
                 class="w-40 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent text-center"
                 placeholder="26" />
               <p class="mt-1 text-xs text-gray-400">Dùng để tính lương theo ngày công thực tế</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Section 3b: Thông tin ngân hàng ── -->
+        <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+          <div class="px-5 py-3.5 bg-gray-50 border-b border-gray-200 flex items-center gap-2">
+            <span class="p-1.5 bg-blue-100 rounded-md">
+              <svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                  d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+              </svg>
+            </span>
+            <h2 class="text-sm font-semibold text-gray-700">Thông tin tài khoản ngân hàng</h2>
+          </div>
+          <div class="p-5 space-y-4">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">Số tài khoản</label>
+                <input v-model="form.bank_account_no" type="text"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
+                  placeholder="Số tài khoản ngân hàng" />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1.5">Ngân hàng</label>
+                <input v-model="form.bank_name" type="text"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  placeholder="Vietcombank, Techcombank..." />
+              </div>
             </div>
           </div>
         </div>
@@ -427,6 +498,8 @@ const props = defineProps({
   nextCode: String,
   statuses: Array,
   employmentTypes: Array,
+  departments: Array,
+  positions: Array,
 });
 
 function formatVnd(value) {
@@ -457,6 +530,14 @@ const form = useForm({
   pit_tax_code:             props.employee?.pit_tax_code             ?? '',
   address:                  props.employee?.address                  ?? '',
   notes:                    props.employee?.notes                    ?? '',
+  national_id:              props.employee?.national_id              ?? '',
+  national_id_issue_date:   props.employee?.national_id_issue_date   ?? '',
+  national_id_issue_place:  props.employee?.national_id_issue_place  ?? '',
+  contract_start_date:      props.employee?.contract_start_date      ?? '',
+  contract_end_date:        props.employee?.contract_end_date        ?? '',
+  social_insurance_no:      props.employee?.social_insurance_no      ?? '',
+  bank_account_no:          props.employee?.bank_account_no          ?? '',
+  bank_name:                props.employee?.bank_name                ?? '',
 });
 
 // PC lương (tính BHXH): trách nhiệm + cố định khác

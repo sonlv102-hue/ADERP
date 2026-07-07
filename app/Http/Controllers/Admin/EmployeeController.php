@@ -6,6 +6,8 @@ use App\Enums\EmployeeStatus;
 use App\Enums\EmploymentType;
 use App\Http\Controllers\Controller;
 use App\Models\Employee;
+use App\Models\Department;
+use App\Models\Position;
 use App\Services\EmployeeExportService;
 use App\Services\PayrollService;
 use Illuminate\Http\RedirectResponse;
@@ -55,6 +57,8 @@ class EmployeeController extends Controller
             'nextCode'        => Employee::generateCode(),
             'statuses'        => collect(EmployeeStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
             'employmentTypes' => collect(EmploymentType::cases())->map(fn ($t) => ['value' => $t->value, 'label' => $t->label()]),
+            'departments'     => Department::where('is_active', true)->orderBy('name')->pluck('name')->toArray(),
+            'positions'       => Position::where('is_active', true)->orderBy('name')->pluck('name')->toArray(),
         ]);
     }
 
@@ -84,6 +88,14 @@ class EmployeeController extends Controller
             'pit_tax_code'             => ['nullable', 'string', 'max:20'],
             'address'                  => ['nullable', 'string'],
             'notes'                    => ['nullable', 'string'],
+            'national_id'              => ['nullable', 'string', 'max:20'],
+            'national_id_issue_date'   => ['nullable', 'date'],
+            'national_id_issue_place'  => ['nullable', 'string', 'max:255'],
+            'contract_start_date'      => ['nullable', 'date'],
+            'contract_end_date'        => ['nullable', 'date'],
+            'social_insurance_no'      => ['nullable', 'string', 'max:20'],
+            'bank_account_no'          => ['nullable', 'string', 'max:30'],
+            'bank_name'                => ['nullable', 'string', 'max:100'],
         ]);
 
         $data = $this->coerceSalaryFields($data);
@@ -151,6 +163,14 @@ class EmployeeController extends Controller
             'pit_tax_code'             => $employee->pit_tax_code,
             'address'                  => $employee->address,
             'notes'                    => $employee->notes,
+            'national_id'              => $employee->national_id,
+            'national_id_issue_date'   => $employee->national_id_issue_date?->format($forShow ? 'd/m/Y' : 'Y-m-d'),
+            'national_id_issue_place'  => $employee->national_id_issue_place,
+            'contract_start_date'      => $employee->contract_start_date?->format($forShow ? 'd/m/Y' : 'Y-m-d'),
+            'contract_end_date'        => $employee->contract_end_date?->format($forShow ? 'd/m/Y' : 'Y-m-d'),
+            'social_insurance_no'      => $employee->social_insurance_no,
+            'bank_account_no'          => $employee->bank_account_no,
+            'bank_name'                => $employee->bank_name,
         ];
 
         if ($forShow) {
@@ -168,10 +188,24 @@ class EmployeeController extends Controller
 
     public function edit(Employee $employee): Response
     {
+        $employeeDept = $employee->department;
+        $departments = Department::where('is_active', true)->orderBy('name')->pluck('name')->toArray();
+        if ($employeeDept && !in_array($employeeDept, $departments)) {
+            $departments[] = $employeeDept;
+        }
+
+        $employeePos = $employee->position;
+        $positions = Position::where('is_active', true)->orderBy('name')->pluck('name')->toArray();
+        if ($employeePos && !in_array($employeePos, $positions)) {
+            $positions[] = $employeePos;
+        }
+
         return Inertia::render('Admin/Employees/Form', [
             'employee'        => $this->employeeDTO($employee, false),
             'statuses'        => collect(EmployeeStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
             'employmentTypes' => collect(EmploymentType::cases())->map(fn ($t) => ['value' => $t->value, 'label' => $t->label()]),
+            'departments'     => $departments,
+            'positions'       => $positions,
         ]);
     }
 
@@ -200,6 +234,14 @@ class EmployeeController extends Controller
             'pit_tax_code'             => ['nullable', 'string', 'max:20'],
             'address'                  => ['nullable', 'string'],
             'notes'                    => ['nullable', 'string'],
+            'national_id'              => ['nullable', 'string', 'max:20'],
+            'national_id_issue_date'   => ['nullable', 'date'],
+            'national_id_issue_place'  => ['nullable', 'string', 'max:255'],
+            'contract_start_date'      => ['nullable', 'date'],
+            'contract_end_date'        => ['nullable', 'date'],
+            'social_insurance_no'      => ['nullable', 'string', 'max:20'],
+            'bank_account_no'          => ['nullable', 'string', 'max:30'],
+            'bank_name'                => ['nullable', 'string', 'max:100'],
         ]);
 
         $employee->update($this->coerceSalaryFields($data));
