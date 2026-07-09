@@ -64,7 +64,7 @@ class PurchaseContractController extends Controller
                     'id'          => $o->id,
                     'code'        => $o->code,
                     'supplier_id' => $o->supplier_id,
-                    'total'       => $o->items()->sum(\Illuminate\Support\Facades\DB::raw('quantity * unit_price')),
+                    'total'       => (float) $o->items()->selectRaw('COALESCE(SUM(quantity * unit_price * (1 + COALESCE(vat_rate, 0) / 100.0)), 0) as t')->value('t'),
                 ]),
         ]);
     }
@@ -172,7 +172,12 @@ class PurchaseContractController extends Controller
                 'notes'             => $purchaseContract->notes,
             ],
             'orders' => PurchaseOrder::orderByDesc('id')->get(['id', 'code', 'supplier_id'])
-                ->map(fn ($o) => ['id' => $o->id, 'code' => $o->code, 'supplier_id' => $o->supplier_id, 'total' => 0]),
+                ->map(fn ($o) => [
+                    'id'          => $o->id,
+                    'code'        => $o->code,
+                    'supplier_id' => $o->supplier_id,
+                    'total'       => (float) $o->items()->selectRaw('COALESCE(SUM(quantity * unit_price * (1 + COALESCE(vat_rate, 0) / 100.0)), 0) as t')->value('t'),
+                ]),
         ]);
     }
 
