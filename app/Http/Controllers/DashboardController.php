@@ -68,6 +68,17 @@ class DashboardController extends Controller
             $q->where('status', '!=', 'cancelled')->whereBetween('order_date', [$startOfMonth, $endOfMonth]);
         })->selectRaw('SUM((quantity * unit_price - COALESCE(discount_amount, 0)) + ROUND((quantity * unit_price - COALESCE(discount_amount, 0)) * COALESCE(vat_rate, 0) / 100)) as total')->value('total');
 
+        // Thống kê nhân sự/lương/bảo hiểm tháng trước
+        $lastMonthPeriod = now()->subMonth()->format('Y-m');
+        $lastMonthLabel = now()->subMonth()->format('m/Y');
+
+        $payrollQuery = Payroll::where('period', $lastMonthPeriod)
+            ->where('status', '!=', 'draft');
+
+        $lastMonthSalaryPaid = (float) $payrollQuery->sum('total_net_salary');
+        $lastMonthInsuranceEmployer = (float) $payrollQuery->sum('total_insurance_employer');
+        $lastMonthInsuranceEmployee = (float) $payrollQuery->sum('total_insurance_employee');
+
         return [
             'total_customers'  => Customer::count(),
             'total_products'   => Product::where('is_active', true)->count(),
@@ -77,6 +88,10 @@ class DashboardController extends Controller
             'purchase_orders_total' => $purchaseOrdersTotal,
             'sales_orders_count'    => $salesOrdersCount,
             'sales_orders_total'    => $salesOrdersTotal,
+            'last_month_label'              => $lastMonthLabel,
+            'last_month_salary_paid'        => $lastMonthSalaryPaid,
+            'last_month_insurance_employer' => $lastMonthInsuranceEmployer,
+            'last_month_insurance_employee' => $lastMonthInsuranceEmployee,
         ];
     }
 

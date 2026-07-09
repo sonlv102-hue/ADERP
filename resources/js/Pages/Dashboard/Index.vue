@@ -93,6 +93,60 @@
         </div>
       </div>
     </div>
+      
+      <!-- Thống kê lương & bảo hiểm tháng trước (chỉ dành cho Kế toán / Nhân sự) -->
+      <div v-if="can('accounting.view') || can('hr.employees.view')" class="space-y-3">
+        <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+          Nhân sự & Lương tháng {{ stats.last_month_label }}
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-5">
+          <!-- Lương thực lĩnh -->
+          <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition duration-200 flex items-center justify-between">
+            <div class="space-y-1">
+              <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Lương thực lĩnh</span>
+              <div>
+                <span class="text-xl font-bold text-gray-900">{{ fmtVnd(stats.last_month_salary_paid) }}</span>
+              </div>
+            </div>
+            <div class="p-2.5 rounded-xl bg-emerald-50 text-emerald-600">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+          </div>
+
+          <!-- BH Công ty nộp -->
+          <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition duration-200 flex items-center justify-between">
+            <div class="space-y-1">
+              <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">BH Công ty đóng</span>
+              <div>
+                <span class="text-xl font-bold text-gray-900">{{ fmtVnd(stats.last_month_insurance_employer) }}</span>
+              </div>
+            </div>
+            <div class="p-2.5 rounded-xl bg-blue-50 text-blue-600">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+            </div>
+          </div>
+
+          <!-- BH NLĐ đóng -->
+          <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition duration-200 flex items-center justify-between">
+            <div class="space-y-1">
+              <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">BH NLĐ đóng</span>
+              <div>
+                <span class="text-xl font-bold text-gray-900">{{ fmtVnd(stats.last_month_insurance_employee) }}</span>
+              </div>
+            </div>
+            <div class="p-2.5 rounded-xl bg-orange-50 text-orange-600">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
 
       <!-- Financial KPI (chỉ hiển thị nếu có quyền accounting.view) -->
       <div v-if="financialKpi" class="bg-white rounded-xl border border-gray-200">
