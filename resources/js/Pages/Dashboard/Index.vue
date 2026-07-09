@@ -497,6 +497,9 @@ import {
 } from 'chart.js';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { formatVnd } from '@/composables/useCurrency';
+import { usePermission } from '@/composables/usePermission';
+
+const { hasPermission: can } = usePermission();
 
 ChartJS.register(Title, Tooltip, Legend, BarElement, CategoryScale, LinearScale, ArcElement);
 
