@@ -35,6 +35,7 @@ use App\Http\Controllers\Reports\StockExitDetailReportController;
 use App\Http\Controllers\Reports\CashFlowController;
 use App\Http\Controllers\Reports\CashFlowStatementController;
 use App\Http\Controllers\Reports\IncomeStatementController;
+use App\Http\Controllers\Reports\RevenueReportController;
 use App\Http\Controllers\Sales\CommissionController;
 use App\Http\Controllers\Sales\ContractController;
 use App\Http\Controllers\Sales\CustomerAdvanceController;
@@ -801,6 +802,9 @@ Route::middleware('auth')->group(function () {
         Route::get('ap-aging/export',         [APAgingController::class,         'export'])->name('ap.aging.export');
         Route::get('vat',                     [VatReportController::class,       'index'])->name('vat');
         Route::get('vat/export',              [VatReportController::class,       'export'])->name('vat.export');
+        Route::get('revenue',                 [RevenueReportController::class,   'index'])->name('revenue')->middleware('can:report.revenue.view');
+        Route::get('revenue/export',          [RevenueReportController::class,   'exportExcel'])->name('revenue.export')->middleware('can:report.revenue.export');
+        Route::get('revenue/pdf',             [RevenueReportController::class,   'exportPdf'])->name('revenue.pdf')->middleware('can:report.revenue.print');
         Route::get('inventory',               [InventoryReportController::class, 'index'])->name('inventory');
         Route::get('inventory/export',        [InventoryReportController::class, 'export'])->name('inventory.export');
         Route::get('stock-card',              [InventoryReportController::class, 'stockCard'])->name('stock_card');

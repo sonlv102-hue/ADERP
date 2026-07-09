@@ -113,6 +113,11 @@ class RolePermissionSeeder extends Seeder
             ['module' => 'reports', 'menu_key' => 'reports.cashflow', 'action' => 'view', 'code' => 'reports.cashflow.view', 'name' => 'Xem Báo cáo dòng tiền', 'description' => 'Xem lưu chuyển tiền tệ, thu chi thực tế'],
             ['module' => 'reports', 'menu_key' => 'reports.cashflow', 'action' => 'export', 'code' => 'reports.cashflow.export', 'name' => 'Xuất Báo cáo dòng tiền', 'description' => 'Xuất excel báo cáo dòng tiền'],
 
+            // Báo cáo doanh thu
+            ['module' => 'reports', 'menu_key' => 'reports.revenue', 'action' => 'view', 'code' => 'report.revenue.view', 'name' => 'Xem Báo cáo doanh thu', 'description' => 'Xem báo cáo doanh thu chi tiết'],
+            ['module' => 'reports', 'menu_key' => 'reports.revenue', 'action' => 'export', 'code' => 'report.revenue.export', 'name' => 'Xuất Excel Báo cáo doanh thu', 'description' => 'Xuất Excel dữ liệu báo cáo doanh thu'],
+            ['module' => 'reports', 'menu_key' => 'reports.revenue', 'action' => 'print', 'code' => 'report.revenue.print', 'name' => 'In/PDF Báo cáo doanh thu', 'description' => 'In hoặc xuất PDF báo cáo doanh thu'],
+
 
             // --- COMPATIBILITY PERMISSIONS (Old Spatie keys to prevent breaking existing code) ---
             ['module' => 'old_compat', 'menu_key' => 'compatibility', 'action' => 'customers.view', 'code' => 'customers.view', 'name' => 'Compat: Xem Khách hàng', 'description' => 'Quyền tương thích cũ'],
@@ -209,6 +214,7 @@ class RolePermissionSeeder extends Seeder
             'sales.orders.view', 'purchases.orders.view', 'warehouse.stock_entries.view',
             'warehouse.stock_exits.view', 'reports.financial.view', 'reports.financial.export',
             'reports.cashflow.view', 'reports.cashflow.export',
+            'report.revenue.view', 'report.revenue.export', 'report.revenue.print',
             // Spatie legacy mappings:
             'customers.view', 'products.view', 'warehouse.view', 'quotations.view', 'orders.view',
             'projects.view', 'purchasing.view', 'purchase-returns.view', 'accounting.view', 'accounting.manage',
@@ -246,7 +252,8 @@ class RolePermissionSeeder extends Seeder
             'price-lists.create', 'price-lists.edit', 'price-lists.delete', 'quotations.view',
             'quotations.create', 'quotations.edit', 'orders.view', 'orders.create', 'sales-returns.view',
             'sales-returns.create', 'sales-returns.edit', 'sales-returns.delete', 'accounting.view',
-            'commissions.view', 'commissions.create', 'documents.view', 'documents.create', 'reports.view'
+            'commissions.view', 'commissions.create', 'documents.view', 'documents.create', 'reports.view',
+            'report.revenue.view', 'report.revenue.export', 'report.revenue.print'
         ];
         $salesRole = Role::where('code', 'sales')->first();
         $salesRole->permissions()->sync(Permission::whereIn('code', $salesCodes)->pluck('id'));
@@ -471,6 +478,7 @@ class RolePermissionSeeder extends Seeder
         MenuItem::create(['parent_id' => $reportsSub->id, 'key' => 'accounting.reports.income', 'label' => 'Kết quả HĐKD', 'route_name' => 'reports.income_statement', 'icon' => 'chart-bar', 'required_permission' => 'reports.financial.view', 'order' => 3]);
         MenuItem::create(['parent_id' => $reportsSub->id, 'key' => 'accounting.reports.sheet', 'label' => 'Cân đối kế toán', 'route_name' => 'reports.balance_sheet', 'icon' => 'document', 'required_permission' => 'reports.financial.view', 'order' => 4]);
         MenuItem::create(['parent_id' => $reportsSub->id, 'key' => 'accounting.reports.trial', 'label' => 'Cân đối phát sinh', 'route_name' => 'reports.trial_balance', 'icon' => 'document-text', 'required_permission' => 'reports.financial.view', 'order' => 5]);
+        MenuItem::create(['parent_id' => $reportsSub->id, 'key' => 'accounting.reports.revenue', 'label' => 'Báo cáo doanh thu', 'route_name' => 'reports.revenue', 'icon' => 'currency-dollar', 'required_permission' => 'report.revenue.view', 'order' => 6]);
 
         // Admin Children
         MenuItem::create(['parent_id' => $adminGroup->id, 'key' => 'admin.shareholders', 'label' => 'Cổ đông / Thành viên', 'route_name' => 'admin.shareholders.index', 'icon' => 'library', 'required_permission' => 'admin.users', 'order' => 1]);
