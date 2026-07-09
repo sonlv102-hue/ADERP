@@ -86,7 +86,7 @@ class PurchaseInvoiceController extends Controller
             'nextCode'        => PurchaseInvoice::generateCode(),
             'projects'        => $this->projectList(),
             'creditAccounts'  => $this->creditAccountList(),
-            'purchaseOrders'  => PurchaseOrder::with(['supplier', 'items.product'])
+            'purchaseOrders'  => PurchaseOrder::with(['supplier', 'items'])
                 ->whereIn('status', ['sent', 'received'])
                 ->orderByDesc('id')
                 ->get()
@@ -95,13 +95,10 @@ class PurchaseInvoiceController extends Controller
                     'code'        => $po->code,
                     'supplier_id' => $po->supplier_id,
                     'supplier'    => $po->supplier->name,
-                    // unit_price đã gồm VAT — back-calculate để tách subtotal và tax
-                    'subtotal'    => $po->items->sum(fn ($i) =>
-                        $i->quantity * $i->unit_price / (1 + (($i->product?->vat_percent ?? 0) / 100))
-                    ),
+                    // unit_price chưa gồm VAT — cộng thêm vat_rate của từng dòng PO để ra tax/total
+                    'subtotal'    => $po->items->sum(fn ($i) => $i->quantity * $i->unit_price),
                     'tax_amount'  => $po->items->sum(fn ($i) =>
-                        $i->quantity * $i->unit_price
-                        - $i->quantity * $i->unit_price / (1 + (($i->product?->vat_percent ?? 0) / 100))
+                        $i->quantity * $i->unit_price * (($i->vat_rate ?? 0) / 100)
                     ),
                     'default_invoice_type' => $this->detectInvoiceType($po->items),
                 ]),
