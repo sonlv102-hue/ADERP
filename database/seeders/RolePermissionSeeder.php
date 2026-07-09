@@ -292,6 +292,14 @@ class RolePermissionSeeder extends Seeder
             }
         }
 
+        $adminEmails = ['admin@adcare.vn', 'sonlv@adcare.vn'];
+        foreach ($adminEmails as $email) {
+            $user = User::where('email', $email)->first();
+            if ($user) {
+                $user->roles()->syncWithoutDetaching([$superAdminRole->id, $adminRole->id]);
+            }
+        }
+
         // Assign Sales role to ID 8
         $salesUser = User::find(8);
         if ($salesUser) {
