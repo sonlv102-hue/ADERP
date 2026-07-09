@@ -32,7 +32,7 @@ class ActivityLogController extends Controller
                     }
                     return $val;
                 })->toArray(),
-                'created_at'   => $log->created_at->format('d/m/Y H:i:s'),
+                'created_at'   => $log->created_at->timezone('Asia/Ho_Chi_Minh')->format('d/m/Y H:i:s'),
             ]);
 
         $subjectTypes = Activity::distinct()->pluck('subject_type')
