@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <AppLayout>
     <div class="space-y-6">
       <div class="flex items-center justify-between flex-wrap gap-3">
@@ -23,6 +23,76 @@
         <KpiCard title="Ticket đang mở"   :value="stats.open_tickets"     color="bg-yellow-500" />
         <KpiCard title="Dự án đang chạy"  :value="stats.active_projects"  color="bg-purple-500" />
       </div>
+      
+      <!-- Thống kê giao dịch tháng này -->
+      <div class="space-y-3">
+        <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wider">
+          Giao dịch trong tháng {{ currentMonthLabel }}
+        </h2>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+          <!-- Đơn hàng bán -->
+          <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition duration-200 flex items-center justify-between">
+            <div class="space-y-1">
+              <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Số đơn bán</span>
+              <div class="flex items-baseline gap-1.5">
+                <span class="text-2xl font-bold text-gray-900">{{ stats.sales_orders_count }}</span>
+                <span class="text-xs text-gray-500">đơn</span>
+              </div>
+            </div>
+            <div class="p-2.5 rounded-xl bg-blue-50 text-blue-600">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+              </svg>
+            </div>
+          </div>
+
+          <!-- Doanh số bán -->
+          <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition duration-200 flex items-center justify-between">
+            <div class="space-y-1">
+              <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Doanh số bán</span>
+              <div>
+                <span class="text-xl font-bold text-gray-900">{{ fmtVnd(stats.sales_orders_total) }}</span>
+              </div>
+            </div>
+            <div class="p-2.5 rounded-xl bg-indigo-50 text-indigo-600">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+          </div>
+
+          <!-- Số đơn mua -->
+          <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition duration-200 flex items-center justify-between">
+            <div class="space-y-1">
+              <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Số đơn mua</span>
+              <div class="flex items-baseline gap-1.5">
+                <span class="text-2xl font-bold text-gray-900">{{ stats.purchase_orders_count }}</span>
+                <span class="text-xs text-gray-500">đơn</span>
+              </div>
+            </div>
+            <div class="p-2.5 rounded-xl bg-teal-50 text-teal-600">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+              </svg>
+            </div>
+          </div>
+
+          <!-- Tổng tiền mua -->
+          <div class="bg-white rounded-xl border border-gray-200 p-5 shadow-sm hover:shadow-md transition duration-200 flex items-center justify-between">
+            <div class="space-y-1">
+              <span class="text-xs font-semibold text-gray-400 uppercase tracking-wider">Tổng tiền mua</span>
+              <div>
+                <span class="text-xl font-bold text-gray-900">{{ fmtVnd(stats.purchase_orders_total) }}</span>
+              </div>
+            </div>
+            <div class="p-2.5 rounded-xl bg-rose-50 text-rose-600">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+          </div>
+        </div>
+      </div>
+    </div>
 
       <!-- Financial KPI (chỉ hiển thị nếu có quyền accounting.view) -->
       <div v-if="financialKpi" class="bg-white rounded-xl border border-gray-200">
@@ -403,6 +473,11 @@ onUnmounted(() => { removeStart(); removeFinish(); });
 const loadedAtDisplay = computed(() =>
   loadedAt.value.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
 );
+
+const currentMonthLabel = computed(() => {
+  const date = new Date();
+  return (date.getMonth() + 1) + '/' + date.getFullYear();
+});
 
 function refresh() {
   router.reload({ preserveScroll: true });

@@ -9,6 +9,7 @@ use App\Models\Contract;
 use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\OrderOverDelivery;
 use App\Models\Payment;
 use App\Models\Payroll;
@@ -16,6 +17,8 @@ use App\Models\Product;
 use App\Models\Project;
 use App\Models\InventoryBalance;
 use App\Models\Ticket;
+use App\Models\PurchaseOrder;
+use App\Models\PurchaseOrderItem;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -44,11 +47,36 @@ class DashboardController extends Controller
 
     private function stats(): array
     {
+        $startOfMonth = now()->startOfMonth();
+        $endOfMonth = now()->endOfMonth();
+
+        // Thống kê đơn mua hàng trong tháng
+        $purchaseOrdersCount = PurchaseOrder::where('status', '!=', 'cancelled')
+            ->whereBetween('order_date', [$startOfMonth, $endOfMonth])
+            ->count();
+
+        $purchaseOrdersTotal = (float) PurchaseOrderItem::whereHas('purchaseOrder', function ($q) use ($startOfMonth, $endOfMonth) {
+            $q->where('status', '!=', 'cancelled')->whereBetween('order_date', [$startOfMonth, $endOfMonth]);
+        })->selectRaw('SUM(quantity * unit_price * (1 + COALESCE(vat_rate, 0) / 100.0)) as total')->value('total');
+
+        // Thống kê đơn bán hàng trong tháng
+        $salesOrdersCount = Order::where('status', '!=', 'cancelled')
+            ->whereBetween('order_date', [$startOfMonth, $endOfMonth])
+            ->count();
+
+        $salesOrdersTotal = (float) OrderItem::whereHas('order', function ($q) use ($startOfMonth, $endOfMonth) {
+            $q->where('status', '!=', 'cancelled')->whereBetween('order_date', [$startOfMonth, $endOfMonth]);
+        })->selectRaw('SUM((quantity * unit_price - COALESCE(discount_amount, 0)) + ROUND((quantity * unit_price - COALESCE(discount_amount, 0)) * COALESCE(vat_rate, 0) / 100)) as total')->value('total');
+
         return [
             'total_customers'  => Customer::count(),
             'total_products'   => Product::where('is_active', true)->count(),
             'open_tickets'     => Ticket::whereIn('status', ['open', 'in_progress'])->count(),
             'active_projects'  => Project::whereIn('status', ['planning', 'in_progress'])->count(),
+            'purchase_orders_count' => $purchaseOrdersCount,
+            'purchase_orders_total' => $purchaseOrdersTotal,
+            'sales_orders_count'    => $salesOrdersCount,
+            'sales_orders_total'    => $salesOrdersTotal,
         ];
     }
 
