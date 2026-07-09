@@ -22,9 +22,41 @@ class HandleInertiaRequests extends Middleware
             ...parent::share($request),
             'auth' => [
                 'user' => $request->user()?->only('id', 'name', 'email', 'phone', 'avatar'),
-                'permissions' => $request->user()?->getAllPermissions()->pluck('name') ?? [],
+                'permissions' => $request->user()?->getAllPermissions()->pluck('code')->toArray() ?? [],
                 'roles' => $request->user()?->getRoleNames() ?? [],
             ],
+            'menuItems' => $request->user()
+                ? \App\Models\MenuItem::where('is_active', true)
+                    ->whereNull('parent_id')
+                    ->orderBy('order')
+                    ->get()
+                    ->map(function ($item) use ($request) {
+                        if ($item->required_permission && !$request->user()->hasPermission($item->required_permission)) {
+                            return null;
+                        }
+
+                        $children = $item->children()
+                            ->where('is_active', true)
+                            ->orderBy('order')
+                            ->get()
+                            ->filter(function ($child) use ($request) {
+                                if ($child->required_permission && !$request->user()->hasPermission($child->required_permission)) {
+                                    return false;
+                                }
+                                return true;
+                            })
+                            ->values();
+
+                        if (empty($item->route_name) && $children->isEmpty()) {
+                            return null;
+                        }
+
+                        $item->setRelation('children', $children);
+                        return $item;
+                    })
+                    ->filter()
+                    ->values()
+                : [],
             'flash' => [
                 'success' => session('success'),
                 'error' => session('error'),

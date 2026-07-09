@@ -149,14 +149,20 @@ Route::middleware('auth')->group(function () {
         Route::get('roles', [RoleController::class, 'index'])->name('roles.index');
         Route::put('roles/{role}', [RoleController::class, 'update'])->name('roles.update');
         Route::get('activity-logs', [ActivityLogController::class, 'index'])->name('activity-logs.index');
-        Route::get('employees/export/excel', [EmployeeController::class, 'exportExcel'])->name('employees.export.excel');
-        Route::get('employees/import/template', [EmployeeImportController::class, 'template'])->name('employees.import.template');
-        Route::post('employees/import/preview', [EmployeeImportController::class, 'preview'])->name('employees.import.preview');
-        Route::post('employees/import/confirm', [EmployeeImportController::class, 'confirm'])->name('employees.import.confirm');
-        Route::get('employees/import/errors/{errorFileId}', [EmployeeImportController::class, 'downloadErrors'])->name('employees.import.errors');
-        Route::resource('employees', EmployeeController::class);
-        Route::get('employees/{employee}/export/pdf', [EmployeeController::class, 'exportPdf'])->name('employees.export.pdf');
-        Route::get('employees/{employee}/print', [EmployeeController::class, 'printProfile'])->name('employees.print');
+        Route::get('employees/export/excel', [EmployeeController::class, 'exportExcel'])->name('employees.export.excel')->middleware('can:hr.employees.export');
+        Route::get('employees/import/template', [EmployeeImportController::class, 'template'])->name('employees.import.template')->middleware('can:hr.employees.import');
+        Route::post('employees/import/preview', [EmployeeImportController::class, 'preview'])->name('employees.import.preview')->middleware('can:hr.employees.import');
+        Route::post('employees/import/confirm', [EmployeeImportController::class, 'confirm'])->name('employees.import.confirm')->middleware('can:hr.employees.import');
+        Route::get('employees/import/errors/{errorFileId}', [EmployeeImportController::class, 'downloadErrors'])->name('employees.import.errors')->middleware('can:hr.employees.import');
+        Route::get('employees', [EmployeeController::class, 'index'])->name('employees.index')->middleware('can:hr.employees.view');
+        Route::get('employees/create', [EmployeeController::class, 'create'])->name('employees.create')->middleware('can:hr.employees.create');
+        Route::post('employees', [EmployeeController::class, 'store'])->name('employees.store')->middleware('can:hr.employees.create');
+        Route::get('employees/{employee}', [EmployeeController::class, 'show'])->name('employees.show')->middleware('can:hr.employees.view');
+        Route::get('employees/{employee}/edit', [EmployeeController::class, 'edit'])->name('employees.edit')->middleware('can:hr.employees.update');
+        Route::put('employees/{employee}', [EmployeeController::class, 'update'])->name('employees.update')->middleware('can:hr.employees.update');
+        Route::delete('employees/{employee}', [EmployeeController::class, 'destroy'])->name('employees.destroy')->middleware('can:hr.employees.delete');
+        Route::get('employees/{employee}/export/pdf', [EmployeeController::class, 'exportPdf'])->name('employees.export.pdf')->middleware('can:hr.employees.export');
+        Route::get('employees/{employee}/print', [EmployeeController::class, 'printProfile'])->name('employees.print')->middleware('can:hr.employees.view');
 
         // Chấm công
         Route::get('attendance', [AttendanceController::class, 'index'])->name('attendance.index');
@@ -226,18 +232,30 @@ Route::middleware('auth')->group(function () {
         Route::delete('suppliers/{supplier}/bank-accounts/{bankAccount}', [SupplierBankAccountController::class, 'destroy'])->name('suppliers.bank-accounts.destroy');
         Route::post('suppliers/{supplier}/bank-accounts/{bankAccount}/set-primary', [SupplierBankAccountController::class, 'setPrimary'])->name('suppliers.bank-accounts.set-primary');
 
-        Route::get('stock-entries/export-pdf', [StockEntryController::class, 'exportPdf'])->name('stock-entries.export-pdf');
-        Route::resource('stock-entries', StockEntryController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
-        Route::post('stock-entries/{stockEntry}/confirm', [StockEntryController::class, 'confirm'])->name('stock-entries.confirm');
-        Route::post('stock-entries/{stockEntry}/cancel', [StockEntryController::class, 'cancel'])->name('stock-entries.cancel');
-        Route::post('stock-entries/{stockEntry}/recall', [StockEntryController::class, 'recall'])->name('stock-entries.recall');
-        Route::get('stock-entries/{stockEntry}/pdf', [StockEntryController::class, 'pdf'])->name('stock-entries.pdf');
+        Route::get('stock-entries/export-pdf', [StockEntryController::class, 'exportPdf'])->name('stock-entries.export-pdf')->middleware('can:warehouse.stock_entries.view');
+        Route::get('stock-entries', [StockEntryController::class, 'index'])->name('stock-entries.index')->middleware('can:warehouse.stock_entries.view');
+        Route::get('stock-entries/create', [StockEntryController::class, 'create'])->name('stock-entries.create')->middleware('can:warehouse.stock_entries.create');
+        Route::post('stock-entries', [StockEntryController::class, 'store'])->name('stock-entries.store')->middleware('can:warehouse.stock_entries.create');
+        Route::get('stock-entries/{stockEntry}', [StockEntryController::class, 'show'])->name('stock-entries.show')->middleware('can:warehouse.stock_entries.view');
+        Route::get('stock-entries/{stockEntry}/edit', [StockEntryController::class, 'edit'])->name('stock-entries.edit')->middleware('can:warehouse.stock_entries.update');
+        Route::put('stock-entries/{stockEntry}', [StockEntryController::class, 'update'])->name('stock-entries.update')->middleware('can:warehouse.stock_entries.update');
+        Route::delete('stock-entries/{stockEntry}', [StockEntryController::class, 'destroy'])->name('stock-entries.destroy')->middleware('can:warehouse.stock_entries.delete');
+        Route::post('stock-entries/{stockEntry}/confirm', [StockEntryController::class, 'confirm'])->name('stock-entries.confirm')->middleware('can:warehouse.stock_entries.confirm');
+        Route::post('stock-entries/{stockEntry}/cancel', [StockEntryController::class, 'cancel'])->name('stock-entries.cancel')->middleware('can:warehouse.stock_entries.confirm');
+        Route::post('stock-entries/{stockEntry}/recall', [StockEntryController::class, 'recall'])->name('stock-entries.recall')->middleware('can:warehouse.stock_entries.confirm');
+        Route::get('stock-entries/{stockEntry}/pdf', [StockEntryController::class, 'pdf'])->name('stock-entries.pdf')->middleware('can:warehouse.stock_entries.view');
 
-        Route::resource('stock-exits', StockExitController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
-        Route::post('stock-exits/{stockExit}/confirm', [StockExitController::class, 'confirm'])->name('stock-exits.confirm');
-        Route::post('stock-exits/{stockExit}/cancel', [StockExitController::class, 'cancel'])->name('stock-exits.cancel');
+        Route::get('stock-exits', [StockExitController::class, 'index'])->name('stock-exits.index')->middleware('can:warehouse.stock_exits.view');
+        Route::get('stock-exits/create', [StockExitController::class, 'create'])->name('stock-exits.create')->middleware('can:warehouse.stock_exits.create');
+        Route::post('stock-exits', [StockExitController::class, 'store'])->name('stock-exits.store')->middleware('can:warehouse.stock_exits.create');
+        Route::get('stock-exits/{stockExit}', [StockExitController::class, 'show'])->name('stock-exits.show')->middleware('can:warehouse.stock_exits.view');
+        Route::get('stock-exits/{stockExit}/edit', [StockExitController::class, 'edit'])->name('stock-exits.edit')->middleware('can:warehouse.stock_exits.update');
+        Route::put('stock-exits/{stockExit}', [StockExitController::class, 'update'])->name('stock-exits.update')->middleware('can:warehouse.stock_exits.update');
+        Route::delete('stock-exits/{stockExit}', [StockExitController::class, 'destroy'])->name('stock-exits.destroy')->middleware('can:warehouse.stock_exits.delete');
+        Route::post('stock-exits/{stockExit}/confirm', [StockExitController::class, 'confirm'])->name('stock-exits.confirm')->middleware('can:warehouse.stock_exits.confirm');
+        Route::post('stock-exits/{stockExit}/cancel', [StockExitController::class, 'cancel'])->name('stock-exits.cancel')->middleware('can:warehouse.stock_exits.confirm');
         Route::post('stock-exits/{stockExit}/edit-date', [StockExitController::class, 'editDate'])->name('stock-exits.edit-date')->middleware('role:admin');
-        Route::get('stock-exits/{stockExit}/pdf', [StockExitController::class, 'pdf'])->name('stock-exits.pdf');
+        Route::get('stock-exits/{stockExit}/pdf', [StockExitController::class, 'pdf'])->name('stock-exits.pdf')->middleware('can:warehouse.stock_exits.view');
         Route::get('stock-exits-available-lots', [StockExitController::class, 'availableLots'])->name('stock-exits.available-lots');
         Route::get('stock-exits-avco-costs', [StockExitController::class, 'avcoCosts'])->name('stock-exits.avco-costs');
         Route::get('stock-exits-prefill-from-order', [StockExitController::class, 'prefillFromOrder'])->name('stock-exits.prefill-from-order');
@@ -276,16 +294,22 @@ Route::middleware('auth')->group(function () {
         Route::post('quotations/{quotation}/attachment', [QuotationController::class, 'uploadAttachment'])->name('quotations.attachment.upload');
         Route::delete('quotations/{quotation}/attachment', [QuotationController::class, 'deleteAttachment'])->name('quotations.attachment.delete');
 
-        Route::get('orders/export-excel', [OrderController::class, 'exportExcel'])->name('orders.export-excel');
-        Route::resource('orders', OrderController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
-        Route::post('orders/{order}/process', [OrderController::class, 'process'])->name('orders.process');
-        Route::post('orders/{order}/complete', [OrderController::class, 'complete'])->name('orders.complete');
-        Route::post('orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
-        Route::patch('orders/{order}/dates', [OrderController::class, 'updateDates'])->name('orders.update-dates');
-        Route::post('orders/{order}/customs', [OrderController::class, 'declareCustoms'])->name('orders.customs.declare');
-        Route::post('orders/{order}/attachment', [OrderController::class, 'uploadAttachment'])->name('orders.attachment.upload');
-        Route::delete('orders/{order}/attachment', [OrderController::class, 'deleteAttachment'])->name('orders.attachment.delete');
-        Route::post('orders/{order}/force-revert', [OrderController::class, 'forceRevert'])->name('orders.force-revert');
+        Route::get('orders/export-excel', [OrderController::class, 'exportExcel'])->name('orders.export-excel')->middleware('can:sales.orders.export');
+        Route::get('orders', [OrderController::class, 'index'])->name('orders.index')->middleware('can:sales.orders.view');
+        Route::get('orders/create', [OrderController::class, 'create'])->name('orders.create')->middleware('can:sales.orders.create');
+        Route::post('orders', [OrderController::class, 'store'])->name('orders.store')->middleware('can:sales.orders.create');
+        Route::get('orders/{order}', [OrderController::class, 'show'])->name('orders.show')->middleware('can:sales.orders.view');
+        Route::get('orders/{order}/edit', [OrderController::class, 'edit'])->name('orders.edit')->middleware('can:sales.orders.update');
+        Route::put('orders/{order}', [OrderController::class, 'update'])->name('orders.update')->middleware('can:sales.orders.update');
+        Route::delete('orders/{order}', [OrderController::class, 'destroy'])->name('orders.destroy')->middleware('can:sales.orders.delete');
+        Route::post('orders/{order}/process', [OrderController::class, 'process'])->name('orders.process')->middleware('can:sales.orders.approve');
+        Route::post('orders/{order}/complete', [OrderController::class, 'complete'])->name('orders.complete')->middleware('can:sales.orders.approve');
+        Route::post('orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel')->middleware('can:sales.orders.approve');
+        Route::patch('orders/{order}/dates', [OrderController::class, 'updateDates'])->name('orders.update-dates')->middleware('can:sales.orders.update');
+        Route::post('orders/{order}/customs', [OrderController::class, 'declareCustoms'])->name('orders.customs.declare')->middleware('can:sales.orders.update');
+        Route::post('orders/{order}/attachment', [OrderController::class, 'uploadAttachment'])->name('orders.attachment.upload')->middleware('can:sales.orders.update');
+        Route::delete('orders/{order}/attachment', [OrderController::class, 'deleteAttachment'])->name('orders.attachment.delete')->middleware('can:sales.orders.update');
+        Route::post('orders/{order}/force-revert', [OrderController::class, 'forceRevert'])->name('orders.force-revert')->middleware('can:sales.orders.approve');
 
         Route::resource('contracts', ContractController::class);
         Route::post('contracts/{contract}/activate', [ContractController::class, 'activate'])->name('contracts.activate');
@@ -328,26 +352,31 @@ Route::middleware('auth')->group(function () {
         Route::delete('/{commission}',            [CommissionController::class, 'destroy'])->name('destroy');
     });
 
-    // Projects - dự án thi công IT
     Route::prefix('projects')->name('projects.')->middleware('can:projects.view')->group(function () {
-        Route::get('projects/export-excel', [ProjectController::class, 'exportExcel'])->name('projects.export-excel');
-        Route::resource('projects', ProjectController::class);
-        Route::post('projects/{project}/transition', [ProjectController::class, 'transition'])->name('projects.transition');
+        Route::get('projects/export-excel', [ProjectController::class, 'exportExcel'])->name('projects.export-excel')->middleware('can:projects.view');
+        Route::get('projects', [ProjectController::class, 'index'])->name('projects.index')->middleware('can:projects.view');
+        Route::get('projects/create', [ProjectController::class, 'create'])->name('projects.create')->middleware('can:projects.create');
+        Route::post('projects', [ProjectController::class, 'store'])->name('projects.store')->middleware('can:projects.create');
+        Route::get('projects/{project}', [ProjectController::class, 'show'])->name('projects.show')->middleware('can:projects.view');
+        Route::get('projects/{project}/edit', [ProjectController::class, 'edit'])->name('projects.edit')->middleware('can:projects.update');
+        Route::put('projects/{project}', [ProjectController::class, 'update'])->name('projects.update')->middleware('can:projects.update');
+        Route::delete('projects/{project}', [ProjectController::class, 'destroy'])->name('projects.destroy')->middleware('can:projects.delete');
+        Route::post('projects/{project}/transition', [ProjectController::class, 'transition'])->name('projects.transition')->middleware('can:projects.complete');
 
-        Route::post('projects/{project}/members', [ProjectController::class, 'addMember'])->name('projects.members.store');
-        Route::delete('projects/{project}/members/{member}', [ProjectController::class, 'removeMember'])->name('projects.members.destroy');
+        Route::post('projects/{project}/members', [ProjectController::class, 'addMember'])->name('projects.members.store')->middleware('can:projects.update');
+        Route::delete('projects/{project}/members/{member}', [ProjectController::class, 'removeMember'])->name('projects.members.destroy')->middleware('can:projects.update');
 
-        Route::post('projects/{project}/materials', [ProjectController::class, 'addMaterial'])->name('projects.materials.store');
-        Route::delete('projects/{project}/materials/{material}', [ProjectController::class, 'removeMaterial'])->name('projects.materials.destroy');
+        Route::post('projects/{project}/materials', [ProjectController::class, 'addMaterial'])->name('projects.materials.store')->middleware('can:projects.update');
+        Route::delete('projects/{project}/materials/{material}', [ProjectController::class, 'removeMaterial'])->name('projects.materials.destroy')->middleware('can:projects.update');
 
-        Route::get('projects/{project}/expenses/export-excel', [ProjectController::class, 'exportExpensesExcel'])->name('projects.expenses.export-excel');
-        Route::get('projects/{project}/wip/export-excel', [ProjectController::class, 'exportWipExcel'])->name('projects.wip.export-excel');
-        Route::get('projects/{project}/expenses/create', [ProjectController::class, 'expenseCreate'])->name('projects.expenses.create');
-        Route::post('projects/{project}/expenses/batch', [ProjectController::class, 'expenseBatchStore'])->name('projects.expenses.batch');
-        Route::post('projects/{project}/expenses', [ProjectController::class, 'addExpense'])->name('projects.expenses.store');
-        Route::get('projects/{project}/expenses/{expense}/edit', [ProjectController::class, 'expenseEdit'])->name('projects.expenses.edit');
-        Route::patch('projects/{project}/expenses/{expense}', [ProjectController::class, 'expenseUpdate'])->name('projects.expenses.update');
-        Route::delete('projects/{project}/expenses/{expense}', [ProjectController::class, 'removeExpense'])->name('projects.expenses.destroy');
+        Route::get('projects/{project}/expenses/export-excel', [ProjectController::class, 'exportExpensesExcel'])->name('projects.expenses.export-excel')->middleware('can:projects.costs.view');
+        Route::get('projects/{project}/wip/export-excel', [ProjectController::class, 'exportWipExcel'])->name('projects.wip.export-excel')->middleware('can:projects.costs.view');
+        Route::get('projects/{project}/expenses/create', [ProjectController::class, 'expenseCreate'])->name('projects.expenses.create')->middleware('can:projects.costs.create');
+        Route::post('projects/{project}/expenses/batch', [ProjectController::class, 'expenseBatchStore'])->name('projects.expenses.batch')->middleware('can:projects.costs.create');
+        Route::post('projects/{project}/expenses', [ProjectController::class, 'addExpense'])->name('projects.expenses.store')->middleware('can:projects.costs.create');
+        Route::get('projects/{project}/expenses/{expense}/edit', [ProjectController::class, 'expenseEdit'])->name('projects.expenses.edit')->middleware('can:projects.costs.update');
+        Route::patch('projects/{project}/expenses/{expense}', [ProjectController::class, 'expenseUpdate'])->name('projects.expenses.update')->middleware('can:projects.costs.update');
+        Route::delete('projects/{project}/expenses/{expense}', [ProjectController::class, 'removeExpense'])->name('projects.expenses.destroy')->middleware('can:projects.costs.delete');
 
         // Kết chuyển chi phí PS sang TK 154 (đơn lẻ)
         Route::prefix('projects/{project}/expenses/{expense}/transfers')->name('projects.expense-transfers.')->group(function () {
@@ -499,15 +528,20 @@ Route::middleware('auth')->group(function () {
         Route::delete('ar-ap-opening-balance/{arApOpeningBalance}',     [ArApOpeningBalanceController::class, 'destroy'])->name('ar-ap-opening-balance.destroy')->middleware('can:accounting.manage');
 
         // Phiếu kế toán / Bút toán (Journal Entries)
-        Route::get('journal-entries/export-excel', [JournalEntryController::class, 'exportExcel'])->name('journal-entries.export-excel');
-        Route::resource('journal-entries', JournalEntryController::class)->only(['index', 'create', 'store', 'show', 'update', 'destroy']);
-        Route::get('journal-entries/{journalEntry}/edit', [JournalEntryController::class, 'edit'])->name('journal-entries.edit')->middleware('can:accounting.manage');
-        Route::post('journal-entries/{journalEntry}/post', [JournalEntryController::class, 'markPosted'])->name('journal-entries.post')->middleware('can:accounting.manage');
-        Route::post('journal-entries/{journalEntry}/unpost', [JournalEntryController::class, 'unpost'])->name('journal-entries.unpost')->middleware('can:accounting.manage');
-        Route::post('journal-entries/{journalEntry}/restore-original', [JournalEntryController::class, 'restoreOriginal'])->name('journal-entries.restore-original')->middleware('can:accounting.manage');
-        Route::post('journal-entries/{journalEntry}/reverse', [JournalEntryController::class, 'reverse'])->name('journal-entries.reverse')->middleware('can:accounting.manage');
-        Route::post('journal-entries/{journalEntry}/void', [JournalEntryController::class, 'void'])->name('journal-entries.void')->middleware('can:accounting.manage');
-        Route::post('journal-entries/bulk-approve', [JournalEntryController::class, 'bulkApprove'])->name('journal-entries.bulk-approve')->middleware('can:accounting.manage');
+        Route::get('journal-entries/export-excel', [JournalEntryController::class, 'exportExcel'])->name('journal-entries.export-excel')->middleware('can:accounting.journals.view');
+        Route::get('journal-entries', [JournalEntryController::class, 'index'])->name('journal-entries.index')->middleware('can:accounting.journals.view');
+        Route::get('journal-entries/create', [JournalEntryController::class, 'create'])->name('journal-entries.create')->middleware('can:accounting.journals.create');
+        Route::post('journal-entries', [JournalEntryController::class, 'store'])->name('journal-entries.store')->middleware('can:accounting.journals.create');
+        Route::get('journal-entries/{journalEntry}', [JournalEntryController::class, 'show'])->name('journal-entries.show')->middleware('can:accounting.journals.view');
+        Route::get('journal-entries/{journalEntry}/edit', [JournalEntryController::class, 'edit'])->name('journal-entries.edit')->middleware('can:accounting.journals.update');
+        Route::put('journal-entries/{journalEntry}', [JournalEntryController::class, 'update'])->name('journal-entries.update')->middleware('can:accounting.journals.update');
+        Route::delete('journal-entries/{journalEntry}', [JournalEntryController::class, 'destroy'])->name('journal-entries.destroy')->middleware('can:accounting.journals.delete');
+        Route::post('journal-entries/{journalEntry}/post', [JournalEntryController::class, 'markPosted'])->name('journal-entries.post')->middleware('can:accounting.journals.post');
+        Route::post('journal-entries/{journalEntry}/unpost', [JournalEntryController::class, 'unpost'])->name('journal-entries.unpost')->middleware('can:accounting.journals.post');
+        Route::post('journal-entries/{journalEntry}/restore-original', [JournalEntryController::class, 'restoreOriginal'])->name('journal-entries.restore-original')->middleware('can:accounting.journals.post');
+        Route::post('journal-entries/{journalEntry}/reverse', [JournalEntryController::class, 'reverse'])->name('journal-entries.reverse')->middleware('can:accounting.journals.reverse');
+        Route::post('journal-entries/{journalEntry}/void', [JournalEntryController::class, 'void'])->name('journal-entries.void')->middleware('can:accounting.journals.post');
+        Route::post('journal-entries/bulk-approve', [JournalEntryController::class, 'bulkApprove'])->name('journal-entries.bulk-approve')->middleware('can:accounting.journals.post');
 
         // Chi phí trả trước (Prepaid Expenses)
         Route::resource('prepaid-expenses', PrepaidExpenseController::class)->only(['index', 'create', 'store', 'show'])->middleware('can:accounting.view');
@@ -697,23 +731,35 @@ Route::middleware('auth')->group(function () {
 
     // Purchasing - mua hàng
     Route::prefix('purchasing')->name('purchasing.')->middleware('can:purchasing.view')->group(function () {
-        Route::get('purchase-orders/import/template', [PurchaseOrderController::class, 'importTemplate'])->name('purchase-orders.import.template');
-        Route::post('purchase-orders/import/preview',  [PurchaseOrderController::class, 'importPreview'])->name('purchase-orders.import.preview');
-        Route::post('purchase-orders/import/confirm',  [PurchaseOrderController::class, 'importConfirm'])->name('purchase-orders.import.confirm');
-        Route::get('purchase-orders/export-excel', [PurchaseOrderController::class, 'exportExcel'])->name('purchase-orders.export-excel');
-        Route::resource('purchase-orders', PurchaseOrderController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
-        Route::post('purchase-orders/{purchaseOrder}/send',    [PurchaseOrderController::class, 'send'])->name('purchase-orders.send');
-        Route::post('purchase-orders/{purchaseOrder}/receive', [PurchaseOrderController::class, 'receive'])->name('purchase-orders.receive');
-        Route::post('purchase-orders/{purchaseOrder}/cancel',  [PurchaseOrderController::class, 'cancel'])->name('purchase-orders.cancel');
+        Route::get('purchase-orders/import/template', [PurchaseOrderController::class, 'importTemplate'])->name('purchase-orders.import.template')->middleware('can:purchases.orders.create');
+        Route::post('purchase-orders/import/preview',  [PurchaseOrderController::class, 'importPreview'])->name('purchase-orders.import.preview')->middleware('can:purchases.orders.create');
+        Route::post('purchase-orders/import/confirm',  [PurchaseOrderController::class, 'importConfirm'])->name('purchase-orders.import.confirm')->middleware('can:purchases.orders.create');
+        Route::get('purchase-orders/export-excel', [PurchaseOrderController::class, 'exportExcel'])->name('purchase-orders.export-excel')->middleware('can:purchases.orders.view');
+        Route::get('purchase-orders', [PurchaseOrderController::class, 'index'])->name('purchase-orders.index')->middleware('can:purchases.orders.view');
+        Route::get('purchase-orders/create', [PurchaseOrderController::class, 'create'])->name('purchase-orders.create')->middleware('can:purchases.orders.create');
+        Route::post('purchase-orders', [PurchaseOrderController::class, 'store'])->name('purchase-orders.store')->middleware('can:purchases.orders.create');
+        Route::get('purchase-orders/{purchaseOrder}', [PurchaseOrderController::class, 'show'])->name('purchase-orders.show')->middleware('can:purchases.orders.view');
+        Route::get('purchase-orders/{purchaseOrder}/edit', [PurchaseOrderController::class, 'edit'])->name('purchase-orders.edit')->middleware('can:purchases.orders.update');
+        Route::put('purchase-orders/{purchaseOrder}', [PurchaseOrderController::class, 'update'])->name('purchase-orders.update')->middleware('can:purchases.orders.update');
+        Route::delete('purchase-orders/{purchaseOrder}', [PurchaseOrderController::class, 'destroy'])->name('purchase-orders.destroy')->middleware('can:purchases.orders.delete');
+        Route::post('purchase-orders/{purchaseOrder}/send',    [PurchaseOrderController::class, 'send'])->name('purchase-orders.send')->middleware('can:purchases.orders.approve');
+        Route::post('purchase-orders/{purchaseOrder}/receive', [PurchaseOrderController::class, 'receive'])->name('purchase-orders.receive')->middleware('can:purchases.orders.approve');
+        Route::post('purchase-orders/{purchaseOrder}/cancel',  [PurchaseOrderController::class, 'cancel'])->name('purchase-orders.cancel')->middleware('can:purchases.orders.approve');
 
-        Route::get('purchase-invoices/export-excel', [PurchaseInvoiceController::class, 'exportExcel'])->name('purchase-invoices.export-excel');
-        Route::resource('purchase-invoices', PurchaseInvoiceController::class);
+        Route::get('purchase-invoices/export-excel', [PurchaseInvoiceController::class, 'exportExcel'])->name('purchase-invoices.export-excel')->middleware('can:purchases.invoices.view');
+        Route::get('purchase-invoices', [PurchaseInvoiceController::class, 'index'])->name('purchase-invoices.index')->middleware('can:purchases.invoices.view');
+        Route::get('purchase-invoices/create', [PurchaseInvoiceController::class, 'create'])->name('purchase-invoices.create')->middleware('can:purchases.invoices.create');
+        Route::post('purchase-invoices', [PurchaseInvoiceController::class, 'store'])->name('purchase-invoices.store')->middleware('can:purchases.invoices.create');
+        Route::get('purchase-invoices/{purchaseInvoice}', [PurchaseInvoiceController::class, 'show'])->name('purchase-invoices.show')->middleware('can:purchases.invoices.view');
+        Route::get('purchase-invoices/{purchaseInvoice}/edit', [PurchaseInvoiceController::class, 'edit'])->name('purchase-invoices.edit')->middleware('can:purchases.invoices.update');
+        Route::put('purchase-invoices/{purchaseInvoice}', [PurchaseInvoiceController::class, 'update'])->name('purchase-invoices.update')->middleware('can:purchases.invoices.update');
+        Route::delete('purchase-invoices/{purchaseInvoice}', [PurchaseInvoiceController::class, 'destroy'])->name('purchase-invoices.destroy')->middleware('can:purchases.invoices.delete');
         Route::post('purchase-invoices/{purchaseInvoice}/transition', [PurchaseInvoiceController::class, 'transition'])->name('purchase-invoices.transition');
-        Route::post('purchase-invoices/{purchaseInvoice}/recall-payments', [PurchaseInvoiceController::class, 'recallPayments'])->name('purchase-invoices.recall-payments')->middleware('can:purchasing.approve');
-        Route::post('purchase-invoices/{purchaseInvoice}/payments', [PurchaseInvoicePaymentController::class, 'store'])->name('purchase-invoices.payments.store');
-        Route::delete('purchase-invoices/{purchaseInvoice}/payments/{payment}', [PurchaseInvoicePaymentController::class, 'destroy'])->name('purchase-invoices.payments.destroy');
-        Route::post('purchase-invoices/{purchaseInvoice}/attachment', [PurchaseInvoiceController::class, 'uploadAttachment'])->name('purchase-invoices.attachment.upload');
-        Route::delete('purchase-invoices/{purchaseInvoice}/attachment', [PurchaseInvoiceController::class, 'deleteAttachment'])->name('purchase-invoices.attachment.delete');
+        Route::post('purchase-invoices/{purchaseInvoice}/recall-payments', [PurchaseInvoiceController::class, 'recallPayments'])->name('purchase-invoices.recall-payments')->middleware('can:purchases.invoices.post');
+        Route::post('purchase-invoices/{purchaseInvoice}/payments', [PurchaseInvoicePaymentController::class, 'store'])->name('purchase-invoices.payments.store')->middleware('can:purchases.invoices.post');
+        Route::delete('purchase-invoices/{purchaseInvoice}/payments/{payment}', [PurchaseInvoicePaymentController::class, 'destroy'])->name('purchase-invoices.payments.destroy')->middleware('can:purchases.invoices.post');
+        Route::post('purchase-invoices/{purchaseInvoice}/attachment', [PurchaseInvoiceController::class, 'uploadAttachment'])->name('purchase-invoices.attachment.upload')->middleware('can:purchases.invoices.update');
+        Route::delete('purchase-invoices/{purchaseInvoice}/attachment', [PurchaseInvoiceController::class, 'deleteAttachment'])->name('purchase-invoices.attachment.delete')->middleware('can:purchases.invoices.update');
         Route::patch('purchase-invoices/{purchaseInvoice}/items/{item}/line-type', [PurchaseInvoiceController::class, 'updateItemLineType'])->name('purchase-invoices.items.line-type')->middleware('can:purchasing.approve');
         Route::post('purchase-invoices/{purchaseInvoice}/advance-allocations', [SupplierAdvanceAllocationController::class, 'store'])->name('purchase-invoices.advance-allocations.store');
         Route::delete('advance-allocations/{allocation}', [SupplierAdvanceAllocationController::class, 'destroy'])->name('advance-allocations.destroy');
@@ -840,4 +886,14 @@ Route::middleware('auth')->group(function () {
         Route::get('project-purchase-orders', [SearchController::class, 'projectPurchaseOrders'])->name('project-purchase-orders');
         Route::get('orders',                  [SearchController::class, 'orders'])->name('orders');
     });
+
+    // JSON API for current user permissions
+    Route::get('api/me/permissions', function () {
+        $user = auth()->user();
+        return response()->json([
+            'user'        => $user->only('id', 'name', 'email'),
+            'roles'       => $user->getRoleNames(),
+            'permissions' => $user->getAllPermissions()->pluck('code')->toArray(),
+        ]);
+    })->name('api.me.permissions');
 });

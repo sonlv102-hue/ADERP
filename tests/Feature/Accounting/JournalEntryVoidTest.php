@@ -194,21 +194,27 @@ class JournalEntryVoidTest extends TestCase
 
     public function test_trial_balance_unaffected_after_void_pair(): void
     {
-        $original = $this->postEntry('2026-06-10');
-        $this->accounting->reverse($original, 'Đảo thử');
-        $original->refresh();
+        Carbon::setTestNow(Carbon::parse('2026-06-10'));
 
-        // Sau khi đảo: original = 'reversed' (bị exclude khỏi balance).
-        // Chỉ còn reversal entry (posted) với Cr 1111 = 1M.
-        // TK 1111 normal_balance=debit: balance = dr - cr = 0 - 1M = -1M
-        $balanceBefore = $this->balanceSvc->getAllBalancesAsOf('2026-06-30');
-        $this->assertEquals(-1_000_000, $balanceBefore['1111'] ?? 0);
+        try {
+            $original = $this->postEntry('2026-06-10');
+            $this->accounting->reverse($original, 'Đảo thử');
+            $original->refresh();
 
-        $this->post(route('accounting.journal-entries.void', $original));
+            // Sau khi đảo: original = 'reversed' (bị exclude khỏi balance).
+            // Chỉ còn reversal entry (posted) với Cr 1111 = 1M.
+            // TK 1111 normal_balance=debit: balance = dr - cr = 0 - 1M = -1M
+            $balanceBefore = $this->balanceSvc->getAllBalancesAsOf('2026-06-30');
+            $this->assertEquals(-1_000_000, $balanceBefore['1111'] ?? 0);
 
-        // Sau khi hủy cả cặp: cả 2 đều voided → không còn ảnh hưởng balance
-        $balanceAfter = $this->balanceSvc->getAllBalancesAsOf('2026-06-30');
-        $this->assertArrayNotHasKey('1111', $balanceAfter);
+            $this->post(route('accounting.journal-entries.void', $original));
+
+            // Sau khi hủy cả cặp: cả 2 đều voided → không còn ảnh hưởng balance
+            $balanceAfter = $this->balanceSvc->getAllBalancesAsOf('2026-06-30');
+            $this->assertArrayNotHasKey('1111', $balanceAfter);
+        } finally {
+            Carbon::setTestNow();
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

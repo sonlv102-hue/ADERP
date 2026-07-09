@@ -29,167 +29,66 @@
         <NavItem :href="route('dashboard')" icon="home">Dashboard</NavItem>
         <NavItem :href="route('notifications.index')" icon="bell">Thông báo</NavItem>
 
-        <!-- Danh mục -->
-        <NavGroup v-if="can('products.view')"
-          label="Danh mục" icon="collection" prefix="/catalog">
-          <NavItem :href="route('catalog.products.index')" icon="cube" sub>Sản phẩm</NavItem>
-          <NavItem :href="route('catalog.services.index')" icon="tag" sub>Dịch vụ</NavItem>
-          <NavItem v-if="can('customers.view')" :href="route('crm.customers.index')" icon="users" sub>Khách hàng</NavItem>
-          <NavItem v-if="can('purchasing.view')" :href="route('warehouse.suppliers.index')" icon="office-building" sub>Nhà cung cấp</NavItem>
-        </NavGroup>
+        <!-- Core Menus (Catalog, Sales, Purchasing, Projects, Technical Support, Warehouse) -->
+        <template v-for="menu in coreMenus" :key="menu.key">
+          <template v-if="!menu.route_name && menu.children && menu.children.length > 0">
+            <NavGroup :label="menu.label" :icon="menu.icon" :prefix="'/' + menu.key.split('.')[0]">
+              <NavItem
+                v-for="child in menu.children"
+                :key="child.key"
+                :href="route(child.route_name)"
+                :icon="child.icon"
+                sub
+              >
+                {{ child.label }}
+              </NavItem>
+            </NavGroup>
+          </template>
+          <template v-else-if="menu.route_name">
+            <NavItem :href="route(menu.route_name)" :icon="menu.icon">
+              {{ menu.label }}
+            </NavItem>
+          </template>
+        </template>
 
-        <!-- Bán hàng -->
-        <NavGroup v-if="can('quotations.view')"
-          label="Bán hàng" icon="shopping-bag" prefix="/sales">
-          <NavItem :href="route('sales.quotations.index')" icon="document-text" sub>Báo giá</NavItem>
-          <NavItem :href="route('sales.orders.index')" icon="shopping-bag" sub>Đơn hàng bán</NavItem>
-          <NavItem :href="route('sales.contracts.index')" icon="document" sub>Hợp đồng bán</NavItem>
-          <NavItem :href="route('accounting.invoices.index')" icon="document-text" sub>Hóa đơn bán hàng</NavItem>
-          <NavItem v-if="can('commissions.view')" :href="route('sales.commissions.index')" icon="currency-dollar" sub>Hoa hồng</NavItem>
-          <NavItem v-if="can('accounting.view')" :href="route('sales.customer-advances.index')" icon="cash" sub>Ứng trước khách hàng</NavItem>
-        </NavGroup>
-
-        <!-- Mua hàng -->
-        <NavGroup v-if="can('purchasing.view')"
-          label="Mua hàng" icon="truck" prefix="/purchasing">
-          <NavItem :href="route('purchasing.purchase-orders.index')" icon="document-text" sub>Đơn mua hàng</NavItem>
-          <NavItem :href="route('purchasing.purchase-contracts.index')" icon="document" sub>Hợp đồng mua</NavItem>
-          <NavItem :href="route('purchasing.purchase-invoices.index')" icon="receipt-tax" sub>Hóa đơn đầu vào</NavItem>
-          <NavItem :href="route('purchasing.supplier-advances.index')" icon="cash" sub>Tiền trả trước NCC</NavItem>
-          <NavItem v-if="can('purchase-returns.view')" :href="route('purchasing.purchase-returns.index')" icon="reply" sub>Trả hàng mua</NavItem>
-        </NavGroup>
-
-        <!-- Dự án thi công -->
-        <NavGroup v-if="can('projects.view')"
-          label="Dự án thi công" icon="briefcase" prefix="/projects">
-          <NavItem :href="route('projects.projects.index')" icon="collection" sub>Dự án</NavItem>
-        </NavGroup>
-
-        <!-- Hỗ trợ kỹ thuật -->
-        <NavGroup v-if="can('tickets.view')"
-          label="Hỗ trợ kỹ thuật" icon="support" prefix="/support">
-          <NavItem :href="route('support.tickets.index')" icon="ticket" sub>Ticket kỹ thuật</NavItem>
-          <NavItem :href="route('support.warranties.index')" icon="shield-check" sub>Bảo hành</NavItem>
-        </NavGroup>
-
-        <!-- Kho -->
-        <NavGroup v-if="can('warehouse.view')"
-          label="Kho" icon="archive" prefix="/warehouse">
-          <NavItem :href="route('warehouse.warehouses.index')" icon="office-building" sub>Kho hàng</NavItem>
-          <NavItem :href="route('warehouse.stock-entries.index')" icon="inbox" sub>Nhập kho</NavItem>
-          <NavItem :href="route('warehouse.stock-exits.index')" icon="arrow-circle-right" sub>Xuất kho</NavItem>
-          <NavItem :href="route('reports.stock_entry_details')" icon="document-text" sub>Báo cáo nhập kho</NavItem>
-          <NavItem :href="route('reports.stock_exit_details')" icon="document-text" sub>Báo cáo xuất kho</NavItem>
-          <NavItem :href="route('reports.inventory')" icon="cube" sub>Tồn kho</NavItem>
-          <NavItem :href="route('warehouse.inventory-counts.index')" icon="clipboard-list" sub>Kiểm kê kho</NavItem>
-          <NavItem :href="route('warehouse.project-inventory.index')" icon="collection" sub>Tồn kho dự án</NavItem>
-          <NavItem v-if="can('warehouse.manage')" :href="route('warehouse.opening-balance.index')" icon="database" sub>Tồn đầu kỳ</NavItem>
-          <NavItem :href="route('reports.stock_card')" icon="table" sub>Thẻ kho</NavItem>
-        </NavGroup>
-
-        <!-- KẾ TOÁN -->
-        <div v-if="can('accounting.view')" class="mt-3 pt-3 border-t border-slate-800">
+        <!-- Kế toán Section -->
+        <div v-if="accountingMenus.length > 0" class="mt-3 pt-3 border-t border-slate-800">
           <p class="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Kế toán</p>
-
-          <NavGroup label="Quỹ" icon="library" prefix="/accounting/fund">
-            <NavItem :href="route('accounting.funds.index')" icon="library" sub>Quản lý quỹ</NavItem>
-            <NavItem :href="route('accounting.cash-vouchers.index')" icon="cash" sub>Phiếu thu / chi</NavItem>
-            <NavItem :href="route('accounting.fund-transfers.index')" icon="arrows-expand" sub>Luân chuyển quỹ</NavItem>
-            <NavItem :href="route('accounting.bank-accounts.index')" icon="library" sub>Tài khoản ngân hàng</NavItem>
-            <NavItem v-if="can('accounting.manage')" :href="route('accounting.payment-terms.index')" icon="tag" sub>Điều khoản TT</NavItem>
-            <NavItem v-if="can('accounting.manage')" :href="route('accounting.internal-bank-accounts.index')" icon="office-building" sub>TK nội bộ</NavItem>
-            <NavItem :href="route('accounting.internal-transfers.index')" icon="arrows-expand" sub>CK nội bộ</NavItem>
-          </NavGroup>
-
-          <NavGroup label="Công nợ phải thu (AR)" icon="inbox-in" prefix="/accounting/ar">
-            <NavItem :href="route('accounting.ar-collections.index')" icon="inbox-in" sub>Thu nợ KH (TK 131)</NavItem>
-            <NavItem v-if="can('accounting.manage')" :href="route('accounting.ar-ap-opening-balance.index')" icon="clock" sub>Công nợ đầu kỳ</NavItem>
-            <NavItem :href="route('reports.ar.aging')" icon="chart-bar" sub>Công nợ phải thu (AR)</NavItem>
-            <NavItem :href="route('reports.ar.detail')" icon="document-text" sub>Sổ chi tiết CN phải thu</NavItem>
-          </NavGroup>
-
-          <NavGroup label="Công nợ phải trả (AP)" icon="arrows-expand" prefix="/accounting/ap">
-            <NavItem :href="route('accounting.ap-payments.index')" icon="currency-dollar" sub>Trả NCC (TK 331)</NavItem>
-            <NavItem v-if="can('accounting.manage')" :href="route('accounting.ar-ap-opening-balance.index')" icon="clock" sub>Công nợ đầu kỳ</NavItem>
-            <NavItem :href="route('reports.ap.aging')" icon="chart-bar" sub>Công nợ phải trả (AP)</NavItem>
-            <NavItem :href="route('reports.ap.detail')" icon="document-text" sub>Sổ chi tiết CN phải trả</NavItem>
-          </NavGroup>
-
-          <NavGroup label="Tiền lương" icon="clipboard-list" prefix="/accounting/payroll">
-            <NavItem v-if="isAdmin" :href="route('admin.attendance.index')" icon="calendar" sub>Bảng chấm công</NavItem>
-            <NavItem :href="route('accounting.payrolls.index')" icon="clipboard-list" sub>Bảng lương</NavItem>
-          </NavGroup>
-
-          <NavGroup label="Thuế" icon="receipt-tax" prefix="/accounting/tax">
-            <NavItem :href="route('accounting.taxes.index')" icon="receipt-tax" sub>Kê khai thuế</NavItem>
-            <NavItem :href="route('reports.vat')" icon="receipt-tax" sub>Báo cáo VAT</NavItem>
-          </NavGroup>
-
-          <NavGroup label="Chi phí & Giá vốn" icon="currency-dollar" prefix="/accounting/prepaid">
-            <NavItem :href="route('accounting.prepaid-expenses.index')" icon="clock" sub>Chi phí trả trước</NavItem>
-            <NavItem v-if="can('accounting.manage')" :href="route('accounting.prepaid-expenses.opening-balance.create')" icon="database" sub>Số dư đầu kỳ CPTT</NavItem>
-            <NavItem :href="route('accounting.prepaid-expenses.reports.gl-reconcile')" icon="check-circle" sub>Đối soát GL (CPTT)</NavItem>
-            <NavItem :href="route('reports.expense_detail')" icon="currency-dollar" sub>Chi tiết chi phí</NavItem>
-            <NavItem :href="route('reports.profit.orders')" icon="trending-up" sub>Lợi nhuận đơn hàng</NavItem>
-            <NavItem :href="route('reports.profit.projects')" icon="trending-up" sub>Lợi nhuận dự án</NavItem>
-          </NavGroup>
-
-          <NavGroup label="Tài sản cố định" icon="cube" prefix="/accounting/fixed-asset">
-            <NavItem :href="route('accounting.fixed-assets.index')" icon="cube" sub>Tài sản cố định</NavItem>
-            <NavItem :href="route('accounting.fixed-assets.depreciation.run-page')" icon="refresh" sub>Tính khấu hao</NavItem>
-            <NavItem :href="route('accounting.fixed-assets.reports.ledger')" icon="document-text" sub>Sổ TSCĐ</NavItem>
-            <NavItem :href="route('accounting.fixed-assets.reports.reconciliation')" icon="check-circle" sub>Báo cáo TSCĐ</NavItem>
-          </NavGroup>
-
-          <NavGroup v-if="can('ccdc.view')" label="Công cụ dụng cụ" icon="wrench" prefix="/accounting/small-tools">
-            <NavItem :href="route('accounting.small-tools.index')" icon="view-list" sub>Danh sách CCDC</NavItem>
-            <NavItem v-if="can('ccdc.manage')" :href="route('accounting.small-tools.opening-balance.create')" icon="database" sub>Số dư đầu kỳ CCDC</NavItem>
-            <NavItem :href="route('accounting.small-tools.receipts.index')" icon="inbox" sub>Phiếu nhập CCDC</NavItem>
-            <NavItem :href="route('accounting.small-tools.issues.index')" icon="share" sub>Phiếu xuất dùng</NavItem>
-            <NavItem :href="route('accounting.small-tools.allocations.index')" icon="refresh" sub>Phân bổ hàng tháng</NavItem>
-            <NavItem :href="route('accounting.small-tools.reports.ledger')" icon="document-text" sub>Sổ theo dõi CCDC</NavItem>
-            <NavItem :href="route('accounting.small-tools.reports.allocation-schedule')" icon="calendar" sub>Bảng phân bổ</NavItem>
-            <NavItem v-if="can('accounting.manage')" :href="route('accounting.small-tools.reports.gl-reconcile')" icon="check-circle" sub>Đối soát GL</NavItem>
-            <NavItem v-if="can('ccdc.manage')" :href="route('accounting.small-tools.categories.index')" icon="tag" sub>Danh mục CCDC</NavItem>
-          </NavGroup>
-
-          <NavGroup label="Kế toán tổng hợp" icon="pencil-alt" prefix="/accounting/journal">
-            <NavItem v-if="can('accounting.manage')" :href="route('accounting.opening-balance.index')" icon="database" sub>Số dư đầu kỳ (TK)</NavItem>
-            <NavItem :href="route('accounting.journal-entries.index')" icon="pencil-alt" sub>Phiếu kế toán</NavItem>
-            <NavItem v-if="can('accounting.manage')" :href="route('accounting.account-codes.index')" icon="view-list" sub>Hệ thống tài khoản</NavItem>
-            <NavItem v-if="can('accounting.manage')" :href="route('accounting.accounting-periods.index')" icon="calendar" sub>Kỳ kế toán</NavItem>
-            <NavItem v-if="can('accounting.manage')" :href="route('accounting.period-close.index')" icon="check-circle" sub>Kết chuyển cuối kỳ</NavItem>
-            <NavItem v-if="can('accounting.manage')" :href="route('accounting.journal-audit.index')" icon="magnifying-glass" sub>Kiểm toán bút toán</NavItem>
-            <NavItem :href="route('reports.general_journal')" icon="book-open" sub>Sổ nhật ký chung</NavItem>
-            <NavItem :href="route('reports.general_journal_detail')" icon="book-open" sub>Sổ nhật ký chung chi tiết</NavItem>
-            <NavItem :href="route('reports.account_ledger')" icon="document-text" sub>Sổ chi tiết TK</NavItem>
-            <NavItem :href="route('reports.document_checklist')" icon="clipboard-check" sub>Bảng kê chứng từ</NavItem>
-            <NavItem :href="route('reports.document_checklist_detail')" icon="clipboard-check" sub>Bảng kê chứng từ chi tiết</NavItem>
-            <NavItem v-if="can('documents.view')" :href="route('documents.documents.index')" icon="document-text" sub>Tất cả chứng từ</NavItem>
-          </NavGroup>
-
-          <NavGroup label="Báo cáo" icon="chart-bar" prefix="/reports">
-            <NavItem :href="route('reports.cash_flow_statement')" icon="banknotes" sub>LCTT B03-DNN</NavItem>
-            <NavItem :href="route('reports.cash_flow')" icon="banknotes" sub>Sổ thu chi theo ngày</NavItem>
-            <NavItem :href="route('reports.income_statement')" icon="chart-bar" sub>Kết quả HĐKD</NavItem>
-            <NavItem :href="route('reports.balance_sheet')" icon="document" sub>Cân đối kế toán</NavItem>
-            <NavItem :href="route('reports.trial_balance')" icon="document-text" sub>Cân đối phát sinh</NavItem>
-          </NavGroup>
+          <template v-for="menu in accountingMenus" :key="menu.key">
+            <template v-if="!menu.route_name && menu.children && menu.children.length > 0">
+              <NavGroup :label="menu.label" :icon="menu.icon" :prefix="'/' + menu.key.replace('.', '/')">
+                <NavItem
+                  v-for="child in menu.children"
+                  :key="child.key"
+                  :href="route(child.route_name)"
+                  :icon="child.icon"
+                  sub
+                >
+                  {{ child.label }}
+                </NavItem>
+              </NavGroup>
+            </template>
+          </template>
         </div>
 
-        <!-- Admin -->
-        <div v-if="isAdmin" class="mt-3 pt-3 border-t border-slate-800">
+        <!-- Quản trị Section -->
+        <div v-if="adminMenus.length > 0" class="mt-3 pt-3 border-t border-slate-800">
           <p class="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Quản trị</p>
-          <NavItem :href="route('admin.shareholders.index')" icon="library">Cổ đông / Thành viên</NavItem>
-          <NavItem :href="route('admin.employees.index')" icon="identification">Cán bộ CNV</NavItem>
-          <NavItem :href="route('admin.departments.index')" icon="office-building">Quản lý bộ phận</NavItem>
-          <NavItem :href="route('admin.positions.index')" icon="briefcase">Quản lý chức vụ</NavItem>
-          <NavItem :href="route('admin.users.index')" icon="users">Người dùng</NavItem>
-          <NavItem :href="route('admin.roles.index')" icon="shield-check">Phân quyền</NavItem>
-          <NavItem :href="route('admin.settings.index')" icon="cog">Cài đặt công ty</NavItem>
-          <NavItem :href="route('admin.activity-logs.index')" icon="clipboard-list">Nhật ký hoạt động</NavItem>
-          <NavItem :href="route('admin.backups.index')" icon="server">Sao lưu dữ liệu</NavItem>
-          <NavItem :href="route('admin.system-health.index')" icon="chip">Tình trạng hệ thống</NavItem>
+          <template v-for="menu in adminMenus" :key="menu.key">
+            <template v-if="!menu.route_name && menu.children && menu.children.length > 0">
+              <NavGroup :label="menu.label" :icon="menu.icon" :prefix="'/' + menu.key.replace('_', '/')">
+                <NavItem
+                  v-for="child in menu.children"
+                  :key="child.key"
+                  :href="route(child.route_name)"
+                  :icon="child.icon"
+                  sub
+                >
+                  {{ child.label }}
+                </NavItem>
+              </NavGroup>
+            </template>
+          </template>
         </div>
       </nav>
 
@@ -200,7 +99,6 @@
 <script setup>
 import { computed, provide, ref } from 'vue';
 import { usePage } from '@inertiajs/vue3';
-import { usePermission } from '@/composables/usePermission';
 import NavItem from './NavItem.vue';
 import NavGroup from './NavGroup.vue';
 
@@ -210,14 +108,26 @@ const props = defineProps({
 });
 defineEmits(['close']);
 
-const { hasPermission, hasRole } = usePermission();
-const can     = hasPermission;
-const isAdmin = computed(() => hasRole('admin'));
-
 const page        = usePage();
 const company     = computed(() => page.props.company ?? {});
 const companyName = computed(() => company.value.company_name || 'Mini ERP');
 const companyLogo = computed(() => company.value.company_logo || null);
+const menuItems   = computed(() => page.props.menuItems || []);
+
+// Group menus into sections
+const coreMenus = computed(() => {
+  return menuItems.value.filter(
+    m => !m.key.startsWith('accounting') && m.key !== 'admin_group'
+  );
+});
+
+const accountingMenus = computed(() => {
+  return menuItems.value.filter(m => m.key.startsWith('accounting'));
+});
+
+const adminMenus = computed(() => {
+  return menuItems.value.filter(m => m.key === 'admin_group');
+});
 
 // Accordion context: only one NavGroup open at a time
 const openPrefix = ref(null);
