@@ -26,8 +26,31 @@ class OrderController extends Controller
 {
     public function index(Request $request): Response
     {
-        $q      = $request->input('q');
-        $status = $request->input('status');
+        $q         = $request->input('q');
+        $status    = $request->input('status');
+        $dateType  = $request->input('date_type');
+        $year      = $request->input('year', now()->year);
+        $month     = $request->input('month', now()->month);
+        $quarter   = $request->input('quarter', ceil(now()->month / 3));
+        $startDate = $request->input('start_date');
+        $endDate   = $request->input('end_date');
+
+        $dateRange = null;
+        if ($dateType === 'month') {
+            if ($year && $month) {
+                $start = \Carbon\Carbon::create($year, $month, 1)->startOfDay();
+                $end   = \Carbon\Carbon::create($year, $month, 1)->endOfMonth()->endOfDay();
+                $dateRange = [$start, $end];
+            }
+        } elseif ($dateType === 'quarter') {
+            if ($year && $quarter) {
+                $startMonth = 3 * $quarter - 2;
+                $endMonth   = 3 * $quarter;
+                $start = \Carbon\Carbon::create($year, $startMonth, 1)->startOfDay();
+                $end   = \Carbon\Carbon::create($year, $endMonth, 1)->endOfMonth()->endOfDay();
+                $dateRange = [$start, $end];
+            }
+        }
 
         return Inertia::render('Sales/Orders/Index', [
             'orders' => Order::with(['customer', 'creator', 'quotation'])
@@ -51,6 +74,16 @@ class OrderController extends Controller
                        ->orWhereHas('quotation', fn ($qt) => $qt->where('code', 'ilike', "%{$q}%"));
                 }))
                 ->when($status, fn ($query) => $query->where('status', $status))
+                ->when($dateType === 'month' && $dateRange, fn ($query) => $query->whereBetween('order_date', $dateRange))
+                ->when($dateType === 'quarter' && $dateRange, fn ($query) => $query->whereBetween('order_date', $dateRange))
+                ->when($dateType === 'custom', function ($query) use ($startDate, $endDate) {
+                    if ($startDate) {
+                        $query->where('order_date', '>=', \Carbon\Carbon::parse($startDate)->startOfDay());
+                    }
+                    if ($endDate) {
+                        $query->where('order_date', '<=', \Carbon\Carbon::parse($endDate)->endOfDay());
+                    }
+                })
                 ->orderByDesc('id')
                 ->paginate(20)
                 ->withQueryString()
@@ -73,7 +106,17 @@ class OrderController extends Controller
                     'customs_status_label' => $o->customs_status->label(),
                     'customs_status_color' => $o->customs_status->color(),
                 ]),
-            'filters'  => ['q' => $q, 'status' => $status],
+            'filters'  => [
+                'q'          => $q,
+                'status'     => $status,
+                'date_type'  => $dateType,
+                'year'       => (int) $year,
+                'month'      => (int) $month,
+                'quarter'    => (int) $quarter,
+                'start_date' => $startDate,
+                'end_date'   => $endDate,
+            ],
+            'availableYears' => $this->availableYears(),
             'statuses' => collect(OrderStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
         ]);
     }
@@ -647,6 +690,12 @@ class OrderController extends Controller
                 ];
             })
             ->all();
+    }
+
+    private function availableYears(): array
+    {
+        $current = now()->year;
+        return range($current - 3, $current + 1);
     }
 
     public function exportExcel(\Illuminate\Http\Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse

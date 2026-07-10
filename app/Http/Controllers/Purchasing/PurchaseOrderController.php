@@ -456,8 +456,32 @@ class PurchaseOrderController extends Controller
 
     private function ordersListProps(?Request $request = null): array
     {
-        $q      = $request?->input('q');
-        $status = $request?->input('status');
+        $req = $request ?: request();
+        $q         = $req->input('q');
+        $status    = $req->input('status');
+        $dateType  = $req->input('date_type');
+        $year      = $req->input('year', now()->year);
+        $month     = $req->input('month', now()->month);
+        $quarter   = $req->input('quarter', ceil(now()->month / 3));
+        $startDate = $req->input('start_date');
+        $endDate   = $req->input('end_date');
+
+        $dateRange = null;
+        if ($dateType === 'month') {
+            if ($year && $month) {
+                $start = \Carbon\Carbon::create($year, $month, 1)->startOfDay();
+                $end   = \Carbon\Carbon::create($year, $month, 1)->endOfMonth()->endOfDay();
+                $dateRange = [$start, $end];
+            }
+        } elseif ($dateType === 'quarter') {
+            if ($year && $quarter) {
+                $startMonth = 3 * $quarter - 2;
+                $endMonth   = 3 * $quarter;
+                $start = \Carbon\Carbon::create($year, $startMonth, 1)->startOfDay();
+                $end   = \Carbon\Carbon::create($year, $endMonth, 1)->endOfMonth()->endOfDay();
+                $dateRange = [$start, $end];
+            }
+        }
 
         return [
             'orders' => PurchaseOrder::with(['supplier', 'warehouse', 'creator'])
@@ -479,6 +503,16 @@ class PurchaseOrderController extends Controller
                        ->orWhereHas('creator', fn ($u) => $u->where('name', 'ilike', "%{$q}%"));
                 }))
                 ->when($status, fn ($query) => $query->where('status', $status))
+                ->when($dateType === 'month' && $dateRange, fn ($query) => $query->whereBetween('order_date', $dateRange))
+                ->when($dateType === 'quarter' && $dateRange, fn ($query) => $query->whereBetween('order_date', $dateRange))
+                ->when($dateType === 'custom', function ($query) use ($startDate, $endDate) {
+                    if ($startDate) {
+                        $query->where('order_date', '>=', \Carbon\Carbon::parse($startDate)->startOfDay());
+                    }
+                    if ($endDate) {
+                        $query->where('order_date', '<=', \Carbon\Carbon::parse($endDate)->endOfDay());
+                    }
+                })
                 ->orderByDesc('id')
                 ->paginate(20)
                 ->withQueryString()
@@ -501,7 +535,17 @@ class PurchaseOrderController extends Controller
                     'invoice_type_label' => $po->invoice_type->label(),
                     'invoice_type_color' => $po->invoice_type->color(),
                 ]),
-            'filters'  => ['q' => $q, 'status' => $status],
+            'filters'  => [
+                'q'          => $q,
+                'status'     => $status,
+                'date_type'  => $dateType,
+                'year'       => (int) $year,
+                'month'      => (int) $month,
+                'quarter'    => (int) $quarter,
+                'start_date' => $startDate,
+                'end_date'   => $endDate,
+            ],
+            'availableYears' => $this->availableYears(),
             'statuses' => collect(PurchaseOrderStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
         ];
     }
@@ -514,6 +558,12 @@ class PurchaseOrderController extends Controller
             'cancelled'        => 'cancelled',
             default            => 'none',
         };
+    }
+
+    private function availableYears(): array
+    {
+        $current = now()->year;
+        return range($current - 3, $current + 1);
     }
 
     public function exportExcel(\Illuminate\Http\Request $request): \Symfony\Component\HttpFoundation\BinaryFileResponse

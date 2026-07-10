@@ -1,10 +1,19 @@
-﻿<template>
+<template>
   <AppLayout>
     <div class="space-y-5">
       <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-slate-900">Đơn hàng</h1>
         <div class="flex gap-2 flex-wrap">
-          <ExportExcelButton :endpoint="route('sales.orders.export-excel')" :filters="{ q: search, status: statusFilter }" />
+          <ExportExcelButton :endpoint="route('sales.orders.export-excel')" :filters="{
+            q: search,
+            status: statusFilter,
+            date_type: dateType,
+            year: selectedYear,
+            month: selectedMonth,
+            quarter: selectedQuarter,
+            start_date: startDate,
+            end_date: endDate
+          }" />
           <Link :href="route('sales.orders.create')" class="erp-btn-primary">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
@@ -14,18 +23,97 @@
         </div>
       </div>
 
-      <!-- Search -->
-      <div class="flex gap-3 flex-wrap">
-        <input v-model="search" @input="doSearch" type="text"
-          placeholder="Tìm đơn hàng, khách hàng, mã chứng từ..."
-          class="border border-slate-300 rounded-lg px-3 py-2 text-sm w-full sm:w-72 focus:outline-none focus:ring-2 focus:ring-primary-500" />
-        <select v-model="statusFilter" @change="doSearch"
-          class="border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-          <option value="">Tất cả trạng thái</option>
-          <option v-for="s in statuses" :key="s.value" :value="s.value">{{ s.label }}</option>
-        </select>
-        <button v-if="search || statusFilter" @click="clearSearch"
-          class="text-slate-500 hover:text-slate-700 px-3 py-2 text-sm">Xóa lọc</button>
+      <!-- Filters -->
+      <div class="bg-white rounded-xl border border-slate-200 p-4 space-y-4">
+        <!-- Row 1: Search, Status, Date Type -->
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
+          <div class="md:col-span-6 flex flex-col gap-1">
+            <label class="text-xs text-slate-500 font-medium">Tìm kiếm</label>
+            <input v-model="search" @keyup.enter="applyAllFilters" type="text"
+              placeholder="Tìm đơn hàng, khách hàng, mã chứng từ..."
+              class="erp-input w-full" />
+          </div>
+          <div class="md:col-span-3 flex flex-col gap-1">
+            <label class="text-xs text-slate-500 font-medium">Trạng thái</label>
+            <select v-model="statusFilter" class="erp-input w-full">
+              <option value="">Tất cả trạng thái</option>
+              <option v-for="s in statuses" :key="s.value" :value="s.value">{{ s.label }}</option>
+            </select>
+          </div>
+          <div class="md:col-span-3 flex flex-col gap-1">
+            <label class="text-xs text-slate-500 font-medium">Lọc theo thời gian</label>
+            <select v-model="dateType" class="erp-input w-full">
+              <option value="">Tất cả thời gian</option>
+              <option value="month">Theo tháng</option>
+              <option value="quarter">Theo quý</option>
+              <option value="custom">Khoảng thời gian</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Row 2: Dynamic fields & Filter Buttons -->
+        <div class="flex gap-4 flex-wrap items-end justify-between border-t border-slate-100 pt-4">
+          <div class="flex gap-4 flex-wrap items-end">
+            <!-- Theo tháng -->
+            <template v-if="dateType === 'month'">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs text-slate-500 font-medium">Năm</label>
+                <select v-model="selectedYear" class="erp-input w-28">
+                  <option v-for="y in availableYears" :key="y" :value="y">{{ y }}</option>
+                </select>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs text-slate-500 font-medium">Tháng</label>
+                <select v-model="selectedMonth" class="erp-input w-32">
+                  <option v-for="m in 12" :key="m" :value="m">Tháng {{ String(m).padStart(2, '0') }}</option>
+                </select>
+              </div>
+            </template>
+
+            <!-- Theo quý -->
+            <template v-if="dateType === 'quarter'">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs text-slate-500 font-medium">Năm</label>
+                <select v-model="selectedYear" class="erp-input w-28">
+                  <option v-for="y in availableYears" :key="y" :value="y">{{ y }}</option>
+                </select>
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs text-slate-500 font-medium">Quý</label>
+                <select v-model="selectedQuarter" class="erp-input w-32">
+                  <option :value="1">Quý I</option>
+                  <option :value="2">Quý II</option>
+                  <option :value="3">Quý III</option>
+                  <option :value="4">Quý IV</option>
+                </select>
+              </div>
+            </template>
+
+            <!-- Khoảng thời gian -->
+            <template v-if="dateType === 'custom'">
+              <div class="flex flex-col gap-1">
+                <label class="text-xs text-slate-500 font-medium">Từ ngày</label>
+                <input type="date" v-model="startDate" class="erp-input w-40" />
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-xs text-slate-500 font-medium">Đến ngày</label>
+                <input type="date" v-model="endDate" class="erp-input w-40" />
+              </div>
+            </template>
+          </div>
+
+          <div class="flex gap-2">
+            <button @click="applyAllFilters" class="erp-btn-primary px-5 py-2 text-sm flex items-center gap-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+              Lọc
+            </button>
+            <button @click="clearAllFilters" class="erp-btn-secondary px-5 py-2 text-sm flex items-center gap-1.5">
+              Xóa lọc
+            </button>
+          </div>
+        </div>
       </div>
 
       <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
@@ -150,26 +238,47 @@ import Pagination from '@/Components/Shared/Pagination.vue';
 import ExportExcelButton from '@/Components/Shared/ExportExcelButton.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
-const props = defineProps({ orders: Object, filters: Object, statuses: Array });
+const props = defineProps({
+  orders: Object,
+  filters: Object,
+  statuses: Array,
+  availableYears: Array
+});
 
 const { formatVnd } = useCurrency();
 
-const search       = ref(props.filters?.q ?? '');
-const statusFilter = ref(props.filters?.status ?? '');
-let searchTimer    = null;
+const search          = ref(props.filters?.q ?? '');
+const statusFilter    = ref(props.filters?.status ?? '');
+const dateType        = ref(props.filters?.date_type ?? '');
+const selectedYear    = ref(props.filters?.year ?? new Date().getFullYear());
+const selectedMonth   = ref(props.filters?.month ?? new Date().getMonth() + 1);
+const selectedQuarter = ref(props.filters?.quarter ?? Math.floor(new Date().getMonth() / 3) + 1);
+const startDate       = ref(props.filters?.start_date ?? '');
+const endDate         = ref(props.filters?.end_date ?? '');
 
-function doSearch() {
-  clearTimeout(searchTimer);
-  searchTimer = setTimeout(() => {
-    router.get(route('sales.orders.index'), {
-      q:      search.value || undefined,
-      status: statusFilter.value || undefined,
-    }, { preserveState: true, replace: true });
-  }, 300);
+function applyAllFilters() {
+  router.get(route('sales.orders.index'), {
+    q:          search.value || undefined,
+    status:     statusFilter.value || undefined,
+    date_type:  dateType.value || undefined,
+    year:       dateType.value ? selectedYear.value : undefined,
+    month:      dateType.value === 'month' ? selectedMonth.value : undefined,
+    quarter:    dateType.value === 'quarter' ? selectedQuarter.value : undefined,
+    start_date: dateType.value === 'custom' ? startDate.value : undefined,
+    end_date:   dateType.value === 'custom' ? endDate.value : undefined,
+  }, { preserveState: true });
 }
-function clearSearch() {
-  search.value       = '';
-  statusFilter.value = '';
-  doSearch();
+
+function clearAllFilters() {
+  search.value          = '';
+  statusFilter.value    = '';
+  dateType.value        = '';
+  selectedYear.value    = new Date().getFullYear();
+  selectedMonth.value   = new Date().getMonth() + 1;
+  selectedQuarter.value = Math.floor(new Date().getMonth() / 3) + 1;
+  startDate.value       = '';
+  endDate.value         = '';
+
+  router.get(route('sales.orders.index'), {}, { preserveState: true });
 }
 </script>
