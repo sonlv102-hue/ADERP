@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <AppLayout>
     <div class="max-w-5xl space-y-5">
       <!-- Header -->
@@ -249,6 +249,46 @@
             </tbody>
           </table>
         </div>
+
+        <!-- Tab: Tiền trả trước NCC -->
+        <div v-if="activeTab === 'prepayments'">
+          <table class="min-w-full text-sm">
+            <thead class="bg-gray-50 border-b border-gray-200">
+              <tr>
+                <th class="text-left px-5 py-3 font-semibold text-gray-600">Ngày</th>
+                <th class="text-right px-5 py-3 font-semibold text-gray-600">Số tiền trả trước</th>
+                <th class="text-left px-5 py-3 font-semibold text-gray-600">Hợp đồng liên quan</th>
+                <th class="text-left px-5 py-3 font-semibold text-gray-600">Diễn giải</th>
+                <th class="text-left px-5 py-3 font-semibold text-gray-600">Trạng thái</th>
+                <th class="px-5 py-3"></th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="p in prepayments" :key="p.id" class="hover:bg-gray-50">
+                <td class="px-5 py-3 text-gray-600">{{ p.opening_date }}</td>
+                <td class="px-5 py-3 text-right font-mono font-semibold text-primary-700">
+                  {{ formatVnd(p.amount) }}
+                </td>
+                <td class="px-5 py-3">
+                  <Link v-if="p.contract_id"
+                    :href="route('purchasing.purchase-contracts.show', p.contract_id)"
+                    class="text-primary-600 hover:text-primary-800 font-medium font-mono text-xs">
+                    {{ p.contract_code }}
+                  </Link>
+                  <span v-else class="text-gray-400">—</span>
+                </td>
+                <td class="px-5 py-3 text-sm text-gray-500 max-w-xs truncate">{{ p.notes || '—' }}</td>
+                <td class="px-5 py-3">
+                  <StatusBadge :color="statusColor(p.status)">{{ p.status_label }}</StatusBadge>
+                </td>
+                <td class="px-5 py-3 text-right">
+                  <Link :href="route('purchasing.supplier-advances.show', p.id)"
+                    class="text-primary-600 hover:text-primary-800 text-xs font-medium">Xem</Link>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
@@ -280,7 +320,10 @@ import Modal from '@/Components/Shared/Modal.vue';
 import { usePermission } from '@/composables/usePermission';
 import { useCurrency } from '@/composables/useCurrency';
 
-const props = defineProps({ order: Object });
+const props = defineProps({
+  order: Object,
+  prepayments: { type: Array, default: () => [] }
+});
 
 const { hasRole } = usePermission();
 const { formatVnd } = useCurrency();
@@ -289,11 +332,22 @@ const busy = ref(false);
 const activeTab = ref('items');
 const showDeleteModal = ref(false);
 
-const tabs = computed(() => [
-  { key: 'items',    label: 'Sản phẩm',          count: props.order.items?.length },
-  { key: 'stock',    label: 'Phiếu nhập kho',     count: props.order.stock_entries?.length },
-  { key: 'invoices', label: 'Hóa đơn đầu vào',   count: props.order.purchase_invoices?.length },
-]);
+const tabs = computed(() => {
+  const list = [
+    { key: 'items',    label: 'Sản phẩm',          count: props.order.items?.length },
+    { key: 'stock',    label: 'Phiếu nhập kho',     count: props.order.stock_entries?.length },
+    { key: 'invoices', label: 'Hóa đơn đầu vào',   count: props.order.purchase_invoices?.length },
+  ];
+  if (props.prepayments && props.prepayments.length > 0) {
+    list.push({ key: 'prepayments', label: 'Tiền trả trước NCC', count: props.prepayments.length });
+  }
+  return list;
+});
+
+function statusColor(s) {
+  const map = { open: 'green', partially_applied: 'yellow', fully_applied: 'gray', cancelled: 'red' }
+  return map[s] || 'gray'
+}
 
 const hasVat = computed(() => props.order.invoice_type === 'vat');
 

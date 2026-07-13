@@ -60,6 +60,8 @@
             <tr>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Nhà cung cấp</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Loại</th>
+              <th class="text-left px-5 py-3 font-semibold text-gray-600">Hợp đồng mua</th>
+              <th class="text-left px-5 py-3 font-semibold text-gray-600">Đơn mua hàng</th>
               <th class="text-center px-5 py-3 font-semibold text-gray-600">Năm</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Ngày</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">Số tiền</th>
@@ -72,7 +74,7 @@
           </thead>
           <tbody class="divide-y divide-gray-100">
             <tr v-if="advances.data.length === 0">
-              <td colspan="10" class="py-12 text-center text-gray-400">Chưa có khoản ứng trước nào.</td>
+              <td colspan="12" class="py-12 text-center text-gray-400">Chưa có khoản ứng trước nào.</td>
             </tr>
             <tr v-for="adv in advances.data" :key="adv.id"
               class="hover:bg-gray-50 cursor-pointer" @click="goto(adv.id)">
@@ -84,6 +86,24 @@
                   class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium">
                   {{ adv.type_label }}
                 </span>
+              </td>
+              <td class="px-5 py-3">
+                <Link v-if="adv.purchase_contract"
+                  :href="route('purchasing.purchase-contracts.show', adv.purchase_contract.id)"
+                  class="text-primary-600 hover:text-primary-800 hover:underline font-medium"
+                  @click.stop>
+                  {{ adv.purchase_contract.code }}
+                </Link>
+                <span v-else class="text-gray-400">—</span>
+              </td>
+              <td class="px-5 py-3">
+                <Link v-if="adv.purchase_order"
+                  :href="route('purchasing.purchase-orders.show', adv.purchase_order.id)"
+                  class="text-primary-600 hover:text-primary-800 hover:underline font-medium"
+                  @click.stop>
+                  {{ adv.purchase_order.code }}
+                </Link>
+                <span v-else class="text-gray-400">—</span>
               </td>
               <td class="px-5 py-3 text-center text-gray-500">{{ adv.fiscal_year || '—' }}</td>
               <td class="px-5 py-3 text-gray-600">{{ adv.opening_date }}</td>
@@ -224,7 +244,7 @@ function fmt(val) {
 }
 
 function statusColor(s) {
-  const map = { open: 'green', partially_applied: 'yellow', fully_applied: 'gray', cancelled: 'red' }
+  const map = { unpaid: 'orange', open: 'green', partially_applied: 'yellow', fully_applied: 'gray', cancelled: 'red' }
   return map[s] || 'gray'
 }
 </script>

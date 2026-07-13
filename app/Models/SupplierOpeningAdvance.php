@@ -13,6 +13,7 @@ class SupplierOpeningAdvance extends Model
 
     protected $fillable = [
         'supplier_id', 'advance_type', 'source_type', 'source_id',
+        'purchase_contract_id', 'purchase_order_id', 'payment_schedule_id',
         'fiscal_year', 'opening_date', 'account_code',
         'amount', 'remaining_amount', 'refunded_amount', 'currency', 'reference_no',
         'bank_transaction_ref', 'original_payment_date', 'original_payment_note',
@@ -31,6 +32,21 @@ class SupplierOpeningAdvance extends Model
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class);
+    }
+
+    public function purchaseContract(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseContract::class, 'purchase_contract_id');
+    }
+
+    public function purchaseOrder(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseOrder::class, 'purchase_order_id');
+    }
+
+    public function paymentSchedule(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseContractPaymentSchedule::class, 'payment_schedule_id');
     }
 
     public function creator(): BelongsTo
@@ -84,7 +100,8 @@ class SupplierOpeningAdvance extends Model
     public function statusLabel(): string
     {
         return match($this->status) {
-            'open'              => 'Còn dư',
+            'unpaid'            => 'Chờ thanh toán',
+            'open'              => 'Đã ứng trước',
             'partially_applied' => 'Đối trừ một phần',
             'fully_applied'     => 'Đã đối trừ hết',
             'cancelled'         => 'Đã hủy',

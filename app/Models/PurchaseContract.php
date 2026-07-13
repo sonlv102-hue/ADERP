@@ -16,6 +16,22 @@ class PurchaseContract extends Model
         'file_path', 'file_name', 'notes', 'created_by',
     ];
 
+    protected static function booted(): void
+    {
+        static::saved(function ($contract) {
+            if ($contract->wasChanged(['purchase_order_id', 'supplier_id', 'value'])) {
+                foreach ($contract->paymentSchedules as $schedule) {
+                    if ($contract->wasChanged('value')) {
+                        $schedule->update([
+                            'amount' => round((float) $contract->value * (float) $schedule->percentage / 100, 0)
+                        ]);
+                    }
+                    app(\App\Services\SupplierAdvanceService::class)->syncPrepaymentForSchedule($schedule);
+                }
+            }
+        });
+    }
+
     protected function casts(): array
     {
         return [

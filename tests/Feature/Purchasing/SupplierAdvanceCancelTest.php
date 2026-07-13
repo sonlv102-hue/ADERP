@@ -3,7 +3,6 @@
 namespace Tests\Feature\Purchasing;
 
 use App\Enums\CashVoucherStatus;
-use App\Enums\CashVoucherType;
 use App\Enums\PurchaseInvoiceStatus;
 use App\Models\AccountCode;
 use App\Models\AccountingPeriod;
@@ -112,24 +111,14 @@ class SupplierAdvanceCancelTest extends TestCase
             'created_by'   => $this->user->id,
         ]);
 
-        $voucher = CashVoucher::create([
-            'code'           => CashVoucher::generateCode(CashVoucherType::Payment),
-            'type'           => CashVoucherType::Payment,
-            'status'         => CashVoucherStatus::Draft,
-            'fund_id'        => $this->fund->id,
-            'supplier_id'    => $this->supplier->id,
-            'partner_type'   => 'supplier',
-            'amount'         => $amount,
-            'voucher_date'   => '2026-06-01',
-            'description'    => 'Trả trước NCC test',
-            'business_type'  => 'supplier_prepayment',
-            'reference_type' => SupplierOpeningAdvance::class,
-            'reference_id'   => $advance->id,
-            'created_by'     => $this->user->id,
-        ]);
+        // Dùng đúng luồng nghiệp vụ thật (payPrepayment) thay vì tự tạo + confirm
+        // CashVoucher thủ công — payPrepayment() mới là nơi chuyển status unpaid → open.
+        $this->advanceService->payPrepayment($advance, $this->fund->id, 'cash', '2026-06-01');
 
-        $this->cashVoucherService->confirm($voucher);
-        $voucher->refresh();
+        $advance->refresh();
+        $voucher = CashVoucher::where('reference_type', SupplierOpeningAdvance::class)
+            ->where('reference_id', $advance->id)
+            ->firstOrFail();
 
         return [$advance, $voucher];
     }

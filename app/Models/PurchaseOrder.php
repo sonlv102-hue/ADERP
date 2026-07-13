@@ -15,6 +15,20 @@ class PurchaseOrder extends Model
         'order_date', 'expected_date', 'status', 'notes', 'invoice_type',
     ];
 
+    protected static function booted(): void
+    {
+        static::saved(function ($po) {
+            if ($po->wasChanged('expected_date')) {
+                $contract = \App\Models\PurchaseContract::where('purchase_order_id', $po->id)->first();
+                if ($contract) {
+                    foreach ($contract->paymentSchedules as $schedule) {
+                        app(\App\Services\SupplierAdvanceService::class)->syncPrepaymentForSchedule($schedule);
+                    }
+                }
+            }
+        });
+    }
+
     protected function casts(): array
     {
         return [

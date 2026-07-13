@@ -50,6 +50,43 @@ class AccountingService
             // Bút toán tự động (is_auto=true) tạo ở trạng thái draft để kế toán duyệt trước khi hạch toán
             $status = $isAuto ? 'draft' : 'posted';
 
+            $supplierId = null;
+            $purchaseContractId = null;
+            $purchaseOrderId = null;
+            $supplierPrepaymentId = null;
+
+            if ($referenceType === 'cash_voucher') {
+                $voucher = \App\Models\CashVoucher::find($referenceId);
+                if ($voucher && $voucher->reference_type === \App\Models\SupplierOpeningAdvance::class) {
+                    $advance = \App\Models\SupplierOpeningAdvance::find($voucher->reference_id);
+                    if ($advance) {
+                        $supplierId = $advance->supplier_id;
+                        $purchaseContractId = $advance->purchase_contract_id;
+                        $purchaseOrderId = $advance->purchase_order_id;
+                        $supplierPrepaymentId = $advance->id;
+                    }
+                }
+            } elseif ($referenceType === \App\Models\SupplierOpeningAdvance::class || $referenceType === 'supplier_opening_advances') {
+                $advance = \App\Models\SupplierOpeningAdvance::find($referenceId);
+                if ($advance) {
+                    $supplierId = $advance->supplier_id;
+                    $purchaseContractId = $advance->purchase_contract_id;
+                    $purchaseOrderId = $advance->purchase_order_id;
+                    $supplierPrepaymentId = $advance->id;
+                }
+            } elseif ($referenceType === \App\Models\SupplierAdvanceAllocation::class || $referenceType === 'supplier_advance_allocations') {
+                $allocation = \App\Models\SupplierAdvanceAllocation::find($referenceId);
+                if ($allocation && $allocation->opening_advance_id) {
+                    $advance = \App\Models\SupplierOpeningAdvance::find($allocation->opening_advance_id);
+                    if ($advance) {
+                        $supplierId = $advance->supplier_id;
+                        $purchaseContractId = $advance->purchase_contract_id;
+                        $purchaseOrderId = $advance->purchase_order_id;
+                        $supplierPrepaymentId = $advance->id;
+                    }
+                }
+            }
+
             $entry = JournalEntry::create([
                 'code'                          => JournalEntry::generateCode(),
                 'entry_date'                    => $date,
@@ -64,6 +101,10 @@ class AccountingService
                 'created_by'                    => auth()->id() ?? 1,
                 'posted_at'                     => $isAuto ? null : now(),
                 'notes'                         => $notes,
+                'supplier_id'                   => $supplierId,
+                'purchase_contract_id'          => $purchaseContractId,
+                'purchase_order_id'             => $purchaseOrderId,
+                'supplier_prepayment_id'        => $supplierPrepaymentId,
             ]);
 
             foreach ($lines as $i => $line) {

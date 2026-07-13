@@ -267,21 +267,30 @@ class PurchaseInvoiceController extends Controller
                     'job_id'        => $pj->id,
                 ] : null,
             ],
-            'available_advances' => $this->advanceService
-                ->getAvailable($purchaseInvoice->supplier_id)
-                ->map(fn ($adv) => [
-                    'id'               => $adv->id,
-                    'reference_no'     => $adv->reference_no,
-                    'opening_date'     => $adv->opening_date->format('d/m/Y'),
-                    'amount'           => (float) $adv->amount,
-                    'remaining_amount' => (float) $adv->remaining_amount,
-                    'fiscal_year'      => $adv->fiscal_year,
-                    'advance_type'     => $adv->advance_type,
-                    'type_label'       => $adv->typeLabel(),
-                    'account_code'     => $adv->account_code,
-                    'status'           => $adv->status,
-                    'status_label'     => $adv->statusLabel(),
-                ]),
+            'available_advances' => (function () use ($purchaseInvoice) {
+                $contractId = null;
+                if ($purchaseInvoice->purchase_order_id) {
+                    $contract = \App\Models\PurchaseContract::where('purchase_order_id', $purchaseInvoice->purchase_order_id)->first();
+                    if ($contract) {
+                        $contractId = $contract->id;
+                    }
+                }
+                return $this->advanceService
+                    ->getAvailable($purchaseInvoice->supplier_id, $purchaseInvoice->purchase_order_id, $contractId)
+                    ->map(fn ($adv) => [
+                        'id'               => $adv->id,
+                        'reference_no'     => $adv->reference_no,
+                        'opening_date'     => $adv->opening_date->format('d/m/Y'),
+                        'amount'           => (float) $adv->amount,
+                        'remaining_amount' => (float) $adv->remaining_amount,
+                        'fiscal_year'      => $adv->fiscal_year,
+                        'advance_type'     => $adv->advance_type,
+                        'type_label'       => $adv->typeLabel(),
+                        'account_code'     => $adv->account_code,
+                        'status'           => $adv->status,
+                        'status_label'     => $adv->statusLabel(),
+                    ]);
+            })(),
             'funds' => Fund::where('is_active', true)
                 ->orderBy('name')
                 ->get(['id', 'name', 'type']),

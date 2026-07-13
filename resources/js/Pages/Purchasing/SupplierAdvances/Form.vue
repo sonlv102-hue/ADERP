@@ -41,9 +41,9 @@
               <input type="radio" v-model="form.advance_type" value="opening_balance" class="text-primary-600" />
               <span class="text-sm">Số dư đầu kỳ (không tạo phiếu chi)</span>
             </label>
-            <label class="flex items-center gap-2 cursor-pointer">
+            <label class="inline-flex items-center gap-2 cursor-pointer">
               <input type="radio" v-model="form.advance_type" value="prepayment" class="text-primary-600" />
-              <span class="text-sm">Trả trước trong kỳ (tạo phiếu chi Dr 331UT)</span>
+              <span class="text-sm">Trả trước trong kỳ (Chờ thanh toán)</span>
             </label>
           </div>
         </div>
@@ -58,40 +58,42 @@
             :display-text="form.supplier_name"
             :search-url="route('search.suppliers')"
             placeholder="Tìm theo tên, mã NCC, MST..."
-            :disabled="isEdit && hasAllocations"
+            :disabled="isLocked"
             :has-error="!!form.errors.supplier_id"
-            @change="(opt) => form.supplier_name = opt ? opt.label : ''"
+            @change="onSupplierChange"
           />
           <p v-if="errors.supplier_id" class="mt-1 text-xs text-red-600">{{ errors.supplier_id }}</p>
         </div>
 
-        <!-- Quỹ/Ngân hàng (chỉ cho prepayment) -->
-        <div v-if="form.advance_type === 'prepayment'" class="px-6 py-5 grid grid-cols-2 gap-4">
+        <!-- Hợp đồng mua & Đơn mua hàng -->
+        <div class="px-6 py-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">
-              Quỹ / Tài khoản ngân hàng <span class="text-red-500">*</span>
-            </label>
-            <select v-model="form.fund_id"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-              <option value="">-- Chọn quỹ --</option>
-              <option v-for="f in funds" :key="f.id" :value="f.id">
-                {{ f.name }} ({{ f.type === 'cash' ? 'Tiền mặt' : 'Ngân hàng' }})
-              </option>
-            </select>
-            <p v-if="errors.fund_id" class="mt-1 text-xs text-red-600">{{ errors.fund_id }}</p>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">Hợp đồng mua</label>
+            <RemoteSearchSelect
+              v-model="form.purchase_contract_id"
+              :display-text="form.purchase_contract_code"
+              :search-url="purchaseContractSearchUrl"
+              placeholder="Tìm kiếm hợp đồng..."
+              :disabled="isLocked"
+              @change="onContractChange"
+            />
+            <p v-if="errors.purchase_contract_id" class="mt-1 text-xs text-red-600">{{ errors.purchase_contract_id }}</p>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1.5">
-              Hình thức <span class="text-red-500">*</span>
-            </label>
-            <select v-model="form.payment_method"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-              <option value="cash">Tiền mặt</option>
-              <option value="bank_transfer">Chuyển khoản</option>
-            </select>
-            <p v-if="errors.payment_method" class="mt-1 text-xs text-red-600">{{ errors.payment_method }}</p>
+            <label class="block text-sm font-medium text-gray-700 mb-1.5">Đơn mua hàng</label>
+            <RemoteSearchSelect
+              v-model="form.purchase_order_id"
+              :display-text="form.purchase_order_code"
+              :search-url="purchaseOrderSearchUrl"
+              placeholder="Tìm kiếm đơn mua..."
+              :disabled="isLocked"
+              @change="onPOChange"
+            />
+            <p v-if="errors.purchase_order_id" class="mt-1 text-xs text-red-600">{{ errors.purchase_order_id }}</p>
           </div>
         </div>
+
+
 
         <!-- Năm + Ngày -->
         <div class="px-6 py-5 grid grid-cols-2 gap-4">
@@ -100,7 +102,8 @@
               Năm tài chính <span class="text-red-500">*</span>
             </label>
             <input v-model.number="form.fiscal_year" type="number" min="2020" max="2099"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              :disabled="isLocked" />
             <p v-if="errors.fiscal_year" class="mt-1 text-xs text-red-600">{{ errors.fiscal_year }}</p>
           </div>
           <div>
@@ -108,8 +111,9 @@
               {{ form.advance_type === 'prepayment' ? 'Ngày trả trước' : 'Ngày đầu kỳ' }}
               <span class="text-red-500">*</span>
             </label>
-            <input v-model="form.opening_date" type="date"
-              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
+             <input v-model="form.opening_date" type="date"
+              class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+              :disabled="isLocked" />
             <p v-if="errors.opening_date" class="mt-1 text-xs text-red-600">{{ errors.opening_date }}</p>
           </div>
         </div>
@@ -119,15 +123,15 @@
           <label class="block text-sm font-medium text-gray-700 mb-1.5">
             Số tiền (VND) <span class="text-red-500">*</span>
           </label>
-          <input v-model.number="form.amount" type="number" min="1" step="1"
+           <input v-model.number="form.amount" type="number" min="1" step="1"
             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary-500"
-            :disabled="isEdit && hasAllocations" />
+            :disabled="isLocked" />
           <p v-if="errors.amount" class="mt-1 text-xs text-red-600">{{ errors.amount }}</p>
           <p v-if="form.amount > 0" class="mt-1 text-xs text-gray-500">
             = {{ Number(form.amount).toLocaleString('vi-VN') }} đ
           </p>
-          <p v-if="isEdit && hasAllocations" class="mt-1 text-xs text-amber-600">
-            Không thể sửa số tiền khi đã có đối trừ.
+          <p v-if="isLocked" class="mt-1 text-xs text-amber-600">
+            Không thể sửa các thông tin kế toán cốt lõi sau khi đã thanh toán/ứng trước.
           </p>
         </div>
 
@@ -198,23 +202,74 @@ const props = defineProps({
 const isEdit = computed(() => !!props.advance?.id)
 const hasAllocations = computed(() => (props.advance?.active_allocations_count ?? 0) > 0)
 
+const isLocked = computed(() => {
+  if (!isEdit.value) return false
+  if (props.advance?.advance_type === 'prepayment' && props.advance?.status !== 'unpaid') {
+    return true
+  }
+  if (props.advance?.advance_type === 'opening_balance' && hasAllocations.value) {
+    return true
+  }
+  return false
+})
+
 const form = useForm({
-  advance_type:          props.advance?.advance_type ?? 'opening_balance',
-  supplier_id:           props.advance?.supplier_id ?? '',
-  supplier_name:         props.advance?.supplier?.name ?? '',
-  fund_id:               '',
-  payment_method:        'bank_transfer',
-  fiscal_year:           props.advance?.fiscal_year ?? new Date().getFullYear(),
-  opening_date:          props.advance?.opening_date ?? '',
-  amount:                props.advance?.amount ?? '',
-  reference_no:          props.advance?.reference_no ?? '',
-  bank_transaction_ref:  props.advance?.bank_transaction_ref ?? '',
-  original_payment_date: props.advance?.original_payment_date ?? '',
-  original_payment_note: props.advance?.original_payment_note ?? '',
-  notes:                 props.advance?.notes ?? '',
+  advance_type:           props.advance?.advance_type ?? 'opening_balance',
+  supplier_id:            props.advance?.supplier_id ?? '',
+  supplier_name:          props.advance?.supplier?.name ?? '',
+  purchase_contract_id:   props.advance?.purchase_contract_id ?? '',
+  purchase_contract_code: props.advance?.purchase_contract?.code ?? '',
+  purchase_order_id:      props.advance?.purchase_order_id ?? '',
+  purchase_order_code:    props.advance?.purchase_order?.code ?? '',
+  fiscal_year:            props.advance?.fiscal_year ?? new Date().getFullYear(),
+  opening_date:           props.advance?.opening_date ?? '',
+  amount:                 props.advance?.amount ?? '',
+  reference_no:           props.advance?.reference_no ?? '',
+  bank_transaction_ref:   props.advance?.bank_transaction_ref ?? '',
+  original_payment_date:  props.advance?.original_payment_date ?? '',
+  original_payment_note:  props.advance?.original_payment_note ?? '',
+  notes:                  props.advance?.notes ?? '',
 })
 
 const errors = computed(() => form.errors)
+
+const purchaseContractSearchUrl = computed(() => {
+  return route('search.purchase-contracts') + (form.supplier_id ? '?supplier_id=' + form.supplier_id : '')
+})
+
+const purchaseOrderSearchUrl = computed(() => {
+  const params = new URLSearchParams()
+  if (form.supplier_id) params.set('supplier_id', form.supplier_id)
+  if (form.purchase_contract_id) params.set('purchase_contract_id', form.purchase_contract_id)
+  return route('search.purchase-orders') + '?' + params.toString()
+})
+
+function onSupplierChange(opt) {
+  form.supplier_name = opt ? opt.label : ''
+  form.purchase_contract_id = ''
+  form.purchase_contract_code = ''
+  form.purchase_order_id = ''
+  form.purchase_order_code = ''
+}
+
+function onContractChange(opt) {
+  form.purchase_contract_code = opt ? opt.code : ''
+  form.purchase_order_id = ''
+  form.purchase_order_code = ''
+  
+  if (opt && opt.purchase_order_id) {
+    form.purchase_order_id = opt.purchase_order_id
+    form.purchase_order_code = opt.purchase_order_code || ''
+  }
+}
+
+function onPOChange(opt) {
+  form.purchase_order_code = opt ? opt.code : ''
+  if (opt && opt.purchase_contract_id) {
+    form.purchase_contract_id = opt.purchase_contract_id
+    form.purchase_contract_code = opt.purchase_contract_code || ''
+  }
+}
 
 const pageTitle = computed(() => {
   if (isEdit.value) return 'Sửa khoản ứng trước'
@@ -222,8 +277,8 @@ const pageTitle = computed(() => {
 })
 
 const submitLabel = computed(() => {
-  if (isEdit.value) return 'Cập nhật'
-  return form.advance_type === 'prepayment' ? 'Tạo & ghi sổ phiếu chi' : 'Tạo khoản ứng trước'
+  if (isEdit.value) return 'Cập nhật thông tin'
+  return form.advance_type === 'prepayment' ? 'Tạo khoản trả trước' : 'Tạo khoản ứng trước'
 })
 
 function submit() {

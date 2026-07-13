@@ -22,6 +22,32 @@ class PurchaseContractPaymentSchedule extends Model
         'created_by',
     ];
 
+    protected static function booted(): void
+    {
+        static::saved(function ($schedule) {
+            app(\App\Services\SupplierAdvanceService::class)->syncPrepaymentForSchedule($schedule);
+        });
+
+        static::deleting(function ($schedule) {
+            $prepayment = \App\Models\SupplierOpeningAdvance::where('payment_schedule_id', $schedule->id)->first();
+            if ($prepayment) {
+                $isPaidOrUsed = ($prepayment->remaining_amount < $prepayment->amount)
+                    || ((float)$prepayment->refunded_amount > 0)
+                    || $prepayment->activeAllocations()->exists()
+                    || \App\Models\CashVoucher::where('reference_type', \App\Models\SupplierOpeningAdvance::class)
+                        ->where('reference_id', $prepayment->id)
+                        ->where('status', \App\Enums\CashVoucherStatus::Confirmed->value)
+                        ->exists();
+
+                if ($isPaidOrUsed) {
+                    throw new \RuntimeException('Dòng lịch thanh toán này đã phát sinh bản ghi Tiền trả trước NCC. Vui lòng xử lý bản ghi trả trước trước khi xóa.');
+                } else {
+                    app(\App\Services\SupplierAdvanceService::class)->deleteSafely($prepayment, 'Xóa dòng lịch thanh toán của hợp đồng mua.');
+                }
+            }
+        });
+    }
+
     protected function casts(): array
     {
         return [

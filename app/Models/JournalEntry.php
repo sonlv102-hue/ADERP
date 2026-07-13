@@ -26,6 +26,7 @@ class JournalEntry extends Model
         'source_type', 'fiscal_period', 'exclude_from_period_movement',
         'voided_at', 'voided_by', 'void_reason', 'period_close_batch_id',
         'edited_by_user', 'edit_reason', 'original_lines',
+        'supplier_id', 'purchase_contract_id', 'purchase_order_id', 'supplier_prepayment_id',
     ];
 
     protected $casts = [
@@ -41,6 +42,26 @@ class JournalEntry extends Model
     public function lines(): HasMany
     {
         return $this->hasMany(JournalEntryLine::class)->orderBy('sort_order');
+    }
+
+    public function supplier(): BelongsTo
+    {
+        return $this->belongsTo(Supplier::class);
+    }
+
+    public function purchaseContract(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseContract::class);
+    }
+
+    public function purchaseOrder(): BelongsTo
+    {
+        return $this->belongsTo(PurchaseOrder::class);
+    }
+
+    public function supplierPrepayment(): BelongsTo
+    {
+        return $this->belongsTo(SupplierOpeningAdvance::class, 'supplier_prepayment_id');
     }
 
     public function creator(): BelongsTo

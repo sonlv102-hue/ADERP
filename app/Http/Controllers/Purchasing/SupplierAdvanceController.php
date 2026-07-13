@@ -29,7 +29,7 @@ class SupplierAdvanceController extends Controller
 
     public function index(Request $request)
     {
-        $query = SupplierOpeningAdvance::with('supplier')
+        $query = SupplierOpeningAdvance::with(['supplier', 'purchaseOrder', 'purchaseContract'])
             ->withCount(['activeAllocations'])
             ->when($request->search, fn ($q) =>
                 $q->where(fn ($q2) =>
@@ -63,13 +63,21 @@ class SupplierAdvanceController extends Controller
                 'status'           => $adv->status,
                 'status_label'     => $adv->statusLabel(),
                 'can_refund'       => in_array($adv->status, ['open', 'partially_applied']) && (float) $adv->remaining_amount > 0,
-                'can_cancel'       => $adv->status !== 'cancelled' && $adv->active_allocations_count === 0 && (float) $adv->refunded_amount <= 0,
-                'can_delete'       => in_array($adv->status, ['open', 'cancelled']) && $adv->active_allocations_count === 0,
+                'can_cancel'       => $adv->status !== 'cancelled' && $adv->status !== 'unpaid' && $adv->active_allocations_count === 0 && (float) $adv->refunded_amount <= 0,
+                'can_delete'       => in_array($adv->status, ['unpaid', 'open', 'cancelled']) && $adv->active_allocations_count === 0,
+                'can_pay'          => $adv->status === 'unpaid',
+                'purchase_order'   => $adv->purchaseOrder
+                    ? ['id' => $adv->purchaseOrder->id, 'code' => $adv->purchaseOrder->code]
+                    : null,
+                'purchase_contract' => $adv->purchaseContract
+                    ? ['id' => $adv->purchaseContract->id, 'code' => $adv->purchaseContract->code]
+                    : null,
             ]),
             'filters'        => $request->only(['search', 'supplier_id', 'status', 'fiscal_year', 'advance_type']),
             'suppliers'      => Supplier::orderBy('name')->get(['id', 'name', 'code']),
             'statusOptions'  => [
-                ['value' => 'open',              'label' => 'Còn dư'],
+                ['value' => 'unpaid',            'label' => 'Chờ thanh toán'],
+                ['value' => 'open',              'label' => 'Đã ứng trước'],
                 ['value' => 'partially_applied', 'label' => 'Đối trừ một phần'],
                 ['value' => 'fully_applied',     'label' => 'Đã đối trừ hết'],
                 ['value' => 'cancelled',         'label' => 'Đã hủy'],
@@ -104,6 +112,8 @@ class SupplierAdvanceController extends Controller
             'amount'                => ['required', 'numeric', 'min:1'],
             'reference_no'          => ['nullable', 'string', 'max:100'],
             'notes'                 => ['nullable', 'string'],
+            'purchase_contract_id'  => ['nullable', 'exists:purchase_contracts,id'],
+            'purchase_order_id'     => ['nullable', 'exists:purchase_orders,id'],
         ];
 
         if ($advanceType === 'opening_balance') {
@@ -112,10 +122,7 @@ class SupplierAdvanceController extends Controller
             $rules['original_payment_date'] = ['nullable', 'date'];
             $rules['original_payment_note'] = ['nullable', 'string'];
         } else {
-            // Prepayment: bắt buộc chọn quỹ/ngân hàng để tạo phiếu chi + bút toán Dr 331UT / Cr fund
-            $rules['fiscal_year']    = ['nullable'];
-            $rules['fund_id']        = ['required', Rule::exists('funds', 'id')->where('is_active', true)];
-            $rules['payment_method'] = ['required', 'in:cash,bank_transfer'];
+            $rules['fiscal_year']           = ['nullable'];
         }
 
         $data = $request->validate($rules);
@@ -124,30 +131,9 @@ class SupplierAdvanceController extends Controller
             $advance = DB::transaction(function () use ($data, $advanceType) {
                 if ($advanceType === 'prepayment') {
                     $data['account_code'] = AccountingSettings::get('supplier_advance_account', '331UT');
+                    $data['status']       = 'unpaid';
                 }
-                $advance = $this->service->create($data);
-
-                if ($advanceType === 'prepayment') {
-                    $fund = Fund::findOrFail($data['fund_id']);
-                    $voucher = CashVoucher::create([
-                        'code'           => CashVoucher::generateCode(CashVoucherType::Payment),
-                        'type'           => CashVoucherType::Payment,
-                        'status'         => CashVoucherStatus::Draft,
-                        'fund_id'        => $fund->id,
-                        'supplier_id'    => $advance->supplier_id,
-                        'partner_type'   => 'supplier',
-                        'amount'         => $advance->amount,
-                        'voucher_date'   => $advance->opening_date,
-                        'description'    => 'Trả trước NCC' . ($advance->reference_no ? " {$advance->reference_no}" : ''),
-                        'business_type'  => CashVoucherBusinessType::SupplierPrepayment->value,
-                        'reference_type' => SupplierOpeningAdvance::class,
-                        'reference_id'   => $advance->id,
-                        'created_by'     => auth()->id(),
-                    ]);
-                    $this->cashVoucherService->confirm($voucher);
-                }
-
-                return $advance;
+                return $this->service->create($data);
             });
         } catch (\RuntimeException $e) {
             return back()->withErrors(['general' => $e->getMessage()]);
@@ -164,7 +150,7 @@ class SupplierAdvanceController extends Controller
     public function show(SupplierOpeningAdvance $supplierAdvance)
     {
         $supplierAdvance->load([
-            'supplier', 'creator',
+            'supplier', 'creator', 'purchaseOrder', 'purchaseContract', 'paymentSchedule',
             'allocations' => fn ($q) =>
                 $q->with(['invoice', 'creator', 'reversedBy'])
                   ->orderByDesc('allocation_date')->orderByDesc('id'),
@@ -187,10 +173,21 @@ class SupplierAdvanceController extends Controller
                 'can_refund'       => in_array($supplierAdvance->status, ['open', 'partially_applied'])
                     && (float) $supplierAdvance->remaining_amount > 0,
                 'can_cancel'       => $supplierAdvance->status !== 'cancelled'
+                    && $supplierAdvance->status !== 'unpaid'
                     && ! $supplierAdvance->activeAllocations()->exists()
                     && (float) $supplierAdvance->refunded_amount <= 0,
-                'can_delete'       => in_array($supplierAdvance->status, ['open', 'cancelled'])
+                'can_delete'       => in_array($supplierAdvance->status, ['unpaid', 'open', 'cancelled'])
                     && ! $supplierAdvance->activeAllocations()->exists(),
+                'can_pay'          => $supplierAdvance->status === 'unpaid',
+                'purchase_order'   => $supplierAdvance->purchaseOrder
+                    ? ['id' => $supplierAdvance->purchaseOrder->id, 'code' => $supplierAdvance->purchaseOrder->code, 'expected_date' => $supplierAdvance->purchaseOrder->expected_date?->format('d/m/Y')]
+                    : null,
+                'purchase_contract' => $supplierAdvance->purchaseContract
+                    ? ['id' => $supplierAdvance->purchaseContract->id, 'code' => $supplierAdvance->purchaseContract->code]
+                    : null,
+                'payment_schedule' => $supplierAdvance->paymentSchedule
+                    ? ['id' => $supplierAdvance->paymentSchedule->id, 'name' => $supplierAdvance->paymentSchedule->name, 'due_date' => $supplierAdvance->paymentSchedule->due_date?->format('d/m/Y')]
+                    : null,
                 'allocations'      => $supplierAdvance->allocations->map(fn ($a) => [
                     'id'                  => $a->id,
                     'allocation_date'     => $a->allocation_date,
@@ -220,7 +217,7 @@ class SupplierAdvanceController extends Controller
     public function edit(SupplierOpeningAdvance $supplierAdvance)
     {
         return Inertia::render('Purchasing/SupplierAdvances/Form', [
-            'advance' => $supplierAdvance->load('supplier'),
+            'advance' => $supplierAdvance->load(['supplier', 'purchaseContract', 'purchaseOrder']),
             'funds'   => Fund::where('is_active', true)->orderBy('name')->get(['id', 'name', 'type']),
         ]);
     }
@@ -228,11 +225,13 @@ class SupplierAdvanceController extends Controller
     public function update(Request $request, SupplierOpeningAdvance $supplierAdvance)
     {
         $rules = [
-            'supplier_id'  => ['required', 'exists:suppliers,id'],
-            'opening_date' => ['required', 'date'],
-            'amount'       => ['required', 'numeric', 'min:1'],
-            'reference_no' => ['nullable', 'string', 'max:100'],
-            'notes'        => ['nullable', 'string'],
+            'supplier_id'           => ['required', 'exists:suppliers,id'],
+            'opening_date'          => ['required', 'date'],
+            'amount'                => ['required', 'numeric', 'min:1'],
+            'reference_no'          => ['nullable', 'string', 'max:100'],
+            'notes'                 => ['nullable', 'string'],
+            'purchase_contract_id'  => ['nullable', 'exists:purchase_contracts,id'],
+            'purchase_order_id'     => ['nullable', 'exists:purchase_orders,id'],
         ];
 
         if ($supplierAdvance->advance_type === 'opening_balance') {
@@ -296,5 +295,27 @@ class SupplierAdvanceController extends Controller
 
         return redirect()->route('purchasing.supplier-advances.index')
             ->with('success', 'Đã xóa khoản trả trước NCC. Bút toán liên quan đã được xử lý.');
+    }
+
+    public function pay(Request $request, SupplierOpeningAdvance $supplierAdvance)
+    {
+        $data = $request->validate([
+            'payment_date'   => ['required', 'date'],
+            'fund_id'        => ['required', 'exists:funds,id'],
+            'payment_method' => ['required', 'in:cash,bank_transfer'],
+        ]);
+
+        try {
+            $this->service->payPrepayment(
+                $supplierAdvance,
+                (int) $data['fund_id'],
+                $data['payment_method'],
+                $data['payment_date']
+            );
+        } catch (\RuntimeException $e) {
+            return back()->withErrors(['general' => $e->getMessage()]);
+        }
+
+        return back()->with('success', 'Đã xác nhận thanh toán khoản trả trước NCC.');
     }
 }

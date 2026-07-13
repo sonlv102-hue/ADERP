@@ -488,4 +488,66 @@ class SearchController extends Controller
 
         return response()->json(['data' => $items]);
     }
+
+    public function purchaseContracts(Request $request): JsonResponse
+    {
+        $q          = $this->q($request);
+        $supplierId = $request->input('supplier_id');
+
+        $items = \App\Models\PurchaseContract::query()
+            ->with('purchaseOrder')
+            ->when($supplierId, fn ($query) => $query->where('supplier_id', $supplierId))
+            ->when($q, fn ($query) => $query->where(fn ($b) => 
+                $b->whereRaw('LOWER(code) LIKE ?', ["%{$q}%"])
+                  ->orWhereRaw('LOWER(title) LIKE ?', ["%{$q}%"])
+            ))
+            ->orderByDesc('id')
+            ->limit(30)
+            ->get()
+            ->map(fn ($c) => [
+                'value'               => $c->id,
+                'label'               => "{$c->code} — {$c->title}",
+                'code'                => $c->code,
+                'purchase_order_id'   => $c->purchase_order_id,
+                'purchase_order_code' => $c->purchaseOrder?->code,
+            ]);
+
+        return response()->json(['data' => $items]);
+    }
+
+    public function purchaseOrders(Request $request): JsonResponse
+    {
+        $q                  = $this->q($request);
+        $supplierId         = $request->input('supplier_id');
+        $purchaseContractId = $request->input('purchase_contract_id');
+
+        $contractPoId = null;
+        if ($purchaseContractId) {
+            $contract = \App\Models\PurchaseContract::find($purchaseContractId);
+            if ($contract && $contract->purchase_order_id) {
+                $contractPoId = $contract->purchase_order_id;
+            }
+        }
+
+        $items = \App\Models\PurchaseOrder::query()
+            ->when($contractPoId, fn ($query) => $query->where('id', $contractPoId))
+            ->when(!$contractPoId && $supplierId, fn ($query) => $query->where('supplier_id', $supplierId))
+            ->when($q, fn ($query) => $query->whereRaw('LOWER(code) LIKE ?', ["%{$q}%"]))
+            ->orderByDesc('id')
+            ->limit(30)
+            ->get(['id', 'code'])
+            ->map(function ($po) {
+                $contract = \App\Models\PurchaseContract::where('purchase_order_id', $po->id)->first();
+                return [
+                    'value'                  => $po->id,
+                    'label'                  => $po->code,
+                    'code'                   => $po->code,
+                    'purchase_contract_id'   => $contract?->id,
+                    'purchase_contract_code' => $contract?->code,
+                    'purchase_contract_title'=> $contract?->title,
+                ];
+            });
+
+        return response()->json(['data' => $items]);
+    }
 }

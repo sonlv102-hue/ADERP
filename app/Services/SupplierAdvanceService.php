@@ -27,8 +27,8 @@ class SupplierAdvanceService
     public function create(array $data): SupplierOpeningAdvance
     {
         $data['remaining_amount'] = $data['amount'];
-        $data['status']           = 'open';
         $data['advance_type']     = $data['advance_type'] ?? 'opening_balance';
+        $data['status']           = $data['status'] ?? ($data['advance_type'] === 'prepayment' ? 'unpaid' : 'open');
         if (!isset($data['account_code'])) {
             $data['account_code'] = AccountingSettings::get('supplier_advance_account', '331UT');
         }
@@ -75,9 +75,25 @@ class SupplierAdvanceService
         if ($advance->activeAllocations()->exists()) {
             throw new \RuntimeException('Không thể sửa khoản ứng trước đã có đối trừ đang hoạt động.');
         }
+
+        // Chặn sửa các trường kế toán cốt lõi nếu đã được hạch toán (prepayment không ở trạng thái unpaid) hoặc đã có đối trừ (opening_balance)
+        $isPrepaymentLocked = $advance->advance_type === 'prepayment' && $advance->status !== 'unpaid' && $advance->status !== 'cancelled';
+        $isOpeningBalanceLocked = $advance->advance_type === 'opening_balance' && $advance->activeAllocations()->exists();
+
+        if ($isPrepaymentLocked || $isOpeningBalanceLocked) {
+            $coreFields = ['supplier_id', 'opening_date', 'amount', 'purchase_contract_id', 'purchase_order_id'];
+            foreach ($coreFields as $field) {
+                if (isset($data[$field]) && $data[$field] != $advance->{$field}) {
+                    throw new \RuntimeException('Không được phép chỉnh sửa các trường kế toán cốt lõi sau khi đã thanh toán/ứng trước.');
+                }
+            }
+        }
+
         if (isset($data['amount'])) {
             $data['remaining_amount'] = $data['amount'];
-            $data['status']           = 'open';
+            if ($advance->status !== 'unpaid') {
+                $data['status'] = 'open';
+            }
         }
         $advance->update($data);
     }
@@ -476,13 +492,28 @@ class SupplierAdvanceService
     /**
      * Danh sách ứng trước còn dư của một NCC.
      */
-    public function getAvailable(int $supplierId): Collection
+    public function getAvailable(int $supplierId, ?int $purchaseOrderId = null, ?int $purchaseContractId = null): Collection
     {
-        return SupplierOpeningAdvance::where('supplier_id', $supplierId)
+        $advances = SupplierOpeningAdvance::where('supplier_id', $supplierId)
             ->available()
-            ->with('supplier')
+            ->with(['supplier', 'purchaseContract', 'purchaseOrder'])
             ->orderBy('opening_date')
             ->get();
+
+        if ($purchaseOrderId || $purchaseContractId) {
+            $advances = $advances->sortBy(function ($adv) use ($purchaseOrderId, $purchaseContractId) {
+                $score = 0;
+                if ($purchaseOrderId && $adv->purchase_order_id === $purchaseOrderId) {
+                    $score -= 2;
+                }
+                if ($purchaseContractId && $adv->purchase_contract_id === $purchaseContractId) {
+                    $score -= 1;
+                }
+                return $score;
+            })->values();
+        }
+
+        return $advances;
     }
 
     /**
@@ -493,6 +524,164 @@ class SupplierAdvanceService
         return (float) SupplierOpeningAdvance::where('supplier_id', $supplierId)
             ->available()
             ->sum('remaining_amount');
+    }
+
+    public function syncPrepaymentForSchedule(\App\Models\PurchaseContractPaymentSchedule $schedule): void
+    {
+        $contract = $schedule->contract;
+        if (!$contract) {
+            return;
+        }
+
+        $purchaseOrder = $contract->purchaseOrder;
+        
+        // Điều kiện tạo trả trước: Hợp đồng có liên kết PO, PO có expected_date, schedule có due_date
+        $isPrepayment = false;
+        if ($purchaseOrder && $purchaseOrder->expected_date && $schedule->due_date) {
+            $dueDate = \Carbon\Carbon::parse($schedule->due_date)->startOfDay();
+            $expectedDate = \Carbon\Carbon::parse($purchaseOrder->expected_date)->startOfDay();
+            
+            if ($dueDate->lt($expectedDate)) {
+                $isPrepayment = true;
+            }
+        }
+
+        // Tìm bản ghi trả trước hiện tại cho dòng lịch thanh toán này
+        $prepayment = SupplierOpeningAdvance::where('payment_schedule_id', $schedule->id)->first();
+
+        if ($isPrepayment) {
+            $amount = (float) $schedule->amount;
+            $formattedDate = \Carbon\Carbon::parse($schedule->due_date)->format('d/m/Y');
+            $notes = "Trả trước NCC theo HĐ mua {$contract->code}, Đơn hàng " . ($purchaseOrder->code ?? '') . ", lịch thanh toán ngày {$formattedDate}";
+
+            if (!$prepayment) {
+                // Tạo mới: Mặc định trạng thái là unpaid (Chờ thanh toán)
+                SupplierOpeningAdvance::create([
+                    'supplier_id'          => $contract->supplier_id,
+                    'advance_type'         => 'prepayment',
+                    'source_type'          => 'payment_schedule',
+                    'source_id'            => $schedule->id,
+                    'purchase_contract_id' => $contract->id,
+                    'purchase_order_id'    => $contract->purchase_order_id,
+                    'payment_schedule_id'  => $schedule->id,
+                    'opening_date'         => $schedule->due_date,
+                    'amount'               => $amount,
+                    'remaining_amount'     => $amount,
+                    'currency'             => 'VND',
+                    'reference_no'         => $contract->code,
+                    'notes'                => $notes,
+                    'status'               => 'unpaid',
+                    'created_by'           => $schedule->created_by ?? auth()->id() ?? 1,
+                    'account_code'         => AccountingSettings::get('supplier_advance_account', '331UT'),
+                    'fiscal_year'          => DB::getDriverName() === 'pgsql' ? null : (int) date('Y'),
+                ]);
+                Log::info("System auto-created supplier prepayment from purchase contract payment schedule. Contract: {$contract->code}, Schedule ID: {$schedule->id}, Amount: {$amount}");
+            } else {
+                // Đã tồn tại bản ghi. Kiểm tra xem có đổi gì không và check thanh toán thực tế
+                $isPaidOrUsed = ($prepayment->remaining_amount < $prepayment->amount) 
+                    || ((float)$prepayment->refunded_amount > 0) 
+                    || $prepayment->activeAllocations()->exists()
+                    || CashVoucher::where('reference_type', SupplierOpeningAdvance::class)
+                        ->where('reference_id', $prepayment->id)
+                        ->where('status', \App\Enums\CashVoucherStatus::Confirmed->value)
+                        ->exists();
+
+                if ($isPaidOrUsed) {
+                    $amountDiff = abs((float)$prepayment->amount - $amount) > 0.01;
+                    $dateDiff = \Carbon\Carbon::parse($prepayment->opening_date)->startOfDay()->ne($dueDate);
+                    $poDiff = $prepayment->purchase_order_id !== $contract->purchase_order_id;
+
+                    if ($amountDiff || $dateDiff || $poDiff) {
+                        throw new \RuntimeException("Không thể cập nhật lịch thanh toán do khoản trả trước tương ứng đã phát sinh thanh toán hoặc đối trừ thực tế trên hệ thống.");
+                    }
+                } else {
+                    // Chưa thanh toán thực tế, cập nhật an toàn
+                    $prepayment->update([
+                        'supplier_id'          => $contract->supplier_id,
+                        'purchase_order_id'    => $contract->purchase_order_id,
+                        'opening_date'         => $schedule->due_date,
+                        'amount'               => $amount,
+                        'remaining_amount'     => $amount,
+                        'notes'                => $notes,
+                    ]);
+                    Log::info("System auto-updated supplier prepayment from purchase contract payment schedule. Contract: {$contract->code}, Schedule ID: {$schedule->id}, Amount: {$amount}");
+                }
+            }
+        } else {
+            // Không phải là trả trước. Nếu trước đó có bản ghi trả trước thì cần xóa/hủy
+            if ($prepayment) {
+                $isPaidOrUsed = ($prepayment->remaining_amount < $prepayment->amount) 
+                    || ((float)$prepayment->refunded_amount > 0) 
+                    || $prepayment->activeAllocations()->exists()
+                    || CashVoucher::where('reference_type', SupplierOpeningAdvance::class)
+                        ->where('reference_id', $prepayment->id)
+                        ->where('status', \App\Enums\CashVoucherStatus::Confirmed->value)
+                        ->exists();
+
+                if ($isPaidOrUsed) {
+                    throw new \RuntimeException("Không thể thay đổi lịch thanh toán thành không trả trước do khoản trả trước tương ứng đã phát sinh thanh toán hoặc đối trừ thực tế.");
+                } else {
+                    $this->deleteSafely($prepayment, 'Lịch thanh toán không còn thỏa mãn điều kiện trả trước NCC (ngày thanh toán >= ngày nhận hàng hoặc không còn liên kết đơn mua).');
+                    Log::info("System auto-deleted supplier prepayment due to schedule update. Schedule ID: {$schedule->id}");
+                }
+            }
+        }
+    }
+
+    /**
+     * Xác nhận thanh toán khoản trả trước NCC ở trạng thái unpaid.
+     */
+    public function payPrepayment(
+        SupplierOpeningAdvance $advance,
+        int $fundId,
+        string $paymentMethod,
+        string $paymentDate
+    ): void {
+        if ($advance->status !== 'unpaid') {
+            throw new \RuntimeException('Khoản trả trước này đã được thanh toán hoặc không ở trạng thái Chờ thanh toán.');
+        }
+
+        // Chống trùng
+        $existingVoucher = CashVoucher::where('reference_type', SupplierOpeningAdvance::class)
+            ->where('reference_id', $advance->id)
+            ->exists();
+        if ($existingVoucher) {
+            throw new \RuntimeException('Khoản trả trước này đã có phiếu chi liên kết.');
+        }
+
+        DB::transaction(function () use ($advance, $fundId, $paymentMethod, $paymentDate) {
+            $fund = Fund::findOrFail($fundId);
+            
+            // 1. Tạo phiếu chi ở trạng thái Draft
+            $voucher = CashVoucher::create([
+                'code'                   => CashVoucher::generateCode(\App\Enums\CashVoucherType::Payment),
+                'type'                   => \App\Enums\CashVoucherType::Payment,
+                'status'                 => \App\Enums\CashVoucherStatus::Draft,
+                'fund_id'                => $fund->id,
+                'supplier_id'            => $advance->supplier_id,
+                'partner_type'           => 'supplier',
+                'amount'                 => $advance->amount,
+                'voucher_date'           => $paymentDate,
+                'description'            => 'Trả trước NCC ' . ($advance->reference_no ? " {$advance->reference_no}" : ''),
+                'business_type'          => \App\Enums\CashVoucherBusinessType::SupplierPrepayment->value,
+                'reference_type'         => SupplierOpeningAdvance::class,
+                'reference_id'           => $advance->id,
+                'created_by'             => auth()->id() ?? 1,
+                'supplier_prepayment_id' => $advance->id,
+            ]);
+
+            // 2. Ghi sổ phiếu chi
+            $cashVoucherService = app(CashVoucherService::class);
+            $cashVoucherService->confirm($voucher);
+
+            // 3. Cập nhật trạng thái tiền trả trước thành open (Đã ứng trước / Còn dư)
+            $advance->update([
+                'status'       => 'open',
+                'opening_date' => $paymentDate,
+            ]);
+
+            Log::info("Prepayment #{$advance->id} paid successfully via CashVoucher #{$voucher->id}. Amount: {$advance->amount}");
+        });
     }
 
     // ─── Private helpers ──────────────────────────────────────────────────

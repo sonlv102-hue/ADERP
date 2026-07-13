@@ -15,6 +15,7 @@ class CashVoucher extends Model
         'shareholder_id', 'advance_purpose', 'advance_due_date', 'advance_reference_id',
         'description', 'reference_type', 'reference_id', 'created_by',
         'business_type', 'cash_flow_code', 'journal_mode', 'edited_by_user', 'edit_reason',
+        'supplier_prepayment_id',
     ];
 
     protected function casts(): array
@@ -72,6 +73,11 @@ class CashVoucher extends Model
     public function reference(): \Illuminate\Database\Eloquent\Relations\MorphTo
     {
         return $this->morphTo('reference');
+    }
+
+    public function supplierPrepayment(): BelongsTo
+    {
+        return $this->belongsTo(SupplierOpeningAdvance::class, 'supplier_prepayment_id');
     }
 
     public static function generateCode(CashVoucherType $type): string

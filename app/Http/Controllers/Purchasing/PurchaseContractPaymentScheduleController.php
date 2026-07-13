@@ -21,31 +21,35 @@ class PurchaseContractPaymentScheduleController extends Controller
             'notes'      => ['nullable', 'string'],
         ]);
 
-        $error = DB::transaction(function () use ($purchaseContract, $data) {
-            // Lock parent row to prevent concurrent over-allocation
-            PurchaseContract::where('id', $purchaseContract->id)->lockForUpdate()->first();
-            $totalPercent = $purchaseContract->paymentSchedules()->sum('percentage');
-            $remaining = round(100 - $totalPercent, 2);
+        try {
+            $error = DB::transaction(function () use ($purchaseContract, $data) {
+                // Lock parent row to prevent concurrent over-allocation
+                PurchaseContract::where('id', $purchaseContract->id)->lockForUpdate()->first();
+                $totalPercent = $purchaseContract->paymentSchedules()->sum('percentage');
+                $remaining = round(100 - $totalPercent, 2);
 
-            if ($data['percentage'] > $remaining) {
-                return "Tổng % đã vượt 100%. Còn có thể thêm tối đa {$remaining}%.";
+                if ($data['percentage'] > $remaining) {
+                    return "Tổng % đã vượt 100%. Còn có thể thêm tối đa {$remaining}%.";
+                }
+
+                $purchaseContract->paymentSchedules()->create([
+                    'name'       => $data['name'],
+                    'percentage' => $data['percentage'],
+                    'amount'     => round((float) $purchaseContract->value * $data['percentage'] / 100, 0),
+                    'due_date'   => $data['due_date'] ?? null,
+                    'status'     => PaymentScheduleStatus::Pending,
+                    'notes'      => $data['notes'] ?? null,
+                    'created_by' => auth()->id(),
+                ]);
+
+                return null;
+            });
+
+            if ($error) {
+                return back()->withErrors(['percentage' => $error])->withInput();
             }
-
-            $purchaseContract->paymentSchedules()->create([
-                'name'       => $data['name'],
-                'percentage' => $data['percentage'],
-                'amount'     => round((float) $purchaseContract->value * $data['percentage'] / 100, 0),
-                'due_date'   => $data['due_date'] ?? null,
-                'status'     => PaymentScheduleStatus::Pending,
-                'notes'      => $data['notes'] ?? null,
-                'created_by' => auth()->id(),
-            ]);
-
-            return null;
-        });
-
-        if ($error) {
-            return back()->withErrors(['percentage' => $error])->withInput();
+        } catch (\Exception $e) {
+            return back()->with('error', $e->getMessage())->withInput();
         }
 
         return back()->with('success', 'Đã thêm đợt thanh toán.');
@@ -63,30 +67,34 @@ class PurchaseContractPaymentScheduleController extends Controller
             'notes'      => ['nullable', 'string'],
         ]);
 
-        $error = DB::transaction(function () use ($purchaseContract, $schedule, $data) {
-            PurchaseContract::where('id', $purchaseContract->id)->lockForUpdate()->first();
-            $otherPercent = $purchaseContract->paymentSchedules()
-                ->where('id', '!=', $schedule->id)
-                ->sum('percentage');
-            $remaining = round(100 - $otherPercent, 2);
+        try {
+            $error = DB::transaction(function () use ($purchaseContract, $schedule, $data) {
+                PurchaseContract::where('id', $purchaseContract->id)->lockForUpdate()->first();
+                $otherPercent = $purchaseContract->paymentSchedules()
+                    ->where('id', '!=', $schedule->id)
+                    ->sum('percentage');
+                $remaining = round(100 - $otherPercent, 2);
 
-            if ($data['percentage'] > $remaining) {
-                return "Tổng % vượt 100%. Tối đa cho đợt này: {$remaining}%.";
+                if ($data['percentage'] > $remaining) {
+                    return "Tổng % vượt 100%. Tối đa cho đợt này: {$remaining}%.";
+                }
+
+                $schedule->update([
+                    'name'       => $data['name'],
+                    'percentage' => $data['percentage'],
+                    'amount'     => round((float) $purchaseContract->value * $data['percentage'] / 100, 0),
+                    'due_date'   => $data['due_date'] ?? null,
+                    'notes'      => $data['notes'] ?? null,
+                ]);
+
+                return null;
+            });
+
+            if ($error) {
+                return back()->withErrors(['percentage' => $error])->withInput();
             }
-
-            $schedule->update([
-                'name'       => $data['name'],
-                'percentage' => $data['percentage'],
-                'amount'     => round((float) $purchaseContract->value * $data['percentage'] / 100, 0),
-                'due_date'   => $data['due_date'] ?? null,
-                'notes'      => $data['notes'] ?? null,
-            ]);
-
-            return null;
-        });
-
-        if ($error) {
-            return back()->withErrors(['percentage' => $error])->withInput();
+        } catch (\Exception $e) {
+            return back()->with('error', $e->getMessage())->withInput();
         }
 
         return back()->with('success', 'Đã cập nhật đợt thanh toán.');
@@ -97,7 +105,11 @@ class PurchaseContractPaymentScheduleController extends Controller
         abort_if($schedule->purchase_contract_id !== $purchaseContract->id, 404);
         abort_if($schedule->status === PaymentScheduleStatus::Paid, 403, 'Không xóa được đợt đã thanh toán.');
 
-        $schedule->delete();
+        try {
+            $schedule->delete();
+        } catch (\Exception $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return back()->with('success', 'Đã xóa đợt thanh toán.');
     }

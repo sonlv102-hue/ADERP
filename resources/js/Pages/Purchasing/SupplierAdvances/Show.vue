@@ -21,6 +21,11 @@
           </div>
         </div>
         <div class="flex gap-2 flex-wrap">
+          <button v-if="advance.can_pay"
+            @click="showPayModal = true"
+            class="erp-btn-primary bg-green-600 hover:bg-green-700 text-white">
+            Xác nhận thanh toán
+          </button>
           <Link v-if="advance.status !== 'cancelled'"
             :href="route('purchasing.supplier-advances.edit', advance.id)"
             class="erp-btn-secondary">Sửa</Link>
@@ -90,6 +95,38 @@
           <div v-if="advance.notes" class="sm:col-span-2">
             <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">Ghi chú</p>
             <p class="text-sm text-gray-700">{{ advance.notes }}</p>
+          </div>
+        </div>
+
+        <!-- Linked Info (Đơn hàng mua, Hợp đồng, Lịch thanh toán) if present -->
+        <div v-if="advance.purchase_order || advance.purchase_contract || advance.payment_schedule"
+          class="mt-4 pt-4 border-t border-gray-100">
+          <h3 class="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Nguồn gốc & Liên kết</h3>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 rounded-xl p-4 border border-gray-100">
+            <div v-if="advance.purchase_contract">
+              <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">Hợp đồng mua hàng</p>
+              <Link :href="route('purchasing.purchase-contracts.show', advance.purchase_contract.id)"
+                class="text-sm font-semibold text-primary-600 hover:text-primary-800 hover:underline">
+                {{ advance.purchase_contract.code }}
+              </Link>
+            </div>
+            <div v-if="advance.purchase_order">
+              <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">Đơn mua hàng</p>
+              <div class="space-y-0.5">
+                <Link :href="route('purchasing.purchase-orders.show', advance.purchase_order.id)"
+                  class="text-sm font-semibold text-primary-600 hover:text-primary-800 hover:underline">
+                  {{ advance.purchase_order.code }}
+                </Link>
+                <p class="text-xs text-gray-500">Ngày dự kiến nhận: {{ advance.purchase_order.expected_date || '—' }}</p>
+              </div>
+            </div>
+            <div v-if="advance.payment_schedule">
+              <p class="text-xs text-gray-500 uppercase tracking-wide mb-1">Đợt thanh toán dự kiến</p>
+              <div class="space-y-0.5">
+                <p class="text-sm font-medium text-gray-900">{{ advance.payment_schedule.name }}</p>
+                <p class="text-xs text-gray-500">Hạn thanh toán: {{ advance.payment_schedule.due_date || '—' }}</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -267,11 +304,56 @@
         </button>
       </template>
     </Modal>
+
+    <!-- Pay Modal -->
+    <Modal :show="showPayModal" max-width="lg" @close="showPayModal = false">
+      <template #title>Xác nhận thanh toán trả trước NCC</template>
+      <div class="space-y-4">
+        <p class="text-sm text-gray-500">
+          Số tiền cần chi ứng trước: <strong class="text-primary-700">{{ fmt(advance.amount) }} đ</strong>
+        </p>
+        <div v-if="payErrors.general" class="bg-red-50 border border-red-200 rounded-lg px-4 py-3 text-sm text-red-700">
+          {{ payErrors.general }}
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Ngày thanh toán <span class="text-red-500">*</span></label>
+            <input v-model="payForm.payment_date" type="date" class="erp-input"
+              :class="payErrors.payment_date ? 'erp-input-error' : ''" />
+            <p v-if="payErrors.payment_date" class="text-xs text-red-500 mt-1">{{ payErrors.payment_date }}</p>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Hình thức <span class="text-red-500">*</span></label>
+            <select v-model="payForm.payment_method" class="erp-input">
+              <option value="bank_transfer">Chuyển khoản ngân hàng</option>
+              <option value="cash">Tiền mặt</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">Quỹ chi tiền / Tài khoản ngân hàng <span class="text-red-500">*</span></label>
+          <select v-model="payForm.fund_id" class="erp-input"
+            :class="payErrors.fund_id ? 'erp-input-error' : ''">
+            <option value="">-- Chọn tài khoản/quỹ --</option>
+            <option v-for="f in filteredFunds" :key="f.id" :value="f.id">
+              {{ f.name }} ({{ f.type === 'cash' ? 'Tiền mặt' : 'Ngân hàng' }})
+            </option>
+          </select>
+          <p v-if="payErrors.fund_id" class="text-xs text-red-500 mt-1">{{ payErrors.fund_id }}</p>
+        </div>
+      </div>
+      <template #footer>
+        <button @click="showPayModal = false" class="erp-btn-secondary">Hủy</button>
+        <button @click="submitPay" :disabled="paying" class="erp-btn-primary bg-green-600 hover:bg-green-700">
+          {{ paying ? 'Đang xử lý...' : 'Xác nhận hạch toán' }}
+        </button>
+      </template>
+    </Modal>
   </AppLayout>
 </template>
 
 <script setup>
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, watch } from 'vue'
 import { router, Link } from '@inertiajs/vue3'
 import AppLayout from '@/Components/Layout/AppLayout.vue'
 import StatusBadge from '@/Components/Shared/StatusBadge.vue'
@@ -288,6 +370,54 @@ const props = defineProps({
 const showCancelModal = ref(false)
 const cancelReason = ref('')
 const cancelling = ref(false)
+
+// Pay Prepayment
+const showPayModal = ref(false)
+const paying = ref(false)
+const payErrors = reactive({})
+const payForm = reactive({
+  payment_date: props.advance.opening_date ? props.advance.opening_date.split('T')[0] : new Date().toISOString().split('T')[0],
+  fund_id: '',
+  payment_method: 'bank_transfer',
+})
+
+const filteredFunds = computed(() => {
+  const typeMap = { cash: 'cash', bank_transfer: 'bank' }
+  const expectedType = typeMap[payForm.payment_method]
+  return props.funds.filter(f => f.type === expectedType)
+})
+
+watch(() => payForm.payment_method, () => {
+  payForm.fund_id = ''
+})
+
+function submitPay() {
+  if (!payForm.fund_id) {
+    payErrors.fund_id = 'Vui lòng chọn tài khoản/quỹ.'
+    return
+  }
+  payErrors.fund_id = null
+  payErrors.general = null
+  paying.value = true
+
+  router.post(
+    route('purchasing.supplier-advances.pay', props.advance.id),
+    payForm,
+    {
+      onError: (err) => {
+        Object.assign(payErrors, err)
+        paying.value = false
+      },
+      onSuccess: () => {
+        paying.value = false
+        showPayModal.value = false
+      },
+      onFinish: () => {
+        paying.value = false
+      }
+    }
+  )
+}
 
 // Refund
 const showRefundModal = ref(false)
@@ -323,7 +453,7 @@ function fmt(val) {
 }
 
 function statusColor(s) {
-  const map = { open: 'green', partially_applied: 'yellow', fully_applied: 'gray', cancelled: 'red' }
+  const map = { unpaid: 'orange', open: 'green', partially_applied: 'yellow', fully_applied: 'gray', cancelled: 'red' }
   return map[s] || 'gray'
 }
 

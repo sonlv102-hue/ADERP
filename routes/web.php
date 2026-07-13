@@ -768,6 +768,7 @@ Route::middleware('auth')->group(function () {
         Route::resource('supplier-advances', SupplierAdvanceController::class);
         Route::post('supplier-advances/{supplierAdvance}/cancel', [SupplierAdvanceController::class, 'cancel'])->name('supplier-advances.cancel');
         Route::post('supplier-advances/{supplierAdvance}/refund', [SupplierAdvanceController::class, 'refund'])->name('supplier-advances.refund');
+        Route::post('supplier-advances/{supplierAdvance}/pay', [SupplierAdvanceController::class, 'pay'])->name('supplier-advances.pay');
 
         Route::get('purchase-contracts/export-excel', [PurchaseContractController::class, 'exportExcel'])->name('purchase-contracts.export-excel');
         Route::resource('purchase-contracts', PurchaseContractController::class);
@@ -889,6 +890,8 @@ Route::middleware('auth')->group(function () {
         Route::get('warehouse-products',      [SearchController::class, 'warehouseProducts'])->name('warehouse-products');
         Route::get('project-purchase-orders', [SearchController::class, 'projectPurchaseOrders'])->name('project-purchase-orders');
         Route::get('orders',                  [SearchController::class, 'orders'])->name('orders');
+        Route::get('purchase-contracts',      [SearchController::class, 'purchaseContracts'])->name('purchase-contracts');
+        Route::get('purchase-orders',         [SearchController::class, 'purchaseOrders'])->name('purchase-orders');
     });
 
     // JSON API for current user permissions

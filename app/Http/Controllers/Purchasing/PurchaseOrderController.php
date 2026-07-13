@@ -245,7 +245,22 @@ class PurchaseOrderController extends Controller
             'stockEntries', 'purchaseInvoices',
         ]);
 
+        $prepayments = \App\Models\SupplierOpeningAdvance::where('purchase_order_id', $purchaseOrder->id)
+            ->with('purchaseContract')
+            ->orderBy('opening_date')
+            ->get();
+
         return Inertia::render('Purchasing/PurchaseOrders/Show', [
+            'prepayments' => $prepayments->map(fn ($p) => [
+                'id'            => $p->id,
+                'opening_date'  => $p->opening_date?->format('d/m/Y'),
+                'amount'        => (float) $p->amount,
+                'status'        => $p->status,
+                'status_label'  => $p->statusLabel(),
+                'contract_code' => $p->purchaseContract?->code,
+                'contract_id'   => $p->purchaseContract?->id,
+                'notes'         => $p->notes,
+            ]),
             'order' => [
                 'id'            => $purchaseOrder->id,
                 'code'          => $purchaseOrder->code,

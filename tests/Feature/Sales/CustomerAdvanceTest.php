@@ -290,8 +290,6 @@ class CustomerAdvanceTest extends TestCase
             'advance_type'   => 'prepayment',
             'opening_date'   => '2026-06-01',
             'amount'         => 40_000_000,
-            'fund_id'        => $this->fund->id,
-            'payment_method' => 'bank_transfer',
         ]);
 
         $response->assertRedirect();
@@ -302,6 +300,17 @@ class CustomerAdvanceTest extends TestCase
         $this->assertEquals('prepayment', $advance->advance_type);
         $this->assertEquals(40_000_000, (float) $advance->amount);
         $this->assertEquals('331UT', $advance->account_code);
+        $this->assertEquals('unpaid', $advance->status);
+
+        // Thực hiện Xác nhận thanh toán qua API
+        $payResponse = $this->post(route('purchasing.supplier-advances.pay', $advance->id), [
+            'payment_date'   => '2026-06-01',
+            'fund_id'        => $this->fund->id,
+            'payment_method' => 'bank_transfer',
+        ]);
+        $payResponse->assertRedirect();
+
+        $advance->refresh();
         $this->assertEquals('open', $advance->status);
 
         // JE: Dr 331UT / Cr 1121 — không phát sinh 3311
