@@ -51,6 +51,7 @@ Các rule chi tiết nằm trong `.claude/rules/`. Không import toàn bộ rule
 | Seeder, routes, admin, permission | `.claude/rules/rbac.md` |
 | Module map, service map, FSM, migration prefix | `.claude/rules/phase-history.md` |
 | Trạng thái module đã làm/xong/gần đây | `.claude/rules/project-state.md` |
+| **Chạy audit/reconcile/diagnose command (inventory, purchase-invoices, accounting...)** | **`.claude/rules/audit-verification.md` — bắt buộc đọc trước khi báo cáo bất kỳ finding nào** |
 
 **Skills** (activate qua Skill tool):
 
