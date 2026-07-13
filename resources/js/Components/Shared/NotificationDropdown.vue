@@ -123,7 +123,9 @@ const handleClickOutside = (e) => {
 };
 
 onMounted(() => {
-  fetchUnreadCount();
+  // Trì hoãn lần gọi đầu để tránh race-condition ghi session (CSRF token bị
+  // request nền ghi đè) khi request này chạy song song với request load trang.
+  setTimeout(fetchUnreadCount, 2000);
   pollInterval = setInterval(fetchUnreadCount, 30000);
   document.addEventListener('click', handleClickOutside);
 });
