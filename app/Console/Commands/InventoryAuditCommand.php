@@ -227,8 +227,27 @@ class InventoryAuditCommand extends Command
         $this->line('');
         $this->line('[G] Đối soát GL vs tồn kho...');
 
-        // G1: Tổng amount movement nhập (excl project) vs số dư GL 156x
-        $movementValue = DB::table('stock_movements as m')
+        // Tổng giá trị movement xuất kho (confirmed), tách theo issue_purpose:
+        // - sale_delivery: hạch toán Cr156x/Dr632 (bán hàng thương mại)
+        // - project_cost (và các purpose khác): hạch toán Cr156x/Dr154 (WIP dự án), KHÔNG qua 632
+        // Cả 2 loại đều làm giảm TK156x, nên phải cộng chung khi đối chiếu G1;
+        // nhưng chỉ sale_delivery mới được tính vào G3 (đối chiếu TK632).
+        $exitByPurpose = DB::table('stock_movements as m')
+            ->join('stock_exits as x', function ($j) {
+                $j->on('x.id', '=', 'm.source_id')
+                  ->where('m.source_type', '=', \App\Models\StockExit::class);
+            })
+            ->where('x.status', StockExitStatus::Confirmed->value)
+            ->whereNotNull('m.amount')
+            ->selectRaw('x.issue_purpose, SUM(ABS(m.amount)) as total_value')
+            ->groupBy('x.issue_purpose')
+            ->pluck('total_value', 'issue_purpose');
+
+        $exitValueAll          = (float) $exitByPurpose->sum();
+        $exitValueSaleDelivery = (float) ($exitByPurpose['sale_delivery'] ?? 0);
+
+        // G1: Tổng giá trị movement nhập (stock_entries) trừ tổng movement xuất (mọi loại) vs số dư GL 156x
+        $entryValue = DB::table('stock_movements as m')
             ->join('stock_entries as e', function ($j) {
                 $j->on('e.id', '=', 'm.source_id')
                   ->where('m.source_type', '=', \App\Models\StockEntry::class);
@@ -237,6 +256,8 @@ class InventoryAuditCommand extends Command
             ->whereNotNull('m.amount')
             ->selectRaw('SUM(m.amount) as total_value')
             ->value('total_value') ?? 0;
+
+        $movementValue = (float) $entryValue - $exitValueAll;
 
         $glValue = DB::table('journal_entry_lines as jl')
             ->join('journal_entries as je', 'je.id', '=', 'jl.journal_entry_id')
@@ -249,11 +270,11 @@ class InventoryAuditCommand extends Command
         $diff = abs((float)$movementValue - (float)$glValue);
         if ($diff > 1000) {
             $this->addFinding('G1', 'warning', sprintf(
-                "GL TK 156x (%.0f) lệch với tổng giá trị movement nhập (%.0f). Chênh: %.0f",
+                "GL TK 156x (%.0f) lệch với tổng giá trị movement nhập trừ xuất (%.0f). Chênh: %.0f",
                 $glValue, $movementValue, $glValue - $movementValue
             ));
         } else {
-            $this->line("  G1: GL 156x khớp với movement (chênh < 1.000đ). OK.");
+            $this->line("  G1: GL 156x khớp với movement nhập-xuất ròng (chênh < 1.000đ). OK.");
         }
 
         // G2: GL 154 vs tổng WIP entries
@@ -276,17 +297,8 @@ class InventoryAuditCommand extends Command
             $this->line("  G2: GL 154 khớp với WIP entries (chênh < 1.000đ). OK.");
         }
 
-        // G3: Tổng giá vốn movement xuất bán vs số dư GL 632x
-        $exitValue = DB::table('stock_movements as m')
-            ->join('stock_exits as x', function ($j) {
-                $j->on('x.id', '=', 'm.source_id')
-                  ->where('m.source_type', '=', \App\Models\StockExit::class);
-            })
-            ->where('x.status', \App\Enums\StockExitStatus::Confirmed->value)
-            ->whereNotNull('m.amount')
-            ->selectRaw('SUM(ABS(m.amount)) as total_value')
-            ->value('total_value') ?? 0;
-
+        // G3: Tổng giá vốn movement xuất bán (chỉ issue_purpose=sale_delivery — loại đi
+        // qua TK154 dự án như project_cost KHÔNG được tính vào đây) vs số dư GL 632x
         $gl632 = DB::table('journal_entry_lines as jl')
             ->join('journal_entries as je', 'je.id', '=', 'jl.journal_entry_id')
             ->where('je.status', 'posted')
@@ -294,11 +306,11 @@ class InventoryAuditCommand extends Command
             ->selectRaw('SUM(jl.debit) - SUM(jl.credit) as balance')
             ->value('balance') ?? 0;
 
-        $diff632 = abs((float)$exitValue - (float)$gl632);
+        $diff632 = abs($exitValueSaleDelivery - (float)$gl632);
         if ($diff632 > 1000) {
             $this->addFinding('G3', 'warning', sprintf(
-                "GL TK 632 (%.0f) lệch với tổng giá trị movement xuất bán (%.0f). Chênh: %.0f",
-                $gl632, $exitValue, $gl632 - $exitValue
+                "GL TK 632 (%.0f) lệch với tổng giá trị movement xuất bán sale_delivery (%.0f). Chênh: %.0f",
+                $gl632, $exitValueSaleDelivery, $gl632 - $exitValueSaleDelivery
             ));
         } else {
             $this->line("  G3: GL 632 khớp với movement xuất bán (chênh < 1.000đ). OK.");
