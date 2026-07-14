@@ -374,4 +374,39 @@ class AvcoTest extends TestCase
         $this->assertEquals(150000.0,  (float) $balance->avg_cost);
         $this->assertEquals(3000000.0, (float) $balance->value_on_hand);
     }
+
+    /** T9: avg_cost = 0 (hàng nhập giá 0) → confirmExit throws nếu allow_zero_cost = false (mặc định) */
+    public function test_exit_throws_when_avg_cost_zero_and_not_allowed(): void
+    {
+        $entry = $this->makeNonProjectEntry(10, 0);
+        $this->svc->confirmEntry($entry);
+
+        $exit = $this->makeNonProjectExit(2);
+        $this->expectException(\RuntimeException::class);
+        $this->svc->confirmExit($exit);
+    }
+
+    /** T10: avg_cost = 0 nhưng allow_zero_cost = true (hàng tặng kèm) → confirmExit thành công, không tạo JE */
+    public function test_exit_succeeds_when_avg_cost_zero_and_allowed(): void
+    {
+        $this->product->update(['allow_zero_cost' => true]);
+
+        $entry = $this->makeNonProjectEntry(10, 0);
+        $this->svc->confirmEntry($entry);
+
+        $exit = $this->makeNonProjectExit(2);
+        $this->svc->confirmExit($exit);
+
+        $exitItem = $exit->items()->first();
+        $this->assertEquals(0.0, (float) $exitItem->total_cost);
+
+        $je = JournalEntry::where('reference_type', 'stock_exit')
+            ->where('reference_id', $exit->id)
+            ->first();
+        $this->assertNull($je, 'Không nên tạo JE khi tổng giá vốn = 0');
+
+        $balance = InventoryBalance::where('product_id', $this->product->id)->first();
+        $this->assertEquals(8.0, (float) $balance->qty_on_hand);
+        $this->assertEquals(0.0, (float) $balance->avg_cost);
+    }
 }

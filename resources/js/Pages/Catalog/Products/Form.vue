@@ -74,6 +74,14 @@
             <label for="has_serial" class="text-sm text-gray-700">Quản lý theo serial</label>
           </div>
 
+          <div class="flex items-center gap-2">
+            <input v-model="form.allow_zero_cost" id="allow_zero_cost" type="checkbox"
+              class="h-4 w-4 text-primary-600 rounded border-gray-300" />
+            <label for="allow_zero_cost" class="text-sm text-gray-700">
+              Hàng tặng kèm — cho phép giá vốn = 0 khi xuất kho
+            </label>
+          </div>
+
           <div>
             <label class="block text-sm font-medium text-gray-700 mb-1">Mô tả</label>
             <textarea v-model="form.description" rows="2"
@@ -278,6 +286,7 @@ const form = useForm({
   warranty_months:      props.product?.warranty_months ?? 0,
   min_stock:            props.product?.min_stock ?? 0,
   has_serial:           props.product?.has_serial ?? false,
+  allow_zero_cost:      props.product?.allow_zero_cost ?? false,
   description:          props.product?.description ?? '',
   is_active:            props.product?.is_active ?? true,
   item_type:            props.product?.item_type ?? null,

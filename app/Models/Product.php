@@ -15,18 +15,20 @@ class Product extends Model
         'code', 'category_id', 'item_type', 'revenue_account_code', 'inventory_account',
         'name', 'unit', 'cost_price', 'business_cost', 'vat_percent', 'total_cost',
         'sell_price', 'has_serial', 'warranty_months', 'min_stock', 'description', 'is_active',
+        'allow_zero_cost',
     ];
 
     protected function casts(): array
     {
         return [
-            'cost_price'    => 'decimal:2',
-            'business_cost' => 'decimal:2',
-            'vat_percent'   => 'decimal:2',
-            'total_cost'    => 'decimal:2',
-            'sell_price'    => 'decimal:2',
-            'has_serial'    => 'boolean',
-            'is_active'     => 'boolean',
+            'cost_price'      => 'decimal:2',
+            'business_cost'   => 'decimal:2',
+            'vat_percent'     => 'decimal:2',
+            'total_cost'      => 'decimal:2',
+            'sell_price'      => 'decimal:2',
+            'has_serial'      => 'boolean',
+            'is_active'       => 'boolean',
+            'allow_zero_cost' => 'boolean',
         ];
     }
 

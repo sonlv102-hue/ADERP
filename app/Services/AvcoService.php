@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\InventoryBalance;
+use App\Models\Product;
 use App\Models\StockEntryItem;
 use App\Models\StockMovement;
 use RuntimeException;
@@ -85,9 +86,10 @@ class AvcoService
             }
         }
 
-        if ((float) $balance->avg_cost <= 0) {
+        if ((float) $balance->avg_cost <= 0 && ! Product::where('id', $productId)->value('allow_zero_cost')) {
             throw new RuntimeException(
-                "Đơn giá bình quân = 0 cho sản phẩm ID {$productId}. Kiểm tra lại dữ liệu nhập kho."
+                "Đơn giá bình quân = 0 cho sản phẩm ID {$productId}. Kiểm tra lại dữ liệu nhập kho, " .
+                "hoặc nếu đây là hàng tặng/không tính giá vốn, bật \"Cho phép giá vốn = 0\" ở Sản phẩm."
             );
         }
 

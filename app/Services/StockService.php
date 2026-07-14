@@ -905,8 +905,9 @@ class StockService
         $lines     = [];
 
         foreach ($exit->items as $item) {
-            // Ưu tiên dùng FIFO cost đã tính, fallback về product cost_price
-            if ($item->total_cost !== null && (float)$item->total_cost > 0) {
+            // Ưu tiên dùng cost đã tính bởi AVCO/FIFO (kể cả 0 — hàng tặng kèm allow_zero_cost),
+            // chỉ fallback về product cost_price khi cost_source chưa được tính (null).
+            if ($item->cost_source !== null) {
                 $cogs = (float) $item->total_cost;
             } else {
                 $vatRate     = (float) ($item->product?->vat_percent ?? 10);
