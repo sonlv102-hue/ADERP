@@ -22,3 +22,6 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# Báo cáo audit chứa dữ liệu kế toán/khách hàng thật — repo này là public, không commit
+docs/LOCAL_VPS_PARITY_AUDIT.md

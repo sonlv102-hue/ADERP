@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Enums\OrderStatus;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\OrderOverDelivery;
 use App\Models\StockExit;
 use Illuminate\Support\Facades\DB;
@@ -17,12 +18,14 @@ class OrderService
      */
     public function syncDelivery(StockExit $exit): array
     {
-        if (! $exit->order_id) {
+        $exit->load('items.product');
+
+        $orderId = $exit->order_id ?? $this->resolveOrderIdFromItems($exit);
+        if (! $orderId) {
             return [];
         }
 
-        $exit->load('items.product');
-        $order = Order::with('items')->find($exit->order_id);
+        $order = Order::with('items')->find($orderId);
 
         if (! $order) {
             return [];
@@ -31,14 +34,21 @@ class OrderService
         $warnings = [];
 
         DB::transaction(function () use ($exit, $order, &$warnings) {
-            $orderItemsById      = $order->items->whereNotNull('product_id')->keyBy('id');
-            $orderItemsByProduct = $order->items->whereNotNull('product_id')->keyBy('product_id');
+            $orderItemsById           = $order->items->whereNotNull('product_id')->keyBy('id');
+            $orderItemsByProductGroup = $order->items->whereNotNull('product_id')->groupBy('product_id');
 
             foreach ($exit->items as $exitItem) {
                 // Ưu tiên match theo order_item_id (chính xác), fallback về product_id (legacy)
-                $orderItem = ($exitItem->order_item_id && isset($orderItemsById[$exitItem->order_item_id]))
-                    ? $orderItemsById[$exitItem->order_item_id]
-                    : ($orderItemsByProduct[$exitItem->product_id] ?? null);
+                if ($exitItem->order_item_id && isset($orderItemsById[$exitItem->order_item_id])) {
+                    $orderItem = $orderItemsById[$exitItem->order_item_id];
+                } else {
+                    $productMatches = $orderItemsByProductGroup->get($exitItem->product_id, collect());
+                    if ($productMatches->count() > 1) {
+                        $warnings[] = "SP \"{$exitItem->product->name}\": xuất hiện {$productMatches->count()} dòng trong đơn — không thể tự khớp theo product_id, cần gán order_item_id thủ công (stock-exits:repair-sales-order-links).";
+                        continue;
+                    }
+                    $orderItem = $productMatches->first();
+                }
 
                 if (! $orderItem) {
                     continue;
@@ -89,24 +99,30 @@ class OrderService
      */
     public function reverseDelivery(StockExit $exit): void
     {
-        if (! $exit->order_id) {
+        $exit->load('items');
+
+        $orderId = $exit->order_id ?? $this->resolveOrderIdFromItems($exit);
+        if (! $orderId) {
             return;
         }
 
-        $exit->load('items');
-        $order = Order::with('items')->find($exit->order_id);
+        $order = Order::with('items')->find($orderId);
         if (! $order) {
             return;
         }
 
         DB::transaction(function () use ($exit, $order) {
-            $orderItemsById      = $order->items->whereNotNull('product_id')->keyBy('id');
-            $orderItemsByProduct = $order->items->whereNotNull('product_id')->keyBy('product_id');
+            $orderItemsById           = $order->items->whereNotNull('product_id')->keyBy('id');
+            $orderItemsByProductGroup = $order->items->whereNotNull('product_id')->groupBy('product_id');
 
             foreach ($exit->items as $exitItem) {
-                $orderItem = ($exitItem->order_item_id && isset($orderItemsById[$exitItem->order_item_id]))
-                    ? $orderItemsById[$exitItem->order_item_id]
-                    : ($orderItemsByProduct[$exitItem->product_id] ?? null);
+                if ($exitItem->order_item_id && isset($orderItemsById[$exitItem->order_item_id])) {
+                    $orderItem = $orderItemsById[$exitItem->order_item_id];
+                } else {
+                    $productMatches = $orderItemsByProductGroup->get($exitItem->product_id, collect());
+                    // Trùng nhiều dòng theo product_id → không đoán mù, bỏ qua reverse dòng này
+                    $orderItem = $productMatches->count() === 1 ? $productMatches->first() : null;
+                }
 
                 if (! $orderItem) {
                     continue;
@@ -119,6 +135,20 @@ class OrderService
 
             $this->syncOrderStatus($order->id);
         });
+    }
+
+    /**
+     * Suy ra order_id từ order_item_id trên các dòng exit khi header exit.order_id bị thiếu
+     * (ví dụ exit tạo qua project_cost có link item-level nhưng không set order_id header).
+     */
+    private function resolveOrderIdFromItems(StockExit $exit): ?int
+    {
+        $orderItemIds = $exit->items->pluck('order_item_id')->filter()->unique();
+        if ($orderItemIds->isEmpty()) {
+            return null;
+        }
+
+        return OrderItem::whereIn('id', $orderItemIds)->value('order_id');
     }
 
     private function recordOverDelivery(int $orderId, int $productId, string $productName, float $over): void

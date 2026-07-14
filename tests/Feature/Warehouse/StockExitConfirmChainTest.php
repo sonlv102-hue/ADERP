@@ -312,4 +312,128 @@ class StockExitConfirmChainTest extends TestCase
         $warnings = $this->svc->confirmExit($exit);
         $this->assertEquals(StockExitStatus::Confirmed, $exit->fresh()->status, 'sale_delivery phải Confirmed dù JE fail.');
     }
+
+    // ── TC5: exit.order_id = NULL nhưng item có order_item_id → vẫn phải sync ──
+    // Tái hiện đúng bug thật (XK-0015/DH-0011): header order_id thiếu, item vẫn
+    // link order_item_id → OrderService::syncDelivery() phải tự suy ra order.
+
+    public function test_tc5_sync_delivery_resolves_order_from_item_link_when_exit_order_id_null(): void
+    {
+        $this->seedInventoryBalance(10);
+
+        $order = Order::create([
+            'code' => 'DH-CHAIN-005', 'customer_id' => $this->customer->id,
+            'status' => OrderStatus::Processing, 'created_by' => $this->user->id,
+            'order_date' => now()->toDateString(),
+        ]);
+
+        $orderItem = OrderItem::create([
+            'order_id' => $order->id, 'name' => $this->product->name, 'product_id' => $this->product->id,
+            'quantity' => 5, 'unit_price' => 1500000, 'delivered_quantity' => 0,
+        ]);
+
+        $exit = StockExit::create([
+            'code' => 'XK-CHAIN-NULLHDR', 'warehouse_id' => $this->warehouse->id,
+            'project_id' => $this->project->id,
+            'order_id' => null, // <- đúng trạng thái lỗi thật: header KHÔNG có order_id
+            'exit_date' => now()->toDateString(), 'status' => StockExitStatus::Draft,
+            'created_by' => $this->user->id, 'issue_purpose' => 'project_cost',
+        ]);
+
+        StockExitItem::create([
+            'stock_exit_id' => $exit->id, 'product_id' => $this->product->id, 'quantity' => 5,
+            'unit_price' => 1500000, 'project_id' => $this->project->id,
+            'order_item_id' => $orderItem->id, // item vẫn có link
+        ]);
+
+        $exit = $exit->fresh('items.product', 'items.serials');
+        $this->svc->confirmExit($exit);
+
+        $this->assertEquals(5, (float) $orderItem->fresh()->delivered_quantity,
+            'delivered_quantity phải sync dù exit.order_id header = NULL, miễn item có order_item_id.');
+        $this->assertEquals(OrderStatus::Completed, $order->fresh()->status);
+    }
+
+    // ── TC6: item thiếu order_item_id nhưng product_id duy nhất trong đơn → fallback ──
+
+    public function test_tc6_sync_delivery_fallback_by_product_id_when_order_item_id_null(): void
+    {
+        $this->seedInventoryBalance(10);
+
+        $order = Order::create([
+            'code' => 'DH-CHAIN-006', 'customer_id' => $this->customer->id,
+            'status' => OrderStatus::Processing, 'created_by' => $this->user->id,
+            'order_date' => now()->toDateString(),
+        ]);
+
+        $orderItem = OrderItem::create([
+            'order_id' => $order->id, 'name' => $this->product->name, 'product_id' => $this->product->id,
+            'quantity' => 5, 'unit_price' => 1500000, 'delivered_quantity' => 0,
+        ]);
+
+        $exit = StockExit::create([
+            'code' => 'XK-CHAIN-FALLBACK', 'warehouse_id' => $this->warehouse->id,
+            'project_id' => $this->project->id, 'order_id' => $order->id,
+            'exit_date' => now()->toDateString(), 'status' => StockExitStatus::Draft,
+            'created_by' => $this->user->id, 'issue_purpose' => 'project_cost',
+        ]);
+
+        StockExitItem::create([
+            'stock_exit_id' => $exit->id, 'product_id' => $this->product->id, 'quantity' => 5,
+            'unit_price' => 1500000, 'project_id' => $this->project->id,
+            'order_item_id' => null, // legacy: thiếu link item-level
+        ]);
+
+        $exit = $exit->fresh('items.product', 'items.serials');
+        $this->svc->confirmExit($exit);
+
+        $this->assertEquals(5, (float) $orderItem->fresh()->delivered_quantity,
+            'delivered_quantity phải fallback đúng qua product_id khi order_item_id null và product_id duy nhất trong đơn.');
+    }
+
+    // ── TC7: product_id trùng nhiều dòng trong đơn → không fallback mù, phải warning ──
+
+    public function test_tc7_sync_delivery_warns_and_skips_when_product_id_duplicated_in_order(): void
+    {
+        $this->seedInventoryBalance(10);
+
+        $order = Order::create([
+            'code' => 'DH-CHAIN-007', 'customer_id' => $this->customer->id,
+            'status' => OrderStatus::Processing, 'created_by' => $this->user->id,
+            'order_date' => now()->toDateString(),
+        ]);
+
+        // Cùng product_id xuất hiện ở 2 dòng khác nhau trong đơn (vd 2 đợt giao khác giá)
+        $orderItem1 = OrderItem::create([
+            'order_id' => $order->id, 'name' => $this->product->name, 'product_id' => $this->product->id,
+            'quantity' => 3, 'unit_price' => 1500000, 'delivered_quantity' => 0,
+        ]);
+        $orderItem2 = OrderItem::create([
+            'order_id' => $order->id, 'name' => $this->product->name, 'product_id' => $this->product->id,
+            'quantity' => 2, 'unit_price' => 1600000, 'delivered_quantity' => 0,
+        ]);
+
+        $exit = StockExit::create([
+            'code' => 'XK-CHAIN-DUP', 'warehouse_id' => $this->warehouse->id,
+            'project_id' => $this->project->id, 'order_id' => $order->id,
+            'exit_date' => now()->toDateString(), 'status' => StockExitStatus::Draft,
+            'created_by' => $this->user->id, 'issue_purpose' => 'project_cost',
+        ]);
+
+        StockExitItem::create([
+            'stock_exit_id' => $exit->id, 'product_id' => $this->product->id, 'quantity' => 5,
+            'unit_price' => 1500000, 'project_id' => $this->project->id,
+            'order_item_id' => null, // không rõ dòng nào — product_id trùng 2 dòng
+        ]);
+
+        $exit = $exit->fresh('items.product', 'items.serials');
+        $warnings = $this->svc->confirmExit($exit);
+
+        $this->assertEquals(0, (float) $orderItem1->fresh()->delivered_quantity,
+            'Không được đoán mù gán delivered_quantity cho order_item #1 khi product_id trùng nhiều dòng.');
+        $this->assertEquals(0, (float) $orderItem2->fresh()->delivered_quantity,
+            'Không được đoán mù gán delivered_quantity cho order_item #2 khi product_id trùng nhiều dòng.');
+        $this->assertNotEmpty($warnings, 'Phải có warning khi không thể tự khớp product_id trùng nhiều dòng.');
+        $this->assertStringContainsString('không thể tự khớp', $warnings[0]);
+    }
 }

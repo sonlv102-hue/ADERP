@@ -13,6 +13,7 @@ use App\Models\InventoryBalance;
 use App\Models\JournalEntry;
 use App\Models\StockEntryItem;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\ProductSerial;
 use App\Models\Project;
@@ -238,6 +239,24 @@ class StockExitController extends Controller
     }
 
     /**
+     * Suy ra order_id từ order_item_id trên các dòng hàng khi form không gửi order_id header.
+     * Tránh tạo trạng thái nửa vời (order_item_id có nhưng order_id header rỗng) khiến
+     * OrderService::syncDelivery() không xác định được đơn hàng liên quan.
+     * Trả về: null nếu không có order_item_id nào, false nếu items trỏ tới nhiều đơn khác nhau (lỗi).
+     */
+    private function resolveOrderIdFromItems(array $items): int|false|null
+    {
+        $orderItemIds = array_values(array_filter(array_column($items, 'order_item_id')));
+        if (empty($orderItemIds)) {
+            return null;
+        }
+
+        $orderIds = OrderItem::whereIn('id', $orderItemIds)->pluck('order_id')->unique();
+
+        return $orderIds->count() > 1 ? false : $orderIds->first();
+    }
+
+    /**
      * Kiểm tra tồn kho trước khi lưu phiếu xuất (draft).
      * Non-project: dùng inventory_balances (chỉ kiểm tra nếu đã có AVCO).
      * Project: dùng project_inventory_lots.
@@ -437,6 +456,16 @@ class StockExitController extends Controller
         ]);
 
         $purpose = $data['issue_purpose'] ?? null;
+
+        // Nếu items có order_item_id nhưng thiếu order_id header → tự suy ra để tránh
+        // trạng thái nửa vời khiến syncDelivery() không chạy đúng (xem OrderService::resolveOrderIdFromItems)
+        if (empty($data['order_id'])) {
+            $resolved = $this->resolveOrderIdFromItems($data['items']);
+            if ($resolved === false) {
+                return back()->withErrors(['order_id' => 'Các dòng hàng đang trỏ tới nhiều đơn hàng bán khác nhau — vui lòng chọn đơn hàng rõ ràng.'])->withInput();
+            }
+            $data['order_id'] = $resolved;
+        }
 
         // project_id bắt buộc khi issue_purpose=project_cost/project_transfer hoặc item_usage_type=project
         $requiresProject = in_array($purpose, ['project_cost', 'project_transfer']) || $data['item_usage_type'] === 'project';
@@ -677,6 +706,15 @@ class StockExitController extends Controller
         ]);
 
         $purpose = $data['issue_purpose'] ?? null;
+
+        if (empty($data['order_id'])) {
+            $resolved = $this->resolveOrderIdFromItems($data['items']);
+            if ($resolved === false) {
+                return back()->withErrors(['order_id' => 'Các dòng hàng đang trỏ tới nhiều đơn hàng bán khác nhau — vui lòng chọn đơn hàng rõ ràng.'])->withInput();
+            }
+            $data['order_id'] = $resolved;
+        }
+
         $requiresProject = in_array($purpose, ['project_cost', 'project_transfer']) || $data['item_usage_type'] === 'project';
         if ($requiresProject && empty($data['project_id'])) {
             return back()->withErrors(['project_id' => 'Vui lòng chọn dự án khi xuất hàng cho dự án.'])->withInput();
