@@ -78,12 +78,25 @@ class RolePermissionSeeder extends Seeder
             ['module' => 'projects', 'menu_key' => 'projects', 'action' => 'update', 'code' => 'projects.update', 'name' => 'Sửa Dự án', 'description' => 'Chỉnh sửa thông tin dự án'],
             ['module' => 'projects', 'menu_key' => 'projects', 'action' => 'delete', 'code' => 'projects.delete', 'name' => 'Xóa Dự án', 'description' => 'Xóa dự án khỏi hệ thống'],
             ['module' => 'projects', 'menu_key' => 'projects', 'action' => 'complete', 'code' => 'projects.complete', 'name' => 'Hoàn thành Dự án', 'description' => 'Nghiệm thu quyết toán hoàn thành dự án'],
+            ['module' => 'projects', 'menu_key' => 'projects', 'action' => 'manage', 'code' => 'projects.manage', 'name' => 'Quản lý Vật tư/Chi phí PS dự án', 'description' => 'Thêm/sửa/hủy vật tư phát sinh và kết chuyển chi phí PS trong dự án'],
 
             // Chi phí dự án
             ['module' => 'projects', 'menu_key' => 'projects.costs', 'action' => 'view', 'code' => 'projects.costs.view', 'name' => 'Xem Chi phí dự án', 'description' => 'Xem báo cáo chi tiết chi phí dự án'],
             ['module' => 'projects', 'menu_key' => 'projects.costs', 'action' => 'create', 'code' => 'projects.costs.create', 'name' => 'Thêm Chi phí dự án', 'description' => 'Ghi nhận chi phí nguyên vật liệu, nhân công dự án'],
             ['module' => 'projects', 'menu_key' => 'projects.costs', 'action' => 'update', 'code' => 'projects.costs.update', 'name' => 'Sửa Chi phí dự án', 'description' => 'Chỉnh sửa chi phí dự án đã ghi nhận'],
             ['module' => 'projects', 'menu_key' => 'projects.costs', 'action' => 'delete', 'code' => 'projects.costs.delete', 'name' => 'Xóa Chi phí dự án', 'description' => 'Xóa chi phí dự án'],
+
+            // Hợp đồng khoán / Nhà thầu phụ
+            ['module' => 'projects', 'menu_key' => 'projects.subcontracts', 'action' => 'view', 'code' => 'projects.subcontracts.view', 'name' => 'Xem Hợp đồng khoán', 'description' => 'Xem danh sách và chi tiết hợp đồng khoán/nhà thầu phụ'],
+            ['module' => 'projects', 'menu_key' => 'projects.subcontracts', 'action' => 'create', 'code' => 'projects.subcontracts.create', 'name' => 'Thêm Hợp đồng khoán', 'description' => 'Tạo mới hợp đồng khoán/nhà thầu phụ'],
+            ['module' => 'projects', 'menu_key' => 'projects.subcontracts', 'action' => 'update', 'code' => 'projects.subcontracts.update', 'name' => 'Sửa Hợp đồng khoán', 'description' => 'Chỉnh sửa hợp đồng khoán, tạo tạm ứng'],
+            ['module' => 'projects', 'menu_key' => 'projects.subcontracts', 'action' => 'delete', 'code' => 'projects.subcontracts.delete', 'name' => 'Xóa Hợp đồng khoán', 'description' => 'Xóa hợp đồng khoán'],
+            ['module' => 'projects', 'menu_key' => 'projects.subcontracts', 'action' => 'approve', 'code' => 'projects.subcontracts.approve', 'name' => 'Duyệt/Đóng Hợp đồng khoán', 'description' => 'Duyệt hợp đồng nháp và đóng hợp đồng'],
+            ['module' => 'projects', 'menu_key' => 'projects.subcontracts', 'action' => 'cancel', 'code' => 'projects.subcontracts.cancel', 'name' => 'Hủy Hợp đồng khoán', 'description' => 'Hủy hợp đồng, nghiệm thu, tạm ứng, thanh toán'],
+            ['module' => 'projects', 'menu_key' => 'projects.subcontracts', 'action' => 'export', 'code' => 'projects.subcontracts.export', 'name' => 'Xuất Hợp đồng khoán', 'description' => 'Xuất Excel danh sách hợp đồng khoán'],
+            ['module' => 'projects', 'menu_key' => 'projects.subcontracts.acceptance', 'action' => 'create', 'code' => 'projects.subcontracts.acceptance.create', 'name' => 'Tạo Nghiệm thu HĐ khoán', 'description' => 'Tạo biên bản nghiệm thu hợp đồng khoán'],
+            ['module' => 'projects', 'menu_key' => 'projects.subcontracts.acceptance', 'action' => 'post', 'code' => 'projects.subcontracts.acceptance.post', 'name' => 'Ghi sổ Nghiệm thu HĐ khoán', 'description' => 'Ghi sổ nghiệm thu — tạo bút toán N154/C3312 hoặc C3388'],
+            ['module' => 'projects', 'menu_key' => 'projects.subcontracts.payment', 'action' => 'create', 'code' => 'projects.subcontracts.payment.create', 'name' => 'Thanh toán HĐ khoán', 'description' => 'Ghi nhận thanh toán công nợ nhà thầu phụ'],
 
             // Kế toán (accounting.journals)
             ['module' => 'accounting', 'menu_key' => 'accounting.journals', 'action' => 'view', 'code' => 'accounting.journals.view', 'name' => 'Xem Phiếu kế toán', 'description' => 'Xem danh sách và chi tiết phiếu kế toán tổng hợp'],
@@ -117,6 +130,14 @@ class RolePermissionSeeder extends Seeder
             ['module' => 'reports', 'menu_key' => 'reports.revenue', 'action' => 'view', 'code' => 'report.revenue.view', 'name' => 'Xem Báo cáo doanh thu', 'description' => 'Xem báo cáo doanh thu chi tiết'],
             ['module' => 'reports', 'menu_key' => 'reports.revenue', 'action' => 'export', 'code' => 'report.revenue.export', 'name' => 'Xuất Excel Báo cáo doanh thu', 'description' => 'Xuất Excel dữ liệu báo cáo doanh thu'],
             ['module' => 'reports', 'menu_key' => 'reports.revenue', 'action' => 'print', 'code' => 'report.revenue.print', 'name' => 'In/PDF Báo cáo doanh thu', 'description' => 'In hoặc xuất PDF báo cáo doanh thu'],
+
+            ['module' => 'reports', 'menu_key' => 'reports.profit', 'action' => 'view', 'code' => 'reports.profit.view', 'name' => 'Xem Báo cáo lợi nhuận', 'description' => 'Xem báo cáo lợi nhuận theo kỳ (doanh thu, giá vốn, chi phí, LN gộp/thuần)'],
+            ['module' => 'reports', 'menu_key' => 'reports.profit', 'action' => 'export', 'code' => 'reports.profit.export', 'name' => 'Xuất Excel Báo cáo lợi nhuận', 'description' => 'Xuất Excel dữ liệu báo cáo lợi nhuận'],
+
+            ['module' => 'sales', 'menu_key' => 'sales.invoices', 'action' => 'view', 'code' => 'invoices.view', 'name' => 'Xem Hóa đơn bán hàng', 'description' => 'Xem danh sách/chi tiết hóa đơn bán hàng, xuất Excel/PDF'],
+            ['module' => 'sales', 'menu_key' => 'sales.invoices', 'action' => 'create', 'code' => 'invoices.create', 'name' => 'Tạo Hóa đơn bán hàng', 'description' => 'Tạo mới hóa đơn bán hàng'],
+            ['module' => 'sales', 'menu_key' => 'sales.invoices', 'action' => 'update', 'code' => 'invoices.update', 'name' => 'Sửa Hóa đơn bán hàng', 'description' => 'Sửa, đánh dấu đã gửi/đã thanh toán/quá hạn hóa đơn bán hàng'],
+            ['module' => 'sales', 'menu_key' => 'sales.invoices', 'action' => 'cancel', 'code' => 'invoices.cancel', 'name' => 'Hủy Hóa đơn bán hàng', 'description' => 'Hủy/xóa hóa đơn bán hàng'],
 
 
             // --- COMPATIBILITY PERMISSIONS (Old Spatie keys to prevent breaking existing code) ---
@@ -215,6 +236,8 @@ class RolePermissionSeeder extends Seeder
             'warehouse.stock_exits.view', 'reports.financial.view', 'reports.financial.export',
             'reports.cashflow.view', 'reports.cashflow.export',
             'report.revenue.view', 'report.revenue.export', 'report.revenue.print',
+            'reports.profit.view', 'reports.profit.export',
+            'invoices.view', 'invoices.create', 'invoices.update', 'invoices.cancel',
             // Spatie legacy mappings:
             'customers.view', 'products.view', 'warehouse.view', 'quotations.view', 'orders.view',
             'projects.view', 'purchasing.view', 'purchase-returns.view', 'accounting.view', 'accounting.manage',
@@ -251,7 +274,8 @@ class RolePermissionSeeder extends Seeder
             'leads.edit', 'leads.delete', 'products.view', 'services.view', 'price-lists.view',
             'price-lists.create', 'price-lists.edit', 'price-lists.delete', 'quotations.view',
             'quotations.create', 'quotations.edit', 'orders.view', 'orders.create', 'sales-returns.view',
-            'sales-returns.create', 'sales-returns.edit', 'sales-returns.delete', 'accounting.view',
+            'sales-returns.create', 'sales-returns.edit', 'sales-returns.delete',
+            'invoices.view', 'invoices.create', 'invoices.update', 'invoices.cancel',
             'commissions.view', 'commissions.create', 'documents.view', 'documents.create', 'reports.view',
             'report.revenue.view', 'report.revenue.export', 'report.revenue.print'
         ];
@@ -262,6 +286,10 @@ class RolePermissionSeeder extends Seeder
         $projectCodes = [
             'dashboard.view', 'projects.view', 'projects.create', 'projects.update', 'projects.delete', 'projects.complete',
             'projects.costs.view', 'projects.costs.create', 'projects.costs.update', 'projects.costs.delete',
+            'projects.subcontracts.view', 'projects.subcontracts.create', 'projects.subcontracts.update',
+            'projects.subcontracts.delete', 'projects.subcontracts.approve', 'projects.subcontracts.cancel',
+            'projects.subcontracts.export', 'projects.subcontracts.acceptance.create', 'projects.subcontracts.acceptance.post',
+            'projects.subcontracts.payment.create',
             // Legacy:
             'projects.view', 'projects.create', 'projects.manage', 'projects.delete', 'reports.view'
         ];
@@ -283,7 +311,7 @@ class RolePermissionSeeder extends Seeder
             'dashboard.view', 'sales.orders.view', 'purchases.orders.view', 'purchases.invoices.view',
             'warehouse.stock_entries.view', 'warehouse.stock_exits.view', 'projects.view',
             'accounting.journals.view', 'hr.employees.view', 'reports.inventory.view',
-            'reports.financial.view', 'reports.cashflow.view'
+            'reports.financial.view', 'reports.cashflow.view', 'reports.profit.view'
         ];
         $readOnlyRole = Role::where('code', 'read_only')->first();
         $readOnlyRole->permissions()->sync(Permission::whereIn('code', $readOnlyCodes)->pluck('id'));
@@ -375,7 +403,7 @@ class RolePermissionSeeder extends Seeder
         MenuItem::create(['parent_id' => $salesGroup->id, 'key' => 'sales.quotations', 'label' => 'Báo giá', 'route_name' => 'sales.quotations.index', 'icon' => 'document-text', 'required_permission' => 'quotations.view', 'order' => 1]);
         MenuItem::create(['parent_id' => $salesGroup->id, 'key' => 'sales.orders', 'label' => 'Đơn hàng bán', 'route_name' => 'sales.orders.index', 'icon' => 'shopping-bag', 'required_permission' => 'sales.orders.view', 'order' => 2]);
         MenuItem::create(['parent_id' => $salesGroup->id, 'key' => 'sales.contracts', 'label' => 'Hợp đồng bán', 'route_name' => 'sales.contracts.index', 'icon' => 'document', 'required_permission' => 'quotations.view', 'order' => 3]);
-        MenuItem::create(['parent_id' => $salesGroup->id, 'key' => 'sales.invoices', 'label' => 'Hóa đơn bán hàng', 'route_name' => 'accounting.invoices.index', 'icon' => 'document-text', 'required_permission' => 'accounting.view', 'order' => 4]);
+        MenuItem::create(['parent_id' => $salesGroup->id, 'key' => 'sales.invoices', 'label' => 'Hóa đơn bán hàng', 'route_name' => 'accounting.invoices.index', 'icon' => 'document-text', 'required_permission' => 'invoices.view', 'order' => 4]);
         MenuItem::create(['parent_id' => $salesGroup->id, 'key' => 'sales.commissions', 'label' => 'Hoa hồng', 'route_name' => 'sales.commissions.index', 'icon' => 'currency-dollar', 'required_permission' => 'commissions.view', 'order' => 5]);
         MenuItem::create(['parent_id' => $salesGroup->id, 'key' => 'sales.advances', 'label' => 'Ứng trước khách hàng', 'route_name' => 'sales.customer-advances.index', 'icon' => 'cash', 'required_permission' => 'accounting.view', 'order' => 6]);
 
@@ -479,6 +507,7 @@ class RolePermissionSeeder extends Seeder
         MenuItem::create(['parent_id' => $reportsSub->id, 'key' => 'accounting.reports.sheet', 'label' => 'Cân đối kế toán', 'route_name' => 'reports.balance_sheet', 'icon' => 'document', 'required_permission' => 'reports.financial.view', 'order' => 4]);
         MenuItem::create(['parent_id' => $reportsSub->id, 'key' => 'accounting.reports.trial', 'label' => 'Cân đối phát sinh', 'route_name' => 'reports.trial_balance', 'icon' => 'document-text', 'required_permission' => 'reports.financial.view', 'order' => 5]);
         MenuItem::create(['parent_id' => $reportsSub->id, 'key' => 'accounting.reports.revenue', 'label' => 'Báo cáo doanh thu', 'route_name' => 'reports.revenue', 'icon' => 'currency-dollar', 'required_permission' => 'report.revenue.view', 'order' => 6]);
+        MenuItem::create(['parent_id' => $reportsSub->id, 'key' => 'accounting.reports.profit', 'label' => 'Báo cáo lợi nhuận', 'route_name' => 'reports.profit', 'icon' => 'chart-bar', 'required_permission' => 'reports.profit.view', 'order' => 7]);
 
         // Admin Children
         MenuItem::create(['parent_id' => $adminGroup->id, 'key' => 'admin.shareholders', 'label' => 'Cổ đông / Thành viên', 'route_name' => 'admin.shareholders.index', 'icon' => 'library', 'required_permission' => 'admin.users', 'order' => 1]);

@@ -17,6 +17,7 @@ class PurchaseInvoice extends Model
         'subtotal', 'tax_amount', 'total', 'paid_amount', 'advance_allocated_amount',
         'due_date', 'status', 'notes', 'expense_account_code', 'invoice_type', 'created_by',
         'file_path', 'file_name',
+        'subcontract_id', 'subcontract_acceptance_id', 'cost_group',
     ];
 
     protected function casts(): array
@@ -59,6 +60,16 @@ class PurchaseInvoice extends Model
     public function supplier(): BelongsTo
     {
         return $this->belongsTo(Supplier::class);
+    }
+
+    public function subcontract(): BelongsTo
+    {
+        return $this->belongsTo(ProjectSubcontract::class, 'subcontract_id');
+    }
+
+    public function subcontractAcceptance(): BelongsTo
+    {
+        return $this->belongsTo(ProjectSubcontractAcceptance::class, 'subcontract_acceptance_id');
     }
 
     public function creator(): BelongsTo

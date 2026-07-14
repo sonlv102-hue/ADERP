@@ -37,7 +37,8 @@ class CogsAndRevenueAccountTest extends TestCase
         $this->invoiceService = app(InvoiceService::class);
 
         \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'accounting.view', 'guard_name' => 'web']);
-        $this->user->givePermissionTo('accounting.view');
+        \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'invoices.view', 'guard_name' => 'web']);
+        $this->user->givePermissionTo(['accounting.view', 'invoices.view']);
 
         foreach ([
             ['code' => '131',   'name' => 'Phải thu KH',      'type' => 'asset',     'normal_balance' => 'debit',  'is_detail' => false],

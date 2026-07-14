@@ -283,20 +283,53 @@
                 </div>
               </div>
 
-              <!-- Tài khoản Có — chỉ hiện khi type = journal_entry -->
-              <div v-if="dmForm.handling_type === 'journal_entry'" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label class="block text-xs font-medium text-gray-600 mb-1">Tài khoản Có (Cr) <span class="text-red-500">*</span></label>
-                  <input v-model="dmForm.credit_account_code" type="text" placeholder="vd: 3311, 1111, 1121"
-                    class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" />
-                  <p class="text-xs text-gray-400 mt-1">Nợ TK 154 / Có TK {{ dmForm.credit_account_code || '3311' }}</p>
+              <!-- Hình thức ghi nhận + TK Có + VAT — chỉ hiện khi type = journal_entry -->
+              <div v-if="dmForm.handling_type === 'journal_entry'" class="space-y-3">
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Hình thức ghi nhận</label>
+                    <select v-model="dmForm.payment_method" @change="onDmPaymentMethodChange"
+                      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
+                      <option value="">-- Tự nhập TK Có --</option>
+                      <option v-for="(mode, key) in DM_PAYMENT_MODES" :key="key" :value="key">{{ mode.label }}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Tài khoản Có (Cr) <span class="text-red-500">*</span></label>
+                    <input v-model="dmForm.credit_account_code" type="text" placeholder="vd: 3311, 1111, 1121"
+                      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" />
+                    <p class="text-xs text-gray-400 mt-1">Nợ TK 154 / Có TK {{ dmForm.credit_account_code || '3311' }}</p>
+                  </div>
+                  <div class="flex items-end">
+                    <button @click="previewJe" type="button"
+                      class="border border-purple-300 text-purple-700 hover:bg-purple-50 px-3 py-2 rounded-lg text-sm font-medium w-full">
+                      Xem trước bút toán
+                    </button>
+                  </div>
                 </div>
-                <div class="flex items-end">
-                  <button @click="previewJe" type="button"
-                    class="border border-purple-300 text-purple-700 hover:bg-purple-50 px-3 py-2 rounded-lg text-sm font-medium w-full">
-                    Xem trước bút toán
-                  </button>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">VAT %</label>
+                    <input v-model="dmForm.vat_rate" type="number" min="0" max="100" step="1" placeholder="0"
+                      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" @input="computeDmVat" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Tiền VAT</label>
+                    <input v-model="dmForm.vat_amount" type="number" min="0" step="1" placeholder="0"
+                      class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono" />
+                  </div>
+                  <div>
+                    <label class="block text-xs font-medium text-gray-600 mb-1">Tổng cộng</label>
+                    <div class="border border-gray-200 rounded-lg px-3 py-2 text-sm bg-gray-100 font-mono">
+                      {{ formatVnd(dmTotalWithVat) }}
+                    </div>
+                  </div>
                 </div>
+
+                <p v-if="stockWarning" class="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                  ⚠ {{ stockWarning }}
+                </p>
               </div>
 
               <!-- Preview bút toán -->
@@ -331,9 +364,13 @@
                   class="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg text-sm">
                   Hủy
                 </button>
-                <button @click="addDirectMaterial" type="button"
+                <button @click="addDirectMaterial(false)" type="button"
+                  class="border border-gray-400 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium">
+                  Lưu nháp
+                </button>
+                <button @click="addDirectMaterial(true)" type="button"
                   class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
-                  Xác nhận thêm
+                  Ghi nhận
                 </button>
               </div>
             </div>
@@ -381,13 +418,19 @@
                   </td>
                   <td class="px-4 py-2 text-xs font-mono text-gray-500">{{ m.journal_code ?? '—' }}</td>
                   <td class="px-4 py-2">
-                    <span :class="['text-xs px-2 py-0.5 rounded-full font-medium', m.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-600']">
-                      {{ m.status === 'active' ? 'Đang hoạt động' : 'Đã hủy' }}
+                    <span :class="['text-xs px-2 py-0.5 rounded-full font-medium',
+                      m.status === 'active' ? 'bg-green-100 text-green-700' :
+                      m.status === 'draft'  ? 'bg-gray-100 text-gray-600' : 'bg-red-100 text-red-600']">
+                      {{ m.status === 'active' ? 'Đã ghi nhận' : m.status === 'draft' ? 'Nháp' : 'Đã hủy' }}
                     </span>
                     <p v-if="m.cancel_reason" class="text-xs text-gray-400 mt-0.5">{{ m.cancel_reason }}</p>
                   </td>
-                  <td v-if="can('projects.manage')" class="px-4 py-2 text-right">
-                    <button v-if="m.status === 'active'" @click="cancelDirectMaterial(m)"
+                  <td v-if="can('projects.manage')" class="px-4 py-2 text-right whitespace-nowrap">
+                    <button v-if="m.status === 'draft'" @click="postDirectMaterial(m)"
+                      class="text-xs text-primary-600 hover:underline mr-2">
+                      Ghi nhận
+                    </button>
+                    <button v-if="m.status !== 'cancelled'" @click="cancelDirectMaterial(m)"
                       class="text-xs text-red-500 hover:underline">
                       Hủy
                     </button>
@@ -1130,6 +1173,75 @@
           </div>
         </div>
 
+        <!-- Tab: Nhà thầu phụ / Hợp đồng khoán -->
+        <div v-if="activeTab === 'subcontracts'" class="p-5 space-y-4">
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-3 bg-gray-50 rounded-lg p-4 text-sm">
+            <div><p class="text-gray-500 text-xs">Tổng giá trị HĐ</p><p class="font-semibold text-gray-900">{{ formatVnd(subcontractSummary.total_contracts ?? 0) }}</p></div>
+            <div><p class="text-gray-500 text-xs">Tổng đã nghiệm thu</p><p class="font-semibold text-gray-900">{{ formatVnd(subcontractSummary.total_accepted ?? 0) }}</p></div>
+            <div><p class="text-gray-500 text-xs">Tổng vào TK154</p><p class="font-semibold text-gray-900">{{ formatVnd(subcontractSummary.total_wip_154 ?? 0) }}</p></div>
+            <div><p class="text-gray-500 text-xs">Tổng còn phải trả</p><p class="font-semibold text-red-600">{{ formatVnd(subcontractSummary.total_amount_due ?? 0) }}</p></div>
+            <div><p class="text-gray-500 text-xs">Tổng vượt hợp đồng</p><p :class="['font-semibold', (subcontractSummary.total_over_budget ?? 0) > 0 ? 'text-amber-600' : 'text-gray-900']">{{ formatVnd(subcontractSummary.total_over_budget ?? 0) }}</p></div>
+          </div>
+
+          <div class="flex justify-end">
+            <Link v-if="can('projects.subcontracts.create')"
+              :href="route('projects.projects.subcontracts.create', project.id)"
+              class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium">
+              + Thêm hợp đồng
+            </Link>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="min-w-full text-sm">
+              <thead class="bg-gray-50 border-b border-gray-200">
+                <tr>
+                  <th class="text-left px-3 py-2.5 font-semibold text-gray-600">Số HĐ</th>
+                  <th class="text-left px-3 py-2.5 font-semibold text-gray-600">Nhà thầu / đội nhóm</th>
+                  <th class="text-left px-3 py-2.5 font-semibold text-gray-600">Loại</th>
+                  <th class="text-left px-3 py-2.5 font-semibold text-gray-600">Hạng mục</th>
+                  <th class="text-right px-3 py-2.5 font-semibold text-gray-600">Giá trị HĐ</th>
+                  <th class="text-right px-3 py-2.5 font-semibold text-gray-600">Đã tạm ứng</th>
+                  <th class="text-right px-3 py-2.5 font-semibold text-gray-600">Đã nghiệm thu</th>
+                  <th class="text-right px-3 py-2.5 font-semibold text-gray-600">Đã thanh toán</th>
+                  <th class="text-right px-3 py-2.5 font-semibold text-gray-600">Còn phải trả</th>
+                  <th class="text-right px-3 py-2.5 font-semibold text-gray-600">Giữ bảo hành</th>
+                  <th class="text-left px-3 py-2.5 font-semibold text-gray-600">Trạng thái</th>
+                  <th class="px-3 py-2.5" />
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100">
+                <tr v-for="s in subcontracts" :key="s.id" class="hover:bg-gray-50">
+                  <td class="px-3 py-2 font-mono text-gray-700">{{ s.contract_no }}</td>
+                  <td class="px-3 py-2 text-gray-800">{{ s.contractor_name }}</td>
+                  <td class="px-3 py-2 text-xs text-gray-500">{{ s.contractor_type_label }}</td>
+                  <td class="px-3 py-2 text-xs text-gray-500">{{ s.cost_group_label }}</td>
+                  <td class="px-3 py-2 text-right">{{ formatVnd(s.total_amount) }}</td>
+                  <td class="px-3 py-2 text-right">{{ formatVnd(s.advance_amount) }}</td>
+                  <td class="px-3 py-2 text-right">{{ formatVnd(s.accepted_total) }}</td>
+                  <td class="px-3 py-2 text-right">{{ formatVnd(s.paid_total) }}</td>
+                  <td class="px-3 py-2 text-right font-semibold text-red-600">{{ formatVnd(s.amount_due) }}</td>
+                  <td class="px-3 py-2 text-right text-gray-500">{{ formatVnd(s.retention_amount) }}</td>
+                  <td class="px-3 py-2">
+                    <span :class="['text-xs px-2 py-0.5 rounded-full font-medium',
+                      s.status_color === 'green'  ? 'bg-green-100 text-green-700' :
+                      s.status_color === 'blue'   ? 'bg-blue-100 text-blue-700' :
+                      s.status_color === 'yellow' ? 'bg-yellow-100 text-yellow-700' :
+                      s.status_color === 'red'    ? 'bg-red-100 text-red-600' : 'bg-gray-100 text-gray-600']">
+                      {{ s.status_label }}
+                    </span>
+                  </td>
+                  <td class="px-3 py-2 text-right">
+                    <Link :href="route('projects.projects.subcontracts.show', [project.id, s.id])" class="text-xs text-primary-600 hover:underline">Xem</Link>
+                  </td>
+                </tr>
+                <tr v-if="!subcontracts.length">
+                  <td colspan="12" class="px-4 py-10 text-center text-gray-400">Chưa có hợp đồng khoán / nhà thầu phụ nào.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
         <!-- Tab: Đơn mua hàng -->
         <div v-if="activeTab === 'purchase-orders'">
           <table v-if="purchaseOrders.length" class="w-full text-sm">
@@ -1305,6 +1417,8 @@ const props = defineProps({
   stockExitTotal:      { type: Number, default: 0 },
   directMaterials:     { type: Array,  default: () => [] },
   directMaterialTotal: { type: Number, default: 0 },
+  subcontracts:        { type: Array,  default: () => [] },
+  subcontractSummary:  { type: Object, default: () => ({}) },
   funds:               { type: Array,  default: () => [] },
   bankAccounts:        { type: Array,  default: () => [] },
 });
@@ -1320,6 +1434,7 @@ const tabs = computed(() => [
   { id: 'stock-exits',      label: 'Vật tư đã xuất',       count: props.stockExitItems.filter(i => !i.is_cancelled).length },
   { id: 'direct-materials', label: 'Vật tư phát sinh',     count: props.directMaterials.filter(m => m.status === 'active').length },
   { id: 'expenses',         label: 'Chi phí PS',           count: props.project.expenses.length },
+  { id: 'subcontracts',     label: 'Nhà thầu phụ / Hợp đồng khoán', count: props.subcontracts.length },
   { id: 'purchase-orders',    label: 'Đơn mua hàng',      count: props.purchaseOrders.length },
   { id: 'purchase-invoices',  label: 'Hóa đơn mua',       count: props.purchaseInvoices.length },
   { id: 'wip',              label: 'Chi phí dở dang (TK 154)' },
@@ -1770,22 +1885,48 @@ const submitCancelTransfer = () => {
 // Direct material form
 const showDmForm = ref(false);
 const jePreview = ref([]);
+const stockWarning = ref('');
 const handlingTypes = [
   { value: 'tracking_only', label: 'Chỉ theo dõi', description: 'Không tạo bút toán, không cập nhật TK 154.' },
   { value: 'invoice_link',  label: 'Liên kết HĐ mua', description: 'Link vào hóa đơn đã có, không tạo thêm bút toán.' },
   { value: 'journal_entry', label: 'Ghi nhận TK 154', description: 'Tạo bút toán Nợ 154 / Có TK chỉ định.' },
 ];
+const DM_PAYMENT_MODES = {
+  cash:    { label: 'Chi tiền mặt → Có 1111',       credit: '1111' },
+  bank:    { label: 'Chi ngân hàng → Có 1121',       credit: '1121' },
+  advance: { label: 'Quyết toán tạm ứng → Có 141',   credit: '141'  },
+  payable: { label: 'Ghi công nợ NCC → Có 3311',     credit: '3311' },
+  misc:    { label: 'Ghi nhận khác → tự nhập TK Có', credit: ''     },
+};
 const dmForm = reactive({
   product_id: null,
   product_name: '',
   quantity: 1,
   unit_price: 0,
+  vat_rate: '',
+  vat_amount: '',
   occurrence_date: new Date().toISOString().slice(0, 10),
   handling_type: 'tracking_only',
+  payment_method: '',
   credit_account_code: '3311',
   notes: '',
   source_document_ref: '',
 });
+
+const dmTotalWithVat = computed(() =>
+  (parseFloat(dmForm.quantity) || 0) * (parseFloat(dmForm.unit_price) || 0) + (parseFloat(dmForm.vat_amount) || 0)
+);
+
+function onDmPaymentMethodChange() {
+  const creditTk = DM_PAYMENT_MODES[dmForm.payment_method]?.credit;
+  if (creditTk) dmForm.credit_account_code = creditTk;
+}
+
+function computeDmVat() {
+  const amount  = (parseFloat(dmForm.quantity) || 0) * (parseFloat(dmForm.unit_price) || 0);
+  const vatRate = parseFloat(dmForm.vat_rate) || 0;
+  dmForm.vat_amount = vatRate > 0 ? Math.round(amount * vatRate / 100) : '';
+}
 
 const previewJe = async () => {
   if (!dmForm.quantity || !dmForm.unit_price || !dmForm.credit_account_code) return;
@@ -1793,23 +1934,40 @@ const previewJe = async () => {
     const res = await fetch(route('projects.projects.direct-materials.preview', props.project.id), {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.content ?? '' },
-      body: JSON.stringify({ quantity: dmForm.quantity, unit_price: dmForm.unit_price, credit_account_code: dmForm.credit_account_code }),
+      body: JSON.stringify({
+        quantity: dmForm.quantity, unit_price: dmForm.unit_price,
+        vat_rate: dmForm.vat_rate, vat_amount: dmForm.vat_amount,
+        credit_account_code: dmForm.credit_account_code, product_id: dmForm.product_id,
+      }),
     });
     const data = await res.json();
     jePreview.value = data.lines ?? [];
+    stockWarning.value = data.stock_warning ?? '';
   } catch {
     jePreview.value = [];
   }
 };
 
-const addDirectMaterial = () => {
-  router.post(route('projects.projects.direct-materials.store', props.project.id), { ...dmForm }, {
+const addDirectMaterial = (postImmediately) => {
+  router.post(route('projects.projects.direct-materials.store', props.project.id),
+    { ...dmForm, post_immediately: postImmediately }, {
     preserveScroll: true,
     onSuccess: () => {
       showDmForm.value = false;
       jePreview.value = [];
-      Object.assign(dmForm, { product_id: null, product_name: '', quantity: 1, unit_price: 0, notes: '', source_document_ref: '' });
+      stockWarning.value = '';
+      Object.assign(dmForm, {
+        product_id: null, product_name: '', quantity: 1, unit_price: 0,
+        vat_rate: '', vat_amount: '', payment_method: '',
+        notes: '', source_document_ref: '',
+      });
     },
+  });
+};
+
+const postDirectMaterial = (m) => {
+  router.post(route('projects.projects.direct-materials.post', [props.project.id, m.id]), {}, {
+    preserveScroll: true,
   });
 };
 

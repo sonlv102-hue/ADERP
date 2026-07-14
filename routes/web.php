@@ -35,6 +35,7 @@ use App\Http\Controllers\Reports\StockExitDetailReportController;
 use App\Http\Controllers\Reports\CashFlowController;
 use App\Http\Controllers\Reports\CashFlowStatementController;
 use App\Http\Controllers\Reports\IncomeStatementController;
+use App\Http\Controllers\Reports\ProfitReportController;
 use App\Http\Controllers\Reports\RevenueReportController;
 use App\Http\Controllers\Sales\CommissionController;
 use App\Http\Controllers\Sales\ContractController;
@@ -43,6 +44,10 @@ use App\Http\Controllers\Sales\SalesReturnController;
 use App\Http\Controllers\Projects\ProjectController;
 use App\Http\Controllers\Projects\ProjectDirectMaterialController;
 use App\Http\Controllers\Projects\ProjectExtraCostTransferController;
+use App\Http\Controllers\Projects\ProjectSubcontractController;
+use App\Http\Controllers\Projects\ProjectSubcontractAcceptanceController;
+use App\Http\Controllers\Projects\ProjectSubcontractAdvanceController;
+use App\Http\Controllers\Projects\ProjectSubcontractPaymentController;
 use App\Http\Controllers\Projects\ProjectWipCorrectionController;
 use App\Http\Controllers\Projects\TaskController;
 use App\Http\Controllers\Support\TicketController;
@@ -405,8 +410,31 @@ Route::middleware('auth')->group(function () {
             ->name('projects.direct-materials.store');
         Route::post('projects/{project}/direct-materials/preview', [ProjectDirectMaterialController::class, 'preview'])
             ->name('projects.direct-materials.preview');
+        Route::post('projects/{project}/direct-materials/{directMaterial}/post', [ProjectDirectMaterialController::class, 'post'])
+            ->name('projects.direct-materials.post');
         Route::delete('projects/{project}/direct-materials/{directMaterial}', [ProjectDirectMaterialController::class, 'destroy'])
             ->name('projects.direct-materials.destroy');
+
+        // Hợp đồng khoán / Nhà thầu phụ
+        Route::prefix('projects/{project}/subcontracts')->name('projects.subcontracts.')->group(function () {
+            Route::get('create', [ProjectSubcontractController::class, 'create'])->name('create');
+            Route::post('/', [ProjectSubcontractController::class, 'store'])->name('store');
+            Route::get('{subcontract}', [ProjectSubcontractController::class, 'show'])->name('show');
+            Route::get('{subcontract}/edit', [ProjectSubcontractController::class, 'edit'])->name('edit');
+            Route::put('{subcontract}', [ProjectSubcontractController::class, 'update'])->name('update');
+            Route::post('{subcontract}/approve', [ProjectSubcontractController::class, 'approve'])->name('approve');
+            Route::post('{subcontract}/close', [ProjectSubcontractController::class, 'close'])->name('close');
+            Route::post('{subcontract}/cancel', [ProjectSubcontractController::class, 'cancel'])->name('cancel');
+
+            Route::post('{subcontract}/acceptances', [ProjectSubcontractAcceptanceController::class, 'store'])->name('acceptances.store');
+            Route::delete('{subcontract}/acceptances/{acceptance}', [ProjectSubcontractAcceptanceController::class, 'cancel'])->name('acceptances.cancel');
+
+            Route::post('{subcontract}/advances', [ProjectSubcontractAdvanceController::class, 'store'])->name('advances.store');
+            Route::delete('{subcontract}/advances/{advance}', [ProjectSubcontractAdvanceController::class, 'cancel'])->name('advances.cancel');
+
+            Route::post('{subcontract}/payments', [ProjectSubcontractPaymentController::class, 'store'])->name('payments.store');
+            Route::delete('{subcontract}/payments/{payment}', [ProjectSubcontractPaymentController::class, 'cancel'])->name('payments.cancel');
+        });
 
         // WIP Correction (hủy, chuyển dự án, điều chỉnh tài khoản)
         Route::prefix('projects/{project}/wip/{wip}')->name('projects.wip.')->group(function () {
@@ -422,13 +450,21 @@ Route::middleware('auth')->group(function () {
 
     // Accounting - kế toán
     Route::prefix('accounting')->name('accounting.')->middleware('can:accounting.view')->group(function () {
-        Route::get('invoices/export-excel', [InvoiceController::class, 'exportExcel'])->name('invoices.export-excel');
-        Route::resource('invoices', InvoiceController::class);
-        Route::post('invoices/{invoice}/mark-sent',       [InvoiceController::class, 'markSent'])->name('invoices.mark-sent');
-        Route::post('invoices/{invoice}/mark-paid',       [InvoiceController::class, 'markPaid'])->name('invoices.mark-paid');
-        Route::post('invoices/{invoice}/mark-overdue',    [InvoiceController::class, 'markOverdue'])->name('invoices.mark-overdue');
-        Route::post('invoices/{invoice}/cancel',          [InvoiceController::class, 'cancel'])->name('invoices.cancel');
-        Route::get('invoices/{invoice}/pdf',              [InvoiceController::class, 'pdf'])->name('invoices.pdf');
+        // Hóa đơn bán hàng — permission riêng invoices.* (không bắt buộc accounting.view)
+        // để có thể chia sẻ quản lý hóa đơn bán cho role Kinh doanh mà không mở toàn bộ khu vực Kế toán.
+        Route::get('invoices/export-excel', [InvoiceController::class, 'exportExcel'])->name('invoices.export-excel')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.view');
+        Route::get('invoices', [InvoiceController::class, 'index'])->name('invoices.index')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.view');
+        Route::get('invoices/create', [InvoiceController::class, 'create'])->name('invoices.create')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.create');
+        Route::post('invoices', [InvoiceController::class, 'store'])->name('invoices.store')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.create');
+        Route::get('invoices/{invoice}', [InvoiceController::class, 'show'])->name('invoices.show')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.view');
+        Route::get('invoices/{invoice}/edit', [InvoiceController::class, 'edit'])->name('invoices.edit')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.update');
+        Route::put('invoices/{invoice}', [InvoiceController::class, 'update'])->name('invoices.update')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.update');
+        Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy'])->name('invoices.destroy')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.cancel');
+        Route::post('invoices/{invoice}/mark-sent',       [InvoiceController::class, 'markSent'])->name('invoices.mark-sent')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.update');
+        Route::post('invoices/{invoice}/mark-paid',       [InvoiceController::class, 'markPaid'])->name('invoices.mark-paid')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.update');
+        Route::post('invoices/{invoice}/mark-overdue',    [InvoiceController::class, 'markOverdue'])->name('invoices.mark-overdue')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.update');
+        Route::post('invoices/{invoice}/cancel',          [InvoiceController::class, 'cancel'])->name('invoices.cancel')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.cancel');
+        Route::get('invoices/{invoice}/pdf',              [InvoiceController::class, 'pdf'])->name('invoices.pdf')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.view');
         Route::post('invoices/{invoice}/issue-einvoice',  [InvoiceController::class, 'issueEInvoice'])->name('invoices.issue-einvoice')->middleware('can:accounting.manage');
         Route::post('invoices/{invoice}/cancel-einvoice', [InvoiceController::class, 'cancelEInvoice'])->name('invoices.cancel-einvoice')->middleware('can:accounting.manage');
         Route::get('invoices/{invoice}/e-invoice-pdf',    [InvoiceController::class, 'eInvoicePdf'])->name('invoices.e-invoice-pdf');
@@ -806,6 +842,8 @@ Route::middleware('auth')->group(function () {
         Route::get('revenue',                 [RevenueReportController::class,   'index'])->name('revenue')->middleware('can:report.revenue.view');
         Route::get('revenue/export',          [RevenueReportController::class,   'exportExcel'])->name('revenue.export')->middleware('can:report.revenue.export');
         Route::get('revenue/pdf',             [RevenueReportController::class,   'exportPdf'])->name('revenue.pdf')->middleware('can:report.revenue.print');
+        Route::get('profit',                  [ProfitReportController::class,    'index'])->name('profit')->middleware('can:reports.profit.view');
+        Route::get('profit/export',           [ProfitReportController::class,    'exportExcel'])->name('profit.export')->middleware('can:reports.profit.export');
         Route::get('inventory',               [InventoryReportController::class, 'index'])->name('inventory');
         Route::get('inventory/export',        [InventoryReportController::class, 'export'])->name('inventory.export');
         Route::get('stock-card',              [InventoryReportController::class, 'stockCard'])->name('stock_card');

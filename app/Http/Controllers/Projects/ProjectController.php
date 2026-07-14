@@ -198,6 +198,37 @@ class ProjectController extends Controller
             ->whereIn('handling_type', ['invoice_link', 'journal_entry', 'tracking_only'])
             ->sum('total_amount');
 
+        $subcontracts = $project->subcontracts()->with('contractor')->orderByDesc('id')->get();
+        $subcontractRows = $subcontracts->map(fn ($s) => [
+            'id'              => $s->id,
+            'contract_no'     => $s->contract_no,
+            'contractor_name' => $s->contractor_name,
+            'contractor_type' => $s->contractor_type->value,
+            'contractor_type_label' => $s->contractor_type->label(),
+            'cost_group'      => $s->cost_group->value,
+            'cost_group_label'=> $s->cost_group->label(),
+            'total_amount'    => (float) $s->total_amount,
+            'advance_amount'  => (float) $s->advance_amount,
+            'accepted_total'  => $s->acceptedTotal(),
+            'paid_total'      => $s->paidTotal(),
+            'amount_due'      => $s->amountDue(),
+            'retention_amount'=> (float) $s->retention_amount,
+            'status'          => $s->status->value,
+            'status_label'    => $s->status->label(),
+            'status_color'    => $s->status->color(),
+        ]);
+        // Tổng hợp toàn dự án: tổng HĐ, tổng nghiệm thu, tổng hạch toán 154, tổng còn phải trả, tổng vượt hợp đồng
+        $subcontractSummary = [
+            'total_contracts'   => (float) $subcontracts->sum('total_amount'),
+            'total_accepted'    => (float) $subcontracts->sum(fn ($s) => $s->acceptances()->where('status', 'posted')->sum('total_amount')),
+            'total_wip_154'     => (float) $subcontracts->sum(fn ($s) => $s->acceptedTotal()),
+            'total_amount_due'  => (float) $subcontracts->sum(fn ($s) => $s->amountDue()),
+            'total_over_budget' => (float) $subcontracts->sum(function ($s) {
+                $acceptedWithVat = (float) $s->acceptances()->where('status', 'posted')->sum('total_amount');
+                return max(0, $acceptedWithVat - (float) $s->total_amount);
+            }),
+        ];
+
         return Inertia::render('Projects/Show', [
             'project' => [
                 'id'                => $project->id,
@@ -382,6 +413,8 @@ class ProjectController extends Controller
             'stockExitTotal'       => (float) $stockExitTotal,
             'directMaterials'      => $directMaterials,
             'directMaterialTotal'  => (float) $directMaterialTotal,
+            'subcontracts'        => $subcontractRows,
+            'subcontractSummary'  => $subcontractSummary,
             // Budget (hợp đồng khách hàng) vs Actual (hóa đơn mua hàng qua PO dự án)
             'contract_value'  => $project->contract ? (float) $project->contract->value : null,
             'actual_cost_from_pi' => (float) \DB::table('purchase_invoices as pi')

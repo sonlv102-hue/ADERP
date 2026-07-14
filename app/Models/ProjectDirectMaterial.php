@@ -12,8 +12,8 @@ class ProjectDirectMaterial extends Model
 
     protected $fillable = [
         'project_id', 'product_id', 'product_name',
-        'quantity', 'unit_price', 'total_amount',
-        'occurrence_date', 'handling_type',
+        'quantity', 'unit_price', 'vat_rate', 'vat_amount', 'total_amount',
+        'occurrence_date', 'handling_type', 'payment_method',
         'supplier_id', 'credit_account_code',
         'purchase_invoice_item_id', 'journal_entry_id',
         'status', 'cancel_reason', 'cancelled_by', 'cancelled_at',
@@ -27,6 +27,8 @@ class ProjectDirectMaterial extends Model
             'occurrence_date'  => 'date',
             'quantity'         => 'decimal:3',
             'unit_price'       => 'decimal:2',
+            'vat_rate'         => 'decimal:2',
+            'vat_amount'       => 'decimal:2',
             'total_amount'     => 'decimal:2',
             'cancelled_at'     => 'datetime',
         ];

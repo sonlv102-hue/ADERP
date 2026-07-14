@@ -17,6 +17,7 @@ class AttachmentController extends Controller
         'purchase_contract' => \App\Models\PurchaseContract::class,
         'invoice'           => \App\Models\Invoice::class,
         'employee'          => \App\Models\Employee::class,
+        'project_subcontract' => \App\Models\ProjectSubcontract::class,
     ];
 
     public function store(Request $request, string $type, int $id): RedirectResponse

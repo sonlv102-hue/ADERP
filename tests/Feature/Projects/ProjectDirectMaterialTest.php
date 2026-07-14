@@ -28,6 +28,9 @@ use Tests\TestCase;
  * TC5: Direct material loại journal_entry — tạo JE + WIP entry
  * TC6: Hủy direct material đã có JE — JE bị reverse
  * TC7: Tổng hợp stockExitTotal + directMaterialTotal không bị nhân đôi
+ * TC8: journal_entry + payment_method=cash, không VAT — JE Nợ154/Có1111, không tạo stock_movement
+ * TC9: journal_entry + payment_method=payable, có VAT — JE Nợ154/Nợ1331/Có3311, WIP = phần trước VAT
+ * TC10: post_immediately=false → lưu nháp không JE/WIP; gọi route post → ghi nhận JE+WIP
  */
 class ProjectDirectMaterialTest extends TestCase
 {
@@ -64,7 +67,7 @@ class ProjectDirectMaterialTest extends TestCase
         ]);
 
         // Seed tài khoản kế toán cần thiết
-        foreach (['154', '1561', '1331', '3311', '331', '6321', '5111', '131', '1311'] as $code) {
+        foreach (['154', '1561', '1331', '3311', '331', '6321', '5111', '131', '1311', '1111', '1121', '141'] as $code) {
             AccountCode::firstOrCreate(['code' => $code], [
                 'name' => "TK {$code}", 'type' => 'asset', 'normal_balance' => 'debit',
                 'level' => 2, 'is_detail' => true, 'is_active' => true,
@@ -271,5 +274,103 @@ class ProjectDirectMaterialTest extends TestCase
 
         // Hai giá trị không trùng nhau
         $this->assertNotEquals($data['stockExitTotal'], $data['directMaterialTotal']);
+    }
+
+    // ─── TC8: payment_method=cash, không VAT — JE Nợ154/Có1111, không tạo stock_movement ───
+
+    public function test_tc8_cash_payment_method_no_vat(): void
+    {
+        $res = $this->post(route('projects.projects.direct-materials.store', $this->project->id), [
+            'product_name'    => 'VT chi tiền mặt',
+            'quantity'        => 1,
+            'unit_price'      => 250000,
+            'occurrence_date' => '2026-06-15',
+            'handling_type'   => 'journal_entry',
+            'payment_method'  => 'cash',
+        ]);
+        $res->assertSessionHasNoErrors();
+
+        $mat = ProjectDirectMaterial::where('project_id', $this->project->id)->first();
+        $this->assertEquals('cash', $mat->payment_method);
+        $this->assertEquals('1111', $mat->credit_account_code);
+        $this->assertEquals('active', $mat->status);
+
+        $je = $mat->journalEntry;
+        $this->assertNotNull($je);
+        $lines = $je->lines;
+        $this->assertEquals('154', $lines->firstWhere('debit', '>', 0)->account_code);
+        $this->assertEquals('1111', $lines->firstWhere('credit', '>', 0)->account_code);
+        $this->assertEquals(250000, (float) $lines->firstWhere('debit', '>', 0)->debit);
+
+        $wip = ProjectWipEntry::where('source_type', ProjectDirectMaterial::class)->where('source_id', $mat->id)->first();
+        $this->assertNotNull($wip);
+        $this->assertEquals(250000, (float) $wip->amount);
+
+        $this->assertDatabaseCount('stock_movements', 0);
+    }
+
+    // ─── TC9: payment_method=payable, có VAT — JE Nợ154/Nợ1331/Có3311, WIP = phần trước VAT ───
+
+    public function test_tc9_payable_with_vat(): void
+    {
+        $res = $this->post(route('projects.projects.direct-materials.store', $this->project->id), [
+            'product_name'    => 'VT công nợ NCC có VAT',
+            'quantity'        => 1,
+            'unit_price'      => 1000000,
+            'vat_rate'        => 10,
+            'vat_amount'      => 100000,
+            'occurrence_date' => '2026-06-15',
+            'handling_type'   => 'journal_entry',
+            'payment_method'  => 'payable',
+        ]);
+        $res->assertSessionHasNoErrors();
+
+        $mat = ProjectDirectMaterial::where('project_id', $this->project->id)->first();
+        $this->assertEquals(100000, (float) $mat->vat_amount);
+
+        $je = $mat->journalEntry;
+        $lines = $je->lines;
+        $debit154 = $lines->firstWhere('account_code', '154');
+        $debit1331 = $lines->firstWhere('account_code', '1331');
+        $credit3311 = $lines->firstWhere('account_code', '3311');
+
+        $this->assertEquals(1000000, (float) $debit154->debit);
+        $this->assertEquals(100000, (float) $debit1331->debit);
+        $this->assertEquals(1100000, (float) $credit3311->credit);
+
+        $wip = ProjectWipEntry::where('source_type', ProjectDirectMaterial::class)->where('source_id', $mat->id)->first();
+        $this->assertEquals(1000000, (float) $wip->amount, 'WIP phải là phần trước VAT');
+    }
+
+    // ─── TC10: post_immediately=false → nháp; gọi route post → ghi nhận ───────
+
+    public function test_tc10_draft_then_post(): void
+    {
+        $res = $this->post(route('projects.projects.direct-materials.store', $this->project->id), [
+            'product_name'      => 'VT nháp',
+            'quantity'           => 1,
+            'unit_price'         => 400000,
+            'occurrence_date'    => '2026-06-15',
+            'handling_type'      => 'journal_entry',
+            'payment_method'     => 'bank',
+            'post_immediately'   => false,
+        ]);
+        $res->assertSessionHasNoErrors();
+
+        $mat = ProjectDirectMaterial::where('project_id', $this->project->id)->first();
+        $this->assertEquals('draft', $mat->status);
+        $this->assertNull($mat->journal_entry_id);
+        $this->assertEquals(0, ProjectWipEntry::where('source_type', ProjectDirectMaterial::class)->where('source_id', $mat->id)->count());
+
+        $res2 = $this->post(route('projects.projects.direct-materials.post', [$this->project->id, $mat->id]));
+        $res2->assertSessionHasNoErrors();
+
+        $mat->refresh();
+        $this->assertEquals('active', $mat->status);
+        $this->assertNotNull($mat->journal_entry_id);
+
+        $wip = ProjectWipEntry::where('source_type', ProjectDirectMaterial::class)->where('source_id', $mat->id)->first();
+        $this->assertNotNull($wip);
+        $this->assertEquals(400000, (float) $wip->amount);
     }
 }

@@ -87,4 +87,9 @@ class Project extends Model
     {
         return $this->hasMany(ProjectDirectMaterial::class);
     }
+
+    public function subcontracts(): HasMany
+    {
+        return $this->hasMany(ProjectSubcontract::class);
+    }
 }

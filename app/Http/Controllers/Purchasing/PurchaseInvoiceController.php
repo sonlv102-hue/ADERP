@@ -125,6 +125,9 @@ class PurchaseInvoiceController extends Controller
             'notes'                => ['nullable', 'string'],
             'expense_account_code' => ['nullable', 'string', 'max:20'],
             'invoice_type'         => ['nullable', 'string', 'in:' . implode(',', array_column(PurchaseInvoiceType::cases(), 'value'))],
+            'subcontract_id'            => ['nullable', 'exists:project_subcontracts,id'],
+            'subcontract_acceptance_id' => ['nullable', 'exists:project_subcontract_acceptances,id'],
+            'cost_group'                => ['nullable', 'in:subcontractor,labor,equipment,transport,other'],
             'items'                             => ['nullable', 'array'],
             'items.*.description'               => ['nullable', 'string', 'max:255'],
             'items.*.account_code'              => ['required_with:items', 'string', 'max:20', 'exists:account_codes,code'],
@@ -136,6 +139,17 @@ class PurchaseInvoiceController extends Controller
         ]);
 
         $this->validateItemProjectLinks($data['items'] ?? []);
+
+        if (!empty($data['subcontract_id']) && !empty($data['invoice_number'])) {
+            $duplicateAcceptance = \App\Models\ProjectSubcontractAcceptance::where('subcontract_id', $data['subcontract_id'])
+                ->where('invoice_no', $data['invoice_number'])
+                ->where('status', 'posted')
+                ->exists();
+
+            if ($duplicateAcceptance) {
+                return back()->withErrors(['invoice_number' => "Hóa đơn số {$data['invoice_number']} đã được nhập ở Nghiệm thu hợp đồng khoán. Không nhập trùng."])->withInput();
+            }
+        }
 
         $invoice = DB::transaction(function () use ($data) {
             $inv = PurchaseInvoice::create([
