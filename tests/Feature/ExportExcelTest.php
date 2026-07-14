@@ -24,7 +24,8 @@ class ExportExcelTest extends TestCase
         $perms = [
             'quotations.view',
             'accounting.view',
-            'invoices.view',
+            'sales.invoices.view',
+            'sales.invoices.export',
             'purchasing.view',
             'projects.view',
         ];

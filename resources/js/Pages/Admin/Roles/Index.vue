@@ -279,6 +279,7 @@ const newRoleForm = ref({
 const MATRIX_ROWS = [
   'dashboard',
   'sales.orders',
+  'sales.invoices',
   'purchases.orders',
   'purchases.invoices',
   'warehouse.stock_entries',
@@ -308,6 +309,7 @@ const MATRIX_COLUMNS = [
 const ROW_LABELS = {
   'dashboard': 'Bảng điều khiển (Dashboard)',
   'sales.orders': 'Đơn hàng bán',
+  'sales.invoices': 'Quản lý hóa đơn bán',
   'purchases.orders': 'Đơn mua hàng',
   'purchases.invoices': 'Hóa đơn đầu vào',
   'warehouse.stock_entries': 'Nhập kho (Stock Entries)',

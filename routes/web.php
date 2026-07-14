@@ -450,21 +450,24 @@ Route::middleware('auth')->group(function () {
 
     // Accounting - kế toán
     Route::prefix('accounting')->name('accounting.')->middleware('can:accounting.view')->group(function () {
-        // Hóa đơn bán hàng — permission riêng invoices.* (không bắt buộc accounting.view)
+        // Hóa đơn bán hàng — permission riêng sales.invoices.* (không bắt buộc accounting.view)
         // để có thể chia sẻ quản lý hóa đơn bán cho role Kinh doanh mà không mở toàn bộ khu vực Kế toán.
-        Route::get('invoices/export-excel', [InvoiceController::class, 'exportExcel'])->name('invoices.export-excel')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.view');
-        Route::get('invoices', [InvoiceController::class, 'index'])->name('invoices.index')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.view');
-        Route::get('invoices/create', [InvoiceController::class, 'create'])->name('invoices.create')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.create');
-        Route::post('invoices', [InvoiceController::class, 'store'])->name('invoices.store')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.create');
-        Route::get('invoices/{invoice}', [InvoiceController::class, 'show'])->name('invoices.show')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.view');
-        Route::get('invoices/{invoice}/edit', [InvoiceController::class, 'edit'])->name('invoices.edit')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.update');
-        Route::put('invoices/{invoice}', [InvoiceController::class, 'update'])->name('invoices.update')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.update');
-        Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy'])->name('invoices.destroy')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.cancel');
-        Route::post('invoices/{invoice}/mark-sent',       [InvoiceController::class, 'markSent'])->name('invoices.mark-sent')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.update');
-        Route::post('invoices/{invoice}/mark-paid',       [InvoiceController::class, 'markPaid'])->name('invoices.mark-paid')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.update');
-        Route::post('invoices/{invoice}/mark-overdue',    [InvoiceController::class, 'markOverdue'])->name('invoices.mark-overdue')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.update');
-        Route::post('invoices/{invoice}/cancel',          [InvoiceController::class, 'cancel'])->name('invoices.cancel')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.cancel');
-        Route::get('invoices/{invoice}/pdf',              [InvoiceController::class, 'pdf'])->name('invoices.pdf')->withoutMiddleware('can:accounting.view')->middleware('can:invoices.view');
+        Route::get('invoices/export-excel', [InvoiceController::class, 'exportExcel'])->name('invoices.export-excel')->withoutMiddleware('can:accounting.view')->middleware('can:sales.invoices.export');
+        Route::get('invoices', [InvoiceController::class, 'index'])->name('invoices.index')->withoutMiddleware('can:accounting.view')->middleware('can:sales.invoices.view');
+        Route::get('invoices/create', [InvoiceController::class, 'create'])->name('invoices.create')->withoutMiddleware('can:accounting.view')->middleware('can:sales.invoices.create');
+        Route::post('invoices', [InvoiceController::class, 'store'])->name('invoices.store')->withoutMiddleware('can:accounting.view')->middleware('can:sales.invoices.create');
+        Route::get('invoices/{invoice}', [InvoiceController::class, 'show'])->name('invoices.show')->withoutMiddleware('can:accounting.view')->middleware('can:sales.invoices.view');
+        Route::get('invoices/{invoice}/edit', [InvoiceController::class, 'edit'])->name('invoices.edit')->withoutMiddleware('can:accounting.view')->middleware('can:sales.invoices.update');
+        Route::put('invoices/{invoice}', [InvoiceController::class, 'update'])->name('invoices.update')->withoutMiddleware('can:accounting.view')->middleware('can:sales.invoices.update');
+        Route::delete('invoices/{invoice}', [InvoiceController::class, 'destroy'])->name('invoices.destroy')->withoutMiddleware('can:accounting.view')->middleware('can:sales.invoices.delete');
+        // mark-sent là lúc bút toán doanh thu 511/3331 thực sự được ghi sổ — gate bằng sales.invoices.post.
+        Route::post('invoices/{invoice}/mark-sent',       [InvoiceController::class, 'markSent'])->name('invoices.mark-sent')->withoutMiddleware('can:accounting.view')->middleware('can:sales.invoices.post');
+        Route::post('invoices/{invoice}/mark-paid',       [InvoiceController::class, 'markPaid'])->name('invoices.mark-paid')->withoutMiddleware('can:accounting.view')->middleware('can:sales.invoices.update');
+        Route::post('invoices/{invoice}/mark-overdue',    [InvoiceController::class, 'markOverdue'])->name('invoices.mark-overdue')->withoutMiddleware('can:accounting.view')->middleware('can:sales.invoices.update');
+        // cancel() vừa hủy hóa đơn vừa tự động đảo/xóa bút toán liên quan (AccountingService::reverseOrDelete)
+        // — không tách được 2 nghiệp vụ này thành 2 bước riêng, nên route đòi cả 2 permission (AND).
+        Route::post('invoices/{invoice}/cancel',          [InvoiceController::class, 'cancel'])->name('invoices.cancel')->withoutMiddleware('can:accounting.view')->middleware(['can:sales.invoices.cancel', 'can:sales.invoices.reverse']);
+        Route::get('invoices/{invoice}/pdf',              [InvoiceController::class, 'pdf'])->name('invoices.pdf')->withoutMiddleware('can:accounting.view')->middleware('can:sales.invoices.export');
         Route::post('invoices/{invoice}/issue-einvoice',  [InvoiceController::class, 'issueEInvoice'])->name('invoices.issue-einvoice')->middleware('can:accounting.manage');
         Route::post('invoices/{invoice}/cancel-einvoice', [InvoiceController::class, 'cancelEInvoice'])->name('invoices.cancel-einvoice')->middleware('can:accounting.manage');
         Route::get('invoices/{invoice}/e-invoice-pdf',    [InvoiceController::class, 'eInvoicePdf'])->name('invoices.e-invoice-pdf');

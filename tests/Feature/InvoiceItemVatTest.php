@@ -38,8 +38,8 @@ class InvoiceItemVatTest extends TestCase
 
         \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'accounting.view', 'guard_name' => 'web']);
         \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'accounting.manage', 'guard_name' => 'web']);
-        \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'invoices.create', 'guard_name' => 'web']);
-        $this->user->givePermissionTo(['accounting.view', 'accounting.manage', 'invoices.create']);
+        \Spatie\Permission\Models\Permission::firstOrCreate(['name' => 'sales.invoices.create', 'guard_name' => 'web']);
+        $this->user->givePermissionTo(['accounting.view', 'accounting.manage', 'sales.invoices.create']);
 
         foreach ([
             ['code' => '131',   'name' => 'Phải thu KH',      'type' => 'asset',     'normal_balance' => 'debit',  'is_detail' => false],

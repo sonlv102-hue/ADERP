@@ -374,7 +374,10 @@ class InvoiceController extends Controller
             return back()->with('error', 'Không thể xóa hóa đơn đã có thanh toán.');
         }
 
+        $code = $invoice->code;
         $invoice->delete();
+
+        activity()->causedBy(auth()->user())->log("Xóa hóa đơn bán nháp {$code}");
 
         return redirect()->route('accounting.invoices.index')
             ->with('success', 'Đã xóa hóa đơn.');
@@ -388,6 +391,8 @@ class InvoiceController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
+        activity()->causedBy(auth()->user())->performedOn($invoice)->log("Hủy hóa đơn bán {$invoice->code} (đảo bút toán nếu đã ghi sổ)");
+
         return back()->with('success', 'Đã hủy hóa đơn.');
     }
 
@@ -398,6 +403,8 @@ class InvoiceController extends Controller
         } catch (\RuntimeException $e) {
             return back()->with('error', $e->getMessage());
         }
+
+        activity()->causedBy(auth()->user())->performedOn($invoice)->log("Ghi sổ hóa đơn bán {$invoice->code} (bút toán doanh thu 511/3331)");
 
         return back()->with('success', 'Đã gửi hóa đơn.');
     }

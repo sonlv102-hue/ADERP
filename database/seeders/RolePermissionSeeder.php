@@ -134,10 +134,16 @@ class RolePermissionSeeder extends Seeder
             ['module' => 'reports', 'menu_key' => 'reports.profit', 'action' => 'view', 'code' => 'reports.profit.view', 'name' => 'Xem Báo cáo lợi nhuận', 'description' => 'Xem báo cáo lợi nhuận theo kỳ (doanh thu, giá vốn, chi phí, LN gộp/thuần)'],
             ['module' => 'reports', 'menu_key' => 'reports.profit', 'action' => 'export', 'code' => 'reports.profit.export', 'name' => 'Xuất Excel Báo cáo lợi nhuận', 'description' => 'Xuất Excel dữ liệu báo cáo lợi nhuận'],
 
-            ['module' => 'sales', 'menu_key' => 'sales.invoices', 'action' => 'view', 'code' => 'invoices.view', 'name' => 'Xem Hóa đơn bán hàng', 'description' => 'Xem danh sách/chi tiết hóa đơn bán hàng, xuất Excel/PDF'],
-            ['module' => 'sales', 'menu_key' => 'sales.invoices', 'action' => 'create', 'code' => 'invoices.create', 'name' => 'Tạo Hóa đơn bán hàng', 'description' => 'Tạo mới hóa đơn bán hàng'],
-            ['module' => 'sales', 'menu_key' => 'sales.invoices', 'action' => 'update', 'code' => 'invoices.update', 'name' => 'Sửa Hóa đơn bán hàng', 'description' => 'Sửa, đánh dấu đã gửi/đã thanh toán/quá hạn hóa đơn bán hàng'],
-            ['module' => 'sales', 'menu_key' => 'sales.invoices', 'action' => 'cancel', 'code' => 'invoices.cancel', 'name' => 'Hủy Hóa đơn bán hàng', 'description' => 'Hủy/xóa hóa đơn bán hàng'],
+            ['module' => 'sales', 'menu_key' => 'sales.invoices', 'action' => 'view', 'code' => 'sales.invoices.view', 'name' => 'Xem Hóa đơn bán', 'description' => 'Xem danh sách/chi tiết hóa đơn bán hàng'],
+            ['module' => 'sales', 'menu_key' => 'sales.invoices', 'action' => 'create', 'code' => 'sales.invoices.create', 'name' => 'Thêm Hóa đơn bán', 'description' => 'Tạo mới hóa đơn bán hàng'],
+            ['module' => 'sales', 'menu_key' => 'sales.invoices', 'action' => 'update', 'code' => 'sales.invoices.update', 'name' => 'Sửa Hóa đơn bán', 'description' => 'Sửa hóa đơn nháp, đánh dấu đã thanh toán/quá hạn'],
+            ['module' => 'sales', 'menu_key' => 'sales.invoices', 'action' => 'delete', 'code' => 'sales.invoices.delete', 'name' => 'Xóa Hóa đơn bán', 'description' => 'Xóa hóa đơn bán ở trạng thái Nháp/Đã hủy'],
+            ['module' => 'sales', 'menu_key' => 'sales.invoices', 'action' => 'approve', 'code' => 'sales.invoices.approve', 'name' => 'Duyệt Hóa đơn bán', 'description' => 'Duyệt hóa đơn bán hàng (dự phòng — hiện chưa có bước duyệt riêng trong nghiệp vụ)'],
+            ['module' => 'sales', 'menu_key' => 'sales.invoices', 'action' => 'cancel', 'code' => 'sales.invoices.cancel', 'name' => 'Hủy Hóa đơn bán', 'description' => 'Hủy hóa đơn bán hàng'],
+            ['module' => 'sales', 'menu_key' => 'sales.invoices', 'action' => 'post', 'code' => 'sales.invoices.post', 'name' => 'Ghi sổ Hóa đơn bán', 'description' => 'Gửi hóa đơn (ghi nhận bút toán doanh thu 511/3331)'],
+            ['module' => 'sales', 'menu_key' => 'sales.invoices', 'action' => 'reverse', 'code' => 'sales.invoices.reverse', 'name' => 'Đảo bút toán Hóa đơn bán', 'description' => 'Đảo bút toán khi hủy hóa đơn đã ghi sổ'],
+            ['module' => 'sales', 'menu_key' => 'sales.invoices', 'action' => 'export', 'code' => 'sales.invoices.export', 'name' => 'Xuất Hóa đơn bán', 'description' => 'Xuất Excel/PDF hóa đơn bán hàng'],
+            ['module' => 'sales', 'menu_key' => 'sales.invoices', 'action' => 'import', 'code' => 'sales.invoices.import', 'name' => 'Import Hóa đơn bán', 'description' => 'Import hóa đơn bán hàng (dự phòng — hiện chưa có tính năng import)'],
 
 
             // --- COMPATIBILITY PERMISSIONS (Old Spatie keys to prevent breaking existing code) ---
@@ -237,7 +243,8 @@ class RolePermissionSeeder extends Seeder
             'reports.cashflow.view', 'reports.cashflow.export',
             'report.revenue.view', 'report.revenue.export', 'report.revenue.print',
             'reports.profit.view', 'reports.profit.export',
-            'invoices.view', 'invoices.create', 'invoices.update', 'invoices.cancel',
+            'sales.invoices.view', 'sales.invoices.create', 'sales.invoices.update', 'sales.invoices.approve',
+            'sales.invoices.cancel', 'sales.invoices.post', 'sales.invoices.reverse', 'sales.invoices.export',
             // Spatie legacy mappings:
             'customers.view', 'products.view', 'warehouse.view', 'quotations.view', 'orders.view',
             'projects.view', 'purchasing.view', 'purchase-returns.view', 'accounting.view', 'accounting.manage',
@@ -275,7 +282,7 @@ class RolePermissionSeeder extends Seeder
             'price-lists.create', 'price-lists.edit', 'price-lists.delete', 'quotations.view',
             'quotations.create', 'quotations.edit', 'orders.view', 'orders.create', 'sales-returns.view',
             'sales-returns.create', 'sales-returns.edit', 'sales-returns.delete',
-            'invoices.view', 'invoices.create', 'invoices.update', 'invoices.cancel',
+            'sales.invoices.view', 'sales.invoices.create', 'sales.invoices.update', 'sales.invoices.export',
             'commissions.view', 'commissions.create', 'documents.view', 'documents.create', 'reports.view',
             'report.revenue.view', 'report.revenue.export', 'report.revenue.print'
         ];
@@ -311,7 +318,7 @@ class RolePermissionSeeder extends Seeder
             'dashboard.view', 'sales.orders.view', 'purchases.orders.view', 'purchases.invoices.view',
             'warehouse.stock_entries.view', 'warehouse.stock_exits.view', 'projects.view',
             'accounting.journals.view', 'hr.employees.view', 'reports.inventory.view',
-            'reports.financial.view', 'reports.cashflow.view', 'reports.profit.view'
+            'reports.financial.view', 'reports.cashflow.view', 'reports.profit.view', 'sales.invoices.view'
         ];
         $readOnlyRole = Role::where('code', 'read_only')->first();
         $readOnlyRole->permissions()->sync(Permission::whereIn('code', $readOnlyCodes)->pluck('id'));
@@ -403,7 +410,7 @@ class RolePermissionSeeder extends Seeder
         MenuItem::create(['parent_id' => $salesGroup->id, 'key' => 'sales.quotations', 'label' => 'Báo giá', 'route_name' => 'sales.quotations.index', 'icon' => 'document-text', 'required_permission' => 'quotations.view', 'order' => 1]);
         MenuItem::create(['parent_id' => $salesGroup->id, 'key' => 'sales.orders', 'label' => 'Đơn hàng bán', 'route_name' => 'sales.orders.index', 'icon' => 'shopping-bag', 'required_permission' => 'sales.orders.view', 'order' => 2]);
         MenuItem::create(['parent_id' => $salesGroup->id, 'key' => 'sales.contracts', 'label' => 'Hợp đồng bán', 'route_name' => 'sales.contracts.index', 'icon' => 'document', 'required_permission' => 'quotations.view', 'order' => 3]);
-        MenuItem::create(['parent_id' => $salesGroup->id, 'key' => 'sales.invoices', 'label' => 'Hóa đơn bán hàng', 'route_name' => 'accounting.invoices.index', 'icon' => 'document-text', 'required_permission' => 'invoices.view', 'order' => 4]);
+        MenuItem::create(['parent_id' => $salesGroup->id, 'key' => 'sales.invoices', 'label' => 'Hóa đơn bán hàng', 'route_name' => 'accounting.invoices.index', 'icon' => 'document-text', 'required_permission' => 'sales.invoices.view', 'order' => 4]);
         MenuItem::create(['parent_id' => $salesGroup->id, 'key' => 'sales.commissions', 'label' => 'Hoa hồng', 'route_name' => 'sales.commissions.index', 'icon' => 'currency-dollar', 'required_permission' => 'commissions.view', 'order' => 5]);
         MenuItem::create(['parent_id' => $salesGroup->id, 'key' => 'sales.advances', 'label' => 'Ứng trước khách hàng', 'route_name' => 'sales.customer-advances.index', 'icon' => 'cash', 'required_permission' => 'accounting.view', 'order' => 6]);
 
