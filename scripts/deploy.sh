@@ -25,6 +25,13 @@ if [[ "${1:-}" != "--skip-build" ]]; then
     CACHE_BUST=$(git rev-parse HEAD) $COMPOSE build \
         --build-arg CACHE_BUST="$(git rev-parse HEAD)" \
         app queue scheduler
+
+    # nginx serves public/build from the HOST filesystem (read-only bind mount),
+    # while frontend assets are built INSIDE the app image — must extract after every build
+    # or nginx keeps serving stale hashed filenames while the app container renders new ones.
+    log "Extracting frontend assets to host..."
+    rm -rf public/build
+    docker run --rm -v "$APP_DIR/public:/host_public" web_erp-app sh -c 'cp -r /var/www/html/public/build /host_public/'
 fi
 
 # ── Database backup before migration ─────────────────────────────────────────
