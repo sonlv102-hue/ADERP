@@ -3,11 +3,13 @@
 namespace App\Services;
 
 use App\Enums\AccountingPostingStatus;
+use App\Enums\SubcontractCostGroup;
 use App\Models\AccountCode;
 use App\Models\AccountingPeriod;
 use App\Models\AccountingPostingJob;
 use App\Models\JournalEntry;
 use App\Models\JournalEntryLine;
+use App\Models\ProjectWipEntry;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
@@ -36,8 +38,16 @@ class AccountingService
         bool $excludeFromPeriodMovement = false,
         ?string $fiscalPeriod = null,
         bool $skipParentAccountCheck = false,
+        bool $isReversal = false,
     ): JournalEntry {
         $this->validateLines($lines, $skipParentAccountCheck);
+        // reference_type = null chỉ xảy ra với Phiếu kế toán thủ công (JournalEntryController::store()
+        // luôn truyền null) — mọi bút toán tự động từ service khác đều truyền referenceType/sourceType.
+        // isReversal=true (gọi từ reverse()) luôn bỏ qua — dòng đảo có thể biến Có154 (không bắt buộc
+        // project_id) thành Nợ154, không được validate lại hay tạo WIP mới cho bút toán đảo.
+        if ($referenceType === null && ! $isReversal) {
+            $this->validateProjectDimensions($lines);
+        }
         $this->checkPeriodOpen($date);
 
         // fiscal_period tự suy ra từ entry_date nếu không truyền
@@ -45,7 +55,7 @@ class AccountingService
 
         return DB::transaction(function () use (
             $description, $date, $lines, $referenceType, $referenceId, $isAuto, $notes,
-            $journalSourceType, $excludeFromPeriodMovement, $resolvedFiscalPeriod
+            $journalSourceType, $excludeFromPeriodMovement, $resolvedFiscalPeriod, $isReversal
         ) {
             // Bút toán tự động (is_auto=true) tạo ở trạng thái draft để kế toán duyệt trước khi hạch toán
             $status = $isAuto ? 'draft' : 'posted';
@@ -109,20 +119,26 @@ class AccountingService
 
             foreach ($lines as $i => $line) {
                 JournalEntryLine::create([
-                    'journal_entry_id' => $entry->id,
-                    'account_code'     => $line['account'],
-                    'description'      => $line['description'] ?? null,
-                    'debit'            => (int) ($line['debit'] ?? 0),
-                    'credit'           => (int) ($line['credit'] ?? 0),
-                    'sort_order'       => $i,
-                    'project_id'       => $line['project_id'] ?? null,
-                    'partner_type'     => $line['partner_type'] ?? null,
-                    'partner_id'       => $line['partner_id'] ?? null,
+                    'journal_entry_id'   => $entry->id,
+                    'account_code'       => $line['account'],
+                    'description'        => $line['description'] ?? null,
+                    'debit'              => (int) ($line['debit'] ?? 0),
+                    'credit'             => (int) ($line['credit'] ?? 0),
+                    'sort_order'         => $i,
+                    'project_id'         => $line['project_id'] ?? null,
+                    'cost_group'         => $line['cost_group'] ?? null,
+                    'project_cost_note'  => $line['project_cost_note'] ?? null,
+                    'partner_type'       => $line['partner_type'] ?? null,
+                    'partner_id'         => $line['partner_id'] ?? null,
                 ]);
             }
 
             // Mở kỳ kế toán nếu chưa tồn tại
             AccountingPeriod::findOrCreateForDate($date);
+
+            if ($referenceType === null && $entry->status === 'posted' && ! $isReversal) {
+                $this->createWipForManualEntry($entry);
+            }
 
             return $entry;
         });
@@ -135,7 +151,22 @@ class AccountingService
             throw new \RuntimeException('Chỉ có thể duyệt bút toán đang ở trạng thái Nháp.');
         }
         $this->checkPeriodOpen(Carbon::parse($entry->entry_date));
+
+        if ($entry->reference_type === null) {
+            $entry->load('lines');
+            $this->validateProjectDimensions($entry->lines->map(fn ($l) => [
+                'account'    => $l->account_code,
+                'debit'      => (float) $l->debit,
+                'project_id' => $l->project_id,
+                'cost_group' => $l->cost_group,
+            ])->all());
+        }
+
         $entry->update(['status' => 'posted', 'posted_at' => now()]);
+
+        if ($entry->reference_type === null) {
+            $this->createWipForManualEntry($entry);
+        }
     }
 
     /**
@@ -180,6 +211,7 @@ class AccountingService
             'credit'      => (int) $l->debit,
             'description' => $l->description,
             'project_id'  => $l->project_id,
+            'cost_group'  => $l->cost_group,
         ])->all();
 
         // Bút toán đảo luôn posted ngay (isAuto=false) — đây là bút toán điều chỉnh, không cần duyệt lại
@@ -193,9 +225,12 @@ class AccountingService
             isAuto: false,
             notes: $reason,
             skipParentAccountCheck: true,
+            isReversal: true,
         );
 
         $entry->update(['status' => 'reversed', 'reversed_by_id' => $reversal->id]);
+
+        $this->cancelWipForEntry($entry, 'reversed', $reason);
 
         return $reversal;
     }
@@ -223,14 +258,17 @@ class AccountingService
 
             foreach ($lines as $i => $line) {
                 JournalEntryLine::create([
-                    'journal_entry_id' => $entry->id,
-                    'account_code'     => $line['account'],
-                    'description'      => $line['description'] ?? null,
-                    'debit'            => (int) ($line['debit'] ?? 0),
-                    'credit'           => (int) ($line['credit'] ?? 0),
-                    'sort_order'       => $i,
-                    'partner_type'     => $line['partner_type'] ?? null,
-                    'partner_id'       => $line['partner_id'] ?? null,
+                    'journal_entry_id'  => $entry->id,
+                    'account_code'      => $line['account'],
+                    'description'       => $line['description'] ?? null,
+                    'debit'             => (int) ($line['debit'] ?? 0),
+                    'credit'            => (int) ($line['credit'] ?? 0),
+                    'sort_order'        => $i,
+                    'project_id'        => $line['project_id'] ?? null,
+                    'cost_group'        => $line['cost_group'] ?? null,
+                    'project_cost_note' => $line['project_cost_note'] ?? null,
+                    'partner_type'      => $line['partner_type'] ?? null,
+                    'partner_id'        => $line['partner_id'] ?? null,
                 ]);
             }
 
@@ -270,14 +308,17 @@ class AccountingService
             $entry->lines()->delete();
             foreach ($lines as $i => $line) {
                 JournalEntryLine::create([
-                    'journal_entry_id' => $entry->id,
-                    'account_code'     => $line['account'],
-                    'description'      => $line['description'] ?? null,
-                    'debit'            => (int) ($line['debit'] ?? 0),
-                    'credit'           => (int) ($line['credit'] ?? 0),
-                    'sort_order'       => $i,
-                    'partner_type'     => $line['partner_type'] ?? null,
-                    'partner_id'       => $line['partner_id'] ?? null,
+                    'journal_entry_id'  => $entry->id,
+                    'account_code'      => $line['account'],
+                    'description'       => $line['description'] ?? null,
+                    'debit'             => (int) ($line['debit'] ?? 0),
+                    'credit'            => (int) ($line['credit'] ?? 0),
+                    'sort_order'        => $i,
+                    'project_id'        => $line['project_id'] ?? null,
+                    'cost_group'        => $line['cost_group'] ?? null,
+                    'project_cost_note' => $line['project_cost_note'] ?? null,
+                    'partner_type'      => $line['partner_type'] ?? null,
+                    'partner_id'        => $line['partner_id'] ?? null,
                 ]);
             }
         });
@@ -537,5 +578,100 @@ class AccountingService
                 "Kỳ kế toán {$period->label()} đã đóng/khóa. Không thể hạch toán."
             );
         }
+    }
+
+    /** TK chi phí trực tiếp dự án (621 vật tư / 622 nhân công / 623 máy / 627 chung). */
+    private const PROJECT_DIRECT_COST_PREFIXES = ['621', '622', '623', '627'];
+
+    /**
+     * Bắt buộc project_id/cost_group cho Phiếu kế toán thủ công (reference_type=null).
+     * Chỉ áp dụng khi tạo/duyệt bút toán thủ công — không ảnh hưởng các service auto-posting khác
+     * (StockService, ProjectWipService...) vì các nơi đó luôn truyền referenceType/sourceType.
+     */
+    private function validateProjectDimensions(array $lines): void
+    {
+        foreach ($lines as $line) {
+            $account = (string) ($line['account'] ?? '');
+            $debit   = (float) ($line['debit'] ?? 0);
+
+            if ($debit <= 0) {
+                continue;
+            }
+
+            if (str_starts_with($account, '154')) {
+                if (empty($line['project_id'])) {
+                    throw new \InvalidArgumentException('Dòng Nợ TK154 phải chọn Dự án.');
+                }
+                if (empty($line['cost_group'])) {
+                    throw new \InvalidArgumentException('Dòng Nợ TK154 phải chọn Nhóm chi phí.');
+                }
+                continue;
+            }
+
+            // 621/622/623/627: chỉ bắt buộc project_id khi dòng đã được đánh dấu là chi phí dự án
+            // (đánh dấu = người dùng đã chọn cost_group cho dòng đó).
+            if (in_array(substr($account, 0, 3), self::PROJECT_DIRECT_COST_PREFIXES, true)
+                && ! empty($line['cost_group']) && empty($line['project_id'])
+            ) {
+                throw new \InvalidArgumentException(
+                    "Dòng Nợ TK{$account} đã chọn Nhóm chi phí (chi phí dự án) nhưng chưa chọn Dự án."
+                );
+            }
+        }
+    }
+
+    /**
+     * Tạo project_wip_entries cho các dòng Nợ TK154 đủ điều kiện (có project_id + cost_group)
+     * khi một Phiếu kế toán thủ công được post. Chống trùng qua exists() + unique index DB.
+     */
+    public function createWipForManualEntry(JournalEntry $entry): void
+    {
+        $entry->load('lines');
+
+        foreach ($entry->lines as $line) {
+            if (! str_starts_with($line->account_code, '154')
+                || (float) $line->debit <= 0
+                || ! $line->project_id
+                || ! $line->cost_group
+            ) {
+                continue;
+            }
+
+            $exists = ProjectWipEntry::where('source_type', 'manual_journal_entry')
+                ->where('journal_entry_line_id', $line->id)
+                ->exists();
+
+            if ($exists) {
+                continue;
+            }
+
+            ProjectWipEntry::create([
+                'project_id'             => $line->project_id,
+                'source_type'            => 'manual_journal_entry',
+                'source_id'              => $entry->id,
+                'journal_entry_id'       => $entry->id,
+                'journal_entry_line_id'  => $line->id,
+                'cost_type'              => SubcontractCostGroup::tryFrom($line->cost_group)?->wipCostType() ?? $line->cost_group,
+                'amount'                 => (int) $line->debit,
+                'description'            => $line->project_cost_note ?: ($line->description ?: $entry->description),
+                'entry_date'             => $entry->entry_date,
+                'created_by'             => $entry->created_by,
+                'status'                 => 'active',
+            ]);
+        }
+    }
+
+    /** Soft-cancel WIP entries của Phiếu kế toán thủ công khi bút toán bị đảo/hủy — không hard-delete. */
+    public function cancelWipForEntry(JournalEntry $entry, string $newStatus, ?string $reason = null): void
+    {
+        ProjectWipEntry::where('source_type', 'manual_journal_entry')
+            ->where('journal_entry_id', $entry->id)
+            ->where('status', 'active')
+            ->update([
+                'status'        => $newStatus,
+                'cancel_reason' => $reason,
+                'cancelled_by'  => auth()->id(),
+                'cancelled_at'  => now(),
+            ]);
     }
 }

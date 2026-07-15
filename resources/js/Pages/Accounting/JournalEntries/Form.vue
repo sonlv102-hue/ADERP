@@ -1,6 +1,6 @@
 ﻿<template>
   <AppLayout>
-    <div class="max-w-3xl mx-auto space-y-6">
+    <div class="max-w-6xl mx-auto space-y-6">
       <div class="flex items-center gap-3">
         <Link :href="backUrl" class="text-gray-400 hover:text-gray-600">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -40,6 +40,21 @@
             class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500" />
         </div>
 
+        <div>
+          <label class="block text-sm font-medium text-gray-700 mb-1">
+            Dự án mặc định
+            <span class="text-gray-400 font-normal">(tùy chọn — tự điền cho dòng mới thêm vào)</span>
+          </label>
+          <RemoteSearchSelect
+            v-model="defaultProjectId"
+            :search-url="route('search.projects')"
+            :display-text="defaultProjectDisplay"
+            placeholder="— Chọn dự án mặc định (không bắt buộc) —"
+            empty-text="Không tìm thấy dự án"
+            @change="opt => { defaultProjectDisplay = opt ? `${opt.code} - ${opt.label}` : ''; }"
+          />
+        </div>
+
         <!-- Journal Lines -->
         <div>
           <div class="flex items-center justify-between mb-3">
@@ -53,20 +68,22 @@
             </button>
           </div>
 
-          <div class="overflow-hidden rounded-lg border border-gray-200">
+          <div class="rounded-lg border border-gray-200 overflow-x-auto">
             <table class="min-w-full text-sm">
               <thead class="bg-gray-50">
                 <tr>
                   <th class="text-left px-3 py-2 font-semibold text-gray-600 w-44">Tài khoản</th>
                   <th class="text-left px-3 py-2 font-semibold text-gray-600">Diễn giải dòng</th>
-                  <th class="text-right px-3 py-2 font-semibold text-gray-600 w-36">Nợ (Debit)</th>
-                  <th class="text-right px-3 py-2 font-semibold text-gray-600 w-36">Có (Credit)</th>
+                  <th class="text-right px-3 py-2 font-semibold text-gray-600 w-32">Nợ (Debit)</th>
+                  <th class="text-right px-3 py-2 font-semibold text-gray-600 w-32">Có (Credit)</th>
+                  <th class="text-left px-3 py-2 font-semibold text-gray-600 w-44">Dự án</th>
+                  <th class="text-left px-3 py-2 font-semibold text-gray-600 w-36">Nhóm chi phí</th>
                   <th class="px-3 py-2 w-8" />
                 </tr>
               </thead>
               <tbody class="divide-y divide-gray-100">
                 <tr v-for="(line, i) in form.lines" :key="i">
-                  <td class="px-3 py-2">
+                  <td class="px-3 py-2 align-top">
                     <RemoteSearchSelect
                       v-model="line.account_code"
                       :search-url="route('search.account-codes')"
@@ -77,19 +94,42 @@
                       @change="opt => onAccountSelect(line, opt)"
                     />
                   </td>
-                  <td class="px-3 py-2">
+                  <td class="px-3 py-2 align-top">
                     <input v-model="line.description" placeholder="Diễn giải..."
+                      @blur="suggestCostGroup(line)"
                       class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary-500" />
+                    <input v-if="isProjectAccount(line.account_code)" v-model="line.project_cost_note"
+                      placeholder="Hạng mục / ghi chú chi tiết (tùy chọn)..."
+                      class="w-full border border-gray-200 rounded px-2 py-1 text-[11px] text-gray-500 mt-1 focus:outline-none focus:ring-1 focus:ring-primary-500" />
                   </td>
-                  <td class="px-3 py-2">
+                  <td class="px-3 py-2 align-top">
                     <input v-model.number="line.debit" type="number" min="0" step="any" @input="line.credit = 0"
                       class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-primary-500" />
                   </td>
-                  <td class="px-3 py-2">
+                  <td class="px-3 py-2 align-top">
                     <input v-model.number="line.credit" type="number" min="0" step="any" @input="line.debit = 0"
                       class="w-full border border-gray-300 rounded px-2 py-1.5 text-xs text-right focus:outline-none focus:ring-1 focus:ring-primary-500" />
                   </td>
-                  <td class="px-3 py-2 text-center">
+                  <td class="px-3 py-2 align-top">
+                    <RemoteSearchSelect
+                      v-model="line.project_id"
+                      :search-url="route('search.projects')"
+                      :display-text="line._projectDisplay"
+                      placeholder="— Không gắn dự án —"
+                      empty-text="Không tìm thấy dự án"
+                      :has-error="isMissingProject(line)"
+                      @change="opt => { line._projectDisplay = opt ? `${opt.code} - ${opt.label}` : ''; }"
+                    />
+                    <p v-if="isMissingProject(line)" class="text-red-600 text-[11px] mt-0.5">Bắt buộc chọn Dự án</p>
+                  </td>
+                  <td class="px-3 py-2 align-top">
+                    <select v-model="line.cost_group" class="erp-input text-xs">
+                      <option value="">— Không chọn —</option>
+                      <option v-for="opt in costGroupOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+                    </select>
+                    <p v-if="isMissingCostGroup(line)" class="text-red-600 text-[11px] mt-0.5">Bắt buộc chọn Nhóm chi phí</p>
+                  </td>
+                  <td class="px-3 py-2 text-center align-top">
                     <button type="button" v-if="form.lines.length > 2" @click="removeLine(i)"
                       class="text-red-400 hover:text-red-600">
                       <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -108,7 +148,7 @@
                   <td class="px-3 py-2 text-right text-sm font-bold" :class="isBalanced ? 'text-gray-800' : 'text-red-600'">
                     {{ formatVnd(totalCredit) }}
                   </td>
-                  <td />
+                  <td colspan="3" />
                 </tr>
               </tfoot>
             </table>
@@ -169,7 +209,7 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import { Link, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
@@ -185,6 +225,50 @@ const { formatVnd } = useCurrency();
 const isEditing = computed(() => !!props.entry);
 const today = new Date().toISOString().slice(0, 10);
 
+// TK xuất hiện trong dòng chi phí dự án — dùng để hiện ô "Hạng mục/ghi chú" và gợi ý cost_group.
+// 154: chi phí SXKD dở dang; 621/622/623/627: chi phí trực tiếp dự án trước khi kết chuyển 154.
+const PROJECT_ACCOUNT_PREFIXES = ['154', '621', '622', '623', '627'];
+function isProjectAccount(accountCode) {
+  return !!accountCode && PROJECT_ACCOUNT_PREFIXES.some(p => accountCode.startsWith(p));
+}
+
+const costGroupOptions = [
+  { value: 'material',      label: 'Vật tư / Hàng hóa' },
+  { value: 'labor',         label: 'Nhân công' },
+  { value: 'subcontractor', label: 'Nhà thầu phụ' },
+  { value: 'equipment',     label: 'Máy thi công / thiết bị' },
+  { value: 'transport',     label: 'Vận chuyển' },
+  { value: 'overhead',      label: 'Chi phí chung' },
+  { value: 'other',         label: 'Khác' },
+];
+
+// Gợi ý cost_group theo từ khóa trong diễn giải — chỉ gợi ý khi TK154 và cost_group đang trống,
+// người dùng vẫn phải tự xác nhận (yêu cầu 7: chỉ gợi ý, không tự ép chọn).
+const COST_GROUP_KEYWORDS = [
+  { keywords: ['lương', 'nhân công', 'kỹ thuật'], value: 'labor' },
+  { keywords: ['nhà thầu', 'khoán', 'thi công thuê ngoài'], value: 'subcontractor' },
+  { keywords: ['vận chuyển'], value: 'transport' },
+  { keywords: ['máy', 'thiết bị', 'xe nâng'], value: 'equipment' },
+];
+function suggestCostGroup(line) {
+  if (!line.account_code?.startsWith('154') || line.cost_group || !line.description) return;
+  const text = line.description.toLowerCase();
+  const match = COST_GROUP_KEYWORDS.find(k => k.keywords.some(kw => text.includes(kw)));
+  if (match) line.cost_group = match.value;
+}
+
+const defaultProjectId = ref(null);
+const defaultProjectDisplay = ref('');
+
+function makeLine(overrides = {}) {
+  return {
+    account_code: '', _accountDisplay: '', description: '', debit: 0, credit: 0,
+    project_id: defaultProjectId.value, _projectDisplay: defaultProjectDisplay.value,
+    cost_group: '', project_cost_note: '',
+    ...overrides,
+  };
+}
+
 const form = useForm({
   entry_date:    props.entry?.entry_date ?? today,
   description:   props.entry?.description ?? '',
@@ -193,17 +277,26 @@ const form = useForm({
   save_as_draft: false,
   lines: props.entry?.lines?.length
     ? props.entry.lines.map(l => ({
-        account_code:    l.account_code,
-        _accountDisplay: l.account_code && l.account_name ? `${l.account_code} - ${l.account_name}` : (l.account_code ?? ''),
-        description:     l.description ?? '',
-        debit:           l.debit,
-        credit:          l.credit,
+        account_code:       l.account_code,
+        _accountDisplay:    l.account_code && l.account_name ? `${l.account_code} - ${l.account_name}` : (l.account_code ?? ''),
+        description:        l.description ?? '',
+        debit:              l.debit,
+        credit:             l.credit,
+        project_id:         l.project_id ?? null,
+        _projectDisplay:    l.project_name ?? '',
+        cost_group:         l.cost_group ?? '',
+        project_cost_note:  l.project_cost_note ?? '',
       }))
-    : [
-        { account_code: '', _accountDisplay: '', description: '', debit: 0, credit: 0 },
-        { account_code: '', _accountDisplay: '', description: '', debit: 0, credit: 0 },
-      ],
+    : [makeLine(), makeLine()],
 });
+
+// Dòng Nợ TK154 bắt buộc project_id/cost_group (khớp AccountingService::validateProjectDimensions).
+function isMissingProject(line) {
+  return line.account_code?.startsWith('154') && Number(line.debit) > 0 && !line.project_id;
+}
+function isMissingCostGroup(line) {
+  return line.account_code?.startsWith('154') && Number(line.debit) > 0 && !line.cost_group;
+}
 
 const backUrl = computed(() =>
   isEditing.value
@@ -225,7 +318,7 @@ const totalCredit = computed(() => form.lines.reduce((s, l) => s + (Number(l.cre
 const isBalanced  = computed(() => Math.abs(totalDebit.value - totalCredit.value) < 1 && totalDebit.value > 0);
 
 function addLine() {
-  form.lines.push({ account_code: '', _accountDisplay: '', description: '', debit: 0, credit: 0 });
+  form.lines.push(makeLine());
 }
 function removeLine(i) {
   form.lines.splice(i, 1);
@@ -239,7 +332,7 @@ function onAccountSelect(line, opt) {
 function submitEdit() {
   form.transform(d => ({
     ...d,
-    lines: d.lines.map(({ _accountDisplay, ...rest }) => rest),
+    lines: d.lines.map(({ _accountDisplay, _projectDisplay, ...rest }) => rest),
   })).put(route('accounting.journal-entries.update', props.entry.id));
 }
 
@@ -247,7 +340,7 @@ function submitDraft() {
   form.save_as_draft = true;
   form.transform(d => ({
     ...d,
-    lines: d.lines.map(({ _accountDisplay, ...rest }) => rest),
+    lines: d.lines.map(({ _accountDisplay, _projectDisplay, ...rest }) => rest),
   })).post(route('accounting.journal-entries.store'));
 }
 
@@ -255,7 +348,7 @@ function submitPost() {
   form.save_as_draft = false;
   form.transform(d => ({
     ...d,
-    lines: d.lines.map(({ _accountDisplay, ...rest }) => rest),
+    lines: d.lines.map(({ _accountDisplay, _projectDisplay, ...rest }) => rest),
   })).post(route('accounting.journal-entries.store'));
 }
 </script>

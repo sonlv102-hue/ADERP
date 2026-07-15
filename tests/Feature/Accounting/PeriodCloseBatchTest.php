@@ -4,8 +4,10 @@ namespace Tests\Feature\Accounting;
 
 use App\Models\AccountCode;
 use App\Models\AccountingPeriod;
+use App\Models\Customer;
 use App\Models\JournalEntry;
 use App\Models\PeriodCloseBatch;
+use App\Models\Project;
 use App\Models\User;
 use App\Services\Accounting\PeriodCloseService;
 use App\Services\AccountingService;
@@ -21,6 +23,7 @@ class PeriodCloseBatchTest extends TestCase
     private AccountingService  $accounting;
     private User               $user;
     private AccountingPeriod   $period;
+    private Project            $project;
 
     protected function setUp(): void
     {
@@ -66,6 +69,12 @@ class PeriodCloseBatchTest extends TestCase
                 'parent_code' => $parent, 'level' => $lvl, 'is_detail' => $detail, 'is_active' => true,
             ]);
         }
+
+        $customer = Customer::create(['code' => 'KH-PCB', 'name' => 'KH PeriodClose Test', 'is_active' => true]);
+        $this->project = Project::create([
+            'code' => 'DA-PCB', 'name' => 'Dự án PeriodClose Test', 'status' => 'in_progress',
+            'customer_id' => $customer->id, 'created_by' => $this->user->id,
+        ]);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -149,7 +158,7 @@ class PeriodCloseBatchTest extends TestCase
     public function test_preview_warns_info_for_wip_balance(): void
     {
         $this->postJE([
-            ['account' => '154',  'debit' => 5_000_000, 'credit' => 0,         'description' => 'WIP'],
+            ['account' => '154',  'debit' => 5_000_000, 'credit' => 0,         'description' => 'WIP', 'project_id' => $this->project->id, 'cost_group' => 'material'],
             ['account' => '1111', 'debit' => 0,          'credit' => 5_000_000, 'description' => 'WIP'],
         ]);
 
@@ -231,7 +240,7 @@ class PeriodCloseBatchTest extends TestCase
     {
         $this->makeRevenueCogs();
         $this->postJE([
-            ['account' => '154',  'debit' => 5_000_000, 'credit' => 0,         'description' => 'WIP'],
+            ['account' => '154',  'debit' => 5_000_000, 'credit' => 0,         'description' => 'WIP', 'project_id' => $this->project->id, 'cost_group' => 'material'],
             ['account' => '1111', 'debit' => 0,          'credit' => 5_000_000, 'description' => 'WIP'],
         ]);
         $this->postJE([

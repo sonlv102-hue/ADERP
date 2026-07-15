@@ -78,7 +78,7 @@ class JournalEntryController extends Controller
                 ->with('error', 'Chỉ có thể sửa bút toán ở trạng thái Nháp.');
         }
 
-        $journalEntry->load('lines.account');
+        $journalEntry->load('lines.account', 'lines.project');
 
         return Inertia::render('Accounting/JournalEntries/Form', [
             'entry'    => [
@@ -90,11 +90,15 @@ class JournalEntryController extends Controller
                 'is_auto'        => $journalEntry->is_auto,
                 'edited_by_user' => $journalEntry->edited_by_user,
                 'lines'          => $journalEntry->lines->map(fn ($l) => [
-                    'account_code'    => $l->account_code,
-                    'account_name'    => $l->account?->name ?? '',
-                    'description'     => $l->description,
-                    'debit'           => (float) $l->debit,
-                    'credit'          => (float) $l->credit,
+                    'account_code'      => $l->account_code,
+                    'account_name'      => $l->account?->name ?? '',
+                    'description'       => $l->description,
+                    'debit'             => (float) $l->debit,
+                    'credit'            => (float) $l->credit,
+                    'project_id'        => $l->project_id,
+                    'project_name'      => $l->project ? "{$l->project->code} - {$l->project->name}" : '',
+                    'cost_group'        => $l->cost_group,
+                    'project_cost_note' => $l->project_cost_note,
                 ])->values()->toArray(),
             ],
             'nextCode' => null,
@@ -104,22 +108,28 @@ class JournalEntryController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'entry_date'           => ['required', 'date'],
-            'description'          => ['required', 'string', 'max:500'],
-            'notes'                => ['nullable', 'string', 'max:1000'],
-            'save_as_draft'        => ['nullable', 'boolean'],
-            'lines'                => ['required', 'array', 'min:2'],
-            'lines.*.account_code' => ['required', 'exists:account_codes,code'],
-            'lines.*.description'  => ['nullable', 'string', 'max:500'],
-            'lines.*.debit'        => ['required', 'numeric', 'min:0'],
-            'lines.*.credit'       => ['required', 'numeric', 'min:0'],
+            'entry_date'                => ['required', 'date'],
+            'description'               => ['required', 'string', 'max:500'],
+            'notes'                     => ['nullable', 'string', 'max:1000'],
+            'save_as_draft'             => ['nullable', 'boolean'],
+            'lines'                     => ['required', 'array', 'min:2'],
+            'lines.*.account_code'      => ['required', 'exists:account_codes,code'],
+            'lines.*.description'       => ['nullable', 'string', 'max:500'],
+            'lines.*.debit'             => ['required', 'numeric', 'min:0'],
+            'lines.*.credit'            => ['required', 'numeric', 'min:0'],
+            'lines.*.project_id'        => ['nullable', 'exists:projects,id'],
+            'lines.*.cost_group'        => ['nullable', 'string', 'in:material,labor,subcontractor,equipment,transport,overhead,other'],
+            'lines.*.project_cost_note' => ['nullable', 'string', 'max:255'],
         ]);
 
         $lines = array_map(fn ($l) => [
-            'account'     => $l['account_code'],
-            'description' => $l['description'] ?? null,
-            'debit'       => (int) $l['debit'],
-            'credit'      => (int) $l['credit'],
+            'account'            => $l['account_code'],
+            'description'        => $l['description'] ?? null,
+            'debit'              => (int) $l['debit'],
+            'credit'             => (int) $l['credit'],
+            'project_id'         => $l['project_id'] ?? null,
+            'cost_group'         => $l['cost_group'] ?? null,
+            'project_cost_note'  => $l['project_cost_note'] ?? null,
         ], $data['lines']);
 
         try {
@@ -152,7 +162,7 @@ class JournalEntryController extends Controller
 
     public function show(JournalEntry $journalEntry): Response
     {
-        $journalEntry->load('lines.account', 'creator', 'voidedBy');
+        $journalEntry->load('lines.account', 'lines.project', 'creator', 'voidedBy');
 
         return Inertia::render('Accounting/JournalEntries/Show', [
             'entry' => [
@@ -179,12 +189,15 @@ class JournalEntryController extends Controller
                 'total_debit'    => $journalEntry->totalDebit(),
                 'total_credit'   => $journalEntry->totalCredit(),
                 'lines'          => $journalEntry->lines->map(fn ($l) => [
-                    'id'           => $l->id,
-                    'account_code' => $l->account_code,
-                    'account_name' => $l->account?->name ?? '—',
-                    'description'  => $l->description,
-                    'debit'        => (float) $l->debit,
-                    'credit'       => (float) $l->credit,
+                    'id'                => $l->id,
+                    'account_code'      => $l->account_code,
+                    'account_name'      => $l->account?->name ?? '—',
+                    'description'       => $l->description,
+                    'debit'             => (float) $l->debit,
+                    'credit'            => (float) $l->credit,
+                    'project_name'      => $l->project ? "{$l->project->code} - {$l->project->name}" : null,
+                    'cost_group'        => $l->cost_group,
+                    'project_cost_note' => $l->project_cost_note,
                 ]),
             ],
         ]);
@@ -193,14 +206,17 @@ class JournalEntryController extends Controller
     public function update(Request $request, JournalEntry $journalEntry): RedirectResponse
     {
         $data = $request->validate([
-            'description'          => ['required', 'string', 'max:500'],
-            'notes'                => ['nullable', 'string', 'max:1000'],
-            'edit_reason'          => ['nullable', 'string', 'max:500'],
-            'lines'                => ['nullable', 'array', 'min:2'],
-            'lines.*.account_code' => ['required_with:lines', 'exists:account_codes,code'],
-            'lines.*.description'  => ['nullable', 'string', 'max:500'],
-            'lines.*.debit'        => ['required_with:lines', 'numeric', 'min:0'],
-            'lines.*.credit'       => ['required_with:lines', 'numeric', 'min:0'],
+            'description'               => ['required', 'string', 'max:500'],
+            'notes'                     => ['nullable', 'string', 'max:1000'],
+            'edit_reason'               => ['nullable', 'string', 'max:500'],
+            'lines'                     => ['nullable', 'array', 'min:2'],
+            'lines.*.account_code'      => ['required_with:lines', 'exists:account_codes,code'],
+            'lines.*.description'       => ['nullable', 'string', 'max:500'],
+            'lines.*.debit'             => ['required_with:lines', 'numeric', 'min:0'],
+            'lines.*.credit'            => ['required_with:lines', 'numeric', 'min:0'],
+            'lines.*.project_id'        => ['nullable', 'exists:projects,id'],
+            'lines.*.cost_group'        => ['nullable', 'string', 'in:material,labor,subcontractor,equipment,transport,overhead,other'],
+            'lines.*.project_cost_note' => ['nullable', 'string', 'max:255'],
         ]);
 
         $journalEntry->update([
@@ -213,10 +229,13 @@ class JournalEntryController extends Controller
                 return back()->with('error', 'Chỉ có thể sửa dòng bút toán khi ở trạng thái Nháp.');
             }
             $lines = array_map(fn ($l) => [
-                'account'     => $l['account_code'],
-                'description' => $l['description'] ?? null,
-                'debit'       => (int) $l['debit'],
-                'credit'      => (int) $l['credit'],
+                'account'            => $l['account_code'],
+                'description'        => $l['description'] ?? null,
+                'debit'              => (int) $l['debit'],
+                'credit'             => (int) $l['credit'],
+                'project_id'         => $l['project_id'] ?? null,
+                'cost_group'         => $l['cost_group'] ?? null,
+                'project_cost_note'  => $l['project_cost_note'] ?? null,
             ], $data['lines']);
             try {
                 $this->accounting->updateLines($journalEntry, $lines, $data['edit_reason'] ?? null);
@@ -411,6 +430,8 @@ class JournalEntryController extends Controller
         }
 
         $journalEntry->update($voidData);
+        // WIP đã tạo từ Phiếu kế toán thủ công (nếu có) phải soft-cancel theo, không để treo TK154
+        $this->accounting->cancelWipForEntry($journalEntry, 'cancelled', $data['void_reason'] ?? null);
 
         return back()->with('success', "Đã hủy bút toán {$journalEntry->code}. Bút toán không còn ảnh hưởng đến báo cáo, nhưng vẫn được lưu trong lịch sử.");
     }
@@ -431,7 +452,7 @@ class JournalEntryController extends Controller
 
         try {
             $reversal = $this->accounting->reverse($journalEntry, $data['reason'] ?? null);
-        } catch (\RuntimeException $e) {
+        } catch (\InvalidArgumentException|\RuntimeException $e) {
             return back()->with('error', $e->getMessage());
         }
 
@@ -459,7 +480,7 @@ class JournalEntryController extends Controller
             try {
                 $this->accounting->markPosted($entry);
                 $approved++;
-            } catch (\RuntimeException $e) {
+            } catch (\InvalidArgumentException|\RuntimeException $e) {
                 $errors[] = "{$entry->code}: {$e->getMessage()}";
             }
         }

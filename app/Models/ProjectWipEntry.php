@@ -14,7 +14,7 @@ class ProjectWipEntry extends Model
         'project_id', 'source_type', 'source_id',
         'cost_type', 'amount', 'description',
         'source_item_id', 'vat_amount',
-        'entry_date', 'journal_entry_id', 'created_by',
+        'entry_date', 'journal_entry_id', 'journal_entry_line_id', 'created_by',
         'product_id', 'quantity', 'unit_cost', 'stock_exit_item_id',
         'status', 'cancel_reason', 'cancelled_by', 'cancelled_at', 'correction_of_id',
     ];

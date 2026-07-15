@@ -54,11 +54,12 @@ Dự án đang ở giai đoạn **vận hành và cải tiến**. Các module co
 | CCDC: Xóa hồ sơ (destroy) — chặn nếu có receipt/issue/transfer/disposal/posted allocation/JE, bắt buộc lý do + activity log | Hoàn thành (2026-07-03) |
 | CCDC: Export Excel/PDF + Import từ file mẫu Excel (Danh sách CCDC) — import luôn tạo draft, không tự ghi bút toán | Hoàn thành (2026-07-03) |
 | Bảng chấm công: Export Excel (cột ngày động theo số ngày trong tháng + tổng hợp Công/NghỉHL/NghỉKL/OT/Tổng) | Hoàn thành (2026-07-03) |
+| Phiếu kế toán thủ công: chọn Dự án + Nhóm chi phí per-line (`journal_entry_lines.project_id/cost_group`), tự tạo `project_wip_entries` khi post dòng Nợ154, bắt buộc validate, soft-cancel WIP khi đảo/hủy, chống trùng WIP; command `journal-entries:audit-project-dimensions` + `journal-entries:repair-legacy-project-wip` (dry-run) | Hoàn thành (2026-07-15) |
 
 ## Migration sequence hiện tại
 
-- **Last 900xxx:** `2026_07_02_900219` (số dư đầu kỳ + tạm dừng/tiếp tục phân bổ CCDC/CPTT)
-- **Next:** `2026_07_02_900220`
+- **Last 900xxx:** `2026_07_15_900231` (journal_entry_line_id trên project_wip_entries + unique index chống trùng WIP)
+- **Next:** `2026_07_15_900232`
 - Last Phase E / bank: `2026_06_05_100006` — Next (cùng chủ đề bank): `100007`
 
 ## TK hệ thống (accounting_settings)
@@ -90,6 +91,7 @@ Tất cả services dùng `AccountingSettings::get('key', 'fallback')` — khôn
 9. `resolvePeriod()`/`resolveComparison()`/`previousCalendarPeriod()`/`fileSlug()` duplicate y hệt giữa `IncomeStatementController` và `CashFlowStatementController` (lọc kỳ báo cáo tháng/quý/năm/tùy chọn). Nếu sửa lỗi ở 1 nơi (VD: date-math cho `previous_period`/`same_period_last_year`) phải sửa cả 2 file — chưa tách thành service dùng chung.
 10. ~~`Tests\Feature\Accounting\JournalEntryVoidTest::trial_balance_unaffected_after_void_pair` fail sẵn trên `master`~~ — **đã fix** trong commit `ac1365e` (2026-07-09, "...fix void test"). Xác nhận lại 2026-07-14: `php artisan test` 797 passed / 0 failed. Không còn là known issue.
 11. `PrepaidExpenses/Form.vue` (form tạo CPTT thường, không phải opening balance) có default `expense_account: '642'` không khớp option nào trong dropdown (chỉ có 6421/6422/627/635) — TK 642 là TK tổng hợp, `AccountingService::validateLines()` sẽ reject nếu user submit mà không đổi select → lỗi 500. Bug có sẵn, phát hiện khi review code liên quan; chưa sửa vì ngoài phạm vi task CCDC/CPTT opening-balance (form Số dư đầu kỳ CPTT mới đã tự sửa default đúng '6422').
+12. **6 JE cũ id 999-1004 (G2, tổng 182.565.000đ, "kết chuyển lương kỹ thuật" Dr154/Cr627)** thiếu `project_id`/`cost_group` — phát hiện qua `journal-entries:audit-project-dimensions`. **Chưa tự sửa** — chỉ Medium confidence hướng về DA-0001 (dự án in_progress duy nhất), không có bằng chứng trực tiếp. Dùng `journal-entries:repair-legacy-project-wip --je=999,1000,1001,1002,1003,1004 --project=<mã> --cost-group=labor --dry-run` để xem trước, cần kế toán xác nhận đúng dự án trước khi thêm `--apply`.
 
 ## Accounting — JE FSM
 
