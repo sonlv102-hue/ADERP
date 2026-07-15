@@ -19,6 +19,7 @@ use App\Models\InventoryBalance;
 use App\Models\Ticket;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
+use App\Services\Accounting\JournalAuditService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -26,20 +27,21 @@ use Inertia\Response;
 
 class DashboardController extends Controller
 {
-    public function index(): Response
+    public function index(JournalAuditService $journalAudit): Response
     {
         $user = auth()->user();
 
         return Inertia::render('Dashboard/Index', [
-            'stats'              => Cache::remember('dashboard.stats', 600, fn () => $this->stats()),
-            'revenueChart'       => Cache::remember('dashboard.revenue_chart', 600, fn () => $this->revenueChart()),
-            'topCustomers'       => Cache::remember('dashboard.top_customers', 600, fn () => $this->topCustomers()),
-            'stockOverview'      => Cache::remember('dashboard.stock_overview', 120, fn () => $this->stockOverview()),
-            'ticketStats'        => Cache::remember('dashboard.ticket_stats', 300, fn () => $this->ticketStats()),
-            'unfulfilledOrders'  => Cache::remember('dashboard.unfulfilled_orders', 120, fn () => $this->unfulfilledOrders()),
-            'overDeliveryAlerts' => $this->overDeliveryAlerts(),
-            'accountingAlerts'   => Cache::remember('dashboard.accounting_alerts', 300, fn () => $this->accountingAlerts()),
-            'financialKpi'       => $user->can('accounting.view')
+            'stats'                => Cache::remember('dashboard.stats', 600, fn () => $this->stats()),
+            'revenueChart'         => Cache::remember('dashboard.revenue_chart', 600, fn () => $this->revenueChart()),
+            'topCustomers'         => Cache::remember('dashboard.top_customers', 600, fn () => $this->topCustomers()),
+            'stockOverview'        => Cache::remember('dashboard.stock_overview', 120, fn () => $this->stockOverview()),
+            'ticketStats'          => Cache::remember('dashboard.ticket_stats', 300, fn () => $this->ticketStats()),
+            'unfulfilledOrders'    => Cache::remember('dashboard.unfulfilled_orders', 120, fn () => $this->unfulfilledOrders()),
+            'overDeliveryAlerts'   => $this->overDeliveryAlerts(),
+            'accountingAlerts'     => Cache::remember('dashboard.accounting_alerts', 300, fn () => $this->accountingAlerts()),
+            'journalAuditFindings' => Cache::remember('dashboard.journal_audit_findings', 300, fn () => $journalAudit->run()),
+            'financialKpi'         => $user->can('accounting.view')
                 ? Cache::remember('dashboard.financial_kpi.' . now()->format('Y-m'), 300, fn () => $this->financialKpi())
                 : null,
         ]);

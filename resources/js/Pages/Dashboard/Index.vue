@@ -358,6 +358,44 @@
         </div>
       </div>
 
+      <!-- Journal audit findings (E001-E007) -->
+      <div v-if="journalAuditFindings.length" class="bg-white rounded-xl border overflow-x-auto"
+        :class="journalAuditFindings.some(f => f.severity === 'critical') ? 'border-red-300' : 'border-amber-300'">
+        <div class="px-5 py-4 border-b flex items-center justify-between"
+          :class="journalAuditFindings.some(f => f.severity === 'critical') ? 'border-red-200 bg-red-50' : 'border-amber-200 bg-amber-50'">
+          <div class="flex items-center gap-2">
+            <svg class="w-5 h-5 flex-shrink-0"
+              :class="journalAuditFindings.some(f => f.severity === 'critical') ? 'text-red-600' : 'text-amber-600'"
+              fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <h3 class="text-base font-semibold"
+              :class="journalAuditFindings.some(f => f.severity === 'critical') ? 'text-red-800' : 'text-amber-800'">
+              Rà soát bút toán — sai lệch logic kế toán ({{ journalAuditFindings.length }})
+            </h3>
+          </div>
+          <a href="/accounting/journal-audit" class="text-xs text-primary-600 hover:underline whitespace-nowrap">Mở màn Rà soát bút toán →</a>
+        </div>
+        <div class="divide-y divide-gray-100">
+          <div v-for="(f, idx) in journalAuditFindings" :key="idx" class="px-5 py-3">
+            <div class="flex items-center justify-between gap-2 flex-wrap mb-1">
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-xs px-2 py-0.5 rounded-lg font-medium"
+                  :class="f.severity === 'critical' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'">
+                  {{ f.error_code }} · {{ f.error_label }}
+                </span>
+                <span class="font-semibold text-gray-900 text-sm">{{ f.document_code }}</span>
+                <span v-if="f.partner_name" class="text-xs text-gray-500">{{ f.partner_name }}</span>
+              </div>
+              <span v-if="f.document_amount" class="text-sm font-medium text-gray-900">{{ fmtVnd(f.document_amount) }}</span>
+            </div>
+            <p class="text-xs text-gray-600">{{ f.description }}</p>
+            <p class="text-xs text-gray-400 mt-0.5">Gợi ý: {{ f.suggested_action }}</p>
+          </div>
+        </div>
+      </div>
+
       <!-- Unfulfilled orders warning -->
       <div v-if="unfulfilledOrders.length" class="bg-white rounded-xl border border-orange-200 overflow-x-auto">
         <div class="px-5 py-4 border-b border-orange-100 flex items-center gap-2">
@@ -512,6 +550,7 @@ const props = defineProps({
   unfulfilledOrders:   { type: Array,  default: () => [] },
   overDeliveryAlerts:  { type: Array,  default: () => [] },
   accountingAlerts:    { type: Object, default: () => ({}) },
+  journalAuditFindings: { type: Array,  default: () => [] },
   financialKpi:        { type: Object, default: null },
 });
 
