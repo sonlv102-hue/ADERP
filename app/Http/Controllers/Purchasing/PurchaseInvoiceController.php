@@ -13,6 +13,9 @@ use App\Models\PurchaseInvoice;
 use App\Models\PurchaseInvoiceItem;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
+use App\Models\StockEntry;
+use App\Models\JournalEntry;
+use App\Enums\StockEntryStatus;
 use App\Services\PurchaseInvoiceService;
 use App\Services\SupplierAdvanceService;
 use Illuminate\Http\RedirectResponse;
@@ -185,6 +188,17 @@ class PurchaseInvoiceController extends Controller
         // Phân loại: goods nếu PO có items hàng hóa/NVL/CCDC (không phải service/fixed_asset)
         $isGoodsPurchase = $this->service->isGoodsPurchase($purchaseInvoice);
 
+        // Bút toán Dr1561/Dr1331/Cr3311 của hóa đơn hàng hóa được tạo khi StockEntry (NK-) confirm,
+        // không qua AccountingPostingJob — cần tra riêng để banner không báo "chưa xác nhận" khi đã xong.
+        $goodsStockEntry = $purchaseInvoice->purchase_order_id
+            ? StockEntry::where('purchase_order_id', $purchaseInvoice->purchase_order_id)
+                ->where('status', StockEntryStatus::Confirmed)
+                ->first()
+            : null;
+        $goodsJournalEntry = $goodsStockEntry
+            ? JournalEntry::where('reference_type', 'stock_entry')->where('reference_id', $goodsStockEntry->id)->first()
+            : null;
+
         // PO items để hiển thị loại dòng hàng
         $poItems = $purchaseInvoice->purchaseOrder?->items->map(fn ($item) => [
             'id'         => $item->id,
@@ -265,6 +279,11 @@ class PurchaseInvoiceController extends Controller
                 'is_goods_purchase'   => $isGoodsPurchase,
                 // Giữ is_service_purchase cho backwards-compat (= !isGoods khi có PO)
                 'is_service_purchase' => !$isGoodsPurchase && $purchaseInvoice->purchase_order_id !== null,
+                // Bút toán hàng hóa (Dr1561/Dr1331/Cr3311) đã tạo khi NK- confirm — banner hướng dẫn không nên hiện lại
+                'goods_journal_entry' => $goodsJournalEntry ? [
+                    'code'   => $goodsJournalEntry->code,
+                    'status' => $goodsJournalEntry->status,
+                ] : null,
                 'po_items'             => $poItems,
                 'advance_allocations'  => $purchaseInvoice->activeAdvanceAllocations->map(fn ($a) => [
                     'id'               => $a->id,

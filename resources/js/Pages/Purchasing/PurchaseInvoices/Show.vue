@@ -62,8 +62,8 @@
         </div>
       </Teleport>
 
-      <!-- Banner: hàng hóa mua về bán -->
-      <div v-if="invoice.is_goods_purchase && invoice.status === 'valid'"
+      <!-- Banner: hàng hóa mua về bán — chưa xác nhận nhập kho -->
+      <div v-if="invoice.is_goods_purchase && invoice.status === 'valid' && !invoice.goods_journal_entry"
         class="bg-green-50 border border-green-200 rounded-xl p-4 flex items-start gap-3">
         <svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -72,6 +72,19 @@
         <p class="text-sm text-green-800">
           <strong>Hóa đơn mua hàng hóa</strong> — bút toán <strong>Nợ 1561, Nợ 1331 / Có 3311</strong> sẽ được tạo tự động khi xác nhận phiếu nhập kho.
           Vào <strong>Kho › Phiếu nhập kho</strong> để xác nhận nhập kho và tạo bút toán.
+        </p>
+      </div>
+
+      <!-- Banner: hàng hóa mua về bán — đã xác nhận nhập kho, bút toán đã tạo -->
+      <div v-if="invoice.is_goods_purchase && invoice.goods_journal_entry"
+        class="bg-green-50 border border-green-200 rounded-xl p-4 flex items-start gap-3">
+        <svg class="w-5 h-5 text-green-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        <p class="text-sm text-green-800">
+          <strong>Hóa đơn mua hàng hóa</strong> — đã ghi sổ bút toán <strong>{{ invoice.goods_journal_entry.code }}</strong>
+          (Nợ 1561, Nợ 1331 / Có 3311) khi xác nhận phiếu nhập kho.
         </p>
       </div>
 
