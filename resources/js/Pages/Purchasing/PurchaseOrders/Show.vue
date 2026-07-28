@@ -145,6 +145,7 @@
                   <th class="text-right px-5 py-3 font-semibold text-gray-600">Tiền VAT</th>
                 </template>
                 <th class="text-right px-5 py-3 font-semibold text-gray-600">Thành tiền</th>
+                <th v-if="hasRole('admin')" class="px-5 py-3"></th>
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-100">
@@ -159,6 +160,14 @@
                   <td class="px-5 py-3 text-right text-gray-700">{{ formatVnd(item.vat_amount ?? 0) }}</td>
                 </template>
                 <td class="px-5 py-3 text-right font-medium text-gray-900">{{ formatVnd(item.total) }}</td>
+                <td v-if="hasRole('admin')" class="px-5 py-3 text-right whitespace-nowrap">
+                  <button v-if="order.status !== 'draft'"
+                    @click="openFixProductModal(item)"
+                    title="Sửa sản phẩm dòng hàng"
+                    class="text-primary-600 hover:text-primary-800 text-xs font-medium">
+                    Sửa sản phẩm
+                  </button>
+                </td>
               </tr>
             </tbody>
             <tfoot class="bg-gray-50 border-t border-gray-200">
@@ -308,6 +317,34 @@
         </button>
       </template>
     </Modal>
+
+    <Modal :show="showFixProductModal" max-width="lg" @close="showFixProductModal = false">
+      <template #title>Sửa sản phẩm dòng hàng</template>
+      <div class="space-y-4">
+        <p class="text-sm text-gray-600">
+          Đang sửa dòng hàng: <strong>{{ fixProductTarget?.product_name }}</strong>
+        </p>
+        <FormField label="Sản phẩm đúng" required :error="fixProductError">
+          <RemoteSearchSelect
+            v-model="fixProductForm.product_id"
+            :display-text="fixProductForm.product_display"
+            :search-url="route('search.products')"
+            placeholder="Tìm sản phẩm..."
+            @change="opt => { fixProductForm.product_display = opt?.label ?? '' }"
+          />
+        </FormField>
+        <FormField label="Lý do sửa" required>
+          <textarea v-model="fixProductForm.reason" rows="2" maxlength="255" class="erp-input"
+            placeholder="VD: Đơn mua gắn nhầm sản phẩm khi tạo, sản phẩm đúng là..."></textarea>
+        </FormField>
+      </div>
+      <template #footer>
+        <button @click="showFixProductModal = false" class="erp-btn-secondary">Hủy</button>
+        <button @click="submitFixProduct" :disabled="fixProductSubmitting" class="erp-btn-primary">
+          Lưu
+        </button>
+      </template>
+    </Modal>
   </AppLayout>
 </template>
 
@@ -317,6 +354,8 @@ import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import Modal from '@/Components/Shared/Modal.vue';
+import FormField from '@/Components/Shared/FormField.vue';
+import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 import { usePermission } from '@/composables/usePermission';
 import { useCurrency } from '@/composables/useCurrency';
 
@@ -331,6 +370,37 @@ const { formatVnd } = useCurrency();
 const busy = ref(false);
 const activeTab = ref('items');
 const showDeleteModal = ref(false);
+
+const showFixProductModal = ref(false);
+const fixProductTarget = ref(null);
+const fixProductForm = ref({ product_id: null, product_display: '', reason: '' });
+const fixProductError = ref('');
+const fixProductSubmitting = ref(false);
+
+function openFixProductModal(item) {
+  fixProductTarget.value = item;
+  fixProductForm.value = { product_id: null, product_display: '', reason: '' };
+  fixProductError.value = '';
+  showFixProductModal.value = true;
+}
+
+function submitFixProduct() {
+  if (!fixProductForm.value.product_id || !fixProductForm.value.reason.trim()) {
+    fixProductError.value = 'Vui lòng chọn sản phẩm đúng và nhập lý do sửa.';
+    return;
+  }
+  fixProductSubmitting.value = true;
+  router.post(
+    route('purchasing.purchase-orders.items.fix-product', [props.order.id, fixProductTarget.value.id]),
+    { product_id: fixProductForm.value.product_id, reason: fixProductForm.value.reason },
+    {
+      preserveScroll: true,
+      onSuccess: () => { showFixProductModal.value = false; },
+      onError: (errors) => { fixProductError.value = Object.values(errors)[0] ?? 'Có lỗi xảy ra.'; },
+      onFinish: () => { fixProductSubmitting.value = false; },
+    }
+  );
+}
 
 const tabs = computed(() => {
   const list = [

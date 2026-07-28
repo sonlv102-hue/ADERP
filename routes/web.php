@@ -299,6 +299,7 @@ Route::middleware('auth')->group(function () {
         Route::get('quotations/{quotation}/pdf', [QuotationController::class, 'pdf'])->name('quotations.pdf');
         Route::post('quotations/{quotation}/attachment', [QuotationController::class, 'uploadAttachment'])->name('quotations.attachment.upload');
         Route::delete('quotations/{quotation}/attachment', [QuotationController::class, 'deleteAttachment'])->name('quotations.attachment.delete');
+        Route::post('quotations/{quotation}/items/{quotationItem}/fix-product', [QuotationController::class, 'fixLineItemProduct'])->name('quotations.items.fix-product')->middleware('role:admin');
 
         Route::get('orders/export-excel', [OrderController::class, 'exportExcel'])->name('orders.export-excel')->middleware('can:sales.orders.export');
         Route::get('orders', [OrderController::class, 'index'])->name('orders.index')->middleware('can:sales.orders.view');
@@ -316,6 +317,7 @@ Route::middleware('auth')->group(function () {
         Route::post('orders/{order}/attachment', [OrderController::class, 'uploadAttachment'])->name('orders.attachment.upload')->middleware('can:sales.orders.update');
         Route::delete('orders/{order}/attachment', [OrderController::class, 'deleteAttachment'])->name('orders.attachment.delete')->middleware('can:sales.orders.update');
         Route::post('orders/{order}/force-revert', [OrderController::class, 'forceRevert'])->name('orders.force-revert')->middleware('can:sales.orders.approve');
+        Route::post('orders/{order}/items/{orderItem}/fix-product', [OrderController::class, 'fixLineItemProduct'])->name('orders.items.fix-product')->middleware('role:admin');
 
         Route::resource('contracts', ContractController::class);
         Route::post('contracts/{contract}/activate', [ContractController::class, 'activate'])->name('contracts.activate');
@@ -785,6 +787,7 @@ Route::middleware('auth')->group(function () {
         Route::post('purchase-orders/{purchaseOrder}/send',    [PurchaseOrderController::class, 'send'])->name('purchase-orders.send')->middleware('can:purchases.orders.approve');
         Route::post('purchase-orders/{purchaseOrder}/receive', [PurchaseOrderController::class, 'receive'])->name('purchase-orders.receive')->middleware('can:purchases.orders.approve');
         Route::post('purchase-orders/{purchaseOrder}/cancel',  [PurchaseOrderController::class, 'cancel'])->name('purchase-orders.cancel')->middleware('can:purchases.orders.approve');
+        Route::post('purchase-orders/{purchaseOrder}/items/{purchaseOrderItem}/fix-product', [PurchaseOrderController::class, 'fixLineItemProduct'])->name('purchase-orders.items.fix-product')->middleware('role:admin');
 
         Route::get('purchase-invoices/export-excel', [PurchaseInvoiceController::class, 'exportExcel'])->name('purchase-invoices.export-excel')->middleware('can:purchases.invoices.view');
         Route::get('purchase-invoices', [PurchaseInvoiceController::class, 'index'])->name('purchase-invoices.index')->middleware('can:purchases.invoices.view');

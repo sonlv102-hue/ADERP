@@ -9,7 +9,9 @@ use App\Models\Customer;
 use App\Models\PriceList;
 use App\Models\Product;
 use App\Models\Quotation;
+use App\Models\QuotationItem;
 use App\Models\Service;
+use App\Services\QuotationItemProductFixService;
 use App\Services\QuotationService;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\RedirectResponse;
@@ -134,6 +136,7 @@ class QuotationController extends Controller
                 'items'           => $quotation->items->map(fn ($item) => [
                     'id'               => $item->id,
                     'item_type'        => $item->item_type,
+                    'product_id'       => $item->product_id,
                     'name'             => $item->name,
                     'unit'             => $item->unit,
                     'quantity'         => $item->quantity,
@@ -248,6 +251,24 @@ class QuotationController extends Controller
 
         return redirect()->route('sales.quotations.show', $quotation)
             ->with('success', 'Đã cập nhật báo giá.');
+    }
+
+    public function fixLineItemProduct(Request $request, Quotation $quotation, QuotationItem $quotationItem, QuotationItemProductFixService $service): RedirectResponse
+    {
+        abort_if($quotationItem->quotation_id !== $quotation->id, 404);
+
+        $data = $request->validate([
+            'product_id' => ['required', 'exists:products,id'],
+            'reason'     => ['required', 'string', 'max:255'],
+        ]);
+
+        try {
+            $service->fixProductLink($quotationItem, $data['product_id'], $data['reason'], $request->user());
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Đã sửa sản phẩm dòng hàng.');
     }
 
     public function destroy(Quotation $quotation): RedirectResponse

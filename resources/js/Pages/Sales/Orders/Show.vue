@@ -86,6 +86,7 @@
               <th class="text-right px-5 py-3 font-semibold text-gray-600">VAT (%)</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">CK (%)</th>
               <th class="text-right px-5 py-3 font-semibold text-gray-600">Thành tiền</th>
+              <th v-if="isAdmin" class="px-5 py-3"></th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
@@ -115,6 +116,14 @@
                 <span v-else class="text-gray-400">—</span>
               </td>
               <td class="px-5 py-3 text-right font-medium text-gray-800">{{ formatVnd(item.line_total + (item.vat_amount ?? 0)) }}</td>
+              <td v-if="isAdmin" class="px-5 py-3 text-right whitespace-nowrap">
+                <button v-if="['completed', 'cancelled'].includes(order.status)"
+                  @click="openFixProductModal(item)"
+                  title="Sửa sản phẩm dòng hàng"
+                  class="text-primary-600 hover:text-primary-800 text-xs font-medium">
+                  Sửa sản phẩm
+                </button>
+              </td>
             </tr>
           </tbody>
           <tfoot class="bg-gray-50 border-t border-gray-200">
@@ -465,6 +474,34 @@
         </div>
       </div>
     </Teleport>
+
+    <Modal :show="showFixProductModal" max-width="lg" @close="showFixProductModal = false">
+      <template #title>Sửa sản phẩm dòng hàng</template>
+      <div class="space-y-4">
+        <p class="text-sm text-gray-600">
+          Đang sửa dòng hàng: <strong>{{ fixProductTarget?.name }}</strong>
+        </p>
+        <FormField label="Sản phẩm đúng" required :error="fixProductError">
+          <RemoteSearchSelect
+            v-model="fixProductForm.product_id"
+            :display-text="fixProductForm.product_display"
+            :search-url="route('search.products')"
+            placeholder="Tìm sản phẩm..."
+            @change="opt => { fixProductForm.product_display = opt?.label ?? '' }"
+          />
+        </FormField>
+        <FormField label="Lý do sửa" required>
+          <textarea v-model="fixProductForm.reason" rows="2" maxlength="255" class="erp-input"
+            placeholder="VD: Đơn hàng gắn nhầm sản phẩm khi tạo, sản phẩm đúng là..."></textarea>
+        </FormField>
+      </div>
+      <template #footer>
+        <button @click="showFixProductModal = false" class="erp-btn-secondary">Hủy</button>
+        <button @click="submitFixProduct" :disabled="fixProductSubmitting" class="erp-btn-primary">
+          Lưu
+        </button>
+      </template>
+    </Modal>
   </AppLayout>
 </template>
 
@@ -474,13 +511,19 @@ import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import FileAttachments from '@/Components/Shared/FileAttachments.vue';
+import Modal from '@/Components/Shared/Modal.vue';
+import FormField from '@/Components/Shared/FormField.vue';
+import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 import { useCurrency } from '@/composables/useCurrency';
 import { usePermission } from '@/composables/usePermission';
+import { usePage } from '@inertiajs/vue3';
 
 const props = defineProps({ order: Object });
 
 const { formatVnd } = useCurrency();
 const { hasPermission: can } = usePermission();
+const page = usePage();
+const isAdmin = computed(() => page.props.auth?.roles?.includes('admin') ?? false);
 
 const subtotalBeforeVat = computed(() =>
   (props.order.items ?? []).reduce((s, i) => s + (i.line_total ?? 0), 0)
@@ -498,6 +541,37 @@ const doDelete = () => {
   showDeleteModal.value = false;
   router.delete(route('sales.orders.destroy', props.order.id));
 };
+
+const showFixProductModal = ref(false);
+const fixProductTarget = ref(null);
+const fixProductForm = ref({ product_id: null, product_display: '', reason: '' });
+const fixProductError = ref('');
+const fixProductSubmitting = ref(false);
+
+function openFixProductModal(item) {
+  fixProductTarget.value = item;
+  fixProductForm.value = { product_id: null, product_display: '', reason: '' };
+  fixProductError.value = '';
+  showFixProductModal.value = true;
+}
+
+function submitFixProduct() {
+  if (!fixProductForm.value.product_id || !fixProductForm.value.reason.trim()) {
+    fixProductError.value = 'Vui lòng chọn sản phẩm đúng và nhập lý do sửa.';
+    return;
+  }
+  fixProductSubmitting.value = true;
+  router.post(
+    route('sales.orders.items.fix-product', [props.order.id, fixProductTarget.value.id]),
+    { product_id: fixProductForm.value.product_id, reason: fixProductForm.value.reason },
+    {
+      preserveScroll: true,
+      onSuccess: () => { showFixProductModal.value = false; },
+      onError: (errors) => { fixProductError.value = Object.values(errors)[0] ?? 'Có lỗi xảy ra.'; },
+      onFinish: () => { fixProductSubmitting.value = false; },
+    }
+  );
+}
 
 // Chỉ hiển thị cột giao hàng khi đơn có sản phẩm (product_id) với delivery tracking
 const hasDeliveryTracking = computed(() =>

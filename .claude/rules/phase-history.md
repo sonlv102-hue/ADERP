@@ -69,6 +69,9 @@
 | PayrollRollbackService | Payroll, PayrollItem | rollback confirmed payroll |
 | SystemHealthService | (utility) | 10 checks độc lập — seed, FK, orphan, migration drift |
 | PeriodCloseService | AccountingPeriod, PeriodCloseBatch, JournalEntry | close(period) idempotent; getPeriodBalances(); kết chuyển Dr/Cr 911 ↔ 4212 |
+| OrderItemProductFixService | OrderItem | fixProductLink() — chỉ khi order Completed/Cancelled, chặn nếu delivered_quantity>0 hoặc có stock_exit_items liên kết; re-snapshot unit_cogs/revenue_account_code |
+| QuotationItemProductFixService | QuotationItem | fixProductLink() — chỉ khi quotation Cancelled (status khác sửa qua form thường) |
+| PurchaseOrderItemProductFixService | PurchaseOrderItem | fixProductLink() — chặn nếu PO Draft hoặc `stockEntryItems()->exists()` (kể cả entry đã cancelled — row lịch sử không bị xóa) |
 
 ## Completed Modules
 - **G1:** Auth, Users, Admin CRUD
@@ -153,3 +156,4 @@
   - Internal Transfer Report: period filter (month/year/custom/all)
   - RemoteSearchSelect đợt 2: 9 forms nữa (SupplierAdvances, PrepaidExpenses, FixedAssets, PurchaseContracts, CustomerAdvances, Invoices, Projects, Sales/Contracts, Commissions)
 - **Extras:** In-app TabBar (useTabs.js), Delivery tracking, Serial tracking, Backup module, Opening Balance Excel import, Mobile Responsive (2026-06-19), Admin System Health (SystemHealthService, 10 checks), Dashboard KPI widget, Account Ledger TK cha→con, Draft JE badge
+- **2026-07-28:** Admin tự sửa product_id sai trên dòng hàng đã khóa (Order/Quotation/PurchaseOrder) — 3 service riêng (guard rail khác nhau per module, xem Services & FSM), route `role:admin`, Modal.vue UI, activity log; thay thế nhu cầu tinker DB surgery (case gốc: DH-0027). Kèm fix bug `OrderItem::$fillable` thiếu 4 field (xem `project-state.md` #13).

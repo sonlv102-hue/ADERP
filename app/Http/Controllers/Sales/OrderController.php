@@ -17,10 +17,12 @@ use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\Quotation;
 use App\Models\Service;
+use App\Services\OrderItemProductFixService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 
 class OrderController extends Controller
 {
@@ -462,6 +464,24 @@ class OrderController extends Controller
 
         return redirect()->route('sales.orders.show', $order)
             ->with('success', 'Đã cập nhật đơn hàng.');
+    }
+
+    public function fixLineItemProduct(Request $request, Order $order, OrderItem $orderItem, OrderItemProductFixService $service): RedirectResponse
+    {
+        abort_if($orderItem->order_id !== $order->id, 404);
+
+        $data = $request->validate([
+            'product_id' => ['required', 'exists:products,id'],
+            'reason'     => ['required', 'string', 'max:255'],
+        ]);
+
+        try {
+            $service->fixProductLink($orderItem, $data['product_id'], $data['reason'], $request->user());
+        } catch (RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Đã sửa sản phẩm dòng hàng.');
     }
 
     public function process(Order $order): RedirectResponse

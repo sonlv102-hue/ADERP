@@ -10,6 +10,7 @@ class OrderItem extends Model
     protected $fillable = [
         'order_id', 'product_id', 'service_id',
         'name', 'unit', 'quantity', 'delivered_quantity', 'unit_price', 'vat_rate', 'discount_percent', 'discount_amount',
+        'unit_cogs', 'unit_cogs_source', 'revenue_account_code',
     ];
 
     protected function casts(): array

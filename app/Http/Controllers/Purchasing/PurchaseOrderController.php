@@ -13,6 +13,7 @@ use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\Supplier;
 use App\Models\Warehouse;
+use App\Services\PurchaseOrderItemProductFixService;
 use App\Services\PurchaseOrderService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -289,6 +290,7 @@ class PurchaseOrderController extends Controller
                 ] : null,
                 'items'         => $purchaseOrder->items->map(fn ($item) => [
                     'id'           => $item->id,
+                    'product_id'   => $item->product_id,
                     'product_code' => $item->product?->code ?? '—',
                     'product_name' => $item->product?->name ?? '(đã xóa)',
                     'unit'         => $item->product?->unit ?? '',
@@ -410,6 +412,24 @@ class PurchaseOrderController extends Controller
 
         return redirect()->route('purchasing.purchase-orders.show', $purchaseOrder)
             ->with('success', 'Đã cập nhật đơn mua hàng.');
+    }
+
+    public function fixLineItemProduct(Request $request, PurchaseOrder $purchaseOrder, PurchaseOrderItem $purchaseOrderItem, PurchaseOrderItemProductFixService $service): RedirectResponse
+    {
+        abort_if($purchaseOrderItem->purchase_order_id !== $purchaseOrder->id, 404);
+
+        $data = $request->validate([
+            'product_id' => ['required', 'exists:products,id'],
+            'reason'     => ['required', 'string', 'max:255'],
+        ]);
+
+        try {
+            $service->fixProductLink($purchaseOrderItem, $data['product_id'], $data['reason'], $request->user());
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Đã sửa sản phẩm dòng hàng.');
     }
 
     public function send(PurchaseOrder $purchaseOrder): RedirectResponse
