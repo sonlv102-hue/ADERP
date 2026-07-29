@@ -1,0 +1,210 @@
+<?php
+
+namespace Tests\Feature\Reports;
+
+use App\Models\Product;
+use App\Models\User;
+use App\Models\Warehouse;
+use App\Services\Reports\InventoryTransactionReportService;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Spatie\Permission\Models\Permission;
+use Tests\TestCase;
+
+/**
+ * TC1: opening balance chỉ tính movement trước date_from
+ * TC2: mỗi dòng movement chỉ có 1 bên nhập HOẶC xuất, không bao giờ cả hai
+ * TC3: dòng closing reconciles: qty_end = qty_begin + Σqty_in - Σqty_out
+ * TC4: movement status=voided bị loại khỏi cả rows và opening balance
+ * TC5: warehouse_id filter cô lập đúng kho (transfer 2 chân)
+ * TC6: StockTransfer movement vẫn xuất hiện như 1 dòng bình thường (không bị rớt)
+ * TC7: route 403 khi thiếu permission reports.view; 200 khi có
+ * TC8: sản phẩm không có tồn đầu kỳ VÀ không phát sinh trong kỳ bị ẩn khỏi báo cáo;
+ *      sản phẩm có tồn đầu kỳ (dù không phát sinh) vẫn phải hiện
+ */
+class InventoryTransactionReportTest extends TestCase
+{
+    use RefreshDatabase;
+
+    private User $user;
+    private Warehouse $wh1;
+    private Warehouse $wh2;
+    private Product $product;
+    private InventoryTransactionReportService $service;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $this->user = User::firstOrCreate(
+            ['email' => 'itr-test@test.local'],
+            ['name' => 'ITR Test', 'password' => bcrypt('x'), 'is_active' => true]
+        );
+        Permission::firstOrCreate(['name' => 'reports.view', 'guard_name' => 'web']);
+        $this->user->givePermissionTo('reports.view');
+        $this->actingAs($this->user);
+
+        $this->wh1 = Warehouse::create(['name' => 'Kho Chính', 'code' => 'ITR-KC', 'address' => 'HN']);
+        $this->wh2 = Warehouse::create(['name' => 'Kho Phụ',   'code' => 'ITR-KP', 'address' => 'HN']);
+
+        $this->product = Product::create([
+            'code' => 'ITR-SP', 'name' => 'ITR Test Product', 'unit' => 'cái',
+            'cost_price' => 100000, 'vat_percent' => 10, 'item_type' => 'product', 'is_active' => true,
+        ]);
+
+        $this->service = new InventoryTransactionReportService();
+    }
+
+    private function insertMovement(array $data): void
+    {
+        DB::table('stock_movements')->insert(array_merge([
+            'product_id' => $this->product->id, 'warehouse_id' => $this->wh1->id,
+            'type' => 'in', 'quantity' => 1, 'unit_cost' => 0, 'amount' => 0,
+            'status' => 'active', 'created_by' => $this->user->id, 'updated_at' => now(),
+        ], $data));
+    }
+
+    private function firstGroup(array $filters): ?array
+    {
+        return $this->service->buildAllProductGroups($filters)
+            ->firstWhere('product.code', 'ITR-SP');
+    }
+
+    public function test_tc1_opening_excludes_in_period_movements(): void
+    {
+        $this->insertMovement(['quantity' => 5, 'amount' => 500000, 'created_at' => '2025-12-01 10:00:00']);
+        $this->insertMovement(['quantity' => 3, 'amount' => 300000, 'created_at' => '2026-01-10 10:00:00']);
+
+        $group = $this->firstGroup(['date_from' => '2026-01-01', 'date_to' => '2026-01-31']);
+        $opening = $group['rows'][0];
+
+        $this->assertEquals('opening', $opening['row_type']);
+        $this->assertEquals(5.0, $opening['qty_begin']);
+        $this->assertEquals(500000.0, $opening['value_begin']);
+    }
+
+    public function test_tc2_movement_row_never_fills_both_sides(): void
+    {
+        $this->insertMovement(['quantity' => 5, 'amount' => 500000, 'created_at' => '2026-01-05 10:00:00']);
+        $this->insertMovement(['quantity' => -2, 'amount' => -200000, 'created_at' => '2026-01-06 10:00:00']);
+
+        $group = $this->firstGroup(['date_from' => '2026-01-01', 'date_to' => '2026-01-31']);
+        $movementRows = array_filter($group['rows'], fn ($r) => $r['row_type'] === 'movement');
+
+        foreach ($movementRows as $row) {
+            $hasIn  = $row['qty_in']  !== null;
+            $hasOut = $row['qty_out'] !== null;
+            $this->assertNotEquals($hasIn, $hasOut, 'Mỗi dòng chỉ được có 1 bên nhập hoặc xuất, không cả hai');
+        }
+    }
+
+    public function test_tc3_closing_row_reconciles(): void
+    {
+        $this->insertMovement(['quantity' => 10, 'amount' => 1000000, 'created_at' => '2025-12-01 10:00:00']);
+        $this->insertMovement(['quantity' => 5,  'amount' => 500000,  'created_at' => '2026-01-05 10:00:00']);
+        $this->insertMovement(['quantity' => -3, 'amount' => -300000, 'created_at' => '2026-01-10 10:00:00']);
+
+        $group = $this->firstGroup(['date_from' => '2026-01-01', 'date_to' => '2026-01-31']);
+        $closing = end($group['rows']);
+
+        $this->assertEquals('closing', $closing['row_type']);
+        $this->assertEquals(5.0, $closing['qty_in']);
+        $this->assertEquals(3.0, $closing['qty_out']);
+        $this->assertEquals(12.0, $closing['qty_end'], '10 (đầu kỳ) + 5 (nhập) - 3 (xuất) = 12');
+        $this->assertEquals(1200000.0, $closing['value_end']);
+    }
+
+    public function test_tc4_voided_movement_excluded(): void
+    {
+        $this->insertMovement(['quantity' => 5, 'amount' => 500000, 'created_at' => '2025-12-01 10:00:00']);
+        $this->insertMovement(['quantity' => 9, 'amount' => 900000, 'created_at' => '2026-01-05 10:00:00', 'status' => 'voided']);
+
+        $group = $this->firstGroup(['date_from' => '2026-01-01', 'date_to' => '2026-01-31']);
+
+        $this->assertEquals(5.0, $group['rows'][0]['qty_begin'], 'voided movement không tính vào opening');
+        $movementCount = count(array_filter($group['rows'], fn ($r) => $r['row_type'] === 'movement'));
+        $this->assertEquals(0, $movementCount, 'voided movement không xuất hiện trong danh sách giao dịch');
+    }
+
+    public function test_tc5_warehouse_filter_isolates_correct_warehouse(): void
+    {
+        $this->insertMovement(['warehouse_id' => $this->wh1->id, 'quantity' => 5, 'amount' => 500000, 'created_at' => '2026-01-05 10:00:00']);
+        $this->insertMovement(['warehouse_id' => $this->wh2->id, 'quantity' => 3, 'amount' => 300000, 'created_at' => '2026-01-05 10:00:00']);
+
+        $wh1Group = $this->firstGroup(['date_from' => '2026-01-01', 'date_to' => '2026-01-31', 'warehouse_id' => $this->wh1->id]);
+        $closing1 = end($wh1Group['rows']);
+        $this->assertEquals(5.0, $closing1['qty_end']);
+
+        $wh2Group = $this->firstGroup(['date_from' => '2026-01-01', 'date_to' => '2026-01-31', 'warehouse_id' => $this->wh2->id]);
+        $closing2 = end($wh2Group['rows']);
+        $this->assertEquals(3.0, $closing2['qty_end']);
+    }
+
+    public function test_tc6_stock_transfer_movement_appears_as_normal_row(): void
+    {
+        $transferId = DB::table('stock_transfers')->insertGetId([
+            'code' => 'CK-ITR-0001', 'from_warehouse_id' => $this->wh1->id, 'to_warehouse_id' => $this->wh2->id,
+            'transfer_date' => '2026-01-08', 'status' => 'confirmed', 'created_by' => $this->user->id,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->insertMovement([
+            'warehouse_id' => $this->wh2->id, 'quantity' => 4, 'amount' => 400000,
+            'source_type' => 'App\\Models\\StockTransfer', 'source_id' => $transferId,
+            'created_at' => '2026-01-08 10:00:00',
+        ]);
+
+        $group = $this->firstGroup(['date_from' => '2026-01-01', 'date_to' => '2026-01-31']);
+        $movementRows = array_values(array_filter($group['rows'], fn ($r) => $r['row_type'] === 'movement'));
+
+        $this->assertCount(1, $movementRows);
+        $this->assertEquals('CK-ITR-0001', $movementRows[0]['in_doc_code'], 'Phải join ra đúng mã CK- thật, không rớt dòng');
+        $this->assertEquals(4.0, $movementRows[0]['qty_in']);
+    }
+
+    public function test_tc8_zero_activity_product_hidden_but_stock_only_product_shown(): void
+    {
+        // ITR-SP: có 1 movement trong kỳ → phải hiện
+        $this->insertMovement(['quantity' => 2, 'amount' => 200000, 'created_at' => '2026-01-05 10:00:00']);
+
+        // Sản phẩm hoàn toàn không có giao dịch/tồn nào → phải bị ẩn
+        $emptyProduct = Product::create([
+            'code' => 'ITR-EMPTY', 'name' => 'Không hoạt động', 'unit' => 'cái',
+            'cost_price' => 50000, 'vat_percent' => 10, 'item_type' => 'product', 'is_active' => true,
+        ]);
+
+        // Sản phẩm có tồn đầu kỳ nhưng KHÔNG phát sinh gì trong kỳ → vẫn phải hiện
+        $stockOnlyProduct = Product::create([
+            'code' => 'ITR-STOCKONLY', 'name' => 'Chỉ có tồn', 'unit' => 'cái',
+            'cost_price' => 80000, 'vat_percent' => 10, 'item_type' => 'product', 'is_active' => true,
+        ]);
+        DB::table('stock_movements')->insert([
+            'product_id' => $stockOnlyProduct->id, 'warehouse_id' => $this->wh1->id,
+            'type' => 'in', 'quantity' => 7, 'unit_cost' => 0, 'amount' => 700000,
+            'status' => 'active', 'created_by' => $this->user->id,
+            'created_at' => '2025-12-01 10:00:00', 'updated_at' => now(),
+        ]);
+
+        $filters = ['date_from' => '2026-01-01', 'date_to' => '2026-01-31'];
+        $groups = $this->service->buildAllProductGroups($filters)->pluck('product.code');
+
+        $this->assertTrue($groups->contains('ITR-SP'), 'Sản phẩm có phát sinh trong kỳ phải hiện');
+        $this->assertTrue($groups->contains('ITR-STOCKONLY'), 'Sản phẩm có tồn đầu kỳ (dù không phát sinh) vẫn phải hiện');
+        $this->assertFalse($groups->contains('ITR-EMPTY'), 'Sản phẩm không tồn, không phát sinh phải bị ẩn');
+    }
+
+    public function test_tc7_route_permission_gate(): void
+    {
+        $noPermUser = User::firstOrCreate(
+            ['email' => 'itr-noperm@test.local'],
+            ['name' => 'No Perm', 'password' => bcrypt('x'), 'is_active' => true]
+        );
+        $this->actingAs($noPermUser)
+            ->get(route('reports.inventory_transactions'))
+            ->assertForbidden();
+
+        $this->actingAs($this->user)
+            ->get(route('reports.inventory_transactions'))
+            ->assertOk();
+    }
+}

@@ -439,6 +439,7 @@ class RolePermissionSeeder extends Seeder
         MenuItem::create(['parent_id' => $warehouseGroup->id, 'key' => 'warehouse.project_inventory', 'label' => 'Tồn kho dự án', 'route_name' => 'warehouse.project-inventory.index', 'icon' => 'collection', 'required_permission' => 'warehouse.view', 'order' => 8]);
         MenuItem::create(['parent_id' => $warehouseGroup->id, 'key' => 'warehouse.opening', 'label' => 'Tồn đầu kỳ', 'route_name' => 'warehouse.opening-balance.index', 'icon' => 'database', 'required_permission' => 'warehouse.manage', 'order' => 9]);
         MenuItem::create(['parent_id' => $warehouseGroup->id, 'key' => 'warehouse.card', 'label' => 'Thẻ kho', 'route_name' => 'reports.stock_card', 'icon' => 'table', 'required_permission' => 'warehouse.view', 'order' => 10]);
+        MenuItem::create(['parent_id' => $warehouseGroup->id, 'key' => 'warehouse.report.transactions', 'label' => 'Nhập-Xuất-Tồn chi tiết', 'route_name' => 'reports.inventory_transactions', 'icon' => 'document-text', 'required_permission' => 'warehouse.view', 'order' => 11]);
 
         // Fund Children
         MenuItem::create(['parent_id' => $fundSub->id, 'key' => 'accounting.fund.funds', 'label' => 'Quản lý quỹ', 'route_name' => 'accounting.funds.index', 'icon' => 'library', 'required_permission' => 'accounting.view', 'order' => 1]);

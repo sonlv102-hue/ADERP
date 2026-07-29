@@ -30,6 +30,7 @@ use App\Http\Controllers\Reports\ARAgingController;
 use App\Http\Controllers\Reports\APAgingController;
 use App\Http\Controllers\Reports\VatReportController;
 use App\Http\Controllers\Reports\InventoryReportController;
+use App\Http\Controllers\Reports\InventoryTransactionReportController;
 use App\Http\Controllers\Reports\StockEntryDetailReportController;
 use App\Http\Controllers\Reports\StockExitDetailReportController;
 use App\Http\Controllers\Reports\CashFlowController;
@@ -853,6 +854,8 @@ Route::middleware('auth')->group(function () {
         Route::get('inventory',               [InventoryReportController::class, 'index'])->name('inventory');
         Route::get('inventory/export',        [InventoryReportController::class, 'export'])->name('inventory.export');
         Route::get('stock-card',              [InventoryReportController::class, 'stockCard'])->name('stock_card');
+        Route::get('inventory-transactions',        [InventoryTransactionReportController::class, 'index'])->name('inventory_transactions');
+        Route::get('inventory-transactions/export', [InventoryTransactionReportController::class, 'export'])->name('inventory_transactions.export');
         Route::get('stock-entry-details',     [StockEntryDetailReportController::class, 'index'])->name('stock_entry_details');
         Route::get('stock-entry-details/export', [StockEntryDetailReportController::class, 'export'])->name('stock_entry_details.export');
         Route::get('stock-exit-details',      [StockExitDetailReportController::class, 'index'])->name('stock_exit_details');

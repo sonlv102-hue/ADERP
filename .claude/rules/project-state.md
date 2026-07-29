@@ -56,6 +56,7 @@ Dự án đang ở giai đoạn **vận hành và cải tiến**. Các module co
 | Bảng chấm công: Export Excel (cột ngày động theo số ngày trong tháng + tổng hợp Công/NghỉHL/NghỉKL/OT/Tổng) | Hoàn thành (2026-07-03) |
 | Phiếu kế toán thủ công: chọn Dự án + Nhóm chi phí per-line (`journal_entry_lines.project_id/cost_group`), tự tạo `project_wip_entries` khi post dòng Nợ154, bắt buộc validate, soft-cancel WIP khi đảo/hủy, chống trùng WIP; command `journal-entries:audit-project-dimensions` + `journal-entries:repair-legacy-project-wip` (dry-run) | Hoàn thành (2026-07-15) |
 | Admin tự sửa product_id sai trên dòng hàng đã khóa (Order/Quotation/PurchaseOrder) — thay thế tinker DB surgery; `Order{,Quotation,PurchaseOrder}ItemProductFixService`, route `role:admin`, Modal.vue UI, activity log. Guard rail riêng từng loại (xem `phase-history.md` Services & FSM) | Hoàn thành (2026-07-28) |
+| Sổ chi tiết Nhập-Xuất-Tồn (Mẫu S10-DN) trong menu Kho — báo cáo chi tiết theo từng giao dịch (khác báo cáo tổng hợp `InventoryReportService` ở menu Báo cáo); `InventoryTransactionReportService/Controller/Export`, route `reports.inventory_transactions{,.export}` (permission `reports.view` có sẵn), menu item `warehouse.report.transactions` | Hoàn thành (2026-07-29) |
 
 ## Migration sequence hiện tại
 
@@ -105,4 +106,4 @@ Kỳ khóa → block void/unpost. Bút toán đã posted không sửa trực ti�
 - Local dev: `php artisan serve --host=0.0.0.0` + `npm run dev`
 - DB: PostgreSQL, DB name `mini_erp_db`, host `localhost:5432`
 - VPS: 103.101.161.143, Docker (5 containers), deploy qua `sync-vps.ps1`
-- Tests: 831+ tests (all pass, last verified 2026-07-28)
+- Tests: 838+ tests (all pass, last verified 2026-07-29)
