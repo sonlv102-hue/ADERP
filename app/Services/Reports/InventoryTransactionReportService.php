@@ -21,11 +21,6 @@ class InventoryTransactionReportService
     // '||' thay vì CONCAT() để tương thích cả PostgreSQL (prod) và SQLite (test)
     private const DOC_CODE = "COALESCE(se.code, sx.code, st.code, sr.code, pr.code, ic.code, 'DK-' || sm.id)";
 
-    // Xấp xỉ "thời điểm xác nhận" bằng updated_at của chứng từ (đủ tốt vì status
-    // chỉ đổi 1 lần draft→confirmed) — dùng để phát hiện chứng từ bị nhập/xác
-    // nhận lùi ngày so với ngày chứng từ (xem plans/260729-avco-negative-stock-cost-investigation).
-    private const DOC_CONFIRMED_AT = "COALESCE(se.updated_at, sx.updated_at, st.updated_at, sr.updated_at, pr.updated_at, ic.updated_at, sm.created_at)";
-
     private function addSourceJoins(Builder $query): Builder
     {
         return $query
@@ -112,7 +107,6 @@ class InventoryTransactionReportService
                 DB::raw('COALESCE(sm.amount, 0) as amount'),
                 DB::raw(self::DOC_CODE . ' as doc_code'),
                 DB::raw(self::DOC_DATE . ' as doc_date'),
-                DB::raw(self::DOC_CONFIRMED_AT . ' as doc_confirmed_at'),
             ])
             // Sắp xếp: ngày chứng từ → số chứng từ → thời gian ghi nhận (created_at) → id
             // (id chỉ để phá thế hòa tuyệt đối, không mang ý nghĩa nghiệp vụ)

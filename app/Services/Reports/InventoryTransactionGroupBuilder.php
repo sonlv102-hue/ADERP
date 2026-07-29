@@ -26,9 +26,9 @@ class InventoryTransactionGroupBuilder
         };
     }
 
-    // Ngưỡng coi là "xác nhận lùi ngày": chứng từ xác nhận sau ngày chứng từ
-    // quá 3 ngày (loại trừ độ trễ vận hành thông thường tạo/confirm cùng ngày
-    // hoặc lệch 1-2 ngày). Xem plans/260729-avco-negative-stock-cost-investigation.
+    // Ngưỡng coi là "ghi nhận lùi ngày": thời điểm ghi nhận trong hệ thống muộn hơn
+    // ngày chứng từ quá 3 ngày (loại trừ độ trễ vận hành thông thường tạo/confirm
+    // cùng ngày hoặc lệch 1-2 ngày). Xem plans/260729-avco-negative-stock-cost-investigation.
     private const BACKDATE_THRESHOLD_DAYS = 3;
 
     /** Row mẫu với mọi field mặc định null — override qua $data. 'qty_end'/'value_end' là
@@ -41,23 +41,34 @@ class InventoryTransactionGroupBuilder
             'in_doc_code' => null, 'in_doc_date' => null, 'qty_in' => null, 'value_in' => null,
             'out_doc_code' => null, 'out_doc_date' => null, 'qty_out' => null, 'value_out' => null,
             'qty_end' => null, 'value_end' => null, 'is_negative' => false,
-            'doc_confirmed_at' => null, 'backdated_note' => null,
+            'estimated_confirmed_at' => null, 'backdated_note' => null,
         ], $data);
     }
 
-    /** Chứng từ được xác nhận (updated_at) muộn hơn ngày chứng từ quá ngưỡng → cảnh báo. */
-    private function backdatedNote(?string $docDate, ?string $docConfirmedAt): ?string
+    /**
+     * Cảnh báo khi thời điểm ghi nhận trong hệ thống muộn hơn ngày chứng từ quá
+     * ngưỡng. Dùng `stock_movements.created_at` (tham số $recordedAt) làm mốc —
+     * KHÔNG dùng `updated_at` của stock_entries/stock_exits/... vì cột đó có thể
+     * bị đổi về sau bởi các thao tác không liên quan (VD: admin sửa ngày xuất kho
+     * qua StockExitDateService chỉ đổi exit_date, không đổi stock_movements, nhưng
+     * vẫn bump updated_at của stock_exits). `stock_movements.created_at` được ghi
+     * đúng 1 lần tại thời điểm confirm và không có nơi nào trong code sửa lại sau
+     * đó — xem plans/260729-avco-negative-stock-cost-investigation.
+     */
+    private function backdatedNote(?string $docDate, ?string $recordedAt): ?string
     {
-        if (! $docDate || ! $docConfirmedAt) {
+        if (! $docDate || ! $recordedAt) {
             return null;
         }
-        $daysLate = (strtotime($docConfirmedAt) - strtotime($docDate)) / 86400;
+        $daysLate = (strtotime($recordedAt) - strtotime($docDate)) / 86400;
         if ($daysLate <= self::BACKDATE_THRESHOLD_DAYS) {
             return null;
         }
 
-        return 'Chứng từ xác nhận sau ngày chứng từ (ngày CT: ' . date('d/m/Y', strtotime($docDate))
-            . ', xác nhận lúc: ' . date('d/m/Y H:i', strtotime($docConfirmedAt)) . ')';
+        return 'Thời điểm ghi nhận trong hệ thống muộn hơn ngày chứng từ trên '
+            . self::BACKDATE_THRESHOLD_DAYS . ' ngày. Đây là dấu hiệu tham khảo do hệ thống '
+            . 'chưa lưu thời điểm xác nhận riêng. (Ngày CT: ' . date('d/m/Y', strtotime($docDate))
+            . ', ghi nhận lúc: ' . date('d/m/Y H:i', strtotime($recordedAt)) . ')';
     }
 
     private function stockStatus(bool $everNegative, float $qtyEnd): array
@@ -115,8 +126,8 @@ class InventoryTransactionGroupBuilder
                 'qty_out'      => $isIn ? null : abs($mQty),
                 'value_out'    => $isIn ? null : abs($mVal),
                 'qty_end' => $qty, 'value_end' => $value, 'is_negative' => $qty < 0,
-                'doc_confirmed_at' => $m->doc_confirmed_at ?? null,
-                'backdated_note'   => $this->backdatedNote($m->doc_date ?? null, $m->doc_confirmed_at ?? null),
+                'estimated_confirmed_at' => $m->created_at ?? null,
+                'backdated_note'         => $this->backdatedNote($m->doc_date ?? null, $m->created_at ?? null),
             ]);
         }
 

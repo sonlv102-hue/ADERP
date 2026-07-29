@@ -31,9 +31,14 @@ use Tests\TestCase;
  * TC12: file Excel thực tế (không chỉ mảng PHP) ghi số 0 vào cell, không bỏ trống —
  *       PhpSpreadsheet::fromArray() mặc định so sánh loose ($cellValue != null) nên số 0
  *       bị coi như null và KHÔNG được ghi vào cell nếu thiếu WithStrictNullComparison
- * TC13: chứng từ xuất có ngày CT trước ngày CT nhập nhưng xác nhận (updated_at) muộn hơn
- *       nhiều tháng → badge "Âm theo ngày chứng từ" (không phải "Đã từng âm kho") +
- *       backdated_note trên đúng dòng bị lùi ngày, không lan sang chứng từ bình thường
+ * TC13: chứng từ xuất có ngày CT trước ngày CT nhập nhưng ghi nhận (stock_movements
+ *       .created_at) muộn hơn nhiều tháng → badge "Âm theo ngày chứng từ" (không phải
+ *       "Đã từng âm kho") + backdated_note trên đúng dòng bị lùi ngày, không lan sang
+ *       chứng từ bình thường
+ * TC14: ngưỡng cảnh báo — đúng 3 ngày KHÔNG cảnh báo, hơn 3 ngày (3 ngày + 1 giờ) CÓ cảnh báo
+ * TC15: sửa ngày chứng từ sau khi confirm (bump updated_at của stock_exits, như
+ *       StockExitDateService) KHÔNG được làm thay đổi kết luận — vì backdated_note dựa
+ *       vào stock_movements.created_at, không phải updated_at của chứng từ
  */
 class InventoryTransactionReportTest extends TestCase
 {
@@ -170,10 +175,11 @@ class InventoryTransactionReportTest extends TestCase
 
     public function test_tc13_backdated_exit_label_and_note(): void
     {
-        // Mô phỏng case thật XK-0013: chứng từ nhập ngày 15/01 (confirm cùng ngày, không
-        // bị lùi), chứng từ xuất ngày CT 10/01 (trước ngày nhập) nhưng thực tế được tạo
-        // và xác nhận (updated_at) tận tháng 6 → "xuất trước nhập" chỉ do ngày chứng từ,
-        // không phải do xác nhận trước — xem plans/260729-avco-negative-stock-cost-investigation.
+        // Mô phỏng case thật XK-0013: chứng từ nhập ngày 15/01, movement ghi nhận cùng
+        // ngày (không bị lùi); chứng từ xuất ngày CT 10/01 (trước ngày nhập) nhưng
+        // movement thực tế được ghi nhận (created_at) tận tháng 6 → "xuất trước nhập"
+        // chỉ do ngày chứng từ, không phải do ghi nhận trước — xem
+        // plans/260729-avco-negative-stock-cost-investigation.
         $entryId = DB::table('stock_entries')->insertGetId([
             'code' => 'NK-ITR-BD01', 'warehouse_id' => $this->wh1->id, 'entry_date' => '2026-01-15',
             'status' => 'confirmed', 'created_by' => $this->user->id,
@@ -203,9 +209,73 @@ class InventoryTransactionReportTest extends TestCase
         $exitRow = collect($movementRows)->first(fn ($r) => $r['out_doc_code'] === 'XK-ITR-BD01');
         $entryRow = collect($movementRows)->first(fn ($r) => $r['in_doc_code'] === 'NK-ITR-BD01');
 
-        $this->assertNotNull($exitRow['backdated_note'], 'Chứng từ xác nhận 5 tháng sau ngày CT phải có ghi chú lùi ngày');
-        $this->assertStringContainsString('xác nhận sau ngày chứng từ', $exitRow['backdated_note']);
-        $this->assertNull($entryRow['backdated_note'], 'Chứng từ xác nhận cùng ngày không được gắn ghi chú lùi ngày');
+        $this->assertNotNull($exitRow['backdated_note'], 'Ghi nhận 5 tháng sau ngày CT phải có ghi chú lùi ngày');
+        $this->assertStringContainsString('dấu hiệu tham khảo', $exitRow['backdated_note']);
+        $this->assertNull($entryRow['backdated_note'], 'Ghi nhận cùng ngày không được gắn ghi chú lùi ngày');
+    }
+
+    public function test_tc14_backdated_note_threshold_boundary(): void
+    {
+        // Đúng 3 ngày (72h tròn) → KHÔNG cảnh báo.
+        $exitExactId = DB::table('stock_exits')->insertGetId([
+            'code' => 'XK-ITR-BD02', 'warehouse_id' => $this->wh1->id, 'exit_date' => '2026-01-10',
+            'status' => 'confirmed', 'created_by' => $this->user->id,
+            'created_at' => '2026-01-13 00:00:00', 'updated_at' => '2026-01-13 00:00:00',
+        ]);
+        $this->insertMovement([
+            'quantity' => -1, 'amount' => -100000, 'source_type' => 'App\\Models\\StockExit',
+            'source_id' => $exitExactId, 'created_at' => '2026-01-13 00:00:00',
+        ]);
+
+        // Hơn 3 ngày (72h + 1h) → CÓ cảnh báo.
+        $exitOverId = DB::table('stock_exits')->insertGetId([
+            'code' => 'XK-ITR-BD03', 'warehouse_id' => $this->wh1->id, 'exit_date' => '2026-01-10',
+            'status' => 'confirmed', 'created_by' => $this->user->id,
+            'created_at' => '2026-01-13 01:00:00', 'updated_at' => '2026-01-13 01:00:00',
+        ]);
+        $this->insertMovement([
+            'quantity' => -1, 'amount' => -100000, 'source_type' => 'App\\Models\\StockExit',
+            'source_id' => $exitOverId, 'created_at' => '2026-01-13 01:00:00',
+        ]);
+
+        $group = $this->firstGroup(['date_from' => '2026-01-01', 'date_to' => '2026-01-31']);
+        $movementRows = collect($group['rows'])->filter(fn ($r) => $r['row_type'] === 'movement');
+
+        $exactRow = $movementRows->first(fn ($r) => $r['out_doc_code'] === 'XK-ITR-BD02');
+        $overRow  = $movementRows->first(fn ($r) => $r['out_doc_code'] === 'XK-ITR-BD03');
+
+        $this->assertNull($exactRow['backdated_note'], 'Đúng ngưỡng 3 ngày không được cảnh báo');
+        $this->assertNotNull($overRow['backdated_note'], 'Vượt ngưỡng 3 ngày phải cảnh báo');
+    }
+
+    public function test_tc15_later_document_edit_does_not_change_backdated_conclusion(): void
+    {
+        // Xuất ghi nhận đúng ngày chứng từ (không lùi ngày).
+        $exitId = DB::table('stock_exits')->insertGetId([
+            'code' => 'XK-ITR-BD04', 'warehouse_id' => $this->wh1->id, 'exit_date' => '2026-01-10',
+            'status' => 'confirmed', 'created_by' => $this->user->id,
+            'created_at' => '2026-01-10 09:00:00', 'updated_at' => '2026-01-10 09:00:00',
+        ]);
+        $this->insertMovement([
+            'quantity' => -1, 'amount' => -100000, 'source_type' => 'App\\Models\\StockExit',
+            'source_id' => $exitId, 'created_at' => '2026-01-10 09:00:00',
+        ]);
+
+        // Mô phỏng admin sửa ngày xuất kho về sau (StockExitDateService) — chỉ đổi
+        // exit_date/updated_at trên stock_exits, KHÔNG đổi stock_movements (đúng
+        // hành vi thật của service, xem StockExitDateService.php dòng 20+59).
+        DB::table('stock_exits')->where('id', $exitId)->update([
+            'updated_at' => '2026-07-01 10:00:00',
+        ]);
+
+        $group = $this->firstGroup(['date_from' => '2026-01-01', 'date_to' => '2026-01-31']);
+        $movementRows = array_values(array_filter($group['rows'], fn ($r) => $r['row_type'] === 'movement'));
+        $exitRow = collect($movementRows)->first(fn ($r) => $r['out_doc_code'] === 'XK-ITR-BD04');
+
+        $this->assertNull(
+            $exitRow['backdated_note'],
+            'Sửa chứng từ sau này (bump updated_at) không được làm sai lệch kết luận vì đã dùng mốc thời gian đáng tin cậy từ stock_movements'
+        );
     }
 
     public function test_tc12_excel_export_closing_row_zero_not_blank(): void
