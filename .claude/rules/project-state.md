@@ -1,6 +1,6 @@
 # Mini ERP — Project State
 
-Cập nhật: 2026-07-28. File này ghi trạng thái ngắn gọn để tránh phải đọc lại toàn bộ phase-history.
+Cập nhật: 2026-07-29. File này ghi trạng thái ngắn gọn để tránh phải đọc lại toàn bộ phase-history.
 
 ## Trạng thái hiện tại
 
@@ -95,6 +95,7 @@ Tất cả services dùng `AccountingSettings::get('key', 'fallback')` — khôn
 11. `PrepaidExpenses/Form.vue` (form tạo CPTT thường, không phải opening balance) có default `expense_account: '642'` không khớp option nào trong dropdown (chỉ có 6421/6422/627/635) — TK 642 là TK tổng hợp, `AccountingService::validateLines()` sẽ reject nếu user submit mà không đổi select → lỗi 500. Bug có sẵn, phát hiện khi review code liên quan; chưa sửa vì ngoài phạm vi task CCDC/CPTT opening-balance (form Số dư đầu kỳ CPTT mới đã tự sửa default đúng '6422').
 12. **6 JE cũ id 999-1004 (G2, tổng 182.565.000đ, "kết chuyển lương kỹ thuật" Dr154/Cr627)** thiếu `project_id`/`cost_group` — phát hiện qua `journal-entries:audit-project-dimensions`. **Chưa tự sửa** — chỉ Medium confidence hướng về DA-0001 (dự án in_progress duy nhất), không có bằng chứng trực tiếp. Dùng `journal-entries:repair-legacy-project-wip --je=999,1000,1001,1002,1003,1004 --project=<mã> --cost-group=labor --dry-run` để xem trước, cần kế toán xác nhận đúng dự án trước khi thêm `--apply`.
 13. **`OrderItem::$fillable` thiếu field (đã fix 2026-07-28):** trước fix, `unit`, `unit_cogs`, `unit_cogs_source`, `revenue_account_code` bị mass-assignment silently drop trên MỌI order tạo/sửa qua `OrderController`. Đã sửa `$fillable`. **Dữ liệu lịch sử (order_items tạo trước 2026-07-28) có thể có `unit_cogs`/`unit_cogs_source`/`revenue_account_code` = NULL — CHƯA backfill**, theo quyết định của user (tự xử lý sau, có thể qua chính công cụ admin fix-product ở mục 57 phía trên vì service đó re-snapshot COGS khi đổi product). Không tự ý chạy backfill nếu chưa được yêu cầu.
+14. **`deploy.sh` KHÔNG chạy `db:seed`** (chỉ `migrate --force`) — menu (`menu_items`) là DB-driven và chỉ được seed qua `RolePermissionSeeder`. Bất kỳ feature mới nào thêm `MenuItem::create()` vào seeder sẽ **không tự xuất hiện trên VPS sau deploy** cho tới khi seeder được chạy thủ công. Phát hiện lần đầu 2026-07-29: menu "Nhập-Xuất-Tồn chi tiết" (Kho) mất tích trên VPS dù route/controller đã hoạt động — do `menu_items` production thiếu đúng 1 row. Đã fix bằng cách insert thủ công đúng 1 row qua tinker (an toàn, không đụng permissions/roles) thay vì chạy lại cả seeder — vì `RolePermissionSeeder` có `MenuItem::truncate()` + `role->permissions()->sync()` theo danh sách cứng, có thể ghi đè các thay đổi quyền thủ công trên production nếu có. **Khi thêm menu item mới trong tương lai**: sau khi deploy, phải kiểm tra `MenuItem::where('key', '...')->exists()` trên VPS và insert thủ công nếu thiếu (hoặc xác nhận rõ với user trước khi chạy lại `db:seed --class=RolePermissionSeeder`).
 
 ## Accounting — JE FSM
 
