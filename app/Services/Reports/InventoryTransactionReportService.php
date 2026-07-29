@@ -103,120 +103,43 @@ class InventoryTransactionReportService
             ->when($warehouseId, fn ($q) => $q->where('sm.warehouse_id', $warehouseId))
             ->whereRaw(self::DOC_DATE . ' BETWEEN ? AND ?', [$dateFrom, $dateTo])
             ->select([
-                'sm.product_id', 'sm.quantity', 'sm.source_type',
+                'sm.product_id', 'sm.quantity', 'sm.source_type', 'sm.created_at',
                 DB::raw('COALESCE(sm.amount, 0) as amount'),
                 DB::raw(self::DOC_CODE . ' as doc_code'),
                 DB::raw(self::DOC_DATE . ' as doc_date'),
             ])
+            // Sắp xếp: ngày chứng từ → số chứng từ → thời gian ghi nhận (created_at) → id
+            // (id chỉ để phá thế hòa tuyệt đối, không mang ý nghĩa nghiệp vụ)
             ->orderBy('sm.product_id')
             ->orderByRaw(self::DOC_DATE)
+            ->orderByRaw(self::DOC_CODE)
+            ->orderBy('sm.created_at')
             ->orderBy('sm.id')
             ->get();
 
         return $rows->groupBy('product_id');
     }
 
-    private function describeMovement(object $row): string
-    {
-        return match (class_basename($row->source_type ?? '')) {
-            'StockEntry'              => "Nhập kho {$row->doc_code}",
-            'StockExit'               => "Xuất kho {$row->doc_code}",
-            'StockTransfer'           => "Chuyển kho {$row->doc_code}",
-            'SalesReturn'             => "Trả hàng bán {$row->doc_code}",
-            'PurchaseReturn'          => "Trả hàng mua {$row->doc_code}",
-            'InventoryCount'          => "Điều chỉnh kiểm kê {$row->doc_code}",
-            'InventoryOpeningBalance' => 'Tồn kho đầu kỳ',
-            default                   => "{$row->doc_code}",
-        };
-    }
-
-    /** Row mẫu 14-cột với mọi field mặc định null — override qua $data */
-    private function row(string $type, string $desc, array $data = []): array
-    {
-        return array_merge([
-            'row_type' => $type, 'description' => $desc,
-            'qty_begin' => null, 'value_begin' => null,
-            'in_doc_code' => null, 'in_doc_date' => null, 'qty_in' => null, 'value_in' => null,
-            'out_doc_code' => null, 'out_doc_date' => null, 'qty_out' => null, 'value_out' => null,
-            'qty_end' => null, 'value_end' => null,
-        ], $data);
-    }
-
-    /**
-     * 1 group = 1 sản phẩm: [dòng tồn đầu kỳ, ...dòng giao dịch, dòng tồn cuối kỳ]
-     */
-    private function buildGroup(object $product, Collection $movements): array
-    {
-        $qty   = (float) $product->qty_begin;
-        $value = (float) $product->value_begin;
-
-        $rows = [$this->row('opening', 'Tồn đầu kỳ', [
-            'qty_begin' => $qty, 'value_begin' => $value, 'qty_end' => $qty, 'value_end' => $value,
-        ])];
-
-        $totalIn = $totalInValue = $totalOut = $totalOutValue = 0.0;
-
-        foreach ($movements as $m) {
-            $mQty = (float) $m->quantity;
-            $mVal = (float) $m->amount;
-            $qty   += $mQty;
-            $value += $mVal;
-            $isIn   = $mQty > 0;
-
-            if ($isIn) {
-                $totalIn += $mQty;
-                $totalInValue += $mVal;
-            } else {
-                $totalOut += abs($mQty);
-                $totalOutValue += abs($mVal);
-            }
-
-            $rows[] = $this->row('movement', $this->describeMovement($m), [
-                'in_doc_code'  => $isIn ? $m->doc_code : null,
-                'in_doc_date'  => $isIn ? $m->doc_date : null,
-                'qty_in'       => $isIn ? $mQty : null,
-                'value_in'     => $isIn ? $mVal : null,
-                'out_doc_code' => $isIn ? null : $m->doc_code,
-                'out_doc_date' => $isIn ? null : $m->doc_date,
-                'qty_out'      => $isIn ? null : abs($mQty),
-                'value_out'    => $isIn ? null : abs($mVal),
-                'qty_end' => $qty, 'value_end' => $value,
-            ]);
-        }
-
-        $rows[] = $this->row('closing', 'Cộng phát sinh + Tồn cuối kỳ', [
-            'qty_in' => $totalIn, 'value_in' => $totalInValue,
-            'qty_out' => $totalOut, 'value_out' => $totalOutValue,
-            'qty_end' => $qty, 'value_end' => $value,
-        ]);
-
-        return [
-            'product' => [
-                'id' => $product->id, 'code' => $product->code, 'name' => $product->name,
-                'unit' => $product->unit, 'category' => $product->category ?? '—',
-            ],
-            'rows' => $rows,
-        ];
-    }
-
     public function buildProductPage(array $filters, int $perPage = 15): LengthAwarePaginator
     {
+        $builder = new InventoryTransactionGroupBuilder();
         $paginator = $this->buildProductQuery($filters)->paginate($perPage);
         $movementsByProduct = $this->fetchMovements(
             collect($paginator->items())->pluck('id')->all(),
             $filters
         );
 
-        $paginator->through(fn ($row) => $this->buildGroup($row, $movementsByProduct->get($row->id, collect())));
+        $paginator->through(fn ($row) => $builder->build($row, $movementsByProduct->get($row->id, collect())));
 
         return $paginator;
     }
 
     public function buildAllProductGroups(array $filters): Collection
     {
+        $builder = new InventoryTransactionGroupBuilder();
         $products = $this->buildProductQuery($filters)->get();
         $movementsByProduct = $this->fetchMovements($products->pluck('id')->all(), $filters);
 
-        return $products->map(fn ($row) => $this->buildGroup($row, $movementsByProduct->get($row->id, collect())));
+        return $products->map(fn ($row) => $builder->build($row, $movementsByProduct->get($row->id, collect())));
     }
 }

@@ -21,6 +21,9 @@ use Tests\TestCase;
  * TC7: route 403 khi thiếu permission reports.view; 200 khi có
  * TC8: sản phẩm không có tồn đầu kỳ VÀ không phát sinh trong kỳ bị ẩn khỏi báo cáo;
  *      sản phẩm có tồn đầu kỳ (dù không phát sinh) vẫn phải hiện
+ * TC9: dòng tổng hợp trả về đúng số 0 (không phải null/blank) khi tồn cuối = 0
+ * TC10: xuất trước khi có tồn → dòng đó is_negative=true, status='was_negative' sau khi bù đủ
+ * TC11: cuối kỳ vẫn âm → status='negative_ending'
  */
 class InventoryTransactionReportTest extends TestCase
 {
@@ -112,6 +115,47 @@ class InventoryTransactionReportTest extends TestCase
         $this->assertEquals(3.0, $closing['qty_out']);
         $this->assertEquals(12.0, $closing['qty_end'], '10 (đầu kỳ) + 5 (nhập) - 3 (xuất) = 12');
         $this->assertEquals(1200000.0, $closing['value_end']);
+        $this->assertEquals(10.0, $closing['qty_begin'], 'Dòng tổng hợp phải nhắc lại tồn đầu kỳ, không để trống');
+        $this->assertEquals(1000000.0, $closing['value_begin']);
+    }
+
+    public function test_tc9_closing_row_shows_zero_not_blank_when_balanced_to_zero(): void
+    {
+        $this->insertMovement(['quantity' => 3, 'amount' => 300000, 'created_at' => '2026-01-05 10:00:00']);
+        $this->insertMovement(['quantity' => -3, 'amount' => -300000, 'created_at' => '2026-01-06 10:00:00']);
+
+        $group = $this->firstGroup(['date_from' => '2026-01-01', 'date_to' => '2026-01-31']);
+        $closing = end($group['rows']);
+
+        $this->assertSame(0.0, $closing['qty_end'], 'Tồn cuối kỳ = 0 phải là số 0, không phải null/blank');
+        $this->assertSame(0.0, $closing['value_end']);
+        $this->assertSame(0.0, $closing['qty_begin']);
+    }
+
+    public function test_tc10_negative_stock_status_detected(): void
+    {
+        // Xuất trước khi có tồn (xuất 2, sau đó mới nhập 2) → từng âm, cuối kỳ về 0 → "was_negative"
+        $this->insertMovement(['quantity' => -2, 'amount' => -200000, 'created_at' => '2026-01-05 10:00:00']);
+        $this->insertMovement(['quantity' => 2,  'amount' => 200000,  'created_at' => '2026-01-10 10:00:00']);
+
+        $group = $this->firstGroup(['date_from' => '2026-01-01', 'date_to' => '2026-01-31']);
+
+        $this->assertEquals('was_negative', $group['status']['code']);
+        $movementRows = array_values(array_filter($group['rows'], fn ($r) => $r['row_type'] === 'movement'));
+        $this->assertTrue($movementRows[0]['is_negative'], 'Dòng xuất khi chưa có tồn phải được đánh dấu âm kho');
+        $this->assertFalse($movementRows[1]['is_negative'], 'Sau khi nhập bù, dòng này không còn âm');
+    }
+
+    public function test_tc11_negative_ending_status_when_still_negative_at_period_end(): void
+    {
+        $this->insertMovement(['quantity' => -5, 'amount' => -500000, 'created_at' => '2026-01-05 10:00:00']);
+
+        $group = $this->firstGroup(['date_from' => '2026-01-01', 'date_to' => '2026-01-31']);
+        $closing = end($group['rows']);
+
+        $this->assertEquals('negative_ending', $group['status']['code']);
+        $this->assertEquals(-5.0, $closing['qty_end']);
+        $this->assertTrue($closing['is_negative']);
     }
 
     public function test_tc4_voided_movement_excluded(): void

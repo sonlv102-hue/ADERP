@@ -52,21 +52,21 @@
               <th colspan="2" class="text-center px-3 py-2 font-semibold text-gray-600 border-r border-gray-100">Tồn đầu kỳ</th>
               <th colspan="4" class="text-center px-3 py-2 font-semibold text-blue-700 border-r border-gray-100 bg-blue-50">Nhập trong kỳ</th>
               <th colspan="4" class="text-center px-3 py-2 font-semibold text-orange-700 border-r border-gray-100 bg-orange-50">Xuất trong kỳ</th>
-              <th colspan="2" class="text-center px-3 py-2 font-semibold text-green-700 bg-green-50">Tồn cuối kỳ</th>
+              <th colspan="2" class="text-center px-3 py-2 font-semibold text-green-700 bg-green-50" title="Tồn ngay sau dòng này — chỉ dòng &quot;Cộng phát sinh + Tồn cuối kỳ&quot; mới là số tồn cuối kỳ thực tế">Tồn sau CT</th>
             </tr>
             <tr class="border-b border-gray-200">
               <th class="text-right px-3 py-2 font-medium text-gray-500 text-xs whitespace-nowrap">SL</th>
-              <th class="text-right px-3 py-2 font-medium text-gray-500 text-xs border-r border-gray-100 whitespace-nowrap">Tiền</th>
+              <th class="text-right px-3 py-2 font-medium text-gray-500 text-xs border-r border-gray-100 whitespace-nowrap">Giá trị</th>
               <th class="text-left px-3 py-2 font-medium text-blue-600 text-xs bg-blue-50 whitespace-nowrap">Số CT</th>
               <th class="text-center px-3 py-2 font-medium text-blue-600 text-xs bg-blue-50 whitespace-nowrap">Ngày</th>
               <th class="text-right px-3 py-2 font-medium text-blue-600 text-xs bg-blue-50 whitespace-nowrap">SL</th>
-              <th class="text-right px-3 py-2 font-medium text-blue-600 text-xs bg-blue-50 border-r border-gray-100 whitespace-nowrap">Tiền</th>
+              <th class="text-right px-3 py-2 font-medium text-blue-600 text-xs bg-blue-50 border-r border-gray-100 whitespace-nowrap">Giá trị</th>
               <th class="text-left px-3 py-2 font-medium text-orange-600 text-xs bg-orange-50 whitespace-nowrap">Số CT</th>
               <th class="text-center px-3 py-2 font-medium text-orange-600 text-xs bg-orange-50 whitespace-nowrap">Ngày</th>
               <th class="text-right px-3 py-2 font-medium text-orange-600 text-xs bg-orange-50 whitespace-nowrap">SL</th>
-              <th class="text-right px-3 py-2 font-medium text-orange-600 text-xs bg-orange-50 border-r border-gray-100 whitespace-nowrap">Tiền</th>
+              <th class="text-right px-3 py-2 font-medium text-orange-600 text-xs bg-orange-50 border-r border-gray-100 whitespace-nowrap">Giá trị</th>
               <th class="text-right px-3 py-2 font-medium text-green-600 text-xs bg-green-50 whitespace-nowrap">SL</th>
-              <th class="text-right px-3 py-2 font-medium text-green-600 text-xs bg-green-50 whitespace-nowrap">Tiền</th>
+              <th class="text-right px-3 py-2 font-medium text-green-600 text-xs bg-green-50 whitespace-nowrap">Giá trị</th>
             </tr>
           </thead>
           <template v-for="group in rows.data" :key="group.product.id">
@@ -74,9 +74,17 @@
               <tr
                 v-for="(r, idx) in group.rows"
                 :key="idx"
-                :class="r.row_type === 'movement' ? 'hover:bg-gray-50' : 'font-semibold bg-slate-50'"
+                :class="[
+                  r.row_type === 'movement' ? 'hover:bg-gray-50' : 'font-semibold bg-slate-50',
+                  r.is_negative ? 'bg-red-50' : '',
+                ]"
               >
-                <td class="px-4 py-2 font-mono text-xs text-primary-700 border-r border-gray-100 whitespace-nowrap">{{ idx === 0 ? group.product.code : '' }}</td>
+                <td class="px-4 py-2 font-mono text-xs text-primary-700 border-r border-gray-100 whitespace-nowrap">
+                  <div class="flex items-center gap-2">
+                    <span>{{ idx === 0 ? group.product.code : '' }}</span>
+                    <StatusBadge v-if="idx === 0 && group.status.code !== 'normal'" :color="group.status.color">{{ group.status.label }}</StatusBadge>
+                  </div>
+                </td>
                 <td class="px-4 py-2 text-gray-800 border-r border-gray-100 whitespace-nowrap">{{ r.description }}</td>
                 <td class="px-3 py-2 text-right text-gray-700 whitespace-nowrap">{{ fmtQty(r.qty_begin) }}</td>
                 <td class="px-3 py-2 text-right text-gray-600 text-xs border-r border-gray-100 whitespace-nowrap">{{ fmtVal(r.value_begin) }}</td>
@@ -88,8 +96,8 @@
                 <td class="px-3 py-2 text-center text-gray-500 text-xs whitespace-nowrap">{{ fmtDate(r.out_doc_date) }}</td>
                 <td class="px-3 py-2 text-right text-orange-700 whitespace-nowrap">{{ fmtQty(r.qty_out) }}</td>
                 <td class="px-3 py-2 text-right text-orange-700 border-r border-gray-100 whitespace-nowrap">{{ fmtVal(r.value_out) }}</td>
-                <td class="px-3 py-2 text-right text-gray-800 whitespace-nowrap">{{ fmtQty(r.qty_end) }}</td>
-                <td class="px-3 py-2 text-right text-green-700 whitespace-nowrap">{{ fmt(r.value_end) }}</td>
+                <td class="px-3 py-2 text-right whitespace-nowrap" :class="r.is_negative ? 'text-red-600 font-semibold' : 'text-gray-800'">{{ fmtQty(r.qty_end) }}</td>
+                <td class="px-3 py-2 text-right whitespace-nowrap" :class="r.is_negative ? 'text-red-600 font-semibold' : 'text-green-700'">{{ fmt(r.value_end) }}</td>
               </tr>
             </tbody>
           </template>
@@ -112,6 +120,7 @@ import AppLayout from '@/Components/Layout/AppLayout.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
 import FormField from '@/Components/Shared/FormField.vue';
 import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
+import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import { useCurrency } from '@/composables/useCurrency';
 
 const props = defineProps({

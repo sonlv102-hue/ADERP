@@ -19,15 +19,17 @@ class InventoryTransactionReportExport implements FromCollection, WithHeadings, 
     {
         return [
             'Mã hàng hóa', 'Diễn giải',
-            'SL tồn đầu kỳ', 'Tiền tồn đầu kỳ',
-            'Số chứng từ nhập', 'Ngày nhập kho', 'SL nhập trong kỳ', 'Tiền nhập trong kỳ',
-            'Số chứng từ xuất', 'Ngày xuất kho', 'SL xuất trong kỳ', 'Tiền xuất trong kỳ',
-            'SL tồn cuối kỳ', 'Tiền tồn cuối kỳ',
+            'SL tồn đầu kỳ', 'Giá trị tồn đầu kỳ',
+            'Số chứng từ nhập', 'Ngày nhập kho', 'SL nhập trong kỳ', 'Giá trị nhập trong kỳ',
+            'Số chứng từ xuất', 'Ngày xuất kho', 'SL xuất trong kỳ', 'Giá trị xuất trong kỳ',
+            'SL tồn sau CT', 'Giá trị tồn sau CT', 'Trạng thái tồn kho',
         ];
     }
 
     // Không dùng WithMapping vì mỗi "dòng" Excel thực chất đến từ 1 group nhiều dòng —
     // tự dựng mảng phẳng ở đây để giữ đúng cột mã hàng hóa lặp lại mỗi dòng cho dễ đọc.
+    // Cột "SL/Giá trị tồn sau CT" = tồn NGAY SAU dòng đó; chỉ dòng "Cộng phát sinh +
+    // Tồn cuối kỳ" mới là số tồn cuối kỳ thực tế — xem mô tả dòng.
     public function collection()
     {
         $groups = (new InventoryTransactionReportService())->buildAllProductGroups($this->filters);
@@ -50,6 +52,7 @@ class InventoryTransactionReportExport implements FromCollection, WithHeadings, 
                     $row['value_out'],
                     $row['qty_end'],
                     $row['value_end'],
+                    $row['row_type'] === 'closing' ? $group['status']['label'] : '',
                 ]);
             }
         }

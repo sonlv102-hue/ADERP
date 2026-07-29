@@ -56,3 +56,28 @@ Sanity check: 100 + 140 − 100 = 140 ✓ — matches last-row running balance.
 ## Not in Scope
 - Signature block / printed PDF (lookup report per `reporting-standards.md` rule 7).
 - Hard business-rule date-range cap (documented as a recommendation only).
+
+## P0 revision (2026-07-29)
+
+User feedback sau khi dùng thử: cột "tồn cuối kỳ" trên MỌI dòng (kể cả dòng
+giao dịch) gây hiểu nhầm — thực chất đó là "tồn sau chứng từ", chỉ dòng
+"Cộng phát sinh + Tồn cuối kỳ" mới là tồn cuối kỳ thật. Đã sửa:
+- Đổi header cột → "Tồn sau CT" (kèm tooltip); dòng closing luôn nhắc lại
+  tồn đầu kỳ (không để trống) + tổng nhập/xuất + tồn cuối kỳ thực.
+- Thêm phát hiện âm kho: `is_negative` per-row + `status` per-product
+  (normal/was_negative/negative_ending), tô đỏ dòng âm, badge cảnh báo.
+- Sắp xếp giao dịch: ngày chứng từ → số chứng từ → created_at → id.
+- Đổi "Tiền" → "Giá trị" toàn bộ header (UI + Excel).
+- Tách `InventoryTransactionGroupBuilder` khỏi Service để giữ ≤200 dòng/file.
+
+**Phát hiện phụ (chưa sửa, ngoài phạm vi report):** 3 mã hàng âm kho thật
+(Aruba 6100 24G/48G, J9150D) có `value_out` của dòng xuất khớp CHÍNH XÁC
+với `value_in` của dòng nhập kho theo sau — dấu hiệu giá xuất kho tại thời
+điểm xuất trước nhập không được tính bằng AVCO thời điểm đó mà có thể đã
+bị backfill/khớp theo lô nhập sau. Đây là vấn đề của `AvcoService`/
+`StockService`, không phải của report — cần điều tra riêng, không tự sửa
+vì rủi ro cao với engine kế toán/kho (theo CLAUDE.md).
+
+Người dùng đã xác nhận scope: **chỉ P0** — P1 (tách 2 loại báo cáo tổng
+hợp/chi tiết, thêm cột ĐVT/kho/nhóm hàng, filter trạng thái âm kho) và P2
+(drill-down, đối chiếu TK 152/153) để lại cho phiên sau.
