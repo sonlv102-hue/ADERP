@@ -82,17 +82,19 @@
                 <td class="px-4 py-2 font-mono text-xs text-primary-700 border-r border-gray-100 whitespace-nowrap">
                   <div class="flex items-center gap-2">
                     <span>{{ idx === 0 ? group.product.code : '' }}</span>
-                    <StatusBadge v-if="idx === 0 && group.status.code !== 'normal'" :color="group.status.color">{{ group.status.label }}</StatusBadge>
+                    <span v-if="idx === 0 && group.status.code !== 'normal'" :title="statusTooltip(group.status.code)">
+                      <StatusBadge :color="group.status.color">{{ group.status.label }}</StatusBadge>
+                    </span>
                   </div>
                 </td>
                 <td class="px-4 py-2 text-gray-800 border-r border-gray-100 whitespace-nowrap">{{ r.description }}</td>
                 <td class="px-3 py-2 text-right text-gray-700 whitespace-nowrap">{{ fmtQty(r.qty_begin) }}</td>
                 <td class="px-3 py-2 text-right text-gray-600 text-xs border-r border-gray-100 whitespace-nowrap">{{ fmtVal(r.value_begin) }}</td>
-                <td class="px-3 py-2 text-left text-blue-700 font-mono text-xs whitespace-nowrap">{{ r.in_doc_code ?? '—' }}</td>
+                <td class="px-3 py-2 text-left text-blue-700 font-mono text-xs whitespace-nowrap" :title="r.backdated_note ?? ''">{{ r.in_doc_code ?? '—' }}</td>
                 <td class="px-3 py-2 text-center text-gray-500 text-xs whitespace-nowrap">{{ fmtDate(r.in_doc_date) }}</td>
                 <td class="px-3 py-2 text-right text-blue-700 whitespace-nowrap">{{ fmtQty(r.qty_in) }}</td>
                 <td class="px-3 py-2 text-right text-blue-700 border-r border-gray-100 whitespace-nowrap">{{ fmtVal(r.value_in) }}</td>
-                <td class="px-3 py-2 text-left text-orange-700 font-mono text-xs whitespace-nowrap">{{ r.out_doc_code ?? '—' }}</td>
+                <td class="px-3 py-2 text-left text-orange-700 font-mono text-xs whitespace-nowrap" :title="r.backdated_note ?? ''">{{ r.out_doc_code ?? '—' }}</td>
                 <td class="px-3 py-2 text-center text-gray-500 text-xs whitespace-nowrap">{{ fmtDate(r.out_doc_date) }}</td>
                 <td class="px-3 py-2 text-right text-orange-700 whitespace-nowrap">{{ fmtQty(r.qty_out) }}</td>
                 <td class="px-3 py-2 text-right text-orange-700 border-r border-gray-100 whitespace-nowrap">{{ fmtVal(r.value_out) }}</td>
@@ -176,5 +178,14 @@ function fmtDate(d) {
   if (!d) return '';
   const [y, m, day] = d.split('-');
   return `${day}/${m}/${y}`;
+}
+
+// "Âm theo ngày chứng từ" tính theo thứ tự ngày chứng từ, có thể là cảnh báo giả
+// nếu chứng từ bị nhập/xác nhận lùi ngày — xem plans/260729-avco-negative-stock-cost-investigation.
+function statusTooltip(statusCode) {
+  if (statusCode === 'was_negative') {
+    return 'Số tồn được tính theo ngày chứng từ. Cảnh báo có thể xuất hiện khi chứng từ được nhập hoặc xác nhận lùi ngày, dù tồn kho tại thời điểm xử lý thực tế không bị âm.';
+  }
+  return '';
 }
 </script>

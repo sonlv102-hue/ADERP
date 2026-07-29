@@ -26,6 +26,11 @@ class InventoryTransactionGroupBuilder
         };
     }
 
+    // Ngưỡng coi là "xác nhận lùi ngày": chứng từ xác nhận sau ngày chứng từ
+    // quá 3 ngày (loại trừ độ trễ vận hành thông thường tạo/confirm cùng ngày
+    // hoặc lệch 1-2 ngày). Xem plans/260729-avco-negative-stock-cost-investigation.
+    private const BACKDATE_THRESHOLD_DAYS = 3;
+
     /** Row mẫu với mọi field mặc định null — override qua $data. 'qty_end'/'value_end' là
      *  TỒN SAU DÒNG NÀY (không phải tồn cuối kỳ, trừ khi row_type='closing') — xem cột "Tồn sau CT". */
     private function row(string $type, string $desc, array $data = []): array
@@ -36,7 +41,23 @@ class InventoryTransactionGroupBuilder
             'in_doc_code' => null, 'in_doc_date' => null, 'qty_in' => null, 'value_in' => null,
             'out_doc_code' => null, 'out_doc_date' => null, 'qty_out' => null, 'value_out' => null,
             'qty_end' => null, 'value_end' => null, 'is_negative' => false,
+            'doc_confirmed_at' => null, 'backdated_note' => null,
         ], $data);
+    }
+
+    /** Chứng từ được xác nhận (updated_at) muộn hơn ngày chứng từ quá ngưỡng → cảnh báo. */
+    private function backdatedNote(?string $docDate, ?string $docConfirmedAt): ?string
+    {
+        if (! $docDate || ! $docConfirmedAt) {
+            return null;
+        }
+        $daysLate = (strtotime($docConfirmedAt) - strtotime($docDate)) / 86400;
+        if ($daysLate <= self::BACKDATE_THRESHOLD_DAYS) {
+            return null;
+        }
+
+        return 'Chứng từ xác nhận sau ngày chứng từ (ngày CT: ' . date('d/m/Y', strtotime($docDate))
+            . ', xác nhận lúc: ' . date('d/m/Y H:i', strtotime($docConfirmedAt)) . ')';
     }
 
     private function stockStatus(bool $everNegative, float $qtyEnd): array
@@ -45,7 +66,7 @@ class InventoryTransactionGroupBuilder
             return ['code' => 'negative_ending', 'label' => 'Âm kho cuối kỳ', 'color' => 'red'];
         }
         if ($everNegative) {
-            return ['code' => 'was_negative', 'label' => 'Đã từng âm kho', 'color' => 'yellow'];
+            return ['code' => 'was_negative', 'label' => 'Âm theo ngày chứng từ', 'color' => 'yellow'];
         }
         return ['code' => 'normal', 'label' => 'Bình thường', 'color' => 'green'];
     }
@@ -94,6 +115,8 @@ class InventoryTransactionGroupBuilder
                 'qty_out'      => $isIn ? null : abs($mQty),
                 'value_out'    => $isIn ? null : abs($mVal),
                 'qty_end' => $qty, 'value_end' => $value, 'is_negative' => $qty < 0,
+                'doc_confirmed_at' => $m->doc_confirmed_at ?? null,
+                'backdated_note'   => $this->backdatedNote($m->doc_date ?? null, $m->doc_confirmed_at ?? null),
             ]);
         }
 

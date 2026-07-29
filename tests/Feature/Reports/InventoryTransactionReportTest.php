@@ -31,6 +31,9 @@ use Tests\TestCase;
  * TC12: file Excel thực tế (không chỉ mảng PHP) ghi số 0 vào cell, không bỏ trống —
  *       PhpSpreadsheet::fromArray() mặc định so sánh loose ($cellValue != null) nên số 0
  *       bị coi như null và KHÔNG được ghi vào cell nếu thiếu WithStrictNullComparison
+ * TC13: chứng từ xuất có ngày CT trước ngày CT nhập nhưng xác nhận (updated_at) muộn hơn
+ *       nhiều tháng → badge "Âm theo ngày chứng từ" (không phải "Đã từng âm kho") +
+ *       backdated_note trên đúng dòng bị lùi ngày, không lan sang chứng từ bình thường
  */
 class InventoryTransactionReportTest extends TestCase
 {
@@ -163,6 +166,46 @@ class InventoryTransactionReportTest extends TestCase
         $this->assertEquals('negative_ending', $group['status']['code']);
         $this->assertEquals(-5.0, $closing['qty_end']);
         $this->assertTrue($closing['is_negative']);
+    }
+
+    public function test_tc13_backdated_exit_label_and_note(): void
+    {
+        // Mô phỏng case thật XK-0013: chứng từ nhập ngày 15/01 (confirm cùng ngày, không
+        // bị lùi), chứng từ xuất ngày CT 10/01 (trước ngày nhập) nhưng thực tế được tạo
+        // và xác nhận (updated_at) tận tháng 6 → "xuất trước nhập" chỉ do ngày chứng từ,
+        // không phải do xác nhận trước — xem plans/260729-avco-negative-stock-cost-investigation.
+        $entryId = DB::table('stock_entries')->insertGetId([
+            'code' => 'NK-ITR-BD01', 'warehouse_id' => $this->wh1->id, 'entry_date' => '2026-01-15',
+            'status' => 'confirmed', 'created_by' => $this->user->id,
+            'created_at' => '2026-01-15 09:00:00', 'updated_at' => '2026-01-15 09:00:00',
+        ]);
+        $this->insertMovement([
+            'quantity' => 5, 'amount' => 500000, 'source_type' => 'App\\Models\\StockEntry',
+            'source_id' => $entryId, 'created_at' => '2026-01-15 09:00:00',
+        ]);
+
+        $exitId = DB::table('stock_exits')->insertGetId([
+            'code' => 'XK-ITR-BD01', 'warehouse_id' => $this->wh1->id, 'exit_date' => '2026-01-10',
+            'status' => 'confirmed', 'created_by' => $this->user->id,
+            'created_at' => '2026-06-20 10:00:00', 'updated_at' => '2026-06-25 14:00:00',
+        ]);
+        $this->insertMovement([
+            'quantity' => -5, 'amount' => -500000, 'source_type' => 'App\\Models\\StockExit',
+            'source_id' => $exitId, 'created_at' => '2026-06-25 14:00:00',
+        ]);
+
+        $group = $this->firstGroup(['date_from' => '2026-01-01', 'date_to' => '2026-01-31']);
+
+        $this->assertEquals('was_negative', $group['status']['code']);
+        $this->assertEquals('Âm theo ngày chứng từ', $group['status']['label']);
+
+        $movementRows = array_values(array_filter($group['rows'], fn ($r) => $r['row_type'] === 'movement'));
+        $exitRow = collect($movementRows)->first(fn ($r) => $r['out_doc_code'] === 'XK-ITR-BD01');
+        $entryRow = collect($movementRows)->first(fn ($r) => $r['in_doc_code'] === 'NK-ITR-BD01');
+
+        $this->assertNotNull($exitRow['backdated_note'], 'Chứng từ xác nhận 5 tháng sau ngày CT phải có ghi chú lùi ngày');
+        $this->assertStringContainsString('xác nhận sau ngày chứng từ', $exitRow['backdated_note']);
+        $this->assertNull($entryRow['backdated_note'], 'Chứng từ xác nhận cùng ngày không được gắn ghi chú lùi ngày');
     }
 
     public function test_tc12_excel_export_closing_row_zero_not_blank(): void
