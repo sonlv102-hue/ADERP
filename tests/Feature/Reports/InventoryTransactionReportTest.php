@@ -2,12 +2,16 @@
 
 namespace Tests\Feature\Reports;
 
+use App\Exports\Reports\InventoryTransactionReportExport;
 use App\Models\Product;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Services\Reports\InventoryTransactionReportService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Maatwebsite\Excel\Excel as ExcelWriterType;
+use Maatwebsite\Excel\Facades\Excel;
+use PhpOffice\PhpSpreadsheet\Reader\Xlsx as XlsxReader;
 use Spatie\Permission\Models\Permission;
 use Tests\TestCase;
 
@@ -24,6 +28,9 @@ use Tests\TestCase;
  * TC9: dòng tổng hợp trả về đúng số 0 (không phải null/blank) khi tồn cuối = 0
  * TC10: xuất trước khi có tồn → dòng đó is_negative=true, status='was_negative' sau khi bù đủ
  * TC11: cuối kỳ vẫn âm → status='negative_ending'
+ * TC12: file Excel thực tế (không chỉ mảng PHP) ghi số 0 vào cell, không bỏ trống —
+ *       PhpSpreadsheet::fromArray() mặc định so sánh loose ($cellValue != null) nên số 0
+ *       bị coi như null và KHÔNG được ghi vào cell nếu thiếu WithStrictNullComparison
  */
 class InventoryTransactionReportTest extends TestCase
 {
@@ -156,6 +163,32 @@ class InventoryTransactionReportTest extends TestCase
         $this->assertEquals('negative_ending', $group['status']['code']);
         $this->assertEquals(-5.0, $closing['qty_end']);
         $this->assertTrue($closing['is_negative']);
+    }
+
+    public function test_tc12_excel_export_closing_row_zero_not_blank(): void
+    {
+        $this->insertMovement(['quantity' => 3, 'amount' => 300000, 'created_at' => '2026-01-05 10:00:00']);
+        $this->insertMovement(['quantity' => -3, 'amount' => -300000, 'created_at' => '2026-01-06 10:00:00']);
+
+        $bytes = Excel::raw(
+            new InventoryTransactionReportExport(['date_from' => '2026-01-01', 'date_to' => '2026-01-31']),
+            ExcelWriterType::XLSX
+        );
+
+        $tmpFile = tempnam(sys_get_temp_dir(), 'itr_test') . '.xlsx';
+        file_put_contents($tmpFile, $bytes);
+        $sheetRows = (new XlsxReader())->load($tmpFile)->getActiveSheet()->toArray(null, false, false, true);
+        unlink($tmpFile);
+
+        $closing = collect($sheetRows)->first(
+            fn ($r) => ($r['A'] ?? null) === 'ITR-SP' && str_contains((string) ($r['B'] ?? ''), 'Cộng phát sinh')
+        );
+
+        $this->assertNotNull($closing, 'Không tìm thấy dòng tổng hợp trong file Excel');
+        $this->assertNotNull($closing['C'], 'SL tồn đầu kỳ = 0 bị ghi thành cell trống trong file Excel thật');
+        $this->assertNotNull($closing['M'], 'SL tồn sau CT = 0 bị ghi thành cell trống trong file Excel thật');
+        $this->assertEquals(0.0, (float) $closing['C']);
+        $this->assertEquals(0.0, (float) $closing['M']);
     }
 
     public function test_tc4_voided_movement_excluded(): void

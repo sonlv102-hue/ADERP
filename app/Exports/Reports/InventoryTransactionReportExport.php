@@ -5,11 +5,15 @@ namespace App\Exports\Reports;
 use App\Services\Reports\InventoryTransactionReportService;
 use Maatwebsite\Excel\Concerns\FromCollection;
 use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\WithStrictNullComparison;
 use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class InventoryTransactionReportExport implements FromCollection, WithHeadings, WithStyles, WithTitle
+// WithStrictNullComparison bắt buộc: PhpSpreadsheet::fromArray() mặc định so sánh
+// $cellValue != null (loose) — số 0/0.0 bị coi "bằng null" nên bị bỏ qua, không ghi
+// vào cell (dòng tổng hợp sẽ hiện trống thay vì "0"). Strict comparison (===) fix việc này.
+class InventoryTransactionReportExport implements FromCollection, WithHeadings, WithStrictNullComparison, WithStyles, WithTitle
 {
     public function __construct(private array $filters = []) {}
 
