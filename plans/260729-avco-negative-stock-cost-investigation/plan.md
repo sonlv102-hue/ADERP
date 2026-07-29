@@ -1,7 +1,10 @@
 # Investigation: Giá xuất kho khi "xuất trước nhập" (AVCO) — mã Aruba/J9150D
 
-**Trạng thái: Điều tra xong, CHƯA sửa code.** Task này tách ra từ P0 báo cáo
-Sổ chi tiết Nhập-Xuất-Tồn (`plans/260729-warehouse-inventory-transaction-report/plan.md`).
+**Trạng thái: HOÀN THÀNH.** Điều tra xác nhận AVCO tính đúng (không sửa
+`AvcoService`/`StockService`); phần hiển thị báo cáo đã fix theo hướng đề
+xuất #2+#3 (xem "Đóng task" bên dưới), đã deploy VPS tại commit `97e9a53`.
+Task này tách ra từ P0 báo cáo Sổ chi tiết Nhập-Xuất-Tồn
+(`plans/260729-warehouse-inventory-transaction-report/plan.md`).
 
 ## Nguồn gốc
 
@@ -132,5 +135,74 @@ phải nhiều sự cố rời rạc:
 ## Not in Scope (task này)
 
 - Không sửa `AvcoService.php` / `StockService.php` — không tìm thấy lỗi cần sửa.
-- Không sửa `InventoryTransactionGroupBuilder.php` — chờ người dùng chọn hướng ở trên.
 - Không chạy `inventory:reconcile-balances` hay bất kỳ lệnh ghi dữ liệu nào.
+
+## Đóng task — Hướng xử lý báo cáo đã chọn và triển khai (2026-07-29)
+
+Người dùng chọn kết hợp **đề xuất #2 (tooltip)** + một phần **#3** (không đổi
+tiêu chí sort hiển thị theo ngày chứng từ — vẫn giữ chuẩn S10-DN — nhưng bổ
+sung thêm mốc thời gian đáng tin cậy để cảnh báo/giải thích thay vì đổi hẳn
+thứ tự sort).
+
+**Commit:** `caabc55` (đổi tên badge + tooltip chung, dùng tạm `updated_at`
+chứng từ) → `97e9a53` (fix nguồn dữ liệu, đổi tên field, hoàn thiện test).
+
+### Thay đổi cuối cùng
+
+- Badge `was_negative`: **"Đã từng âm kho"** → **"Âm theo ngày chứng từ"**
+  (label; `code` nội bộ giữ nguyên `was_negative` để không phá vỡ test/API
+  cũ). `negative_ending` giữ nguyên **"Âm kho cuối kỳ"** vì phản ánh đúng
+  tồn âm thật tại cuối kỳ.
+- Tooltip chung trên badge: giải thích số tồn tính theo ngày chứng từ, cảnh
+  báo có thể là false positive nếu chứng từ bị nhập/xác nhận lùi ngày.
+- Mỗi dòng giao dịch: thêm field `estimated_confirmed_at` + `backdated_note`
+  (tooltip trên ô số chứng từ) khi **mốc ghi nhận trong hệ thống muộn hơn
+  ngày chứng từ quá `BACKDATE_THRESHOLD_DAYS = 3` ngày** (const, dễ chỉnh).
+- **Nguồn timestamp:** dùng `stock_movements.created_at` (KHÔNG dùng
+  `stock_entries`/`stock_exits.updated_at` như bản nháp đầu) — vì đã kiểm
+  chứng `updated_at` của chứng từ có thể bị thao tác không liên quan làm
+  trôi thêm sau khi confirm (VD: `StockExitDateService::updateExitDate()`
+  sửa `exit_date` chỉ đổi `stock_exits`/`journal_entries`/
+  `project_wip_entries`, KHÔNG đổi `stock_movements`, nhưng vẫn bump
+  `stock_exits.updated_at`). Ngược lại, `stock_movements.created_at` được
+  ghi đúng 1 lần tại thời điểm tạo movement (bên trong `confirmEntry()`/
+  `confirmExit()`) và grep toàn bộ `app/Services/*.php` xác nhận không có
+  nơi nào update lại bản ghi `StockMovement` đã tồn tại — mốc đáng tin cậy
+  hơn nhiều so với `updated_at` của chứng từ.
+- Tên field: `doc_confirmed_at` (bản nháp, khẳng định quá mức) →
+  `estimated_confirmed_at` (không khẳng định chắc chắn đây là "thời điểm
+  xác nhận" thật, vì hệ thống không có cột `confirmed_at` riêng).
+
+### Test coverage (TC13–TC15, trong `InventoryTransactionReportTest.php`)
+
+- **TC13** — mô phỏng đúng case thật XK-0013 (nhập ghi nhận cùng ngày CT,
+  xuất ghi nhận 5 tháng sau ngày CT dù ngày CT xuất trước ngày CT nhập):
+  đúng badge "Âm theo ngày chứng từ" + `backdated_note` chỉ gắn vào dòng
+  xuất, không lan sang dòng nhập bình thường.
+- **TC14** — ngưỡng: đúng 3 ngày (72h tròn) → KHÔNG cảnh báo; hơn 3 ngày
+  (72h + 1h) → CÓ cảnh báo.
+- **TC15** — sửa chứng từ sau khi confirm (mô phỏng
+  `StockExitDateService` bump `updated_at` của `stock_exits` mà không đổi
+  `stock_movements`) → kết luận `backdated_note` KHÔNG bị thay đổi, vì dựa
+  vào `stock_movements.created_at`, không phải `updated_at` chứng từ.
+
+### Kết quả kiểm thử + deploy
+
+- `php artisan test`: **846/846 pass**.
+- `npm run build`: pass.
+- Deploy VPS (`97e9a53`): push → build Docker → backup DB
+  (`/var/backups/mini_erp/20260729_130411_97e9a53.sql`) → migrate (nothing
+  to migrate) → deploy smoke test **12/12 pass**, log 200/200 lỗi trước/sau
+  (không lỗi mới).
+- Đối chiếu trực tiếp trên dữ liệu production (qua tinker trong container,
+  không tạo user debug, không đăng nhập browser): cả 6 mã Aruba/J9150D hiện
+  đúng badge "Âm theo ngày chứng từ" + `backdated_note` đúng nội dung.
+
+### Còn lại (không chặn đóng task)
+
+- Kiểm tra UI qua trình duyệt bằng tài khoản quản trị thật — ghi nhận là
+  bước nghiệm thu bổ sung, thực hiện khi người dùng tiện đăng nhập.
+- Task audit toàn hệ thống (`plans/260729-doc-date-vs-confirm-audit/plan.md`)
+  giữ ở backlog, ưu tiên thấp, chưa triển khai.
+
+**Task điều chỉnh cảnh báo âm theo ngày chứng từ: ĐÓNG.**
