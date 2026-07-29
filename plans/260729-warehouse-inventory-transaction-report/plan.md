@@ -81,3 +81,66 @@ vì rủi ro cao với engine kế toán/kho (theo CLAUDE.md).
 Người dùng đã xác nhận scope: **chỉ P0** — P1 (tách 2 loại báo cáo tổng
 hợp/chi tiết, thêm cột ĐVT/kho/nhóm hàng, filter trạng thái âm kho) và P2
 (drill-down, đối chiếu TK 152/153) để lại cho phiên sau.
+
+## Đóng task P0 — Xác nhận hoàn tất (2026-07-29)
+
+**Commit triển khai:** `e2cb243` (trên `9c7b0ef` — P0 revision ở trên).
+
+### Kết quả kiểm thử trước deploy
+
+- `php artisan test`: **843/843 pass** (bao gồm TC12 mới).
+- `npm run build`: pass.
+- Đọc lại file Excel thực tế (không chỉ mảng PHP): đủ 114 dòng "Cộng phát
+  sinh + Tồn cuối kỳ" trên dữ liệu local, công thức Tồn đầu + Nhập − Xuất =
+  Tồn cuối khớp 100% (0 lệch).
+
+### Lỗi phát hiện thêm khi đọc lại file Excel thật + cách khắc phục
+
+Khi đọc trực tiếp file `.xlsx` sinh ra (thay vì chỉ kiểm mảng PHP như test
+cũ), phát hiện dòng tổng hợp có tồn cuối = 0 bị **ghi thành ô TRỐNG** trên
+Excel thật, dù `InventoryTransactionGroupBuilder::build()` trả về đúng
+`float(0)`.
+
+**Nguyên nhân:** `Maatwebsite\Excel` (khi dùng `FromCollection`) ghi dữ liệu
+qua `PhpSpreadsheet\Worksheet::fromArray()`, mặc định so sánh
+`$cellValue != $nullValue` (loose, `$nullValue` mặc định = `null`). Trong
+PHP, `0.0 == null` là `true` (loose comparison), nên bất kỳ giá trị `0`/`0.0`
+nào cũng bị coi như ô trống và **không được ghi vào cell**.
+
+**Khắc phục:** Thêm interface `Maatwebsite\Excel\Concerns\WithStrictNullComparison`
+vào `InventoryTransactionReportExport` — chuyển so sánh sang strict (`===`),
+chỉ bỏ qua cell thật sự `null` (ví dụ cột "Số chứng từ nhập" trên dòng xuất),
+giữ lại số `0` hợp lệ.
+
+**Chống tái diễn:** Thêm `test_tc12_excel_export_closing_row_zero_not_blank`
+— test này gọi `Excel::raw()` sinh file `.xlsx` thật, đọc lại bằng
+`PhpOffice\PhpSpreadsheet\Reader\Xlsx`, và assert cell không phải `null`.
+Test cũ (TC9) chỉ kiểm mảng PHP nên không bắt được lớp lỗi này — bài học:
+với export Excel, phải test ở tầng file nhị phân thật, không chỉ tầng data.
+
+### Deploy VPS
+
+- `scripts/sync-vps.ps1`: push (`b8cd516..e2cb243`) → build Docker → backup
+  DB (`/var/backups/mini_erp/20260729_112550_e2cb243.sql`) → migrate (nothing
+  to migrate) → deploy smoke test **12/12 pass**, không có lỗi mới trong log
+  (199 lỗi trước/sau, toàn bộ là lỗi cũ không liên quan).
+- Smoke test trực tiếp trên dữ liệu production (qua service/export layer
+  trong container, route xác nhận sống qua nginx — HTTP 302 redirect login):
+  - Mặc định: 128 sản phẩm có phát sinh/tồn đầu kỳ.
+  - Lọc "Aruba": 8 sản phẩm, 6 mã đúng trạng thái "Đã từng âm kho".
+  - Excel export thật trên dữ liệu production: dòng tổng hợp ghi đúng `0.0`,
+    không còn trống.
+- **Chưa kiểm tra UI qua trình duyệt trên VPS bằng tài khoản thật** — theo
+  quyết định của người dùng, việc này để dành cho lần nghiệm thu tiếp theo
+  bằng tài khoản quản trị thông thường (không tạo user debug tạm). Không
+  phải điều kiện chặn đóng P0 vì UI đã kiểm tra kỹ trên local + service/export
+  đã xác minh trực tiếp trên VPS.
+
+### Vấn đề AVCO — tách task riêng
+
+Phát hiện ở mục "P0 revision" phía trên (giá xuất kho khớp giá nhập sau khi
+xuất trước nhập, các mã Aruba/J9150D) **không sửa trong task này**. Đã tách
+thành task điều tra riêng: xem
+`plans/260729-avco-negative-stock-cost-investigation/plan.md`.
+
+**P0 task Sổ chi tiết Nhập-Xuất-Tồn: ĐÓNG.**
