@@ -97,6 +97,8 @@ class InventoryReportService
                 DB::raw('COALESCE(sm_agg.amount_in, 0) as amount_in'),
                 DB::raw('COALESCE(sm_agg.amount_out, 0) as amount_out'),
             ])
+            ->selectRaw(InventoryReportLastDocResolver::subquery(true, $warehouseId) . ' as last_in_doc', [$dateFrom, $dateTo])
+            ->selectRaw(InventoryReportLastDocResolver::subquery(false, $warehouseId) . ' as last_out_doc', [$dateFrom, $dateTo])
             ->whereNull('products.deleted_at')
             ->when($search, fn ($q) => $q->where(fn ($q2) =>
                 $q2->where('products.code', 'ilike', "%{$search}%")
@@ -136,6 +138,8 @@ class InventoryReportService
             'value_end'     => $beginVal + $inVal - $outVal,
             'last_in_date'  => $row->last_in_date,
             'last_out_date' => $row->last_out_date,
+            'last_in_doc'   => $row->last_in_doc  ?? null,
+            'last_out_doc'  => $row->last_out_doc ?? null,
         ];
     }
 

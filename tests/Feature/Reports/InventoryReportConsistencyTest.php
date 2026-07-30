@@ -20,6 +20,9 @@ use Tests\TestCase;
  * TC3: Group theo kho đúng (filter warehouse)
  * TC4: Date range — opening chỉ tính movement trước kỳ
  * TC5: CAP 1.4 regression — cost_price khác vs amount thực tế
+ * TC6: last_in_doc/last_out_doc lấy đúng mã chứng từ của lần nhập/xuất GẦN NHẤT
+ *      (không phải lần đầu tiên), có tôn trọng warehouse_id filter
+ * TC7: last_in_doc/last_out_doc = null khi sản phẩm không có phát sinh trong kỳ
  */
 class InventoryReportConsistencyTest extends TestCase
 {
@@ -263,5 +266,84 @@ class InventoryReportConsistencyTest extends TestCase
         $this->assertNotNull($uiRow, 'UI phải trả về row CAP-TEST');
         $this->assertEquals(1518519.0, $uiRow['value_begin'],
             'UI value_begin phải khớp với service: 1,518,519');
+    }
+
+    // ── TC6: last_in_doc/last_out_doc lấy đúng mã chứng từ GẦN NHẤT ─────────────────
+
+    public function test_tc6_last_in_and_out_doc_resolve_to_correct_code(): void
+    {
+        // Nhập lần 1 (cũ hơn) — KHÔNG được là mã hiển thị
+        $entry1Id = DB::table('stock_entries')->insertGetId([
+            'code' => 'NK-TEST-01', 'warehouse_id' => $this->wh1->id, 'entry_date' => '2026-02-01',
+            'status' => 'confirmed', 'created_by' => $this->user->id,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->insertMovement([
+            'quantity' => 3, 'amount' => 300000, 'source_type' => 'App\\Models\\StockEntry',
+            'source_id' => $entry1Id, 'created_at' => '2026-02-01 09:00:00',
+        ]);
+
+        // Nhập lần 2 (gần nhất, ngày CT muộn hơn) — PHẢI là mã hiển thị
+        $entry2Id = DB::table('stock_entries')->insertGetId([
+            'code' => 'NK-TEST-02', 'warehouse_id' => $this->wh1->id, 'entry_date' => '2026-05-10',
+            'status' => 'confirmed', 'created_by' => $this->user->id,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->insertMovement([
+            'quantity' => 2, 'amount' => 200000, 'source_type' => 'App\\Models\\StockEntry',
+            'source_id' => $entry2Id, 'created_at' => '2026-05-10 09:00:00',
+        ]);
+
+        // Xuất duy nhất tại wh1
+        $exitId = DB::table('stock_exits')->insertGetId([
+            'code' => 'XK-TEST-01', 'warehouse_id' => $this->wh1->id, 'exit_date' => '2026-03-15',
+            'status' => 'confirmed', 'created_by' => $this->user->id,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->insertMovement([
+            'quantity' => -1, 'amount' => -100000, 'source_type' => 'App\\Models\\StockExit',
+            'source_id' => $exitId, 'created_at' => '2026-03-15 09:00:00',
+        ]);
+
+        // Nhập muộn hơn nữa nhưng ở KHO KHÁC (wh2) — không được lẫn vào khi lọc theo wh1
+        $entry3Id = DB::table('stock_entries')->insertGetId([
+            'code' => 'NK-TEST-03-WH2', 'warehouse_id' => $this->wh2->id, 'entry_date' => '2026-08-01',
+            'status' => 'confirmed', 'created_by' => $this->user->id,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('stock_movements')->insert([
+            'product_id' => $this->product->id, 'warehouse_id' => $this->wh2->id,
+            'type' => 'in', 'quantity' => 1, 'unit_cost' => 0, 'amount' => 100000,
+            'status' => 'active', 'created_by' => $this->user->id,
+            'source_type' => 'App\\Models\\StockEntry', 'source_id' => $entry3Id,
+            'created_at' => '2026-08-01 09:00:00', 'updated_at' => now(),
+        ]);
+
+        $filters = ['date_from' => '2026-01-01', 'date_to' => '2026-12-31'];
+
+        // Không lọc kho: mã nhập gần nhất phải là NK-TEST-03-WH2 (08/01, muộn nhất)
+        $rowAll = $this->service->buildAllRows($filters)->firstWhere('code', 'CAP-TEST');
+        $this->assertEquals('NK-TEST-03-WH2', $rowAll['last_in_doc']);
+
+        // Lọc theo wh1: phải bỏ qua wh2, lấy NK-TEST-02 (gần nhất TRONG wh1)
+        $rowWh1 = $this->service->buildAllRows(array_merge($filters, ['warehouse_id' => $this->wh1->id]))
+            ->firstWhere('code', 'CAP-TEST');
+        $this->assertEquals('NK-TEST-02', $rowWh1['last_in_doc'],
+            'Phải lấy mã CT nhập gần nhất TRONG KHO ĐANG LỌC, không phải nhập ở kho khác');
+        $this->assertEquals('XK-TEST-01', $rowWh1['last_out_doc']);
+        $this->assertEquals('2026-05-10', $rowWh1['last_in_date']);
+        $this->assertEquals('2026-03-15', $rowWh1['last_out_date']);
+    }
+
+    // ── TC7: null khi không có phát sinh trong kỳ ───────────────────────────────────
+
+    public function test_tc7_last_in_doc_null_when_no_movement_in_period(): void
+    {
+        $filters = ['date_from' => '2026-01-01', 'date_to' => '2026-12-31'];
+        $row = $this->service->buildAllRows($filters)->firstWhere('code', 'CAP-TEST');
+
+        $this->assertNotNull($row);
+        $this->assertNull($row['last_in_doc']);
+        $this->assertNull($row['last_out_doc']);
     }
 }

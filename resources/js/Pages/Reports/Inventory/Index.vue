@@ -80,8 +80,8 @@
               <th rowspan="2" class="text-left px-4 py-2 font-semibold text-gray-600 border-r border-gray-200 align-middle">ĐVT</th>
               <th rowspan="2" class="text-left px-4 py-2 font-semibold text-gray-600 border-r border-gray-200 align-middle">Danh mục</th>
               <th colspan="2" class="text-center px-4 py-2 font-semibold text-gray-600 border-r border-gray-200">Tồn đầu kỳ</th>
-              <th colspan="3" class="text-center px-4 py-2 font-semibold text-blue-700 border-r border-gray-200 bg-blue-50">Nhập trong kỳ</th>
-              <th colspan="3" class="text-center px-4 py-2 font-semibold text-orange-700 border-r border-gray-200 bg-orange-50">Xuất trong kỳ</th>
+              <th colspan="4" class="text-center px-4 py-2 font-semibold text-blue-700 border-r border-gray-200 bg-blue-50">Nhập trong kỳ</th>
+              <th colspan="4" class="text-center px-4 py-2 font-semibold text-orange-700 border-r border-gray-200 bg-orange-50">Xuất trong kỳ</th>
               <th colspan="2" class="text-center px-4 py-2 font-semibold text-green-700 bg-green-50">Tồn cuối kỳ</th>
             </tr>
             <tr class="border-b-2 border-gray-200">
@@ -89,9 +89,11 @@
               <th class="text-right px-3 py-2 font-medium text-gray-500 text-xs border-r border-gray-200 whitespace-nowrap">Giá trị</th>
               <th class="text-right px-3 py-2 font-medium text-blue-600 text-xs bg-blue-50 whitespace-nowrap">SL</th>
               <th class="text-center px-3 py-2 font-medium text-blue-600 text-xs bg-blue-50 whitespace-nowrap">Ngày nhập g.nhất</th>
+              <th class="text-left px-3 py-2 font-medium text-blue-600 text-xs bg-blue-50 whitespace-nowrap">Số CT nhập g.nhất</th>
               <th class="text-right px-3 py-2 font-medium text-blue-600 text-xs bg-blue-50 border-r border-gray-200 whitespace-nowrap">Giá trị</th>
               <th class="text-right px-3 py-2 font-medium text-orange-600 text-xs bg-orange-50 whitespace-nowrap">SL</th>
               <th class="text-center px-3 py-2 font-medium text-orange-600 text-xs bg-orange-50 whitespace-nowrap">Ngày xuất g.nhất</th>
+              <th class="text-left px-3 py-2 font-medium text-orange-600 text-xs bg-orange-50 whitespace-nowrap">Số CT xuất g.nhất</th>
               <th class="text-right px-3 py-2 font-medium text-orange-600 text-xs bg-orange-50 border-r border-gray-200 whitespace-nowrap">Giá trị</th>
               <th class="text-right px-3 py-2 font-medium text-green-600 text-xs bg-green-50 whitespace-nowrap">SL</th>
               <th class="text-right px-3 py-2 font-medium text-green-600 text-xs bg-green-50 whitespace-nowrap">Giá trị</th>
@@ -109,17 +111,19 @@
               <!-- Nhập -->
               <td class="px-3 py-2.5 text-right text-blue-700">{{ fmtQty(row.stock_in) }}</td>
               <td class="px-3 py-2.5 text-center text-gray-500 text-xs">{{ fmtDate(row.last_in_date) }}</td>
+              <td class="px-3 py-2.5 text-left font-mono text-blue-700 text-xs whitespace-nowrap">{{ row.last_in_doc ?? '—' }}</td>
               <td class="px-3 py-2.5 text-right text-blue-700 border-r border-gray-100">{{ fmt(row.value_in) }}</td>
               <!-- Xuất -->
               <td class="px-3 py-2.5 text-right text-orange-700">{{ fmtQty(row.stock_out) }}</td>
               <td class="px-3 py-2.5 text-center text-gray-500 text-xs">{{ fmtDate(row.last_out_date) }}</td>
+              <td class="px-3 py-2.5 text-left font-mono text-orange-700 text-xs whitespace-nowrap">{{ row.last_out_doc ?? '—' }}</td>
               <td class="px-3 py-2.5 text-right text-orange-700 border-r border-gray-100">{{ fmt(row.value_out) }}</td>
               <!-- Tồn cuối -->
               <td class="px-3 py-2.5 text-right font-semibold" :class="row.stock_end < 0 ? 'text-red-700' : 'text-gray-800'">{{ fmtQty(row.stock_end) }}</td>
               <td class="px-3 py-2.5 text-right font-semibold text-green-700">{{ fmt(row.value_end) }}</td>
             </tr>
             <tr v-if="!rows.data?.length">
-              <td colspan="14" class="px-4 py-10 text-center text-gray-400">Không có dữ liệu</td>
+              <td colspan="16" class="px-4 py-10 text-center text-gray-400">Không có dữ liệu</td>
             </tr>
           </tbody>
           <tfoot v-if="rows.data?.length" class="bg-gray-50 border-t-2 border-gray-300">
@@ -127,9 +131,9 @@
               <td colspan="4" class="px-4 py-3 font-semibold text-gray-700 text-sm">Tổng cộng</td>
               <td></td>
               <td class="px-3 py-3 text-right font-semibold text-gray-800">{{ fmt(summary.total_begin_value) }}</td>
-              <td></td><td></td>
+              <td></td><td></td><td></td>
               <td class="px-3 py-3 text-right font-semibold text-blue-700">{{ fmt(summary.total_in_value) }}</td>
-              <td></td><td></td>
+              <td></td><td></td><td></td>
               <td class="px-3 py-3 text-right font-semibold text-orange-700">{{ fmt(summary.total_out_value) }}</td>
               <td></td>
               <td class="px-3 py-3 text-right font-bold text-green-700">{{ fmt(summary.total_end_value) }}</td>

@@ -27,8 +27,8 @@ class InventoryReportExport implements FromCollection, WithHeadings, WithMapping
         return [
             'Mã SP', 'Tên SP', 'ĐVT', 'Danh mục',
             'Tồn đầu kỳ (SL)', 'Giá trị đầu kỳ',
-            'Nhập (SL)', 'Ngày nhập g.nhất', 'TT nhập',
-            'Xuất (SL)', 'Ngày xuất g.nhất', 'TT xuất',
+            'Nhập (SL)', 'Ngày nhập g.nhất', 'Số CT nhập g.nhất', 'TT nhập',
+            'Xuất (SL)', 'Ngày xuất g.nhất', 'Số CT xuất g.nhất', 'TT xuất',
             'Tồn cuối kỳ (SL)', 'Giá trị tồn cuối',
         ];
     }
@@ -45,9 +45,11 @@ class InventoryReportExport implements FromCollection, WithHeadings, WithMapping
             $row['value_begin'],      // SUM(sm.amount) — không tính lại bằng cost_price
             $row['stock_in'],
             $row['last_in_date'] ?? '',
+            $row['last_in_doc']  ?? '',
             $row['value_in'],
             $row['stock_out'],
             $row['last_out_date'] ?? '',
+            $row['last_out_doc']  ?? '',
             $row['value_out'],
             $row['stock_end'],
             $row['value_end'],
