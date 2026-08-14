@@ -53,6 +53,9 @@ class PitCalculatorService
     public const PERSONAL_DEDUCTION  = 15_500_000; // TT 111/2013 sửa đổi bởi TT 79/2022
     public const DEPENDENT_DEDUCTION = 6_200_000;  // TT 111/2013 sửa đổi bởi TT 79/2022
     public const INSURANCE_CAP       = 46_800_000;
+    // Khoản miễn trừ khi xác định Thu nhập chịu thuế (yêu cầu nghiệp vụ nội bộ, không phải giảm
+    // trừ gia cảnh — áp dụng TRƯỚC personal_deduction/dependent_deduction, không cộng dồn/trừ 2 lần).
+    public const NON_TAXABLE_ALLOWANCE = 1_200_000;
 
     private const BRACKETS = [
         [5_000_000,  5],
@@ -134,9 +137,12 @@ class PitCalculatorService
         $insEmp    = $bhxhEmp + $bhytEmp + $bhtnEmp;
         $insEmpl   = $bhxhEmpl + $bhytEmpl + $bhtnEmpl;
 
-        // Thu nhập tính thuế TNCN = Gross - BHXH/BHYT/BHTN NV - Giảm trừ gia cảnh
+        // Thu nhập chịu thuế = Tổng lương thực tế (gross) - khoản miễn trừ nghiệp vụ
+        $taxableIncome = max(0, $gross - self::NON_TAXABLE_ALLOWANCE);
+
+        // Thu nhập tính thuế TNCN = Thu nhập chịu thuế - BHXH/BHYT/BHTN NV - Giảm trừ gia cảnh
         $personalDed   = $cfg['personal_deduction'] + ($dependents * $cfg['dependent_deduction']);
-        $taxableForPit = max(0, $gross - $insEmp - $personalDed);
+        $taxableForPit = max(0, $taxableIncome - $insEmp - $personalDed);
         $pit           = round($this->progressiveTax($taxableForPit, $cfg['brackets']));
         $net           = round($gross - $insEmp - $pit);
 
@@ -154,8 +160,9 @@ class PitCalculatorService
             'bhtn_employer'       => $bhtnEmpl,
             'ins_employee'        => $insEmp,
             'ins_employer'        => $insEmpl,
+            'taxable_income'      => round($taxableIncome),    // "TN chịu thuế"
             'personal_deduction'  => round($personalDed),
-            'taxable_for_pit'     => round($taxableForPit),
+            'taxable_for_pit'     => round($taxableForPit),    // "TN tính thuế"
             'pit'                 => $pit,
             'net_salary'          => $net,
             'dependents_count'    => $dependents,
@@ -169,11 +176,12 @@ class PitCalculatorService
         int     $dependents,
         ?Carbon $payrollMonth = null,
     ): array {
-        $cfg         = $this->loadConfig($payrollMonth ?? now());
-        $personalDed = $cfg['personal_deduction'] + ($dependents * $cfg['dependent_deduction']);
-        $taxable     = max(0, $gross - $insEmployee - $personalDed);
-        $pit         = round($this->progressiveTax($taxable, $cfg['brackets']));
-        $net         = round($gross - $insEmployee - $pit);
+        $cfg           = $this->loadConfig($payrollMonth ?? now());
+        $taxableIncome = max(0, $gross - self::NON_TAXABLE_ALLOWANCE);
+        $personalDed   = $cfg['personal_deduction'] + ($dependents * $cfg['dependent_deduction']);
+        $taxable       = max(0, $taxableIncome - $insEmployee - $personalDed);
+        $pit           = round($this->progressiveTax($taxable, $cfg['brackets']));
+        $net           = round($gross - $insEmployee - $pit);
         return ['pit' => $pit, 'net_salary' => $net];
     }
 

@@ -295,6 +295,13 @@ class PayrollController extends Controller
                 + ((int) $item->dependents_count * \App\Services\PitCalculatorService::DEPENDENT_DEDUCTION);
         }
 
+        // Thu nhập chịu thuế = Tổng lương thực tế (gross_salary) - khoản miễn trừ nghiệp vụ.
+        // Dùng chung hằng số với PitCalculatorService::breakdown() — không hardcode lại số tiền.
+        // Tính từ giá trị ĐÃ LƯU trên item (không gọi lại breakdown() từ base_salary) để không
+        // vô tình bỏ qua BHXH/PIT đã bị kế toán ghi đè thủ công (insurance_overridden/pit_overridden).
+        $taxableIncome = max(0, round($gross - \App\Services\PitCalculatorService::NON_TAXABLE_ALLOWANCE));
+        $taxableForPit = max(0, round($taxableIncome - $insEmp - $personalDed));
+
         $emp = $item->employee;
         return [
             'id'                       => $item->id,
@@ -322,8 +329,9 @@ class PayrollController extends Controller
             'bhtn_employer'            => (float) $item->bhtn_employer,
             'pit'                      => (float) $item->pit,
             'dependents_count'         => (int)   $item->dependents_count,
+            'taxable_income'           => $taxableIncome,
             'personal_deduction'       => round($personalDed),
-            'taxable_for_pit'          => max(0, round($gross - $insEmp - $personalDed)),
+            'taxable_for_pit'          => $taxableForPit,
             'deductions'               => (float) $item->deductions,
             'net_salary'               => (float) $item->net_salary,
             'working_days'             => (int)   ($item->working_days       ?? 26),

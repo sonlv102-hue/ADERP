@@ -259,7 +259,7 @@
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'bhyt_employee')) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'bhtn_employee')) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-bold font-mono">{{ fv(sum(group, 'bhxh_employee') + sum(group, 'bhyt_employee') + sum(group, 'bhtn_employee')) }}</td>
-                  <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'gross_salary')) }}</td>
+                  <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'taxable_income')) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-center font-mono">{{ sumInt(group, 'dependents_count') }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'personal_deduction')) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'taxable_for_pit')) }}</td>
@@ -319,7 +319,7 @@
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono text-orange-600">{{ item.insurance_subject ? fv(item.bhyt_employee) : '—' }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono text-orange-600">{{ item.insurance_subject ? fv(item.bhtn_employee) : '—' }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono font-semibold text-orange-700">{{ item.insurance_subject ? fv(item.bhxh_employee + item.bhyt_employee + item.bhtn_employee) : '—' }}</td>
-                  <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(item.gross_salary) }}</td>
+                  <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(item.taxable_income) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-center font-mono">{{ item.dependents_count }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(item.personal_deduction) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(item.taxable_for_pit) }}</td>
@@ -386,7 +386,7 @@
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono text-orange-600">{{ fv(sumItems('bhyt_employee')) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono text-orange-600">{{ fv(sumItems('bhtn_employee')) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono font-bold text-orange-700">{{ fv(payroll.total_insurance_employee) }}</td>
-                <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(payroll.total_gross) }}</td>
+                <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('taxable_income')) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-center font-mono">{{ sumItems('dependents_count') }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('personal_deduction')) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('taxable_for_pit')) }}</td>
@@ -908,6 +908,7 @@ const groupedItems = computed(() => {
 const INS_CAP       = 46_800_000;
 const PERSONAL_DED  = 15_500_000;  // TT 79/2022
 const DEPENDENT_DED = 6_200_000;   // TT 79/2022
+const NON_TAXABLE_ALLOWANCE = 1_200_000; // phải khớp PitCalculatorService::NON_TAXABLE_ALLOWANCE
 const BRACKETS = [[5e6,5],[10e6,10],[18e6,15],[32e6,20],[52e6,25],[80e6,30],[null,35]];
 
 function calcInsBase(base, bhxhAllw, insSubject) {
@@ -919,8 +920,9 @@ function calcInsEmpOnBase(base, bhxhAllw, insSubject) {
 }
 
 function calcPit(gross, insEmp, deps) {
+  const taxableIncome = Math.max(0, gross - NON_TAXABLE_ALLOWANCE); // Thu nhập chịu thuế
   const deduction = PERSONAL_DED + (deps * DEPENDENT_DED);
-  let taxable = Math.max(0, gross - insEmp - deduction);
+  let taxable = Math.max(0, taxableIncome - insEmp - deduction);
   let tax = 0, prev = 0;
   for (const [cap, rate] of BRACKETS) {
     if (taxable <= prev) break;
