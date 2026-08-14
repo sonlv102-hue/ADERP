@@ -88,7 +88,7 @@ class PayrollController extends Controller
     {
         $payroll->load('creator', 'locker', 'unionFeeConfirmedBy');
 
-        $items = $payroll->items()->with('employee', 'user', 'salaryJournalEntry', 'adjustedBy')
+        $items = $payroll->items()->with('employee', 'user', 'salaryJournalEntry', 'adjustedBy', 'overriddenBy')
             ->orderBy('id')
             ->get()
             ->map(fn (PayrollItem $item) => $this->itemDTO($item));
@@ -161,7 +161,9 @@ class PayrollController extends Controller
             'advance'                  => 'nullable|numeric|min:0',
             'insurance_subject'        => 'nullable|boolean',
             'dependents_count'         => 'nullable|integer|min:0|max:10',
-            // BHXH override — kế toán có thể sửa thủ công từng dòng
+            // BHXH override — chỉ áp dụng khi insurance_override_enabled = true, ngược lại
+            // dùng giá trị công thức (đây cũng là cách "reset về công thức": bỏ tick là xong)
+            'insurance_override_enabled' => 'nullable|boolean',
             'bhxh_employer'            => 'nullable|numeric|min:0',
             'bhyt_employer'            => 'nullable|numeric|min:0',
             'bhtn_employer'            => 'nullable|numeric|min:0',
@@ -171,6 +173,7 @@ class PayrollController extends Controller
             // PIT override — chỉ admin
             'pit_override_enabled'     => 'nullable|boolean',
             'pit_override'             => 'nullable|numeric|min:0',
+            'override_reason'          => 'nullable|string|max:500',
         ]);
 
         $base           = (float) $data['base_salary'];
@@ -195,13 +198,20 @@ class PayrollController extends Controller
 
         $bd = $this->pit->breakdown($base, $bhxhAllowances, $nonBhxhAllowances, $dependents, $insSubject, $workingDays, $standardDays);
 
-        // Dùng override nếu kế toán sửa thủ công, ngược lại dùng giá trị công thức
-        $bhxhEmpl   = isset($data['bhxh_employer']) ? (float) $data['bhxh_employer'] : $bd['bhxh_employer'];
-        $bhytEmpl   = isset($data['bhyt_employer']) ? (float) $data['bhyt_employer'] : $bd['bhyt_employer'];
-        $bhtnEmpl   = isset($data['bhtn_employer']) ? (float) $data['bhtn_employer'] : $bd['bhtn_employer'];
-        $bhxhEmp    = isset($data['bhxh_employee']) ? (float) $data['bhxh_employee'] : $bd['bhxh_employee'];
-        $bhytEmp    = isset($data['bhyt_employee']) ? (float) $data['bhyt_employee'] : $bd['bhyt_employee'];
-        $bhtnEmp    = isset($data['bhtn_employee']) ? (float) $data['bhtn_employee'] : $bd['bhtn_employee'];
+        // BHXH override — chỉ áp dụng khi kế toán bật "Ghi đè thủ công"; ngược lại luôn
+        // dùng giá trị công thức (bỏ tick = tự reset về công thức, không cần nút riêng)
+        $insuranceOverrideEnabled = !empty($data['insurance_override_enabled']);
+        if ($insuranceOverrideEnabled) {
+            $bhxhEmpl = isset($data['bhxh_employer']) ? (float) $data['bhxh_employer'] : $bd['bhxh_employer'];
+            $bhytEmpl = isset($data['bhyt_employer']) ? (float) $data['bhyt_employer'] : $bd['bhyt_employer'];
+            $bhtnEmpl = isset($data['bhtn_employer']) ? (float) $data['bhtn_employer'] : $bd['bhtn_employer'];
+            $bhxhEmp  = isset($data['bhxh_employee']) ? (float) $data['bhxh_employee'] : $bd['bhxh_employee'];
+            $bhytEmp  = isset($data['bhyt_employee']) ? (float) $data['bhyt_employee'] : $bd['bhyt_employee'];
+            $bhtnEmp  = isset($data['bhtn_employee']) ? (float) $data['bhtn_employee'] : $bd['bhtn_employee'];
+        } else {
+            $bhxhEmpl = $bd['bhxh_employer']; $bhytEmpl = $bd['bhyt_employer']; $bhtnEmpl = $bd['bhtn_employer'];
+            $bhxhEmp  = $bd['bhxh_employee']; $bhytEmp  = $bd['bhyt_employee']; $bhtnEmp  = $bd['bhtn_employee'];
+        }
         $insEmpTotal = $bhxhEmp + $bhytEmp + $bhtnEmp;
 
         // Tính lại PIT nếu ins_employee thay đổi so với công thức
@@ -213,6 +223,21 @@ class PayrollController extends Controller
             ? (float) $data['pit_override']
             : $pitCalc['pit'];
         $netFinal = (int) round($bd['gross_salary'] - $insEmpTotal - $pitFinal);
+
+        // Cập nhật audit stamp (overridden_by/at) không chỉ khi bật/tắt override, mà cả khi
+        // override vẫn đang bật nhưng số tiền ghi đè bị đổi (VD: kế toán B sửa số đã override
+        // của kế toán A) — nếu không, overridden_by/at sẽ vẫn hiện tên/giờ của người trước.
+        $overrideChanged = $insuranceOverrideEnabled !== (bool) $item->insurance_overridden
+            || $pitOverrideEnabled !== (bool) $item->pit_overridden
+            || ($insuranceOverrideEnabled && (
+                round($bhxhEmp, 2)  !== round((float) $item->bhxh_employee, 2)
+                || round($bhytEmp, 2)  !== round((float) $item->bhyt_employee, 2)
+                || round($bhtnEmp, 2)  !== round((float) $item->bhtn_employee, 2)
+                || round($bhxhEmpl, 2) !== round((float) $item->bhxh_employer, 2)
+                || round($bhytEmpl, 2) !== round((float) $item->bhyt_employer, 2)
+                || round($bhtnEmpl, 2) !== round((float) $item->bhtn_employer, 2)
+            ))
+            || ($pitOverrideEnabled && round($pitFinal, 2) !== round((float) $item->pit, 2));
 
         $item->update([
             'base_salary'              => $base,
@@ -239,6 +264,13 @@ class PayrollController extends Controller
             'working_days'             => $workingDays,
             'advance'                  => (float) ($data['advance'] ?? $item->advance ?? 0),
             'insurance_subject'        => $insSubject,
+            'insurance_overridden'     => $insuranceOverrideEnabled,
+            'pit_overridden'           => $pitOverrideEnabled,
+            'overridden_by'            => $overrideChanged ? auth()->id() : $item->overridden_by,
+            'overridden_at'            => $overrideChanged ? now() : $item->overridden_at,
+            'override_reason'          => ($insuranceOverrideEnabled || $pitOverrideEnabled)
+                ? ($data['override_reason'] ?? $item->override_reason)
+                : null,
         ]);
 
         $this->service->recalculateTotals($payroll);
@@ -248,7 +280,7 @@ class PayrollController extends Controller
 
     private function itemDTO(PayrollItem $item): array
     {
-        $item->loadMissing(['salaryJournalEntry', 'payroll']);
+        $item->loadMissing(['salaryJournalEntry', 'payroll', 'overriddenBy']);
         $gross       = (float) $item->gross_salary;
         $insEmp      = (float) $item->bhxh_employee + (float) $item->bhyt_employee + (float) $item->bhtn_employee;
 
@@ -302,6 +334,12 @@ class PayrollController extends Controller
             'overtime_days'            => (float) ($item->overtime_days       ?? 0),
             'advance'                  => (float) ($item->advance             ?? 0),
             'insurance_subject'        => (bool)  ($item->insurance_subject ?? true),
+            'missing_insurance_base_salary' => (bool) ($item->insurance_subject && (float) $item->base_salary <= 0),
+            'insurance_overridden'     => (bool)  ($item->insurance_overridden ?? false),
+            'pit_overridden'           => (bool)  ($item->pit_overridden ?? false),
+            'overridden_by'            => $item->overriddenBy?->name,
+            'overridden_at'            => $item->overridden_at?->format('d/m/Y H:i'),
+            'override_reason'          => $item->override_reason,
             'adjustment_amount'        => (float) ($item->adjustment_amount ?? 0),
             'adjustment_reason'        => $item->adjustment_reason,
             'adjustment_taxable'       => (bool)  ($item->adjustment_taxable ?? true),
@@ -421,6 +459,13 @@ class PayrollController extends Controller
             return back()->with('success', 'Đã đồng bộ dữ liệu lương từ hồ sơ nhân viên.');
         } catch (RuntimeException $e) {
             return back()->with('error', $e->getMessage());
+        } catch (\Throwable $e) {
+            // Bắt cả lỗi hạ tầng (VD: 2 người cùng bấm "Đồng bộ" một lúc → đụng unique
+            // constraint payroll_id+employee_id) để không lộ trang lỗi 500 khó hiểu.
+            \Log::error('sync payroll from employees failed', [
+                'payroll_id' => $payroll->id, 'code' => $payroll->code, 'error' => $e->getMessage(),
+            ]);
+            return back()->with('error', 'Đồng bộ thất bại — có thể có người khác đang thao tác cùng lúc. Vui lòng thử lại.');
         }
     }
 
@@ -475,7 +520,7 @@ class PayrollController extends Controller
     {
         $this->authorize('accounting.view');
         $payroll->load('creator');
-        $items = $payroll->items()->with('employee', 'user', 'salaryJournalEntry', 'adjustedBy')
+        $items = $payroll->items()->with('employee', 'user', 'salaryJournalEntry', 'adjustedBy', 'overriddenBy')
             ->orderBy('id')->get()
             ->map(fn (PayrollItem $item) => $this->itemDTO($item));
 
@@ -487,7 +532,7 @@ class PayrollController extends Controller
     {
         $this->authorize('accounting.view');
         $payroll->load('creator');
-        $items = $payroll->items()->with('employee', 'user', 'salaryJournalEntry', 'adjustedBy')
+        $items = $payroll->items()->with('employee', 'user', 'salaryJournalEntry', 'adjustedBy', 'overriddenBy')
             ->orderBy('id')->get()
             ->map(fn (PayrollItem $item) => $this->itemDTO($item));
 

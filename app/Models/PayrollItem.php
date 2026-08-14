@@ -23,6 +23,7 @@ class PayrollItem extends Model
         'unpaid_leave_days', 'overtime_days', 'attendance_note',
         'status', 'paid_at', 'cash_voucher_id', 'salary_journal_entry_id',
         'adjustment_amount', 'adjustment_reason', 'adjustment_taxable', 'adjusted_by', 'adjusted_at',
+        'insurance_overridden', 'pit_overridden', 'overridden_by', 'overridden_at', 'override_reason',
     ];
 
     protected function casts(): array
@@ -64,6 +65,9 @@ class PayrollItem extends Model
             'adjustment_amount'        => 'decimal:2',
             'adjustment_taxable'       => 'boolean',
             'adjusted_at'              => 'datetime',
+            'insurance_overridden'     => 'boolean',
+            'pit_overridden'           => 'boolean',
+            'overridden_at'            => 'datetime',
         ];
     }
 
@@ -95,5 +99,10 @@ class PayrollItem extends Model
     public function adjustedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'adjusted_by');
+    }
+
+    public function overriddenBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'overridden_by');
     }
 }

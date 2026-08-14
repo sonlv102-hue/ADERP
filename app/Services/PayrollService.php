@@ -355,13 +355,23 @@ class PayrollService
         ]);
     }
 
+    /**
+     * Đồng bộ Payroll Draft từ hồ sơ nhân viên — 2 bước:
+     *   A. Cập nhật lại các PayrollItem đã có (giữ nguyên field bị manual override).
+     *   B. Bổ sung PayrollItem cho nhân viên active/probation chưa có trong bảng lương
+     *      (VD: nhân viên mới tuyển hoặc mới chuyển active sau khi Payroll Draft đã tạo).
+     */
     public function syncFromEmployees(Payroll $payroll): void
     {
         if ($payroll->status !== PayrollStatus::Draft) {
             throw new RuntimeException('Chỉ đồng bộ bảng lương ở trạng thái nháp.');
         }
+        if ($payroll->is_locked) {
+            throw new RuntimeException('Bảng lương đã bị khóa, không thể đồng bộ.');
+        }
 
         DB::transaction(function () use ($payroll) {
+            // Bước A — cập nhật nhân viên đã có trong bảng lương
             $items = $payroll->items()
                 ->with('employee')
                 ->where('status', PayrollItemStatus::Pending)
@@ -371,69 +381,137 @@ class PayrollService
                 if (!$item->employee) {
                     continue;
                 }
+                $this->applyEmployeeDataToItem($item, $item->employee);
+            }
 
-                $employee = $item->employee;
+            // Bước B — bổ sung nhân viên active/probation còn thiếu.
+            // An toàn: nếu bảng lương còn dòng cũ (legacy, tạo trước khi có employee_id — chỉ
+            // có user_id) thì KHÔNG so khớp được nhân viên nào đã "có" hay "thiếu" một cách
+            // đáng tin cậy → có thể tạo trùng dòng lương. Bỏ qua Bước B (Bước A vẫn áp dụng).
+            if ($payroll->items()->whereNull('employee_id')->exists()) {
+                $this->recalculateTotals($payroll);
+                return;
+            }
 
-                $base           = (float) ($employee->base_salary              ?? 0);
-                $allocResp      = (float) ($employee->allowance_responsibility ?? 0);
-                $allocLunch     = (float) ($employee->allowance_lunch          ?? 0);
-                $allocPhone     = (float) ($employee->allowance_phone          ?? 0);
-                $allocTransport = (float) ($employee->allowance_transport      ?? 0);
-                $allocOther     = (float) ($employee->allowance                ?? 0);
-                $dependents     = (int)   ($employee->dependents_count  ?? 0);
-                $insSubject     = (bool)  ($employee->insurance_subject ?? true);
-                $standardDays   = (int)   ($employee->standard_days    ?? 26);
+            $existingEmployeeIds = $payroll->items()->pluck('employee_id');
+            $missingEmployees = Employee::whereIn('status', ['active', 'probation'])
+                ->whereNotIn('id', $existingEmployeeIds)
+                ->orderBy('name')
+                ->get();
 
-                // Giữ lại các giá trị nhập tay theo kỳ lương
-                $allocPerf   = (float) ($item->allowance_performance ?? 0);
-                $bonus       = (float) ($item->bonus                 ?? 0);
-                $workingDays = (int)   ($item->working_days          ?? $standardDays);
-
-                $bhxhAllowances    = $allocResp + $allocOther;
-                $nonBhxhAllowances = $allocLunch + $allocPhone + $allocTransport + $allocPerf + $bonus;
-
-                $bd = $this->pit->breakdown(
-                    $base,
-                    $bhxhAllowances,
-                    $nonBhxhAllowances,
-                    $dependents,
-                    $insSubject,
-                    $workingDays,
-                    $standardDays,
-                );
-
-                $tradeUnionFee = 0;
-                if ($this->isUnionFeeEnabled() && $insSubject && $bd['insurance_base'] > 0) {
-                    $tradeUnionFee = (int) round($bd['insurance_base'] * $this->getUnionFeeRate() / 100);
+            if ($missingEmployees->isNotEmpty()) {
+                // Áp dụng cùng validation như lúc lập bảng lương: bảng chấm công kỳ này phải đã chốt
+                $sheet = AttendanceSheet::where('period', $payroll->period)->first();
+                if (!$sheet || $sheet->status !== AttendanceSheetStatus::Locked) {
+                    throw new RuntimeException(
+                        "Bảng chấm công tháng {$payroll->period} chưa được chốt. "
+                        . "Không thể tự động bổ sung nhân viên mới vào bảng lương."
+                    );
                 }
 
-                $item->update([
-                    'base_salary'              => $base,
-                    'allowance'                => $allocOther,
-                    'allowance_responsibility' => $allocResp,
-                    'allowance_lunch'          => $allocLunch,
-                    'allowance_phone'          => $allocPhone,
-                    'allowance_transport'      => $allocTransport,
-                    'standard_days'            => $standardDays,
-                    'dependents_count'         => $dependents,
-                    'insurance_subject'        => $insSubject,
-                    'gross_salary'             => $bd['gross_salary'],
-                    'insurance_base'           => $bd['insurance_base'],
-                    'bhxh_employee'            => $bd['bhxh_employee'],
-                    'bhyt_employee'            => $bd['bhyt_employee'],
-                    'bhtn_employee'            => $bd['bhtn_employee'],
-                    'bhxh_employer'            => $bd['bhxh_employer'],
-                    'bhyt_employer'            => $bd['bhyt_employer'],
-                    'bhtn_employer'            => $bd['bhtn_employer'],
-                    'pit'                      => $bd['pit'],
-                    'deductions'               => $bd['ins_employee'] + $bd['pit'],
-                    'net_salary'               => $bd['net_salary'],
-                    'trade_union_fee'          => $tradeUnionFee,
-                ]);
+                foreach ($missingEmployees as $employee) {
+                    $this->buildItem($payroll, $employee, 0, $sheet);
+                }
             }
 
             $this->recalculateTotals($payroll);
         });
+    }
+
+    /**
+     * Tính lại lương từ hồ sơ Employee hiện tại và ghi vào PayrollItem đã tồn tại.
+     * Dùng chung cho syncFromEmployees() và syncEmployeeToDraftPayrolls() — tránh
+     * duplicate công thức. Giữ nguyên bhxh/bhyt/bhtn nếu item->insurance_overridden,
+     * giữ nguyên pit nếu item->pit_overridden (kế toán đã ghi đè thủ công).
+     */
+    private function applyEmployeeDataToItem(PayrollItem $item, Employee $employee): void
+    {
+        $base           = (float) ($employee->base_salary              ?? 0);
+        $allocResp      = (float) ($employee->allowance_responsibility ?? 0);
+        $allocLunch     = (float) ($employee->allowance_lunch          ?? 0);
+        $allocPhone     = (float) ($employee->allowance_phone          ?? 0);
+        $allocTransport = (float) ($employee->allowance_transport      ?? 0);
+        $allocOther     = (float) ($employee->allowance                ?? 0);
+        $dependents     = (int)   ($employee->dependents_count  ?? 0);
+        $insSubject     = (bool)  ($employee->insurance_subject ?? true);
+        $standardDays   = (int)   ($employee->standard_days    ?? 26);
+
+        // Giữ lại các giá trị nhập tay theo kỳ lương
+        $allocPerf   = (float) ($item->allowance_performance ?? 0);
+        $bonus       = (float) ($item->bonus                 ?? 0);
+        $workingDays = (int)   ($item->working_days          ?? $standardDays);
+
+        $bhxhAllowances    = $allocResp + $allocOther;
+        $nonBhxhAllowances = $allocLunch + $allocPhone + $allocTransport + $allocPerf + $bonus;
+
+        $bd = $this->pit->breakdown(
+            $base,
+            $bhxhAllowances,
+            $nonBhxhAllowances,
+            $dependents,
+            $insSubject,
+            $workingDays,
+            $standardDays,
+        );
+
+        $tradeUnionFee = 0;
+        if ($this->isUnionFeeEnabled() && $insSubject && $bd['insurance_base'] > 0) {
+            $tradeUnionFee = (int) round($bd['insurance_base'] * $this->getUnionFeeRate() / 100);
+        }
+
+        // Bảo vệ manual override — giữ nguyên giá trị kế toán đã sửa tay, không tính lại.
+        // Ngoại lệ: nếu nhân viên không còn thuộc diện đóng BHXH ($insSubject=false), override
+        // không còn ý nghĩa — phải về 0 như công thức, tránh treo số BHXH cũ sai lên sổ sách.
+        if ($item->insurance_overridden && $insSubject) {
+            $insuranceBase = (float) $item->insurance_base;
+            $bhxhEmp  = (float) $item->bhxh_employee;
+            $bhytEmp  = (float) $item->bhyt_employee;
+            $bhtnEmp  = (float) $item->bhtn_employee;
+            $bhxhEmpl = (float) $item->bhxh_employer;
+            $bhytEmpl = (float) $item->bhyt_employer;
+            $bhtnEmpl = (float) $item->bhtn_employer;
+        } else {
+            $insuranceBase = $bd['insurance_base'];
+            $bhxhEmp  = $bd['bhxh_employee'];
+            $bhytEmp  = $bd['bhyt_employee'];
+            $bhtnEmp  = $bd['bhtn_employee'];
+            $bhxhEmpl = $bd['bhxh_employer'];
+            $bhytEmpl = $bd['bhyt_employer'];
+            $bhtnEmpl = $bd['bhtn_employer'];
+        }
+        $insEmpTotal = $bhxhEmp + $bhytEmp + $bhtnEmp;
+
+        $pit = $item->pit_overridden
+            ? (float) $item->pit
+            : $this->pit->calcPitFromGross($bd['gross_salary'], $insEmpTotal, $dependents)['pit'];
+
+        $net = (int) round($bd['gross_salary'] - $insEmpTotal - $pit);
+
+        $item->update([
+            'base_salary'              => $base,
+            'allowance'                => $allocOther,
+            'allowance_responsibility' => $allocResp,
+            'allowance_lunch'          => $allocLunch,
+            'allowance_phone'          => $allocPhone,
+            'allowance_transport'      => $allocTransport,
+            'standard_days'            => $standardDays,
+            'dependents_count'         => $dependents,
+            'insurance_subject'        => $insSubject,
+            'gross_salary'             => $bd['gross_salary'],
+            'insurance_base'           => $insuranceBase,
+            'bhxh_employee'            => $bhxhEmp,
+            'bhyt_employee'            => $bhytEmp,
+            'bhtn_employee'            => $bhtnEmp,
+            'bhxh_employer'            => $bhxhEmpl,
+            'bhyt_employer'            => $bhytEmpl,
+            'bhtn_employer'            => $bhtnEmpl,
+            'pit'                      => $pit,
+            'deductions'               => $insEmpTotal + $pit,
+            'net_salary'               => $net,
+            'trade_union_fee'          => $tradeUnionFee,
+            // Override BHXH không còn ý nghĩa khi NV không còn thuộc diện đóng BHXH
+            'insurance_overridden'     => $item->insurance_overridden && $insSubject,
+        ]);
     }
 
     /**
@@ -454,66 +532,11 @@ class PayrollService
             return;
         }
 
-        $base           = (float) ($employee->base_salary              ?? 0);
-        $allocResp      = (float) ($employee->allowance_responsibility ?? 0);
-        $allocLunch     = (float) ($employee->allowance_lunch          ?? 0);
-        $allocPhone     = (float) ($employee->allowance_phone          ?? 0);
-        $allocTransport = (float) ($employee->allowance_transport      ?? 0);
-        $allocOther     = (float) ($employee->allowance                ?? 0);
-        $dependents     = (int)   ($employee->dependents_count  ?? 0);
-        $insSubject     = (bool)  ($employee->insurance_subject ?? true);
-        $standardDays   = (int)   ($employee->standard_days    ?? 26);
-
         $affectedPayrolls = [];
 
-        DB::transaction(function () use ($items, $base, $allocResp, $allocLunch, $allocPhone, $allocTransport, $allocOther, $dependents, $insSubject, $standardDays, &$affectedPayrolls) {
+        DB::transaction(function () use ($items, $employee, &$affectedPayrolls) {
             foreach ($items as $item) {
-                $allocPerf   = (float) ($item->allowance_performance ?? 0);
-                $bonus       = (float) ($item->bonus                 ?? 0);
-                $workingDays = (int)   ($item->working_days          ?? $standardDays);
-
-                $bhxhAllowances    = $allocResp + $allocOther;
-                $nonBhxhAllowances = $allocLunch + $allocPhone + $allocTransport + $allocPerf + $bonus;
-
-                $bd = $this->pit->breakdown(
-                    $base,
-                    $bhxhAllowances,
-                    $nonBhxhAllowances,
-                    $dependents,
-                    $insSubject,
-                    $workingDays,
-                    $standardDays,
-                );
-
-                $tradeUnionFee = 0;
-                if ($this->isUnionFeeEnabled() && $insSubject && $bd['insurance_base'] > 0) {
-                    $tradeUnionFee = (int) round($bd['insurance_base'] * $this->getUnionFeeRate() / 100);
-                }
-
-                $item->update([
-                    'base_salary'              => $base,
-                    'allowance'                => $allocOther,
-                    'allowance_responsibility' => $allocResp,
-                    'allowance_lunch'          => $allocLunch,
-                    'allowance_phone'          => $allocPhone,
-                    'allowance_transport'      => $allocTransport,
-                    'standard_days'            => $standardDays,
-                    'dependents_count'         => $dependents,
-                    'insurance_subject'        => $insSubject,
-                    'gross_salary'             => $bd['gross_salary'],
-                    'insurance_base'           => $bd['insurance_base'],
-                    'bhxh_employee'            => $bd['bhxh_employee'],
-                    'bhyt_employee'            => $bd['bhyt_employee'],
-                    'bhtn_employee'            => $bd['bhtn_employee'],
-                    'bhxh_employer'            => $bd['bhxh_employer'],
-                    'bhyt_employer'            => $bd['bhyt_employer'],
-                    'bhtn_employer'            => $bd['bhtn_employer'],
-                    'pit'                      => $bd['pit'],
-                    'deductions'               => $bd['ins_employee'] + $bd['pit'],
-                    'net_salary'               => $bd['net_salary'],
-                    'trade_union_fee'          => $tradeUnionFee,
-                ]);
-
+                $this->applyEmployeeDataToItem($item, $employee);
                 $affectedPayrolls[$item->payroll_id] = $item->payroll;
             }
 

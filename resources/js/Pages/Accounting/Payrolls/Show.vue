@@ -117,6 +117,9 @@
       <!-- Flash -->
       <div v-if="$page.props.flash?.success" class="no-print bg-green-50 border border-green-200 text-green-800 rounded-xl px-4 py-3 text-sm">{{ $page.props.flash.success }}</div>
       <div v-if="$page.props.flash?.error"   class="no-print bg-red-50   border border-red-200   text-red-800   rounded-xl px-4 py-3 text-sm">{{ $page.props.flash.error }}</div>
+      <div v-if="missingInsuranceCount > 0" class="no-print bg-amber-50 border border-amber-200 text-amber-800 rounded-xl px-4 py-3 text-sm">
+        ⚠ {{ missingInsuranceCount }} nhân viên thuộc diện đóng BHXH nhưng chưa có mức lương đóng BHXH (base_salary) trong hồ sơ — BHXH/BHYT/BHTN đang tính = 0. Cập nhật hồ sơ nhân viên rồi bấm "Đồng bộ từ hồ sơ NV".
+      </div>
 
       <!-- Summary cards -->
       <div class="no-print grid grid-cols-2 md:grid-cols-5 gap-3">
@@ -279,6 +282,15 @@
                   <td class="border border-gray-200 px-3 py-1.5">
                     <p class="font-semibold text-gray-900">{{ item.employee_name }}</p>
                     <p class="text-gray-400 text-[10px]">{{ item.employee_code }}</p>
+                    <p v-if="item.missing_insurance_base_salary" title="Nhân viên thuộc diện đóng BHXH nhưng chưa có mức lương đóng BHXH trong hồ sơ"
+                      class="inline-flex items-center gap-0.5 mt-0.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px] font-semibold">
+                      ⚠ Thiếu mức lương đóng BHXH
+                    </p>
+                    <p v-if="item.insurance_overridden || item.pit_overridden"
+                      :title="`Ghi đè bởi ${item.overridden_by || '—'} lúc ${item.overridden_at || '—'}${item.override_reason ? ' — ' + item.override_reason : ''}`"
+                      class="inline-flex items-center gap-0.5 mt-0.5 ml-1 px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[9px] font-semibold">
+                      🔒 Đã ghi đè tay
+                    </p>
                   </td>
                   <td class="border border-gray-200 px-2 py-1.5 text-center text-gray-600">{{ item.position }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-center text-gray-600 text-[10px]">{{ item.department || '—' }}</td>
@@ -469,40 +481,52 @@
 
           <!-- BHXH override fields -->
           <div v-if="editForm.insurance_subject" class="bg-orange-50 border border-orange-200 rounded-lg p-3 space-y-2">
-            <p class="text-xs font-semibold text-orange-800">Số tiền BHXH tháng này (có thể sửa)</p>
+            <div class="flex items-center gap-3">
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" v-model="editForm.insurance_override_enabled" class="sr-only peer" />
+                <div class="w-9 h-5 bg-gray-300 rounded-full peer peer-checked:bg-orange-500 transition-colors"></div>
+                <div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-4"></div>
+              </label>
+              <span class="text-xs font-semibold text-orange-800">Ghi đè BHXH/BHYT/BHTN thủ công</span>
+            </div>
+            <p class="text-[10px] text-gray-400">
+              Mặc định hệ thống tự tính theo công thức. Bật để nhập số khác — giá trị này sẽ
+              <b>được giữ nguyên</b> khi bấm "Đồng bộ từ hồ sơ NV" hoặc khi hồ sơ NV thay đổi.
+              Tắt lại để quay về tính theo công thức.
+            </p>
             <div class="grid grid-cols-3 gap-2">
               <div>
                 <label class="text-[10px] text-gray-500 font-medium">BHXH CP DN (17.5%)</label>
-                <input type="number" v-model.number="editForm.bhxh_employer" min="0" step="any"
-                  class="form-input text-right font-mono text-xs" />
+                <input type="number" v-model.number="editForm.bhxh_employer" min="0" step="any" :disabled="!editForm.insurance_override_enabled"
+                  class="form-input text-right font-mono text-xs disabled:bg-gray-100 disabled:text-gray-400" />
               </div>
               <div>
                 <label class="text-[10px] text-gray-500 font-medium">BHYT CP DN (3%)</label>
-                <input type="number" v-model.number="editForm.bhyt_employer" min="0" step="any"
-                  class="form-input text-right font-mono text-xs" />
+                <input type="number" v-model.number="editForm.bhyt_employer" min="0" step="any" :disabled="!editForm.insurance_override_enabled"
+                  class="form-input text-right font-mono text-xs disabled:bg-gray-100 disabled:text-gray-400" />
               </div>
               <div>
                 <label class="text-[10px] text-gray-500 font-medium">BHTN CP DN (1%)</label>
-                <input type="number" v-model.number="editForm.bhtn_employer" min="0" step="any"
-                  class="form-input text-right font-mono text-xs" />
+                <input type="number" v-model.number="editForm.bhtn_employer" min="0" step="any" :disabled="!editForm.insurance_override_enabled"
+                  class="form-input text-right font-mono text-xs disabled:bg-gray-100 disabled:text-gray-400" />
               </div>
               <div>
                 <label class="text-[10px] text-orange-600 font-medium">BHXH NV (8%)</label>
-                <input type="number" v-model.number="editForm.bhxh_employee" min="0" step="any"
-                  class="form-input text-right font-mono text-xs border-orange-300" />
+                <input type="number" v-model.number="editForm.bhxh_employee" min="0" step="any" :disabled="!editForm.insurance_override_enabled"
+                  class="form-input text-right font-mono text-xs border-orange-300 disabled:bg-gray-100 disabled:text-gray-400" />
               </div>
               <div>
                 <label class="text-[10px] text-orange-600 font-medium">BHYT NV (1.5%)</label>
-                <input type="number" v-model.number="editForm.bhyt_employee" min="0" step="any"
-                  class="form-input text-right font-mono text-xs border-orange-300" />
+                <input type="number" v-model.number="editForm.bhyt_employee" min="0" step="any" :disabled="!editForm.insurance_override_enabled"
+                  class="form-input text-right font-mono text-xs border-orange-300 disabled:bg-gray-100 disabled:text-gray-400" />
               </div>
               <div>
                 <label class="text-[10px] text-orange-600 font-medium">BHTN NV (1%)</label>
-                <input type="number" v-model.number="editForm.bhtn_employee" min="0" step="any"
-                  class="form-input text-right font-mono text-xs border-orange-300" />
+                <input type="number" v-model.number="editForm.bhtn_employee" min="0" step="any" :disabled="!editForm.insurance_override_enabled"
+                  class="form-input text-right font-mono text-xs border-orange-300 disabled:bg-gray-100 disabled:text-gray-400" />
               </div>
             </div>
-            <p class="text-[10px] text-gray-400">Mặc định: theo công thức. Đặt về 0 nếu tháng này NV không đóng.</p>
+            <p class="text-[10px] text-gray-400">Công thức tính hiện tại: BHXH/BHYT/BHTN NV = {{ fv(previewInsEmpFormula) }} đ</p>
           </div>
 
           <!-- PIT override — admin only -->
@@ -519,8 +543,15 @@
               <label class="text-[10px] text-red-600 font-medium">Thuế TNCN thực tế (đ)</label>
               <input type="number" v-model.number="editForm.pit_override" min="0" step="any"
                 class="form-input text-right font-mono text-sm border-red-300" />
-              <p class="text-[10px] text-gray-400">Công thức tính: {{ fv(previewPitAuto) }} đ</p>
+              <p class="text-[10px] text-gray-400">Công thức tính: {{ fv(previewPitAuto) }} đ — giá trị ghi đè sẽ được giữ nguyên khi đồng bộ.</p>
             </div>
+          </div>
+
+          <!-- Lý do ghi đè — chung cho BHXH và PIT -->
+          <div v-if="editForm.insurance_override_enabled || editForm.pit_override_enabled">
+            <label class="form-label text-xs">Lý do ghi đè (khuyến nghị)</label>
+            <textarea v-model="editForm.override_reason" rows="2"
+              class="form-input text-sm" placeholder="VD: truy thu BHXH tháng trước, điều chỉnh theo thông báo BHXH..."></textarea>
           </div>
 
           <div class="border-b pb-1 flex gap-3">
@@ -964,7 +995,8 @@ const editForm = useForm({
   working_days:             26,
   advance:                  0,
   insurance_subject:        true,
-  // BHXH override — kế toán có thể sửa thủ công
+  // BHXH override — chỉ áp dụng khi insurance_override_enabled = true
+  insurance_override_enabled: false,
   bhxh_employer:            0,
   bhyt_employer:            0,
   bhtn_employer:            0,
@@ -974,6 +1006,7 @@ const editForm = useForm({
   // PIT override — chỉ admin
   pit_override_enabled:     false,
   pit_override:             0,
+  override_reason:          '',
 });
 
 // BHXH-subject allowances (Nghị định 158/2025): trách nhiệm + cố định khác
@@ -1007,8 +1040,14 @@ const previewInsBase = computed(() =>
               Math.round(previewBhxhAllw.value  * previewRate.value),
               editForm.insurance_subject)
 );
+const previewInsEmpFormula = computed(() => {
+  const f = calcBhxhFromBase(previewInsBase.value);
+  return f.bhxh_employee + f.bhyt_employee + f.bhtn_employee;
+});
 const previewInsEmp  = computed(() =>
-  (editForm.bhxh_employee || 0) + (editForm.bhyt_employee || 0) + (editForm.bhtn_employee || 0)
+  editForm.insurance_override_enabled
+    ? (editForm.bhxh_employee || 0) + (editForm.bhyt_employee || 0) + (editForm.bhtn_employee || 0)
+    : previewInsEmpFormula.value
 );
 const previewPitAuto = computed(() => calcPit(previewGross.value, previewInsEmp.value, editForm.dependents_count || 0));
 const previewPit     = computed(() =>
@@ -1054,14 +1093,16 @@ function openEditModal(item) {
   editForm.working_days             = item.working_days;
   editForm.advance                  = item.advance;
   editForm.insurance_subject        = item.insurance_subject;
+  editForm.insurance_override_enabled = item.insurance_overridden ?? false;
   editForm.bhxh_employer            = item.bhxh_employer ?? 0;
   editForm.bhyt_employer            = item.bhyt_employer ?? 0;
   editForm.bhtn_employer            = item.bhtn_employer ?? 0;
   editForm.bhxh_employee            = item.bhxh_employee ?? 0;
   editForm.bhyt_employee            = item.bhyt_employee ?? 0;
   editForm.bhtn_employee            = item.bhtn_employee ?? 0;
-  editForm.pit_override_enabled     = false;
+  editForm.pit_override_enabled     = item.pit_overridden ?? false;
   editForm.pit_override             = item.pit ?? 0;
+  editForm.override_reason          = item.override_reason ?? '';
   showEditModal.value = true;
 }
 
@@ -1069,7 +1110,8 @@ watch(() => editForm.insurance_subject, (newVal) => {
   if (!newVal) {
     editForm.bhxh_employer = 0; editForm.bhyt_employer = 0; editForm.bhtn_employer = 0;
     editForm.bhxh_employee = 0; editForm.bhyt_employee = 0; editForm.bhtn_employee = 0;
-  } else {
+  } else if (!editForm.insurance_override_enabled) {
+    // Chỉ auto-tính lại khi KHÔNG đang ghi đè thủ công — tránh ghi đè số kế toán vừa nhập
     const insBase = calcInsBase(editForm.base_salary || 0, previewBhxhAllw.value, true);
     Object.assign(editForm, calcBhxhFromBase(insBase));
   }
@@ -1099,6 +1141,7 @@ const rollbackPreview   = ref(null);
 const rollbackForm      = useForm({ scope: '', reason: '' });
 
 const hasPaidItems = computed(() => props.items.some(i => i.status === 'paid'));
+const missingInsuranceCount = computed(() => props.items.filter(i => i.missing_insurance_base_salary).length);
 
 function openRollbackModal() {
   rollbackStep.value   = 'config';
