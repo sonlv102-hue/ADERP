@@ -125,8 +125,8 @@
           <table class="min-w-full text-sm">
             <thead class="border-b-2 border-gray-300">
               <tr class="bg-gray-50">
-                <th class="text-left px-4 py-2 font-semibold text-gray-600 text-xs" rowspan="2">TK</th>
-                <th class="text-left px-4 py-2 font-semibold text-gray-600 text-xs" rowspan="2">Tên tài khoản</th>
+                <th class="erp-sticky-col-header text-left px-4 py-2 font-semibold text-gray-600 text-xs" rowspan="2" :style="getStickyStyle('code')">TK</th>
+                <th class="erp-sticky-col-header erp-sticky-col-boundary text-left px-4 py-2 font-semibold text-gray-600 text-xs" rowspan="2" :style="getStickyStyle('name')">Tên tài khoản</th>
                 <th class="text-center px-4 py-2 font-semibold text-gray-600 text-xs border-l border-gray-200" colspan="2">Số dư đầu kỳ</th>
                 <th class="text-center px-4 py-2 font-semibold text-gray-600 text-xs border-l border-gray-200" colspan="2">Số phát sinh</th>
                 <th class="text-center px-4 py-2 font-semibold text-gray-600 text-xs border-l border-gray-200" colspan="2">Số dư cuối kỳ</th>
@@ -145,15 +145,17 @@
                 :class="[
                   acc.is_rollup  ? 'bg-sky-50 hover:bg-sky-100' :
                   !acc.is_detail ? 'bg-orange-50 hover:bg-orange-100' :
-                                   'hover:bg-gray-50',
+                                   'bg-white hover:bg-gray-50',
                 ]">
-                <td class="px-4 py-2 font-mono font-semibold text-xs"
+                <td class="erp-sticky-col px-4 py-2 font-mono font-semibold text-xs whitespace-nowrap"
+                  :style="getStickyStyle('code')"
                   :class="acc.is_rollup ? 'text-sky-800' : (!acc.is_detail ? 'text-orange-700' : 'text-gray-800')">
                   {{ acc.code }}
                   <span v-if="acc.is_rollup"  class="ml-1 text-sky-500 text-xs font-normal" title="Roll-up từ TK chi tiết">∑</span>
                   <span v-if="!acc.is_detail && !acc.is_rollup" class="ml-1 text-orange-400 text-xs font-normal" title="Ghi trực tiếp vào TK tổng hợp (legacy)">⚠</span>
                 </td>
-                <td class="px-4 py-2 text-xs font-semibold"
+                <td class="erp-sticky-col erp-sticky-col-boundary px-4 py-2 text-xs font-semibold truncate"
+                  :style="getStickyStyle('name')" :title="acc.name"
                   :class="acc.is_rollup ? 'text-sky-800' : (!acc.is_detail ? 'text-orange-700 italic font-normal' : 'text-gray-700 font-normal')">
                   {{ acc.name }}
                 </td>
@@ -166,8 +168,8 @@
               </tr>
             </tbody>
             <tfoot class="bg-gray-50 border-t-2 border-gray-300">
-              <tr>
-                <td colspan="2" class="px-4 py-2 font-bold text-gray-800 text-xs">
+              <tr class="bg-gray-50">
+                <td colspan="2" class="erp-sticky-col erp-sticky-col-boundary px-4 py-2 font-bold text-gray-800 text-xs" :style="getStickyStyle('code', { widthless: true })">
                   TỔNG CỘNG
                   <span v-if="hiddenCount > 0" class="font-normal text-gray-500 text-xs">
                     (gồm ghi trực tiếp {{ hiddenCount }} TK tổng hợp)
@@ -194,6 +196,12 @@ import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { useCurrency } from '@/composables/useCurrency';
 import { useInertiaLoading } from '@/composables/useInertiaLoading';
+import { useStickyColumns } from '@/composables/useStickyColumns';
+
+const { getStickyStyle } = useStickyColumns([
+  { key: 'code', width: 70 },
+  { key: 'name', width: 260 },
+]);
 
 const props = defineProps({
   accounts:    Array,
