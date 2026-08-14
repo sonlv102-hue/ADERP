@@ -72,9 +72,9 @@
           <thead>
             <!-- Day numbers row -->
             <tr class="bg-gray-700 text-white">
-              <th class="px-2 py-2 text-center w-8 border border-gray-600">STT</th>
-              <th class="px-2 py-2 text-left w-[60px] border border-gray-600">Mã NV</th>
-              <th class="px-2 py-2 text-left min-w-[120px] border border-gray-600">Họ và tên</th>
+              <th class="erp-sticky-col-header truncate px-2 py-2 text-center border border-gray-600" :style="getStickyStyle('index')">STT</th>
+              <th class="erp-sticky-col-header truncate px-2 py-2 text-left border border-gray-600" :style="getStickyStyle('code')">Mã NV</th>
+              <th class="erp-sticky-col-header erp-sticky-col-boundary truncate px-2 py-2 text-left border border-gray-600" :style="getStickyStyle('name')">Họ và tên</th>
               <th class="px-2 py-2 text-left min-w-[70px] border border-gray-600">Chức vụ</th>
               <th v-for="d in daysInMonth" :key="d"
                 :class="['w-7 text-center border border-gray-600 select-none', isSunday(d) ? 'bg-red-600' : '']">
@@ -89,7 +89,8 @@
             </tr>
             <!-- Day-of-week row -->
             <tr class="bg-gray-100 text-gray-500">
-              <th colspan="4" class="border border-gray-200"></th>
+              <th colspan="3" class="erp-sticky-col-header erp-sticky-col-boundary border border-gray-200" :style="getStickyStyle('index', { widthless: true })"></th>
+              <th class="border border-gray-200"></th>
               <th v-for="d in daysInMonth" :key="d"
                 :class="['text-center border border-gray-200 py-0.5 text-[9px]', isSunday(d) ? 'bg-red-100 text-red-600 font-bold' : '']">
                 {{ DOW_SHORT[dayHeaders[d]] }}
@@ -99,16 +100,16 @@
           </thead>
           <tbody>
             <tr v-for="(rec, idx) in localRecords" :key="rec.id"
-              :class="['border-b border-gray-100', dirtyRows.has(rec.id) ? 'bg-yellow-50' : (idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/40')]">
-              <td class="px-2 py-1 text-center border border-gray-100 text-gray-400">{{ idx + 1 }}</td>
+              :class="['border-b border-gray-100', dirtyRows.has(rec.id) ? 'bg-yellow-50' : (idx % 2 === 0 ? 'bg-white' : 'bg-gray-50')]">
+              <td class="erp-sticky-col truncate px-2 py-1 text-center border border-gray-100 text-gray-400" :style="getStickyStyle('index')">{{ idx + 1 }}</td>
               <!-- Employee code — click to view detail -->
-              <td class="px-2 py-1 border border-gray-100">
+              <td class="erp-sticky-col truncate px-2 py-1 border border-gray-100" :style="getStickyStyle('code')">
                 <button @click="openDetail(rec)"
                   class="font-mono text-primary-600 hover:underline text-xs">
                   {{ rec.employee_code }}
                 </button>
               </td>
-              <td class="px-2 py-1 font-medium border border-gray-100">
+              <td class="erp-sticky-col erp-sticky-col-boundary truncate px-2 py-1 font-medium border border-gray-100" :style="getStickyStyle('name')" :title="rec.employee_name">
                 <button @click="openDetail(rec)" class="hover:text-primary-600 text-left">
                   {{ rec.employee_name }}
                 </button>
@@ -156,7 +157,8 @@
 
             <!-- Summary totals row -->
             <tr class="bg-gray-100 font-semibold border-t-2 border-gray-300">
-              <td colspan="4" class="px-3 py-2 text-right text-gray-700 border border-gray-200 text-xs">TỔNG CỘNG</td>
+              <td colspan="3" class="erp-sticky-col erp-sticky-col-boundary px-3 py-2 text-right text-gray-700 border border-gray-200 text-xs" :style="getStickyStyle('index', { widthless: true })">TỔNG CỘNG</td>
+              <td class="border border-gray-200"></td>
               <td v-for="d in daysInMonth" :key="d" class="border border-gray-200"></td>
               <td class="px-1 py-2 text-center border border-gray-200">{{ totals.cong }}</td>
               <td class="px-1 py-2 text-center border border-gray-200">{{ totals.nghi_huong_luong || '' }}</td>
@@ -283,9 +285,18 @@ import { Link, router, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import ReportSignatureSection from '@/Components/Shared/ReportSignatureSection.vue';
+import { useStickyColumns } from '@/composables/useStickyColumns';
 
 const company = computed(() => usePage().props.company);
 const printDate = new Date();
+
+// Sticky columns: STT + Mã NV + Họ và tên frozen để luôn biết đang chấm công cho ai
+// khi cuộn qua các ngày trong tháng. Chức vụ scroll cùng lưới ngày (giữ diện tích chấm công tối đa).
+const { getStickyStyle } = useStickyColumns([
+  { key: 'index', width: 32 },
+  { key: 'code', width: 80 },
+  { key: 'name', width: 130 },
+]);
 
 const props = defineProps({
   sheet:       Object,
