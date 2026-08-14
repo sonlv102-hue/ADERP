@@ -110,9 +110,9 @@
         <div class="bg-white rounded-xl shadow-sm overflow-x-auto border border-gray-200">
           <table class="min-w-full text-xs">
             <thead class="bg-gray-50 text-gray-600 uppercase text-[10px] tracking-wider border-b border-gray-200">
-              <tr>
-                <th class="px-4 py-3 text-left w-24">Ngày</th>
-                <th class="px-4 py-3 text-left w-28">Số CT</th>
+              <tr class="bg-gray-50">
+                <th class="erp-sticky-col-header px-4 py-3 text-left w-24" :style="getStickyStyle('date')">Ngày</th>
+                <th class="erp-sticky-col-header erp-sticky-col-boundary px-4 py-3 text-left w-28" :style="getStickyStyle('ref')">Số CT</th>
                 <th class="px-4 py-3 text-left w-24">Tài khoản</th>
                 <th class="px-4 py-3 text-left">Diễn giải</th>
                 <th class="px-4 py-3 text-right w-28">Nợ</th>
@@ -124,8 +124,8 @@
             </thead>
             <tbody class="divide-y divide-gray-100">
               <tr class="bg-green-50 font-medium">
-                <td class="px-4 py-2 text-gray-500">—</td>
-                <td class="px-4 py-2"></td>
+                <td class="erp-sticky-col px-4 py-2 text-gray-500" :style="getStickyStyle('date')">—</td>
+                <td class="erp-sticky-col erp-sticky-col-boundary px-4 py-2" :style="getStickyStyle('ref')"></td>
                 <td class="px-4 py-2 text-gray-400">—</td>
                 <td class="px-4 py-2 text-green-800">Số dư đầu kỳ</td>
                 <td class="px-4 py-2"></td>
@@ -134,9 +134,9 @@
                 <td class="px-4 py-2 text-right text-gray-800">{{ formatVnd(opening_bal_331ut) }}</td>
                 <td class="px-4 py-2 text-right font-bold text-primary-800">{{ formatVnd(opening_bal_net) }}</td>
               </tr>
-              <tr v-for="(row, i) in rows" :key="i" class="hover:bg-gray-50">
-                <td class="px-4 py-2 text-gray-500">{{ row.date }}</td>
-                <td class="px-4 py-2 font-mono text-primary-600">{{ row.ref }}</td>
+              <tr v-for="(row, i) in rows" :key="i" class="bg-white hover:bg-gray-50">
+                <td class="erp-sticky-col px-4 py-2 text-gray-500 whitespace-nowrap" :style="getStickyStyle('date')">{{ row.date }}</td>
+                <td class="erp-sticky-col erp-sticky-col-boundary px-4 py-2 font-mono text-primary-600 whitespace-nowrap" :style="getStickyStyle('ref')">{{ row.ref }}</td>
                 <td class="px-4 py-2 font-semibold text-gray-700">{{ row.account_code }}</td>
                 <td class="px-4 py-2 text-gray-700">{{ row.description || '—' }}</td>
                 <td class="px-4 py-2 text-right text-blue-700 font-medium">{{ row.debit > 0 ? formatVnd(row.debit) : '' }}</td>
@@ -146,7 +146,8 @@
                 <td class="px-4 py-2 text-right font-semibold text-gray-900">{{ formatVnd(row.balance_net) }}</td>
               </tr>
               <tr class="bg-gray-50 font-bold border-t border-gray-200">
-                <td colspan="4" class="px-4 py-2.5 text-gray-700 uppercase tracking-wider text-[10px]">Cộng phát sinh trong kỳ</td>
+                <td colspan="2" class="erp-sticky-col erp-sticky-col-boundary px-4 py-2.5 text-gray-700 uppercase tracking-wider text-[10px]" :style="getStickyStyle('date', { widthless: true })"></td>
+                <td colspan="2" class="px-4 py-2.5 text-gray-700 uppercase tracking-wider text-[10px]">Cộng phát sinh trong kỳ</td>
                 <td class="px-4 py-2.5 text-right text-blue-700">{{ formatVnd(total_debit_331 + total_debit_331ut) }}</td>
                 <td class="px-4 py-2.5 text-right text-green-700">{{ formatVnd(total_credit_331 + total_credit_331ut) }}</td>
                 <td class="px-4 py-2.5 text-right text-gray-700">{{ formatVnd(closing_bal_331) }}</td>
@@ -168,6 +169,12 @@
 import { ref, computed } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
+import { useStickyColumns } from '@/composables/useStickyColumns';
+
+const { getStickyStyle } = useStickyColumns([
+  { key: 'date', width: 90 },
+  { key: 'ref', width: 110 },
+]);
 
 const props = defineProps({
   suppliers:          Array,
