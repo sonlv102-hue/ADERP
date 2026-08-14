@@ -74,10 +74,10 @@
       <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto transition-opacity" :class="{ 'opacity-60': isLoading }">
         <table class="min-w-full text-sm min-w-max">
           <thead class="bg-gray-50">
-            <tr class="border-b border-gray-200">
-              <th rowspan="2" class="text-left px-4 py-2 font-semibold text-gray-600 border-r border-gray-200 align-middle">Mã SP</th>
-              <th rowspan="2" class="text-left px-4 py-2 font-semibold text-gray-600 border-r border-gray-200 align-middle">Tên sản phẩm</th>
-              <th rowspan="2" class="text-left px-4 py-2 font-semibold text-gray-600 border-r border-gray-200 align-middle">ĐVT</th>
+            <tr class="bg-gray-50 border-b border-gray-200">
+              <th rowspan="2" class="erp-sticky-col-header truncate text-left px-4 py-2 font-semibold text-gray-600 border-r border-gray-200 align-middle" :style="getStickyStyle('code')">Mã SP</th>
+              <th rowspan="2" class="erp-sticky-col-header truncate text-left px-4 py-2 font-semibold text-gray-600 border-r border-gray-200 align-middle" :style="getStickyStyle('name')">Tên sản phẩm</th>
+              <th rowspan="2" class="erp-sticky-col-header erp-sticky-col-boundary truncate text-left px-4 py-2 font-semibold text-gray-600 align-middle" :style="getStickyStyle('unit')">ĐVT</th>
               <th rowspan="2" class="text-left px-4 py-2 font-semibold text-gray-600 border-r border-gray-200 align-middle">Danh mục</th>
               <th colspan="2" class="text-center px-4 py-2 font-semibold text-gray-600 border-r border-gray-200">Tồn đầu kỳ</th>
               <th colspan="4" class="text-center px-4 py-2 font-semibold text-blue-700 border-r border-gray-200 bg-blue-50">Nhập trong kỳ</th>
@@ -100,10 +100,10 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <tr v-for="row in rows.data" :key="row.id" class="hover:bg-gray-50">
-              <td class="px-4 py-2.5 font-mono text-xs text-primary-700 border-r border-gray-100">{{ row.code }}</td>
-              <td class="px-4 py-2.5 text-gray-800 border-r border-gray-100">{{ row.name }}</td>
-              <td class="px-4 py-2.5 text-gray-500 text-xs border-r border-gray-100">{{ row.unit }}</td>
+            <tr v-for="row in rows.data" :key="row.id" class="bg-white hover:bg-gray-50">
+              <td class="erp-sticky-col truncate px-4 py-2.5 font-mono text-xs text-primary-700 border-r border-gray-100" :style="getStickyStyle('code')">{{ row.code }}</td>
+              <td class="erp-sticky-col truncate px-4 py-2.5 text-gray-800 border-r border-gray-100" :style="getStickyStyle('name')" :title="row.name">{{ row.name }}</td>
+              <td class="erp-sticky-col erp-sticky-col-boundary truncate px-4 py-2.5 text-gray-500 text-xs" :style="getStickyStyle('unit')">{{ row.unit }}</td>
               <td class="px-4 py-2.5 text-gray-500 text-xs border-r border-gray-100">{{ row.category ?? '—' }}</td>
               <!-- Tồn đầu -->
               <td class="px-3 py-2.5 text-right text-gray-700">{{ fmtQty(row.stock_begin) }}</td>
@@ -127,8 +127,9 @@
             </tr>
           </tbody>
           <tfoot v-if="rows.data?.length" class="bg-gray-50 border-t-2 border-gray-300">
-            <tr>
-              <td colspan="4" class="px-4 py-3 font-semibold text-gray-700 text-sm">Tổng cộng</td>
+            <tr class="bg-gray-50">
+              <td colspan="3" class="erp-sticky-col erp-sticky-col-boundary px-4 py-3 font-semibold text-gray-700 text-sm" :style="getStickyStyle('code', { widthless: true })">Tổng cộng</td>
+              <td></td>
               <td></td>
               <td class="px-3 py-3 text-right font-semibold text-gray-800">{{ fmt(summary.total_begin_value) }}</td>
               <td></td><td></td><td></td>
@@ -153,6 +154,15 @@ import AppLayout from '@/Components/Layout/AppLayout.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
 import { useCurrency } from '@/composables/useCurrency';
 import { useInertiaLoading } from '@/composables/useInertiaLoading';
+import { useStickyColumns } from '@/composables/useStickyColumns';
+
+// Sticky columns: Mã SP/Tên sản phẩm/ĐVT frozen so người dùng luôn biết đang xem mặt hàng nào
+// khi cuộn sang các nhóm số liệu Tồn đầu/Nhập/Xuất/Tồn cuối. Danh mục scroll cùng số liệu.
+const { getStickyStyle } = useStickyColumns([
+  { key: 'code', width: 130 },
+  { key: 'name', width: 240 },
+  { key: 'unit', width: 55 },
+]);
 
 const props = defineProps({
   rows:       Object,
