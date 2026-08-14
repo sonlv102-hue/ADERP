@@ -46,9 +46,9 @@
       <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th rowspan="2" class="text-left px-4 py-2 font-semibold text-gray-600 border-r border-gray-100 align-middle whitespace-nowrap">Mã hàng hóa</th>
-              <th rowspan="2" class="text-left px-4 py-2 font-semibold text-gray-600 border-r border-gray-100 align-middle">Diễn giải</th>
+            <tr class="bg-gray-50">
+              <th rowspan="2" class="erp-sticky-col-header truncate text-left px-4 py-2 font-semibold text-gray-600 border-r border-gray-100 align-middle whitespace-nowrap" :style="getStickyStyle('code')">Mã hàng hóa</th>
+              <th rowspan="2" class="erp-sticky-col-header erp-sticky-col-boundary truncate text-left px-4 py-2 font-semibold text-gray-600 align-middle" :style="getStickyStyle('description')">Diễn giải</th>
               <th colspan="2" class="text-center px-3 py-2 font-semibold text-gray-600 border-r border-gray-100">Tồn đầu kỳ</th>
               <th colspan="4" class="text-center px-3 py-2 font-semibold text-blue-700 border-r border-gray-100 bg-blue-50">Nhập trong kỳ</th>
               <th colspan="4" class="text-center px-3 py-2 font-semibold text-orange-700 border-r border-gray-100 bg-orange-50">Xuất trong kỳ</th>
@@ -75,19 +75,19 @@
                 v-for="(r, idx) in group.rows"
                 :key="idx"
                 :class="[
-                  r.row_type === 'movement' ? 'hover:bg-gray-50' : 'font-semibold bg-slate-50',
-                  r.is_negative ? 'bg-red-50' : '',
+                  r.is_negative ? 'bg-red-50' : (r.row_type === 'movement' ? 'bg-white' : 'bg-slate-50'),
+                  r.row_type === 'movement' ? 'hover:bg-gray-50' : 'font-semibold',
                 ]"
               >
-                <td class="px-4 py-2 font-mono text-xs text-primary-700 border-r border-gray-100 whitespace-nowrap">
-                  <div class="flex items-center gap-2">
-                    <span>{{ idx === 0 ? group.product.code : '' }}</span>
-                    <span v-if="idx === 0 && group.status.code !== 'normal'" :title="statusTooltip(group.status.code)">
+                <td class="erp-sticky-col truncate px-4 py-2 font-mono text-xs text-primary-700 border-r border-gray-100" :style="getStickyStyle('code')">
+                  <div class="flex items-center gap-2 overflow-hidden">
+                    <span class="truncate">{{ idx === 0 ? group.product.code : '' }}</span>
+                    <span v-if="idx === 0 && group.status.code !== 'normal'" :title="statusTooltip(group.status.code)" class="shrink-0">
                       <StatusBadge :color="group.status.color">{{ group.status.label }}</StatusBadge>
                     </span>
                   </div>
                 </td>
-                <td class="px-4 py-2 text-gray-800 border-r border-gray-100 whitespace-nowrap">{{ r.description }}</td>
+                <td class="erp-sticky-col erp-sticky-col-boundary truncate px-4 py-2 text-gray-800" :style="getStickyStyle('description')" :title="r.description">{{ r.description }}</td>
                 <td class="px-3 py-2 text-right text-gray-700 whitespace-nowrap">{{ fmtQty(r.qty_begin) }}</td>
                 <td class="px-3 py-2 text-right text-gray-600 text-xs border-r border-gray-100 whitespace-nowrap">{{ fmtVal(r.value_begin) }}</td>
                 <td class="px-3 py-2 text-left text-blue-700 font-mono text-xs whitespace-nowrap" :title="r.backdated_note ?? ''">{{ r.in_doc_code ?? '—' }}</td>
@@ -124,6 +124,14 @@ import FormField from '@/Components/Shared/FormField.vue';
 import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import { useCurrency } from '@/composables/useCurrency';
+import { useStickyColumns } from '@/composables/useStickyColumns';
+
+// Sticky columns: Mã hàng hóa + Diễn giải là 2 cột định danh thật duy nhất (rowspan=2).
+// Không có cột Ngày/Số chứng từ độc lập — chúng nằm trong từng nhóm Nhập/Xuất riêng nên scroll cùng.
+const { getStickyStyle } = useStickyColumns([
+  { key: 'code', width: 180 },
+  { key: 'description', width: 200 },
+]);
 
 const props = defineProps({
   rows:       Object,
