@@ -34,10 +34,10 @@
       <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
         <table class="min-w-full text-sm">
           <thead class="bg-gray-50 border-b border-gray-200">
-            <tr>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">Mã</th>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">Số HĐ NCC</th>
-              <th class="text-left px-5 py-3 font-semibold text-gray-600">Nhà cung cấp</th>
+            <tr class="bg-gray-50">
+              <th class="erp-sticky-col-header text-left px-5 py-3 font-semibold text-gray-600" :style="getStickyStyle('code')">Mã</th>
+              <th class="erp-sticky-col-header text-left px-5 py-3 font-semibold text-gray-600" :style="getStickyStyle('invoiceNumber')">Số HĐ NCC</th>
+              <th class="erp-sticky-col-header erp-sticky-col-boundary text-left px-5 py-3 font-semibold text-gray-600" :style="getStickyStyle('supplier')">Nhà cung cấp</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Đơn mua</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Ngày HĐ</th>
               <th class="text-left px-5 py-3 font-semibold text-gray-600">Hạn TT</th>
@@ -48,10 +48,10 @@
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
-            <tr v-for="inv in invoices.data" :key="inv.id" class="hover:bg-gray-50">
-              <td class="px-5 py-3 font-mono font-medium text-primary-700">{{ inv.code }}</td>
-              <td class="px-5 py-3 text-gray-700">{{ inv.invoice_number ?? '—' }}</td>
-              <td class="px-5 py-3 text-gray-900">{{ inv.supplier }}</td>
+            <tr v-for="inv in invoices.data" :key="inv.id" class="bg-white hover:bg-gray-50">
+              <td class="erp-sticky-col px-5 py-3 font-mono font-medium text-primary-700 whitespace-nowrap" :style="getStickyStyle('code')">{{ inv.code }}</td>
+              <td class="erp-sticky-col px-5 py-3 text-gray-700 whitespace-nowrap" :style="getStickyStyle('invoiceNumber')">{{ inv.invoice_number ?? '—' }}</td>
+              <td class="erp-sticky-col erp-sticky-col-boundary px-5 py-3 text-gray-900 truncate" :style="getStickyStyle('supplier')" :title="inv.supplier">{{ inv.supplier }}</td>
               <td class="px-5 py-3 font-mono text-xs text-gray-600">{{ inv.purchase_order }}</td>
               <td class="px-5 py-3 text-gray-600">{{ inv.invoice_date ?? '—' }}</td>
               <td class="px-5 py-3 text-gray-600">{{ inv.due_date ?? '—' }}</td>
@@ -218,6 +218,7 @@ import Pagination from '@/Components/Shared/Pagination.vue';
 import ExportExcelButton from '@/Components/Shared/ExportExcelButton.vue';
 import { usePermission } from '@/composables/usePermission';
 import { useCurrency } from '@/composables/useCurrency';
+import { useStickyColumns } from '@/composables/useStickyColumns';
 
 const props = defineProps({
   invoices: Object,
@@ -226,6 +227,12 @@ const props = defineProps({
 const { hasPermission } = usePermission();
 const can = hasPermission;
 const { formatVnd } = useCurrency();
+
+const { getStickyStyle } = useStickyColumns([
+  { key: 'code', width: 110 },
+  { key: 'invoiceNumber', width: 110 },
+  { key: 'supplier', width: 220 },
+]);
 
 const search       = ref('');
 const statusFilter = ref('');
