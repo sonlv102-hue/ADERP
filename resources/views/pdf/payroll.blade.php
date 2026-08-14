@@ -33,10 +33,6 @@ tfoot td.right { text-align: right; }
 .group-header { background: #3B82F6; color: white; font-weight: bold; text-align: center; padding: 3px; font-size: 8px; }
 
 .sign-section { margin-top: 16px; }
-.sign-row { display: flex; justify-content: space-around; }
-.sign-box { text-align: center; width: 28%; }
-.sign-title { font-size: 9px; font-weight: bold; text-transform: uppercase; }
-.sign-name { font-size: 9px; margin-top: 36px; color: #374151; }
 .sign-date { font-size: 8px; color: #6b7280; margin-bottom: 4px; }
 
 .no-data { text-align: center; color: #9ca3af; padding: 20px; font-style: italic; }
@@ -169,23 +165,14 @@ $fmt = fn($n) => number_format((float)$n, 0, ',', '.');
   <!-- Signature section -->
   <div class="sign-section">
     <div class="sign-date" style="text-align:right">{{ $companyAddress ? $companyAddress . ', ' : '' }}ngày {{ now()->format('d') }} tháng {{ now()->format('m') }} năm {{ now()->format('Y') }}</div>
-    <div class="sign-row">
-      <div class="sign-box">
-        <div class="sign-title">Người lập bảng</div>
-        <div style="font-size:8px;color:#6b7280;">(Ký, ghi rõ họ tên)</div>
-        <div class="sign-name">&nbsp;</div>
-      </div>
-      <div class="sign-box">
-        <div class="sign-title">Kế toán trưởng</div>
-        <div style="font-size:8px;color:#6b7280;">(Ký, ghi rõ họ tên)</div>
-        <div class="sign-name">&nbsp;</div>
-      </div>
-      <div class="sign-box">
-        <div class="sign-title">Giám đốc</div>
-        <div style="font-size:8px;color:#6b7280;">(Ký, đóng dấu)</div>
-        <div class="sign-name">&nbsp;</div>
-      </div>
-    </div>
+    @include('pdf.partials.signature-section', [
+        'showSigningDate' => false,
+        'signers' => [
+            ['title' => 'Người lập bảng', 'instruction' => '(Ký, ghi rõ họ tên)'],
+            ['title' => 'Kế toán trưởng', 'instruction' => '(Ký, ghi rõ họ tên)'],
+            ['title' => 'Giám đốc',        'instruction' => '(Ký, đóng dấu)'],
+        ],
+    ])
   </div>
 
 </div>
