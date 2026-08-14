@@ -176,17 +176,16 @@
 
       <!-- Full Payroll Table -->
       <div class="bg-white rounded-xl shadow-sm overflow-x-auto" id="payroll-table-container">
-        <div class="overflow-x-auto">
           <table class="min-w-full text-xs whitespace-nowrap border-collapse" style="min-width: 2400px">
             <thead>
               <!-- Row 1: column group headers -->
               <tr class="bg-primary-700 text-white text-center">
-                <th rowspan="2" class="border border-primary-600 px-2 py-2 w-8">STT</th>
-                <th rowspan="2" class="border border-primary-600 px-3 py-2 text-left min-w-[140px]">Họ và tên</th>
-                <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[90px]">Chức vụ</th>
-                <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[80px]">Bộ phận</th>
-                <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[80px]">Loại HĐ</th>
-                <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[90px]">Lương<br/>Chính</th>
+                <th rowspan="2" class="erp-sticky-col-header truncate border border-primary-600 px-2 py-2" :style="getStickyStyle('index')">STT</th>
+                <th rowspan="2" class="erp-sticky-col-header truncate border border-primary-600 px-3 py-2 text-left" :style="getStickyStyle('name')">Họ và tên</th>
+                <th rowspan="2" class="erp-sticky-col-header truncate border border-primary-600 px-2 py-2" :style="getStickyStyle('position')">Chức vụ</th>
+                <th rowspan="2" class="erp-sticky-col-header truncate border border-primary-600 px-2 py-2" :style="getStickyStyle('department')">Bộ phận</th>
+                <th rowspan="2" class="erp-sticky-col-header truncate border border-primary-600 px-2 py-2" :style="getStickyStyle('contract_type')">Loại HĐ</th>
+                <th rowspan="2" class="erp-sticky-col-header erp-sticky-col-boundary border border-primary-600 px-2 py-2" :style="getStickyStyle('base_salary')">Lương<br/>Chính</th>
                 <th colspan="6" class="border border-primary-600 px-2 py-1">Phụ cấp</th>
                 <th rowspan="2" class="border border-primary-600 px-2 py-2 min-w-[90px]">Tổng<br/>Thu Nhập</th>
                 <th colspan="5" class="border border-primary-600 px-2 py-1 bg-emerald-700">Chuyên cần</th>
@@ -232,10 +231,10 @@
               <template v-for="(group, deptName) in groupedItems" :key="deptName">
                 <!-- Department row -->
                 <tr class="bg-yellow-50">
-                  <td class="border border-gray-200 px-2 py-1.5 font-bold text-gray-800 text-xs" colspan="5">
+                  <td class="erp-sticky-col border border-gray-200 px-2 py-1.5 font-bold text-gray-800 text-xs truncate" colspan="5" :style="getStickyStyle('index', { widthless: true })">
                     {{ deptName || 'Chưa phân phòng ban' }}
                   </td>
-                  <td class="border border-gray-200 px-2 py-1.5 text-right font-bold font-mono">{{ fv(sum(group, 'base_salary')) }}</td>
+                  <td class="erp-sticky-col erp-sticky-col-boundary border border-gray-200 px-2 py-1.5 text-right font-bold font-mono" :style="getStickyStyle('base_salary')">{{ fv(sum(group, 'base_salary')) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'allowance')) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'allowance_responsibility')) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ fv(sum(group, 'allowance_lunch')) }}</td>
@@ -277,25 +276,25 @@
                 <!-- Employee rows -->
                 <tr v-for="(item, idx) in group" :key="item.id"
                   class="hover:bg-blue-50 transition-colors"
-                  :class="{ 'bg-gray-50': !item.insurance_subject }">
-                  <td class="border border-gray-200 px-2 py-1.5 text-center text-gray-500">{{ idx + 1 }}</td>
-                  <td class="border border-gray-200 px-3 py-1.5">
-                    <p class="font-semibold text-gray-900">{{ item.employee_name }}</p>
-                    <p class="text-gray-400 text-[10px]">{{ item.employee_code }}</p>
+                  :class="item.insurance_subject ? 'bg-white' : 'bg-gray-50'">
+                  <td class="erp-sticky-col truncate border border-gray-200 px-2 py-1.5 text-center text-gray-500" :style="getStickyStyle('index')">{{ idx + 1 }}</td>
+                  <td class="erp-sticky-col border border-gray-200 px-3 py-1.5 overflow-hidden" :style="getStickyStyle('name')">
+                    <p class="font-semibold text-gray-900 truncate">{{ item.employee_name }}</p>
+                    <p class="text-gray-400 text-[10px] truncate">{{ item.employee_code }}</p>
                     <p v-if="item.missing_insurance_base_salary" title="Nhân viên thuộc diện đóng BHXH nhưng chưa có mức lương đóng BHXH trong hồ sơ"
-                      class="inline-flex items-center gap-0.5 mt-0.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px] font-semibold">
+                      class="inline-flex items-center gap-0.5 mt-0.5 px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 text-[9px] font-semibold truncate max-w-full">
                       ⚠ Thiếu mức lương đóng BHXH
                     </p>
                     <p v-if="item.insurance_overridden || item.pit_overridden"
                       :title="`Ghi đè bởi ${item.overridden_by || '—'} lúc ${item.overridden_at || '—'}${item.override_reason ? ' — ' + item.override_reason : ''}`"
-                      class="inline-flex items-center gap-0.5 mt-0.5 ml-1 px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[9px] font-semibold">
+                      class="inline-flex items-center gap-0.5 mt-0.5 ml-1 px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[9px] font-semibold truncate max-w-full">
                       🔒 Đã ghi đè tay
                     </p>
                   </td>
-                  <td class="border border-gray-200 px-2 py-1.5 text-center text-gray-600">{{ item.position }}</td>
-                  <td class="border border-gray-200 px-2 py-1.5 text-center text-gray-600 text-[10px]">{{ item.department || '—' }}</td>
-                  <td class="border border-gray-200 px-2 py-1.5 text-center text-gray-600 text-[10px]">{{ item.employment_type || '—' }}</td>
-                  <td class="border border-gray-200 px-2 py-1.5 text-right font-mono font-semibold">{{ fv(item.base_salary) }}</td>
+                  <td class="erp-sticky-col truncate border border-gray-200 px-2 py-1.5 text-center text-gray-600" :style="getStickyStyle('position')">{{ item.position }}</td>
+                  <td class="erp-sticky-col truncate border border-gray-200 px-2 py-1.5 text-center text-gray-600 text-[10px]" :style="getStickyStyle('department')">{{ item.department || '—' }}</td>
+                  <td class="erp-sticky-col truncate border border-gray-200 px-2 py-1.5 text-center text-gray-600 text-[10px]" :style="getStickyStyle('contract_type')">{{ item.employment_type || '—' }}</td>
+                  <td class="erp-sticky-col erp-sticky-col-boundary border border-gray-200 px-2 py-1.5 text-right font-mono font-semibold" :style="getStickyStyle('base_salary')">{{ fv(item.base_salary) }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ item.allowance             ? fv(item.allowance)             : '' }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ item.allowance_responsibility ? fv(item.allowance_responsibility) : '' }}</td>
                   <td class="border border-gray-200 px-2 py-1.5 text-right font-mono">{{ item.allowance_lunch        ? fv(item.allowance_lunch)        : '' }}</td>
@@ -361,8 +360,8 @@
             <!-- Grand total -->
             <tfoot>
               <tr class="bg-primary-50 font-bold border-t-2 border-primary-300">
-                <td colspan="5" class="border border-gray-300 px-3 py-2 text-sm font-bold text-gray-800">Tổng cộng</td>
-                <td class="border border-gray-300 px-2 py-2 text-right font-mono text-sm">{{ fv(payroll.total_base_salary) }}</td>
+                <td colspan="5" class="erp-sticky-col border border-gray-300 px-3 py-2 text-sm font-bold text-gray-800" :style="getStickyStyle('index', { widthless: true })">Tổng cộng</td>
+                <td class="erp-sticky-col erp-sticky-col-boundary border border-gray-300 px-2 py-2 text-right font-mono text-sm" :style="getStickyStyle('base_salary')">{{ fv(payroll.total_base_salary) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('allowance')) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('allowance_responsibility')) }}</td>
                 <td class="border border-gray-300 px-2 py-2 text-right font-mono">{{ fv(sumItems('allowance_lunch')) }}</td>
@@ -401,7 +400,6 @@
               </tr>
             </tfoot>
           </table>
-        </div>
       </div>
 
       <!-- Print-only KPCĐ info -->
@@ -864,12 +862,23 @@ import { ref, computed, watch } from 'vue';
 import { Link, router, useForm, usePage } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import { usePermission } from '@/composables/usePermission';
+import { useStickyColumns } from '@/composables/useStickyColumns';
 
 const props = defineProps({ payroll: Object, items: Array, funds: Array, can_manage: Boolean });
 
 const { hasPermission: can } = usePermission();
 const page = usePage();
 const isAdmin = computed(() => page.props.auth?.roles?.includes('admin') ?? false);
+
+// Sticky columns: STT..Lương chính frozen, Phụ cấp onward scrolls
+const { getStickyStyle } = useStickyColumns([
+  { key: 'index', width: 32 },
+  { key: 'name', width: 170 },
+  { key: 'position', width: 90 },
+  { key: 'department', width: 80 },
+  { key: 'contract_type', width: 80 },
+  { key: 'base_salary', width: 100 },
+]);
 
 function fv(val) {
   return new Intl.NumberFormat('vi-VN').format(Math.round(val || 0));

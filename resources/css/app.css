@@ -112,4 +112,22 @@
     .bg-white.rounded-xl {
         @apply shadow-sm;
     }
+
+    /* ─── Sticky columns (frozen left columns in wide tables with horizontal scroll) ───
+       Usage: pair with resources/js/composables/useStickyColumns.js for left/width offsets.
+       background-color:inherit picks up whatever bg class is on the row (<tr>) — keeps this
+       generic across modules; per-row-state colors (hover/inactive/subtotal/...) stay local
+       to each page, this utility only owns position/z-index/boundary. */
+    .erp-sticky-col {
+        @apply sticky z-[2];
+        background-color: inherit;
+    }
+    .erp-sticky-col-header {
+        @apply sticky z-[3];
+        background-color: inherit;
+    }
+    .erp-sticky-col-boundary {
+        @apply border-r-2 border-slate-400;
+        box-shadow: 3px 0 6px -3px rgba(15, 23, 42, 0.18);
+    }
 }
