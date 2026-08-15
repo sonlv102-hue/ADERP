@@ -42,6 +42,12 @@ class User extends Authenticatable
         return $this->roles()->where('code', $roleCode)->exists();
     }
 
+    public function scopeRole(\Illuminate\Database\Eloquent\Builder $query, string|array $roles): \Illuminate\Database\Eloquent\Builder
+    {
+        $codes = is_array($roles) ? $roles : [$roles];
+        return $query->whereHas('roles', fn ($q) => $q->whereIn('code', $codes));
+    }
+
     public function getRoleNames()
     {
         return $this->roles->pluck('code');
