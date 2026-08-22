@@ -45,7 +45,7 @@ class UserController extends Controller
         $data = $request->validate([
             'name'             => ['required', 'string', 'max:255'],
             'email'            => ['required', 'email', 'unique:users'],
-            'password'         => ['required', 'confirmed', Rules\Password::defaults()],
+            'password'         => ['required', 'confirmed', Rules\Password::min(10)],
             'phone'            => ['nullable', 'string', 'max:20'],
             'role_ids'         => ['required', 'array'],
             'role_ids.*'       => ['integer', 'exists:roles,id'],
@@ -110,7 +110,7 @@ class UserController extends Controller
         $data = $request->validate([
             'name'             => ['required', 'string', 'max:255'],
             'email'            => ['required', 'email', 'unique:users,email,' . $user->id],
-            'password'         => ['nullable', 'confirmed', Rules\Password::defaults()],
+            'password'         => ['nullable', 'confirmed', Rules\Password::min(10)],
             'phone'            => ['nullable', 'string', 'max:20'],
             'is_active'        => ['boolean'],
             'role_ids'         => ['required', 'array'],
