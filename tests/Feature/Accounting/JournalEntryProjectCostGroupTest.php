@@ -279,4 +279,29 @@ class JournalEntryProjectCostGroupTest extends TestCase
         $response->assertSessionHas('success');
         $this->assertEquals('draft', $draft->fresh()->status, 'Draft thiếu dự án phải bị từ chối duyệt, không crash.');
     }
+
+    // ── TC10 ────────────────────────────────────────────────────────────────
+
+    /**
+     * Regression: source_type='manual_journal_entry' là alias string (không phải FQCN).
+     * Nếu thiếu Relation::morphMap() trong AppServiceProvider, eager-load 'source' sẽ
+     * throw "Class manual_journal_entry not found" (xem ProjectWipService::getWipEntries,
+     * dùng bởi ProjectController::show — lỗi 500 thực tế trên production 2026-08-22).
+     */
+    public function test_tc10_wip_source_relation_resolves_for_manual_journal_entry(): void
+    {
+        $entry = $this->accounting->post(
+            description: 'Kết chuyển VPP',
+            date: Carbon::parse('2026-06-15'),
+            lines: [
+                ['account' => '154', 'debit' => 500_000, 'credit' => 0, 'project_id' => $this->projectA->id, 'cost_group' => 'labor'],
+                ['account' => '3341', 'debit' => 0, 'credit' => 500_000],
+            ],
+        );
+
+        $wip = ProjectWipEntry::where('journal_entry_id', $entry->id)->with('source')->firstOrFail();
+
+        $this->assertInstanceOf(JournalEntry::class, $wip->source);
+        $this->assertEquals($entry->id, $wip->source->id);
+    }
 }

@@ -4,11 +4,13 @@ namespace App\Providers;
 
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Schema;
+use App\Models\JournalEntry;
 use App\Models\Permission;
 
 class AppServiceProvider extends ServiceProvider
@@ -17,6 +19,11 @@ class AppServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
+        // ProjectWipEntry::source_type dùng alias string này thay vì FQCN (xem AccountingService::createWipForManualEntry)
+        Relation::morphMap([
+            'manual_journal_entry' => JournalEntry::class,
+        ]);
+
         Event::listen(Login::class, function (Login $event) {
             activity()
                 ->causedBy($event->user)
