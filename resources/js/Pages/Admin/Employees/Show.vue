@@ -20,14 +20,38 @@
         <div class="flex gap-2 flex-wrap">
           <a :href="route('admin.employees.export.pdf', employee.id)" target="_blank" class="erp-btn-secondary">Xuất PDF</a>
           <a :href="route('admin.employees.print', employee.id)" target="_blank" class="erp-btn-secondary">In hồ sơ</a>
-          <Link :href="route('admin.employees.edit', employee.id)"
-            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg text-sm font-medium hover:bg-gray-50">
-            Sửa
-          </Link>
-          <button @click="deleteEmployee"
-            class="px-4 py-2 border border-red-300 text-red-600 rounded-lg text-sm font-medium hover:bg-red-50">
-            Xóa
-          </button>
+          <Link :href="route('admin.employees.edit', employee.id)" class="erp-btn-secondary">Sửa</Link>
+          <button
+            v-if="employee.is_working && can('hr.employees.terminate')"
+            class="erp-btn-danger"
+            @click="showTerminate = true"
+          >Thôi việc</button>
+          <button
+            v-if="!employee.is_working && can('hr.employees.terminate_cancel')"
+            class="erp-btn-secondary"
+            @click="showCancel = true"
+          >Hủy thôi việc</button>
+          <button @click="deleteEmployee" class="erp-btn-danger">Xóa</button>
+        </div>
+      </div>
+
+      <!-- Panel: đã thôi việc -->
+      <div
+        v-if="!employee.is_working && employee.termination_date"
+        class="bg-red-50 border border-red-200 rounded-xl px-6 py-4"
+      >
+        <p class="text-sm font-bold text-red-700 uppercase tracking-wide">Trạng thái: Đã thôi việc</p>
+        <div class="mt-3 grid grid-cols-2 gap-x-8 gap-y-2 text-sm">
+          <InfoRow label="Ngày thôi việc" :value="employee.termination_date" />
+          <InfoRow label="Lý do" :value="employee.termination_reason" />
+          <InfoRow label="Số quyết định" :value="employee.termination_decision_no" />
+          <InfoRow label="Ngày quyết định" :value="employee.termination_decision_date" />
+          <InfoRow label="Ghi nhận bởi" :value="employee.terminated_by_name" />
+          <InfoRow label="Thời điểm ghi nhận" :value="employee.terminated_at" />
+        </div>
+        <div v-if="employee.termination_note" class="mt-2 text-sm">
+          <p class="text-xs font-semibold text-red-600 uppercase tracking-wide mb-0.5">Ghi chú</p>
+          <p class="text-gray-800 whitespace-pre-wrap">{{ employee.termination_note }}</p>
         </div>
       </div>
 
@@ -44,7 +68,6 @@
           <InfoRow label="Loại hợp đồng" :value="employee.employment_type_label" />
         </div>
 
-        <!-- Định danh & Hợp đồng -->
         <div class="px-6 py-4 grid grid-cols-2 gap-x-8 gap-y-3">
           <InfoRow label="CCCD/CMND" :value="employee.national_id" />
           <InfoRow label="Ngày cấp & Nơi cấp" :value="employee.national_id_issue_date ? employee.national_id_issue_date + (employee.national_id_issue_place ? ' tại ' + employee.national_id_issue_place : '') : '—'" />
@@ -54,7 +77,6 @@
           <InfoRow label="Mã số thuế TNCN" :value="employee.pit_tax_code" />
         </div>
 
-        <!-- Tài khoản ngân hàng -->
         <div class="px-6 py-4 grid grid-cols-2 gap-x-8 gap-y-3">
           <InfoRow label="Số tài khoản ngân hàng" :value="employee.bank_account_no" />
           <InfoRow label="Ngân hàng" :value="employee.bank_name" />
@@ -76,22 +98,58 @@
       <FileAttachments :attachments="attachments ?? []"
         :upload-url="route('attachments.store', { type: 'employee', id: employee.id })" />
     </div>
+
+    <TerminateModal v-if="showTerminate" :employee="employee" @close="showTerminate = false" />
+
+    <Modal :show="showCancel" max-width="md" @close="showCancel = false">
+      <template #title>Hủy xác nhận thôi việc</template>
+      <div class="space-y-3">
+        <p class="text-sm text-gray-600">
+          Nhân viên <span class="font-medium">{{ employee.name }}</span> sẽ trở lại trạng thái
+          <span class="font-medium">Đang làm việc</span>. Thông tin thôi việc sẽ bị xóa (vẫn lưu trong nhật ký hoạt động).
+        </p>
+        <FormField label="Lý do hủy thôi việc" required :error="cancelForm.errors.reason">
+          <textarea v-model="cancelForm.reason" rows="3" class="erp-input" placeholder="VD: Nhập nhầm ngày thôi việc" />
+        </FormField>
+      </div>
+      <template #footer>
+        <button class="erp-btn-secondary" @click="showCancel = false">Đóng</button>
+        <button class="erp-btn-primary" :disabled="cancelForm.processing" @click="submitCancel">Xác nhận hủy</button>
+      </template>
+    </Modal>
   </AppLayout>
 </template>
 
 <script setup>
-import { Link, router } from '@inertiajs/vue3';
+import { ref } from 'vue';
+import { Link, router, useForm } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import FileAttachments from '@/Components/Shared/FileAttachments.vue';
+import Modal from '@/Components/Shared/Modal.vue';
+import FormField from '@/Components/Shared/FormField.vue';
+import TerminateModal from './TerminateModal.vue';
+import { usePermission } from '@/composables/usePermission';
 
 const props = defineProps({ employee: Object, attachments: Array });
+const { hasPermission: can } = usePermission();
+
+const showTerminate = ref(false);
+const showCancel = ref(false);
+const cancelForm = useForm({ reason: '' });
 
 const deleteEmployee = () => {
   if (confirm(`Xóa cán bộ ${props.employee.name}? Thao tác không thể hoàn tác.`)) {
     router.delete(route('admin.employees.destroy', props.employee.id));
   }
 };
+
+function submitCancel() {
+  cancelForm.post(route('admin.employees.cancel-termination', props.employee.id), {
+    preserveScroll: true,
+    onSuccess: () => { showCancel.value = false; cancelForm.reset(); },
+  });
+}
 
 const InfoRow = {
   props: ['label', 'value'],

@@ -57,11 +57,13 @@ Dự án đang ở giai đoạn **vận hành và cải tiến**. Các module co
 | Phiếu kế toán thủ công: chọn Dự án + Nhóm chi phí per-line (`journal_entry_lines.project_id/cost_group`), tự tạo `project_wip_entries` khi post dòng Nợ154, bắt buộc validate, soft-cancel WIP khi đảo/hủy, chống trùng WIP; command `journal-entries:audit-project-dimensions` + `journal-entries:repair-legacy-project-wip` (dry-run) | Hoàn thành (2026-07-15) |
 | Admin tự sửa product_id sai trên dòng hàng đã khóa (Order/Quotation/PurchaseOrder) — thay thế tinker DB surgery; `Order{,Quotation,PurchaseOrder}ItemProductFixService`, route `role:admin`, Modal.vue UI, activity log. Guard rail riêng từng loại (xem `phase-history.md` Services & FSM) | Hoàn thành (2026-07-28) |
 | Sổ chi tiết Nhập-Xuất-Tồn (Mẫu S10-DN) trong menu Kho — báo cáo chi tiết theo từng giao dịch (khác báo cáo tổng hợp `InventoryReportService` ở menu Báo cáo); `InventoryTransactionReportService/Controller/Export`, route `reports.inventory_transactions{,.export}` (permission `reports.view` có sẵn), menu item `warehouse.report.transactions` | Hoàn thành (2026-07-29) |
+| **So sánh báo giá NCC** (Mua hàng) — module LOCAL, chưa migrate/deploy production. 6 bảng `purchase_quote_*` (mig `2026_08_28_900233..238`), `PurchaseQuoteComparison{,Matrix}Service` + `PurchaseQuoteImport/Selection`, `/purchasing/quote-comparisons`, perm `purchases.quote_comparisons.*`, seeder `PurchaseQuoteComparisonSeeder`. KHÔNG side-effect kế toán/kho/PO. Chi tiết → memory `project-quote-comparison-module` | Chờ nghiệm thu (2026-08-28) |
+| **Nhân viên thôi việc** — `employees.termination_*` (mig `2026_09_07_900239`), tái dùng `EmployeeStatus` (không thêm `employment_status`). `EmployeeTerminationService` (terminate/cancelTermination + prune payroll draft kỳ sau + cảnh báo kỳ khóa). `Employee::scope{Working,ActiveOn,EmployedDuring}`. `PayrollService::createPayroll`/`syncFromEmployees` + `AttendanceController::store` + `SearchController::employees` chuyển sang lọc theo `termination_date` thay vì `whereIn('status',...)`. Perm `hr.employees.terminate{,_cancel}` (seeder `EmployeeTerminationSeeder` + RolePermissionSeeder). Form.vue khóa status resigned; Show.vue nút Thôi việc/Hủy + panel đỏ; báo cáo biến động `admin.employees.headcount` | Hoàn thành (2026-09-07) |
 
 ## Migration sequence hiện tại
 
-- **Last 900xxx:** `2026_07_15_900231` (journal_entry_line_id trên project_wip_entries + unique index chống trùng WIP)
-- **Next:** `2026_07_15_900232`
+- **Last 900xxx:** `2026_09_07_900239` (termination fields trên employees). Trước đó: `2026_08_28_900233..900238` (6 bảng So sánh báo giá NCC), `2026_08_14_900232` (payroll_items override tracking).
+- **Next:** `2026_09_07_900240`
 - Last Phase E / bank: `2026_06_05_100006` — Next (cùng chủ đề bank): `100007`
 
 ## TK hệ thống (accounting_settings)

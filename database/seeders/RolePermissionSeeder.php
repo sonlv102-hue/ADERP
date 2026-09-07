@@ -113,6 +113,8 @@ class RolePermissionSeeder extends Seeder
             ['module' => 'hr', 'menu_key' => 'hr.employees', 'action' => 'delete', 'code' => 'hr.employees.delete', 'name' => 'Xóa Nhân viên', 'description' => 'Xóa hồ sơ nhân viên'],
             ['module' => 'hr', 'menu_key' => 'hr.employees', 'action' => 'export', 'code' => 'hr.employees.export', 'name' => 'Xuất dữ liệu NV', 'description' => 'Xuất danh sách nhân viên ra Excel/PDF'],
             ['module' => 'hr', 'menu_key' => 'hr.employees', 'action' => 'import', 'code' => 'hr.employees.import', 'name' => 'Import nhân viên', 'description' => 'Import danh sách nhân viên từ excel'],
+            ['module' => 'hr', 'menu_key' => 'hr.employees', 'action' => 'terminate', 'code' => 'hr.employees.terminate', 'name' => 'Xác nhận Nhân viên thôi việc', 'description' => 'Ghi nhận nhân viên thôi việc (đặt ngày thôi việc)'],
+            ['module' => 'hr', 'menu_key' => 'hr.employees', 'action' => 'terminate_cancel', 'code' => 'hr.employees.terminate_cancel', 'name' => 'Hủy xác nhận thôi việc', 'description' => 'Hủy ghi nhận thôi việc, đưa nhân viên về đang làm việc'],
 
             // Báo cáo tồn kho
             ['module' => 'reports', 'menu_key' => 'reports.inventory', 'action' => 'view', 'code' => 'reports.inventory.view', 'name' => 'Xem Báo cáo kho', 'description' => 'Xem báo cáo tồn kho, thẻ kho'],
@@ -307,6 +309,7 @@ class RolePermissionSeeder extends Seeder
         $hrCodes = [
             'dashboard.view', 'hr.employees.view', 'hr.employees.create', 'hr.employees.update',
             'hr.employees.delete', 'hr.employees.export', 'hr.employees.import',
+            'hr.employees.terminate', 'hr.employees.terminate_cancel',
             // Legacy:
             'reports.view', 'admin.users'
         ];

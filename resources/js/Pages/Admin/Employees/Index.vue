@@ -4,6 +4,7 @@
       <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-gray-900">Cán bộ công nhân viên</h1>
         <div class="flex gap-2 flex-wrap">
+          <Link :href="route('admin.employees.headcount')" class="erp-btn-secondary">Báo cáo biến động</Link>
           <ExportExcelButton :endpoint="route('admin.employees.export.excel')" :filters="exportFilters" label="Xuất Excel" />
           <a :href="route('admin.employees.import.template')" class="erp-btn-secondary">Tải mẫu Excel</a>
           <button @click="showImportModal = true" class="erp-btn-secondary">Upload Excel</button>
@@ -22,7 +23,6 @@
         <input v-model="search" @input="doSearch" type="text" placeholder="Tìm tên, mã, phòng ban, chức vụ..."
           class="form-input w-64 text-sm" />
         <select v-model="statusFilter" @change="doSearch" class="form-input text-sm w-44">
-          <option value="">Tất cả trạng thái</option>
           <option v-for="s in statuses" :key="s.value" :value="s.value">{{ s.label }}</option>
         </select>
       </div>

@@ -164,10 +164,14 @@
                 <label class="block text-sm font-medium text-gray-700 mb-1.5">
                   Trạng thái <span class="text-red-500">*</span>
                 </label>
-                <select v-model="form.status"
-                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent">
+                <select v-model="form.status" :disabled="statusLocked"
+                  class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-100 disabled:text-gray-500">
                   <option v-for="s in statuses" :key="s.value" :value="s.value">{{ s.label }}</option>
+                  <option v-if="statusLocked" :value="form.status">{{ props.employee?.status_label ?? 'Đã thôi việc' }}</option>
                 </select>
+                <p v-if="statusLocked" class="mt-1 text-xs text-gray-400">
+                  Nhân viên đã thôi việc — dùng nút "Hủy thôi việc" ở màn chi tiết để khôi phục.
+                </p>
               </div>
             </div>
 
@@ -505,6 +509,9 @@ const props = defineProps({
 function formatVnd(value) {
   return new Intl.NumberFormat('vi-VN').format(value || 0) + ' ₫';
 }
+
+// NV đã thôi việc: khóa dropdown trạng thái — chỉ đổi qua nút "Hủy thôi việc"
+const statusLocked = computed(() => props.employee != null && props.employee.is_working === false);
 
 const form = useForm({
   code:                     props.employee?.code                     ?? props.nextCode ?? '',

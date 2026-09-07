@@ -161,6 +161,7 @@ Route::middleware('auth')->group(function () {
         Route::post('employees/import/preview', [EmployeeImportController::class, 'preview'])->name('employees.import.preview')->middleware('can:hr.employees.import');
         Route::post('employees/import/confirm', [EmployeeImportController::class, 'confirm'])->name('employees.import.confirm')->middleware('can:hr.employees.import');
         Route::get('employees/import/errors/{errorFileId}', [EmployeeImportController::class, 'downloadErrors'])->name('employees.import.errors')->middleware('can:hr.employees.import');
+        Route::get('employees-headcount', [EmployeeController::class, 'headcount'])->name('employees.headcount')->middleware('can:hr.employees.view');
         Route::get('employees', [EmployeeController::class, 'index'])->name('employees.index')->middleware('can:hr.employees.view');
         Route::get('employees/create', [EmployeeController::class, 'create'])->name('employees.create')->middleware('can:hr.employees.create');
         Route::post('employees', [EmployeeController::class, 'store'])->name('employees.store')->middleware('can:hr.employees.create');
@@ -168,6 +169,8 @@ Route::middleware('auth')->group(function () {
         Route::get('employees/{employee}/edit', [EmployeeController::class, 'edit'])->name('employees.edit')->middleware('can:hr.employees.update');
         Route::put('employees/{employee}', [EmployeeController::class, 'update'])->name('employees.update')->middleware('can:hr.employees.update');
         Route::delete('employees/{employee}', [EmployeeController::class, 'destroy'])->name('employees.destroy')->middleware('can:hr.employees.delete');
+        Route::post('employees/{employee}/terminate', [EmployeeController::class, 'terminate'])->name('employees.terminate')->middleware('can:hr.employees.terminate');
+        Route::post('employees/{employee}/cancel-termination', [EmployeeController::class, 'cancelTermination'])->name('employees.cancel-termination')->middleware('can:hr.employees.terminate_cancel');
         Route::get('employees/{employee}/export/pdf', [EmployeeController::class, 'exportPdf'])->name('employees.export.pdf')->middleware('can:hr.employees.export');
         Route::get('employees/{employee}/print', [EmployeeController::class, 'printProfile'])->name('employees.print')->middleware('can:hr.employees.view');
 

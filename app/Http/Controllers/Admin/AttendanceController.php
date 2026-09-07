@@ -60,8 +60,8 @@ class AttendanceController extends Controller
                 'created_by' => auth()->id(),
             ]);
 
-            // Auto-populate from active employees
-            $employees = Employee::whereIn('status', ['active', 'probation'])
+            // Auto-populate NV có quan hệ lao động trong kỳ (kể cả NV nghỉ giữa tháng)
+            $employees = Employee::employedDuring($data['period'])
                 ->orderBy('name')
                 ->get();
 

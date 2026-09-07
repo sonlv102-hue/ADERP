@@ -28,4 +28,22 @@ enum EmployeeStatus: string
             self::Terminated => 'red',
         };
     }
+
+    /** Đang có quan hệ lao động (dùng cho lọc nghiệp vụ lương/chấm công). */
+    public function isWorking(): bool
+    {
+        return in_array($this, [self::Active, self::Probation], true);
+    }
+
+    /** @return array<int, string> */
+    public static function workingValues(): array
+    {
+        return [self::Active->value, self::Probation->value];
+    }
+
+    /** @return array<int, string> — trạng thái đã kết thúc quan hệ lao động */
+    public static function endedValues(): array
+    {
+        return [self::Resigned->value, self::Terminated->value];
+    }
 }

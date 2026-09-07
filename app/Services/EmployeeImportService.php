@@ -87,7 +87,8 @@ class EmployeeImportService
                     if ($existing->trashed()) {
                         $existing->restore();
                     }
-                    $existing->update($data);
+                    // Không đổi trạng thái NV hiện có qua import — dùng nút "Thôi việc" / "Hủy thôi việc"
+                    $existing->update(\Illuminate\Support\Arr::except($data, ['status']));
                     $updated++;
                 } else {
                     Employee::create([...$data, 'created_by' => auth()->id()]);

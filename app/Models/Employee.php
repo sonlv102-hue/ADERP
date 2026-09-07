@@ -20,6 +20,8 @@ class Employee extends Model
         'national_id', 'national_id_issue_date', 'national_id_issue_place',
         'hire_date', 'status', 'employment_type',
         'contract_start_date', 'contract_end_date',
+        'termination_date', 'termination_reason', 'termination_note',
+        'termination_decision_no', 'termination_decision_date', 'terminated_by', 'terminated_at',
         'base_salary', 'allowance',
         'allowance_responsibility', 'allowance_lunch', 'allowance_phone', 'allowance_transport',
         'insurance_subject', 'standard_days',
@@ -34,6 +36,9 @@ class Employee extends Model
         'national_id_issue_date'   => 'date',
         'contract_start_date'      => 'date',
         'contract_end_date'        => 'date',
+        'termination_date'         => 'date',
+        'termination_decision_date' => 'date',
+        'terminated_at'            => 'datetime',
         'status'                   => EmployeeStatus::class,
         'employment_type'          => EmploymentType::class,
         'base_salary'              => 'decimal:0',
@@ -66,6 +71,46 @@ class Employee extends Model
     public function attachments(): MorphMany
     {
         return $this->morphMany(Attachment::class, 'attachable')->latest();
+    }
+
+    public function terminatedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'terminated_by');
+    }
+
+    /** NV đang có quan hệ lao động (active|probation). */
+    public function scopeWorking(Builder $query): Builder
+    {
+        return $query->whereIn('status', EmployeeStatus::workingValues());
+    }
+
+    /**
+     * NV còn hiệu lực lao động tại ngày $date — dùng cho dropdown chọn NV trên chứng từ.
+     * Nguồn sự thật là termination_date; loại thêm NV legacy resigned/terminated không có ngày.
+     */
+    public function scopeActiveOn(Builder $query, string|\DateTimeInterface $date): Builder
+    {
+        $date = $date instanceof \DateTimeInterface ? $date->format('Y-m-d') : $date;
+
+        return $query
+            ->where(fn ($w) => $w->whereNull('termination_date')->orWhereDate('termination_date', '>=', $date))
+            ->where(fn ($w) => $w->whereNotIn('status', EmployeeStatus::endedValues())->orWhereNotNull('termination_date'))
+            ->where(fn ($w) => $w->whereNull('hire_date')->orWhereDate('hire_date', '<=', $date));
+    }
+
+    /**
+     * NV có quan hệ lao động vào bất kỳ thời điểm nào trong kỳ YYYY-MM —
+     * dùng khi lập bảng lương / bảng chấm công (NV nghỉ giữa tháng vẫn được tính tháng đó).
+     */
+    public function scopeEmployedDuring(Builder $query, string $period): Builder
+    {
+        $first = \Carbon\Carbon::createFromFormat('Y-m', $period)->startOfMonth()->toDateString();
+        $last  = \Carbon\Carbon::createFromFormat('Y-m', $period)->endOfMonth()->toDateString();
+
+        return $query
+            ->where(fn ($w) => $w->whereNull('termination_date')->orWhereDate('termination_date', '>=', $first))
+            ->where(fn ($w) => $w->whereNull('hire_date')->orWhereDate('hire_date', '<=', $last))
+            ->where(fn ($w) => $w->whereNotIn('status', EmployeeStatus::endedValues())->orWhereNotNull('termination_date'));
     }
 
     /** Tổng phụ cấp không tính BHXH */

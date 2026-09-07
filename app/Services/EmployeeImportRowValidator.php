@@ -116,7 +116,9 @@ class EmployeeImportRowValidator
             'position'                => $r['position'],
             'hire_date'               => $this->nullableDate($r['hire_date']),
             'employment_type'         => $this->normalizeEmploymentType($r['employment_type_raw']) ?? EmploymentType::FullTime->value,
-            'status'                  => $this->normalizeStatus($r['status_raw']) ?? EmployeeStatus::Active->value,
+            // Import chỉ quản lý dữ liệu hồ sơ — không ghi nhận thôi việc.
+            // Trạng thái nghỉ/chấm dứt phải qua nút "Thôi việc" (có ngày + audit).
+            'status'                  => $this->workingStatusOnly($this->normalizeStatus($r['status_raw'])),
             'base_salary'             => (float) ($r['base_salary_raw'] ?: 0),
             'allowance'               => (float) ($r['allowance_raw'] ?: 0),
             'pit_tax_code'            => $r['pit_tax_code'],
@@ -181,5 +183,13 @@ class EmployeeImportRowValidator
             }
         }
         return null;
+    }
+
+    /** Ép về trạng thái đang làm việc — import không được đặt NV sang thôi việc. */
+    private function workingStatusOnly(?string $status): string
+    {
+        return in_array($status, EmployeeStatus::workingValues(), true)
+            ? $status
+            : EmployeeStatus::Active->value;
     }
 }

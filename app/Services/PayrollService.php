@@ -64,8 +64,8 @@ class PayrollService
                 'notes'                    => $notes,
             ]);
 
-            // Lấy từ Cán bộ CNV (employees) đang làm việc — truyền sheet để tránh N+1
-            foreach (Employee::whereIn('status', ['active', 'probation'])->orderBy('name')->get() as $employee) {
+            // Lấy NV có quan hệ lao động trong kỳ (kể cả NV nghỉ giữa tháng) — truyền sheet để tránh N+1
+            foreach (Employee::employedDuring($period)->orderBy('name')->get() as $employee) {
                 $this->buildItem($payroll, $employee, 0, $sheet);
             }
 
@@ -394,7 +394,7 @@ class PayrollService
             }
 
             $existingEmployeeIds = $payroll->items()->pluck('employee_id');
-            $missingEmployees = Employee::whereIn('status', ['active', 'probation'])
+            $missingEmployees = Employee::employedDuring($payroll->period)
                 ->whereNotIn('id', $existingEmployeeIds)
                 ->orderBy('name')
                 ->get();

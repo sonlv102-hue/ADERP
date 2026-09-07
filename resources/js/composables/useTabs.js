@@ -54,6 +54,7 @@ const URL_TITLES = {
   '/reports/account_ledger':         'Sổ chi tiết TK',
   '/reports/expense_detail':         'Chi tiết CP',
   '/reports/fixed_assets':           'Tài sản CĐ',
+  '/admin/employees-headcount':       'Biến động NS',
   '/admin/users':                    'Người dùng',
   '/admin/roles':                    'Phân quyền',
   '/admin/settings':                 'Cài đặt',

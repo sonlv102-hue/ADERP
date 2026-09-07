@@ -9,45 +9,63 @@ use App\Models\Employee;
 use App\Models\Department;
 use App\Models\Position;
 use App\Services\EmployeeExportService;
+use App\Services\EmployeeTerminationService;
 use App\Services\PayrollService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
 use Maatwebsite\Excel\Facades\Excel;
+use RuntimeException;
 
 class EmployeeController extends Controller
 {
     public function index(Request $request): Response
     {
         $q = $request->input('q');
-        $status = $request->input('status');
+        $status = $request->input('status'); // '' => đang làm việc (mặc định) | 'all' => tất cả | enum value
 
-        $employees = Employee::with('creator')
-            ->filter(['q' => $q, 'status' => $status])
-            ->orderBy('name')
-            ->paginate(20)
-            ->withQueryString()
-            ->through(fn ($e) => [
-                'id'              => $e->id,
-                'code'            => $e->code,
-                'name'            => $e->name,
-                'department'      => $e->department,
-                'position'        => $e->position,
-                'phone'           => $e->phone,
-                'hire_date'       => $e->hire_date?->format('d/m/Y'),
-                'status'          => $e->status->value,
-                'status_label'    => $e->status->label(),
-                'status_color'    => $e->status->color(),
-                'employment_type' => $e->employment_type->label(),
-            ]);
+        $needle = $q ? mb_strtolower($q) : null;
+        $query = Employee::with('creator')
+            ->when($needle, fn ($sub) => $sub->where(function ($sq) use ($needle) {
+                $sq->whereRaw('LOWER(name) LIKE ?', ["%{$needle}%"])
+                   ->orWhereRaw('LOWER(code) LIKE ?', ["%{$needle}%"])
+                   ->orWhereRaw('LOWER(COALESCE(department, \'\')) LIKE ?', ["%{$needle}%"])
+                   ->orWhereRaw('LOWER(COALESCE(position, \'\')) LIKE ?', ["%{$needle}%"]);
+            }))
+            ->orderBy('name');
+
+        if ($status === null || $status === '') {
+            $query->working();
+        } elseif ($status !== 'all') {
+            $query->where('status', $status);
+        }
+
+        $employees = $query->paginate(20)->withQueryString()->through(fn ($e) => [
+            'id'               => $e->id,
+            'code'             => $e->code,
+            'name'             => $e->name,
+            'department'       => $e->department,
+            'position'         => $e->position,
+            'phone'            => $e->phone,
+            'hire_date'        => $e->hire_date?->format('d/m/Y'),
+            'termination_date' => $e->termination_date?->format('d/m/Y'),
+            'status'           => $e->status->value,
+            'status_label'     => $e->status->label(),
+            'status_color'     => $e->status->color(),
+            'employment_type'  => $e->employment_type->label(),
+        ]);
 
         return Inertia::render('Admin/Employees/Index', [
             'employees' => $employees,
             'filters'   => ['q' => $q, 'status' => $status],
-            'statuses'  => collect(EmployeeStatus::cases())->map(fn ($s) => [
-                'value' => $s->value, 'label' => $s->label(),
-            ]),
+            'statuses'  => array_merge(
+                [
+                    ['value' => '',    'label' => 'Đang làm việc'],
+                    ['value' => 'all', 'label' => 'Tất cả'],
+                ],
+                collect(EmployeeStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()])->all(),
+            ),
         ]);
     }
 
@@ -55,7 +73,10 @@ class EmployeeController extends Controller
     {
         return Inertia::render('Admin/Employees/Form', [
             'nextCode'        => Employee::generateCode(),
-            'statuses'        => collect(EmployeeStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
+            'statuses'        => collect(EmployeeStatus::cases())
+                ->filter(fn ($s) => $s->isWorking())
+                ->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()])
+                ->values(),
             'employmentTypes' => collect(EmploymentType::cases())->map(fn ($t) => ['value' => $t->value, 'label' => $t->label()]),
             'departments'     => Department::where('is_active', true)->orderBy('name')->pluck('name')->toArray(),
             'positions'       => Position::where('is_active', true)->orderBy('name')->pluck('name')->toArray(),
@@ -171,16 +192,24 @@ class EmployeeController extends Controller
             'social_insurance_no'      => $employee->social_insurance_no,
             'bank_account_no'          => $employee->bank_account_no,
             'bank_name'                => $employee->bank_name,
+            'is_working'               => $employee->status->isWorking(),
+            'status_label'             => $employee->status->label(),
         ];
 
         if ($forShow) {
-            $dto['status_label']           = $employee->status->label();
             $dto['status_color']           = $employee->status->color();
             $dto['gender_label']           = $employee->gender === 'male' ? 'Nam' : ($employee->gender === 'female' ? 'Nữ' : null);
             $dto['employment_type_label']  = $employee->employment_type->label();
             $dto['creator']                = $employee->creator?->name;
             $dto['created_at']             = $employee->created_at->format('d/m/Y');
             $dto['total_allowances']       = (float) $employee->totalAllowances();
+            $dto['termination_date']       = $employee->termination_date?->format('d/m/Y');
+            $dto['termination_reason']     = $employee->termination_reason;
+            $dto['termination_note']       = $employee->termination_note;
+            $dto['termination_decision_no']   = $employee->termination_decision_no;
+            $dto['termination_decision_date'] = $employee->termination_decision_date?->format('d/m/Y');
+            $dto['terminated_by_name']     = $employee->terminatedBy?->name;
+            $dto['terminated_at']          = $employee->terminated_at?->format('d/m/Y H:i');
         }
 
         return $dto;
@@ -202,7 +231,10 @@ class EmployeeController extends Controller
 
         return Inertia::render('Admin/Employees/Form', [
             'employee'        => $this->employeeDTO($employee, false),
-            'statuses'        => collect(EmployeeStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
+            'statuses'        => collect(EmployeeStatus::cases())
+                ->filter(fn ($s) => $s->isWorking())
+                ->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()])
+                ->values(),
             'employmentTypes' => collect(EmploymentType::cases())->map(fn ($t) => ['value' => $t->value, 'label' => $t->label()]),
             'departments'     => $departments,
             'positions'       => $positions,
@@ -244,6 +276,14 @@ class EmployeeController extends Controller
             'bank_name'                => ['nullable', 'string', 'max:100'],
         ]);
 
+        // Trạng thái thôi việc chỉ được đổi qua nút "Thôi việc" / "Hủy thôi việc" (có ghi ngày + audit)
+        if (in_array($data['status'], EmployeeStatus::endedValues(), true) && $employee->status->isWorking()) {
+            return back()->with('error', 'Dùng nút "Thôi việc" ở màn chi tiết để ghi nhận nhân viên nghỉ.');
+        }
+        if (!$employee->status->isWorking()) {
+            $data['status'] = $employee->status->value; // NV đã nghỉ: giữ nguyên, phải dùng "Hủy thôi việc"
+        }
+
         $employee->update($this->coerceSalaryFields($data));
 
         app(PayrollService::class)->syncEmployeeToDraftPayrolls($employee);
@@ -258,6 +298,85 @@ class EmployeeController extends Controller
 
         return redirect()->route('admin.employees.index')
             ->with('success', 'Đã xóa cán bộ.');
+    }
+
+    public function terminate(Request $request, Employee $employee, EmployeeTerminationService $service): RedirectResponse
+    {
+        $data = $request->validate([
+            'termination_date'          => ['required', 'date'],
+            'termination_reason'        => ['nullable', 'string', 'max:255'],
+            'termination_note'          => ['nullable', 'string', 'max:2000'],
+            'termination_decision_no'   => ['nullable', 'string', 'max:100'],
+            'termination_decision_date' => ['nullable', 'date'],
+        ]);
+
+        try {
+            $warning = $service->terminate($employee, $data);
+        } catch (RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('admin.employees.show', $employee)
+            ->with('success', 'Đã ghi nhận nhân viên thôi việc.')
+            ->with($warning ? ['warning' => $warning] : []);
+    }
+
+    public function cancelTermination(Request $request, Employee $employee, EmployeeTerminationService $service): RedirectResponse
+    {
+        $data = $request->validate(['reason' => ['required', 'string', 'max:500']]);
+
+        try {
+            $service->cancelTermination($employee, $data['reason']);
+        } catch (RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('admin.employees.show', $employee)
+            ->with('success', 'Đã hủy xác nhận thôi việc. Nhân viên trở lại trạng thái đang làm việc.');
+    }
+
+    public function headcount(Request $request): Response
+    {
+        $from = $request->input('from', now()->startOfMonth()->toDateString());
+        $to   = $request->input('to', now()->endOfMonth()->toDateString());
+
+        $ended = EmployeeStatus::endedValues();
+
+        $openingCount = Employee::query()
+            ->where(fn ($w) => $w->whereNull('hire_date')->orWhereDate('hire_date', '<', $from))
+            ->where(fn ($w) => $w->whereNull('termination_date')->orWhereDate('termination_date', '>=', $from))
+            ->where(fn ($w) => $w->whereNotIn('status', $ended)->orWhereNotNull('termination_date'))
+            ->count();
+
+        $increaseList = Employee::whereBetween('hire_date', [$from, $to])->orderBy('hire_date')
+            ->get(['id', 'code', 'name', 'department', 'hire_date']);
+
+        $decreaseList = Employee::whereBetween('termination_date', [$from, $to])->orderBy('termination_date')
+            ->get(['id', 'code', 'name', 'department', 'termination_date', 'termination_reason']);
+
+        $closingCount = Employee::query()
+            ->where(fn ($w) => $w->whereNull('hire_date')->orWhereDate('hire_date', '<=', $to))
+            ->where(fn ($w) => $w->whereNull('termination_date')->orWhereDate('termination_date', '>', $to))
+            ->where(fn ($w) => $w->whereNotIn('status', $ended)->orWhereNotNull('termination_date'))
+            ->count();
+
+        return Inertia::render('Admin/Employees/Headcount', [
+            'filters' => ['from' => $from, 'to' => $to],
+            'summary' => [
+                'opening'  => $openingCount,
+                'increase' => $increaseList->count(),
+                'decrease' => $decreaseList->count(),
+                'closing'  => $closingCount,
+            ],
+            'increase_list' => $increaseList->map(fn ($e) => [
+                'code' => $e->code, 'name' => $e->name, 'department' => $e->department,
+                'date' => $e->hire_date?->format('d/m/Y'),
+            ]),
+            'decrease_list' => $decreaseList->map(fn ($e) => [
+                'code' => $e->code, 'name' => $e->name, 'department' => $e->department,
+                'date' => $e->termination_date?->format('d/m/Y'), 'reason' => $e->termination_reason,
+            ]),
+        ]);
     }
 
     private function coerceSalaryFields(array $data): array

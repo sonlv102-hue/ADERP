@@ -172,12 +172,14 @@ class SearchController extends Controller
     public function employees(Request $request): JsonResponse
     {
         $q = $this->q($request);
+        // Chỉ NV còn hiệu lực lao động tại ngày chứng từ (mặc định hôm nay)
+        $asOf = $request->input('date') ?: now()->toDateString();
         $items = Employee::query()
             ->when($q, fn ($b) => $b->where(fn ($b2) =>
                 $b2->whereRaw('LOWER(name) LIKE ?', ["%{$q}%"])
                    ->orWhereRaw('LOWER(COALESCE(code, \'\')) LIKE ?', ["%{$q}%"])
             ))
-            ->where('status', 'active')
+            ->activeOn($asOf)
             ->orderBy('name')
             ->limit(30)
             ->get(['id', 'code', 'name', 'department'])
