@@ -23,7 +23,10 @@ class SearchController extends Controller
 {
     private function q(Request $request): string
     {
-        return trim($request->input('q', ''));
+        // Lowercase tại đây để mọi endpoint tìm kiếm dùng chung đều so khớp
+        // không phân biệt hoa/thường trên PostgreSQL (LIKE của PG phân biệt case).
+        // Chỉ xử lý case-insensitive — KHÔNG bỏ dấu tiếng Việt.
+        return mb_strtolower(trim((string) $request->input('q', '')), 'UTF-8');
     }
 
     public function suppliers(Request $request): JsonResponse
@@ -233,7 +236,7 @@ class SearchController extends Controller
         ]);
 
         $projectId = $request->integer('project_id');
-        $q         = mb_strtolower($this->q($request));
+        $q         = $this->q($request);
 
         $items = PurchaseOrder::query()
             ->whereHas('items', fn ($b) => $b->where('project_id', $projectId))
@@ -462,8 +465,8 @@ class SearchController extends Controller
 
         $items = Order::with(['customer', 'purchaseOrders.project'])
             ->when($q, fn ($b) => $b->where(fn ($b2) =>
-                $b2->whereRaw('LOWER(orders.code) LIKE ?', ['%' . strtolower($q) . '%'])
-                   ->orWhereHas('customer', fn ($c) => $c->whereRaw('LOWER(name) LIKE ?', ['%' . strtolower($q) . '%']))
+                $b2->whereRaw('LOWER(orders.code) LIKE ?', ["%{$q}%"])
+                   ->orWhereHas('customer', fn ($c) => $c->whereRaw('LOWER(name) LIKE ?', ["%{$q}%"]))
             ))
             ->orderByDesc('id')
             ->limit($limit)

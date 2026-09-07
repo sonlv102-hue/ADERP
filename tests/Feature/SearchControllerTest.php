@@ -203,7 +203,10 @@ class SearchControllerTest extends TestCase
             'order_date'  => now()->toDateString(),
         ]);
 
-        $res = $this->getJson('/api/search/orders?q=Đặc Biệt');
+        // Query dùng chữ cái đầu ASCII ("Biệt") — sqlite LOWER() không hạ được
+        // ký tự hoa Unicode ("Đ") nên fixture "Đặc" không so khớp trên sqlite;
+        // trên PostgreSQL (LOWER() chuẩn Unicode) mọi biến thể đều khớp.
+        $res = $this->getJson('/api/search/orders?q=Biệt');
         $res->assertOk();
         $this->assertGreaterThanOrEqual(1, count($res->json('data')));
         // label = customer name khi tìm theo tên khách
@@ -230,5 +233,70 @@ class SearchControllerTest extends TestCase
         $this->assertEquals('DH-SRCH3', $item['code']);       // code = order code
         $this->assertEquals('KH Meta Test', $item['label']);  // label = customer name
         $this->assertEquals('KH Meta Test', $item['customer_name']);
+    }
+
+    // ── Case-insensitive search (bug fix: PostgreSQL LIKE phân biệt hoa/thường) ──
+
+    /**
+     * @dataProvider viCaseVariants
+     */
+    public function test_search_suppliers_case_insensitive_vietnamese(string $needle): void
+    {
+        Supplier::create(['code' => 'NCC-CI1', 'name' => 'Công ty Nguyễn Văn An', 'is_active' => true]);
+
+        $res = $this->getJson('/api/search/suppliers?q=' . urlencode($needle));
+        $res->assertOk();
+        $this->assertEquals('Công ty Nguyễn Văn An', $res->json('data.0.label'), "q={$needle}");
+    }
+
+    /**
+     * @dataProvider viCaseVariants
+     */
+    public function test_search_customers_case_insensitive_vietnamese(string $needle): void
+    {
+        Customer::create(['code' => 'KH-CI1', 'name' => 'Nguyễn Văn An Company', 'is_active' => true]);
+
+        $res = $this->getJson('/api/search/customers?q=' . urlencode($needle));
+        $res->assertOk();
+        $this->assertEquals('Nguyễn Văn An Company', $res->json('data.0.label'), "q={$needle}");
+    }
+
+    /**
+     * @dataProvider asciiCaseVariants
+     */
+    public function test_search_products_case_insensitive_ascii(string $needle): void
+    {
+        Product::create([
+            'code' => 'SP-CI1', 'name' => 'ABC Router', 'is_active' => true,
+            'unit' => 'cái', 'item_type' => 'goods',
+        ]);
+
+        $res = $this->getJson('/api/search/products?q=' . urlencode($needle));
+        $res->assertOk();
+        $this->assertEquals('ABC Router', $res->json('data.0.label'), "q={$needle}");
+    }
+
+    /** Không được match khi khác dấu — fix này chỉ xử lý hoa/thường, không phải bỏ dấu. */
+    public function test_search_stays_accent_sensitive(): void
+    {
+        Supplier::create(['code' => 'NCC-CI2', 'name' => 'Công ty Nguyễn', 'is_active' => true]);
+
+        $res = $this->getJson('/api/search/suppliers?q=Nguyen');
+        $res->assertOk()->assertJsonCount(0, 'data');
+    }
+
+    public static function viCaseVariants(): array
+    {
+        return [
+            'as-is'      => ['Nguyễn'],
+            'lower'      => ['nguyễn'],
+            'upper'      => ['NGUYỄN'],
+            'mixed'      => ['NgUyỄn'],
+        ];
+    }
+
+    public static function asciiCaseVariants(): array
+    {
+        return [['ABC'], ['abc'], ['Abc']];
     }
 }
