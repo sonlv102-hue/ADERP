@@ -84,11 +84,13 @@ $APP php artisan view:clear
 step "9/10" "Reload app (FPM/OPcache) + chờ sẵn sàng..."
 $COMPOSE restart app
 
-HTTP_PORT=$(grep -m1 '^NGINX_PORT_HTTP=' .env 2>/dev/null | head -1 | cut -d= -f2 | xargs)
+# NGINX_PORT_HTTP có thể là "8080" hoặc "127.0.0.1:8080" — chỉ lấy phần port
+HTTP_BIND=$(grep -m1 '^NGINX_PORT_HTTP=' .env 2>/dev/null | head -1 | cut -d= -f2 | xargs)
+HTTP_PORT="${HTTP_BIND##*:}"
 HEALTH_URL="http://127.0.0.1:${HTTP_PORT:-80}/login"
 APP_READY=""
 for i in $(seq 1 30); do
-    HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$HEALTH_URL" 2>/dev/null || echo 000)
+    HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$HEALTH_URL" 2>/dev/null || true)
     if [ "$HTTP_CODE" = "200" ]; then
         APP_READY=1
         echo "  ✓ app sẵn sàng sau $((i * 2))s (GET $HEALTH_URL → $HTTP_CODE)"
