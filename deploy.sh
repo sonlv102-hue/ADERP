@@ -14,12 +14,12 @@ count_log_errors() {
 }
 
 # ─── 1. Pull code ────────────────────────────────────────────────────────────
-step "1/9" "Pulling latest code..."
+step "1/10" "Pulling latest code..."
 git pull origin master
 COMMIT=$(git rev-parse --short HEAD)
 
 # ─── 2. Kiểm tra log TRƯỚC deploy ────────────────────────────────────────────
-step "2/9" "Kiểm tra Laravel log trước deploy..."
+step "2/10" "Kiểm tra Laravel log trước deploy..."
 BEFORE_ERRORS=$(count_log_errors)
 echo "  Số lỗi hiện có trong log: $BEFORE_ERRORS"
 if [ "${BEFORE_ERRORS:-0}" -gt 0 ]; then
@@ -32,7 +32,7 @@ fi
 # (biên dịch intl/gd/... rất nặng, không cần rebuild nếu không đổi)
 # Build tuần tự từng image (không song song) — VPS RAM hạn chế (1.9GB),
 # build song song 3 image từng bị OOM-killed giữa chừng.
-step "3/9" "Rebuilding Docker images..."
+step "3/10" "Rebuilding Docker images..."
 docker image prune -f
 CACHE_BUST=$(date +%s)
 $COMPOSE build --build-arg CACHE_BUST=$CACHE_BUST app
@@ -40,22 +40,22 @@ $COMPOSE build --build-arg CACHE_BUST=$CACHE_BUST scheduler
 $COMPOSE build --build-arg CACHE_BUST=$CACHE_BUST queue
 
 # ─── 4. Extract frontend assets ──────────────────────────────────────────────
-step "4/9" "Extracting frontend assets to host..."
+step "4/10" "Extracting frontend assets to host..."
 rm -rf /var/www/web_erp/public/build
 docker run --rm -v /var/www/web_erp/public:/host_public web_erp-app sh -c 'cp -r /var/www/html/public/build /host_public/'
 
 # ─── 5. Recreate containers ──────────────────────────────────────────────────
-step "5/9" "Recreating app containers..."
+step "5/10" "Recreating app containers..."
 $COMPOSE down --remove-orphans
 $COMPOSE up -d
 sleep 3
 
 # ─── 6. Restart nginx ────────────────────────────────────────────────────────
-step "6/9" "Restarting nginx..."
+step "6/10" "Restarting nginx..."
 docker restart mini_erp_nginx
 
 # ─── 7. Backup DB (bắt buộc trước migrate) ───────────────────────────────────
-step "7/9" "Backup database trước migrate..."
+step "7/10" "Backup database trước migrate..."
 mkdir -p /var/backups/mini_erp
 BACKUP_FILE="/var/backups/mini_erp/$(date '+%Y%m%d_%H%M%S')_${COMMIT}.sql"
 DB_USER=$(grep -m1 '^DB_USERNAME=' .env 2>/dev/null | head -1 | cut -d= -f2 | xargs)
@@ -67,7 +67,7 @@ else
 fi
 
 # ─── 8. Migrate + cache ───────────────────────────────────────────────────────
-step "8/9" "Migrations + cache..."
+step "8/10" "Migrations + cache..."
 $APP sh -c "printf '\n[${DEPLOY_TS}] production.INFO: === DEPLOY-MARKER commit=${COMMIT} ===\n' >> storage/logs/laravel.log" 2>/dev/null || true
 
 $APP php artisan migrate --force
@@ -75,8 +75,33 @@ $APP php artisan config:cache
 $APP php artisan route:cache
 $APP php artisan view:clear
 
-# ─── 9. Kiểm tra log SAU deploy + Smoke test ─────────────────────────────────
-step "9/9" "Kiểm tra log sau deploy + Smoke test..."
+# ─── 9. Reload app process ───────────────────────────────────────────────────
+# config:cache / route:cache vừa chạy bằng process CLI mới. PHP-FPM của container
+# app đã khởi động từ trước (bước 5) nên các worker vẫn phục vụ web request bằng
+# route/config CŨ trong OPcache → @routes (Ziggy) thiếu route mới dù CLI đã thấy.
+# Phải restart container app để nạp lại FPM + OPcache, rồi CHỜ app trả 200 mới
+# smoke test (app không có Docker healthcheck nên poll qua nginx).
+step "9/10" "Reload app (FPM/OPcache) + chờ sẵn sàng..."
+$COMPOSE restart app
+
+HTTP_PORT=$(grep -m1 '^NGINX_PORT_HTTP=' .env 2>/dev/null | head -1 | cut -d= -f2 | xargs)
+HEALTH_URL="http://127.0.0.1:${HTTP_PORT:-80}/login"
+APP_READY=""
+for i in $(seq 1 30); do
+    HTTP_CODE=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "$HEALTH_URL" 2>/dev/null || echo 000)
+    if [ "$HTTP_CODE" = "200" ]; then
+        APP_READY=1
+        echo "  ✓ app sẵn sàng sau $((i * 2))s (GET $HEALTH_URL → $HTTP_CODE)"
+        break
+    fi
+    sleep 2
+done
+if [ -z "$APP_READY" ]; then
+    echo "  ⚠ app chưa trả 200 sau 60s (lần cuối: $HTTP_CODE) — kiểm tra 'docker compose logs app'"
+fi
+
+# ─── 10. Kiểm tra log SAU deploy + Smoke test ────────────────────────────────
+step "10/10" "Kiểm tra log sau deploy + Smoke test..."
 
 AFTER_ERRORS=$(count_log_errors)
 NEW_COUNT=$(( ${AFTER_ERRORS:-0} - ${BEFORE_ERRORS:-0} ))
