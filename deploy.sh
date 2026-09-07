@@ -7,16 +7,57 @@ APP="$COMPOSE exec -T app"
 DEPLOY_TS=$(date '+%Y-%m-%d %H:%M:%S')
 COMMIT=""
 
+BRANCH="master"
+FETCH_TIMEOUT=120
+MAX_FETCH_ATTEMPTS=3
+
 step() { echo "[$1] $2"; }
 
 count_log_errors() {
     $APP sh -c "grep -cE '\.(ERROR|CRITICAL|ALERT|EMERGENCY):' storage/logs/laravel.log 2>/dev/null || echo 0" 2>/dev/null | tr -d '[:space:]' || echo 0
 }
 
-# ─── 1. Pull code ────────────────────────────────────────────────────────────
-step "1/10" "Pulling latest code..."
-git pull origin master
+# ─── 1. Cập nhật code (fetch có timeout/retry, chỉ fast-forward) ─────────────
+step "1/10" "Cập nhật code từ origin/$BRANCH..."
+
+# 1a. Không ghi đè thay đổi ngoài quy trình deploy — chỉ chấp nhận file untracked
+DIRTY=$(git status --porcelain | grep -vE '^\?\?|^!!' || true)
+if [ -n "$DIRTY" ]; then
+    echo "ERROR: working tree production có file tracked bị sửa ngoài quy trình deploy:"
+    echo "$DIRTY" | sed 's/^/    /'
+    echo "  → Dừng deploy. Xử lý thủ công rồi chạy lại."
+    exit 1
+fi
+echo "  Revision hiện tại: $(git log -1 --oneline)"
+
+# 1b. Fetch có timeout + retry — phân biệt lỗi mạng với lỗi merge
+FETCH_OK=0
+for attempt in $(seq 1 "$MAX_FETCH_ATTEMPTS"); do
+    echo "  Git fetch lần $attempt/$MAX_FETCH_ATTEMPTS (timeout ${FETCH_TIMEOUT}s)..."
+    if GIT_TERMINAL_PROMPT=0 timeout "${FETCH_TIMEOUT}s" \
+        git -c http.lowSpeedLimit=1024 -c http.lowSpeedTime=30 \
+        fetch --prune origin "$BRANCH"; then
+        FETCH_OK=1
+        break
+    fi
+    echo "  ⚠ fetch thất bại/timeout."
+    if [ "$attempt" -lt "$MAX_FETCH_ATTEMPTS" ]; then sleep 5; fi
+done
+if [ "$FETCH_OK" -ne 1 ]; then
+    echo "ERROR: Không lấy được revision cần deploy từ origin/$BRANCH sau $MAX_FETCH_ATTEMPTS lần."
+    echo "  → Dừng deploy, GIỮ NGUYÊN production. Không deploy lại code cũ."
+    exit 1
+fi
+
+# 1c. Chỉ fast-forward — không merge/rebase/reset ngầm
+if ! git merge --ff-only "origin/$BRANCH"; then
+    echo "ERROR: Không thể fast-forward tới origin/$BRANCH (lịch sử phân nhánh?)."
+    echo "  → Dừng deploy. Xử lý thủ công."
+    exit 1
+fi
+
 COMMIT=$(git rev-parse --short HEAD)
+echo "  Revision deploy:   $(git log -1 --oneline)"
 
 # ─── 2. Kiểm tra log TRƯỚC deploy ────────────────────────────────────────────
 step "2/10" "Kiểm tra Laravel log trước deploy..."
@@ -132,4 +173,4 @@ printf '{"deployed_at":"%s","branch":"%s","commit":"%s","commit_message":"%s","d
     | $APP sh -c 'cat > /var/www/html/storage/app/deploy.json' 2>/dev/null || true
 
 echo ""
-echo "=== Deploy done at $(date '+%Y-%m-%d %H:%M:%S') ==="
+echo "=== Deploy done at $(date '+%Y-%m-%d %H:%M:%S') — commit $(git rev-parse HEAD) ==="
