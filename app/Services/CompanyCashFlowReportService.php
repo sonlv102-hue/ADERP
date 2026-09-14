@@ -5,6 +5,8 @@ namespace App\Services;
 use App\Models\BankAccount;
 use App\Models\BankTransaction;
 use App\Models\CashFlowCategory;
+use App\Models\Contract;
+use App\Models\PurchaseContract;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -87,6 +89,123 @@ class CompanyCashFlowReportService
             ->orderByDesc('id')
             ->paginate($perPage)
             ->withQueryString();
+    }
+
+    /**
+     * Bản không phân trang của transactions() — dùng cho Export Excel (Phase 1.1, spec §5/§20:
+     * Excel không được phụ thuộc pagination). Cùng baseQuery()/forPeriod()/eager-load với
+     * transactions() — không phải bộ SQL riêng.
+     */
+    public function transactionsForExport(array $filters): Collection
+    {
+        $from = $filters['from'] ?? now()->startOfMonth()->toDateString();
+        $to = $filters['to'] ?? now()->toDateString();
+
+        return $this->baseQuery($filters)
+            ->forPeriod($from, $to)
+            ->with(['bankAccount', 'cashFlowCategory', 'project', 'responsibleUser', 'pairedTransaction.bankAccount'])
+            ->orderByDesc('transaction_date')
+            ->orderByDesc('id')
+            ->get();
+    }
+
+    /**
+     * Batch preload contract label theo N+1-safe pattern (extracted từ
+     * CompanyCashFlowController::transactionDto() — pre-deploy audit fix — để Export Excel
+     * dùng lại đúng 1 chỗ, không copy lại logic). Trả về mảng [transaction_id => label|null].
+     */
+    public function contractLabelsByTransactionId(Collection $transactions): array
+    {
+        $contractIds = $transactions->where('contract_type', 'contract')->pluck('contract_id')->filter()->unique();
+        $purchaseContractIds = $transactions->where('contract_type', 'purchase_contract')->pluck('contract_id')->filter()->unique();
+
+        $contracts = $contractIds->isNotEmpty()
+            ? Contract::query()->whereIn('id', $contractIds)->get(['id', 'code', 'title'])->keyBy('id')
+            : collect();
+        $purchaseContracts = $purchaseContractIds->isNotEmpty()
+            ? PurchaseContract::query()->whereIn('id', $purchaseContractIds)->get(['id', 'code', 'title'])->keyBy('id')
+            : collect();
+
+        return $transactions->mapWithKeys(function (BankTransaction $t) use ($contracts, $purchaseContracts) {
+            $contract = match ($t->contract_type) {
+                'contract' => $contracts->get($t->contract_id),
+                'purchase_contract' => $purchaseContracts->get($t->contract_id),
+                default => null,
+            };
+
+            return [$t->id => $contract ? "{$contract->code} — {$contract->title}" : null];
+        })->all();
+    }
+
+    /**
+     * Tổng hợp theo (party_type + party_id) từ CHÍNH tập giao dịch đã lấy qua
+     * transactionsForExport() (spec §14, sheet 05_Doi_tuong) — không query SQL riêng, không
+     * group theo party_name (tránh trùng tên khác loại/khác id), tách rõ số giao dịch
+     * tiền vào/tiền ra theo cùng định nghĩa "credit>0 = vào, debit>0 = ra" dùng ở sheet 02.
+     */
+    public function partiesBreakdown(Collection $transactions): array
+    {
+        $identified = $transactions->filter(fn (BankTransaction $t) => $t->party_type !== null);
+        $unidentifiedGroup = $transactions->filter(fn (BankTransaction $t) => $t->party_type === null);
+
+        $rows = collect();
+        foreach ($identified->groupBy(fn (BankTransaction $t) => $t->party_type . '|' . $t->party_id) as $group) {
+            $first = $group->first();
+            $rows->push([
+                'party_type' => $first->party_type,
+                'party_id' => $first->party_id,
+                'party_name' => $first->party_name,
+                'total_in' => (float) $group->sum('credit'),
+                'total_out' => (float) $group->sum('debit'),
+                'in_count' => $group->filter(fn (BankTransaction $t) => (float) $t->credit > 0)->count(),
+                'out_count' => $group->filter(fn (BankTransaction $t) => (float) $t->debit > 0)->count(),
+            ]);
+        }
+
+        return [
+            'rows' => $rows,
+            'unidentified' => [
+                'total_in' => (float) $unidentifiedGroup->sum('credit'),
+                'total_out' => (float) $unidentifiedGroup->sum('debit'),
+                'in_count' => $unidentifiedGroup->filter(fn (BankTransaction $t) => (float) $t->credit > 0)->count(),
+                'out_count' => $unidentifiedGroup->filter(fn (BankTransaction $t) => (float) $t->debit > 0)->count(),
+            ],
+        ];
+    }
+
+    /**
+     * Tổng hợp theo category từ CHÍNH tập giao dịch của transactionsForExport() — dùng cho
+     * sheet 03_Tien_vao/04_Tien_ra (spec §12/§13: "Tổng tiền phải bằng KPI"). KHÔNG dùng
+     * byCategory() thẳng cho export vì byCategory() không loại internal transfer, trong khi
+     * summary() (nguồn KPI sheet 01) CÓ loại khi xem consolidated (spec §6) — nếu export
+     * dùng byCategory() nguyên bản, sheet 03/04 có thể lệch KPI đúng lúc có internal transfer
+     * chưa cặp/không cặp được. Áp dụng đúng 1 điều kiện loại trừ của
+     * scopeExcludingInternalTransfers() (paired HOẶC category nội bộ) trên tập transaction đã
+     * có sẵn — không phải bộ SQL/business rule mới, chỉ chuyển từ SQL sang lọc trên collection
+     * đã lấy theo baseQuery() để tránh query thêm.
+     */
+    public function categoryBreakdownForExport(Collection $transactions, array $filters): Collection
+    {
+        $isConsolidated = empty($filters['bank_account_id']);
+
+        $relevant = $isConsolidated
+            ? $transactions->filter(fn (BankTransaction $t) => $t->paired_transaction_id === null
+                && !($t->cashFlowCategory?->isInternalTransfer() ?? false))
+            : $transactions;
+
+        return $relevant->groupBy(fn (BankTransaction $t) => $t->cash_flow_category_id ?? 'null')
+            ->map(function (Collection $group) {
+                $first = $group->first();
+
+                return (object) [
+                    'cash_flow_category_id' => $first->cash_flow_category_id,
+                    'cashFlowCategory' => $first->cashFlowCategory,
+                    'total_in' => (float) $group->sum('credit'),
+                    'total_out' => (float) $group->sum('debit'),
+                    'tx_count' => $group->count(),
+                ];
+            })
+            ->values();
     }
 
     public function byCategory(array $filters): Collection

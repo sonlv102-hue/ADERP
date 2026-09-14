@@ -934,6 +934,7 @@ Route::middleware('auth')->group(function () {
         Route::prefix('company-cashflow')->name('company-cashflow.')->group(function () {
             Route::get('/', [CompanyCashFlowController::class, 'index'])->name('index')->middleware('can:reports.bank_cashflow.view');
             Route::get('transactions', [CompanyCashFlowController::class, 'transactions'])->name('transactions')->middleware('can:reports.bank_cashflow.transactions.view');
+            Route::get('export', [CompanyCashFlowController::class, 'export'])->name('export')->middleware('can:reports.bank_cashflow.export');
             Route::post('{bankTransaction}/classify', [CompanyCashFlowController::class, 'classify'])->name('classify')->middleware('can:reports.bank_cashflow.reconcile');
             Route::post('pair-suggestions', [CompanyCashFlowController::class, 'pairSuggestions'])->name('pair-suggestions')->middleware('can:reports.bank_cashflow.reconcile');
             Route::post('confirm-pair', [CompanyCashFlowController::class, 'confirmPair'])->name('confirm-pair')->middleware('can:reports.bank_cashflow.reconcile');

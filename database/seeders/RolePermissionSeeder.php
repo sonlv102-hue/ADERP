@@ -134,6 +134,7 @@ class RolePermissionSeeder extends Seeder
             ['module' => 'reports', 'menu_key' => 'reports.bank_cashflow', 'action' => 'reconcile', 'code' => 'reports.bank_cashflow.reconcile', 'name' => 'Đối soát dòng tiền', 'description' => 'Phân loại/gán đối tượng, cặp đôi chuyển khoản nội bộ'],
             ['module' => 'reports', 'menu_key' => 'reports.bank_cashflow', 'action' => 'edit', 'code' => 'reports.bank_cashflow.edit', 'name' => 'Sửa thông tin bổ sung dòng tiền', 'description' => 'Sửa ghi chú/liên kết chứng từ của giao dịch dòng tiền'],
             ['module' => 'reports', 'menu_key' => 'reports.bank_cashflow', 'action' => 'balance_view', 'code' => 'reports.bank_cashflow.balance.view', 'name' => 'Xem số dư tài khoản ngân hàng', 'description' => 'Xem số dư đầu kỳ/cuối kỳ các tài khoản ngân hàng'],
+            ['module' => 'reports', 'menu_key' => 'reports.bank_cashflow', 'action' => 'export', 'code' => 'reports.bank_cashflow.export', 'name' => 'Xuất Excel Dòng tiền tài khoản công ty', 'description' => 'Xuất Excel báo cáo dòng tiền tài khoản ngân hàng công ty'],
 
             // Báo cáo doanh thu
             ['module' => 'reports', 'menu_key' => 'reports.revenue', 'action' => 'view', 'code' => 'report.revenue.view', 'name' => 'Xem Báo cáo doanh thu', 'description' => 'Xem báo cáo doanh thu chi tiết'],
@@ -252,6 +253,7 @@ class RolePermissionSeeder extends Seeder
             'reports.cashflow.view', 'reports.cashflow.export',
             'reports.bank_cashflow.view', 'reports.bank_cashflow.transactions.view',
             'reports.bank_cashflow.reconcile', 'reports.bank_cashflow.edit', 'reports.bank_cashflow.balance.view',
+            'reports.bank_cashflow.export',
             'report.revenue.view', 'report.revenue.export', 'report.revenue.print',
             'reports.profit.view', 'reports.profit.export',
             'sales.invoices.view', 'sales.invoices.create', 'sales.invoices.update', 'sales.invoices.approve',

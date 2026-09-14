@@ -45,6 +45,12 @@
         />
         <input v-model="filterForm.search" class="erp-input w-full sm:w-64" placeholder="Tìm nội dung/số TK/đối tượng..." />
         <button class="erp-btn-primary" @click="applyFilters">Lọc</button>
+        <ExportExcelButton
+          v-if="can('reports.bank_cashflow.export')"
+          :endpoint="route('reports.company-cashflow.export')"
+          :filters="exportFilters"
+          label="Xuất Excel"
+        />
       </div>
 
       <!-- KPI -->
@@ -148,6 +154,7 @@ import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
 import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
+import ExportExcelButton from '@/Components/Shared/ExportExcelButton.vue';
 import { usePermission } from '@/composables/usePermission';
 import { formatVnd } from '@/composables/useCurrency';
 import ClassifyModal from './ClassifyModal.vue';
@@ -187,6 +194,13 @@ const filterForm = reactive({
 
 const activeTx = ref(null);
 const showPairModal = ref(false);
+
+// Xuất Excel phải theo ĐÚNG filter đang hiển thị (spec §2) — bỏ project_name (chỉ để hiện
+// RemoteSearchSelect, không phải filter key backend hiểu), giống applyFilters().
+const exportFilters = computed(() => {
+  const { project_name, ...rest } = filterForm;
+  return rest;
+});
 
 function applyFilters() {
   const payload = { ...filterForm };

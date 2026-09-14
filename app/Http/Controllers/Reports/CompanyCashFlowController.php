@@ -2,12 +2,13 @@
 
 namespace App\Http\Controllers\Reports;
 
+use App\Exports\CompanyCashFlow\CompanyCashFlowExport;
+use App\Exports\CompanyCashFlow\ExportFilterMetaBuilder;
+use App\Helpers\PartyTypeLabels;
 use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use App\Models\BankTransaction;
 use App\Models\CashFlowCategory;
-use App\Models\Contract;
-use App\Models\PurchaseContract;
 use App\Services\CashFlowClassificationService;
 use App\Services\CashFlowInternalTransferMatchingService;
 use App\Services\CompanyCashFlowReportService;
@@ -16,20 +17,11 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
+use Maatwebsite\Excel\Facades\Excel;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class CompanyCashFlowController extends Controller
 {
-    /** Nhãn hiển thị cho party_type — spec §2: luôn hiện rõ CẢ tên lẫn loại, tránh chọn nhầm đối tượng cùng tên khác loại. */
-    private const PARTY_TYPE_LABELS = [
-        'customer' => 'Khách hàng',
-        'supplier' => 'Nhà cung cấp',
-        'employee' => 'Nhân viên',
-        'shareholder' => 'Cổ đông',
-        'bank' => 'Ngân hàng',
-        'other_individual' => 'Cá nhân khác',
-        'other_entity' => 'Đơn vị khác',
-    ];
-
     public function __construct(private readonly CompanyCashFlowReportService $reportService)
     {
     }
@@ -148,6 +140,39 @@ class CompanyCashFlowController extends Controller
         return back()->with('success', 'Đã hủy cặp chuyển khoản nội bộ.');
     }
 
+    /**
+     * Xuất Excel theo ĐÚNG filter hiện tại (Phase 1.1, spec §5): toàn bộ số liệu lấy từ
+     * CompanyCashFlowReportService — cùng baseQuery/filters/category/party/account/date/
+     * reconcile-status logic với web report, không tính lại. Sheet 02_Giao_dich xuất ĐẦY ĐỦ
+     * (kể cả giao dịch chuyển khoản nội bộ, có cột riêng đánh dấu đối ứng — giống sổ giao
+     * dịch ngân hàng thật); sheet 01/03/04 áp dụng đúng internal-transfer-exclusion của
+     * summary() (spec §6) qua categoryBreakdownForExport() để KPI khớp category breakdown.
+     */
+    public function export(Request $request): BinaryFileResponse
+    {
+        $this->authorize('reports.bank_cashflow.export');
+
+        $filters = $this->filters($request);
+
+        $summary = $this->reportService->summary($filters);
+        $transactions = $this->reportService->transactionsForExport($filters);
+        $contractLabels = $this->reportService->contractLabelsByTransactionId($transactions);
+        $byCategory = $this->reportService->categoryBreakdownForExport($transactions, $filters);
+        $parties = $this->reportService->partiesBreakdown($transactions);
+        $meta = ExportFilterMetaBuilder::build($filters, $request->user());
+
+        $filename = 'Bao_cao_dong_tien_'
+            . str_replace('-', '', $summary['from'])
+            . '_'
+            . str_replace('-', '', $summary['to'])
+            . '.xlsx';
+
+        return Excel::download(
+            new CompanyCashFlowExport($summary, $transactions, $contractLabels, $byCategory, $parties, $meta),
+            $filename
+        );
+    }
+
     private function filters(Request $request): array
     {
         $filters = $request->only([
@@ -171,29 +196,10 @@ class CompanyCashFlowController extends Controller
 
     private function transactionDto($paginator)
     {
-        // Preload contract label theo batch — contract_type là discriminator giữa 2 bảng
-        // khác nhau (contracts/purchase_contracts) nên không dùng Eloquent relation/with()
-        // được. Tránh N+1: BankTransaction::contractLabel() gọi find() riêng từng dòng.
+        // Batch preload contract label — extracted sang CompanyCashFlowReportService để
+        // Export Excel (Phase 1.1) dùng lại đúng 1 chỗ, không copy lại logic N+1-fix.
         $items = $paginator->getCollection();
-        $contractIds = $items->where('contract_type', 'contract')->pluck('contract_id')->filter()->unique();
-        $purchaseContractIds = $items->where('contract_type', 'purchase_contract')->pluck('contract_id')->filter()->unique();
-
-        $contracts = $contractIds->isNotEmpty()
-            ? Contract::query()->whereIn('id', $contractIds)->get(['id', 'code', 'title'])->keyBy('id')
-            : collect();
-        $purchaseContracts = $purchaseContractIds->isNotEmpty()
-            ? PurchaseContract::query()->whereIn('id', $purchaseContractIds)->get(['id', 'code', 'title'])->keyBy('id')
-            : collect();
-
-        $contractLabel = function (BankTransaction $t) use ($contracts, $purchaseContracts) {
-            $contract = match ($t->contract_type) {
-                'contract' => $contracts->get($t->contract_id),
-                'purchase_contract' => $purchaseContracts->get($t->contract_id),
-                default => null,
-            };
-
-            return $contract ? "{$contract->code} — {$contract->title}" : null;
-        };
+        $contractLabels = $this->reportService->contractLabelsByTransactionId($items);
 
         return $paginator->through(fn (BankTransaction $t) => [
             'id' => $t->id,
@@ -209,12 +215,12 @@ class CompanyCashFlowController extends Controller
             'party_type' => $t->party_type,
             'party_id' => $t->party_id,
             'party_name' => $t->party_name,
-            'party_type_label' => self::PARTY_TYPE_LABELS[$t->party_type] ?? null,
+            'party_type_label' => PartyTypeLabels::label($t->party_type),
             'project_id' => $t->project_id,
             'project_name' => $t->project?->name,
             'contract_type' => $t->contract_type,
             'contract_id' => $t->contract_id,
-            'contract_label' => $contractLabel($t),
+            'contract_label' => $contractLabels[$t->id] ?? null,
             'responsible_user_id' => $t->responsible_user_id,
             'responsible_user_name' => $t->responsibleUser?->name,
             'cash_flow_note' => $t->cash_flow_note,

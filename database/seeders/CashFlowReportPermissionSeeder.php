@@ -23,6 +23,7 @@ class CashFlowReportPermissionSeeder extends Seeder
             'reports.bank_cashflow.reconcile'          => ['reconcile', 'Đối soát/phân loại giao dịch dòng tiền'],
             'reports.bank_cashflow.edit'                => ['edit', 'Sửa thông tin bổ sung giao dịch dòng tiền'],
             'reports.bank_cashflow.balance.view'        => ['balance_view', 'Xem số dư tài khoản ngân hàng'],
+            'reports.bank_cashflow.export'               => ['export', 'Xuất Excel Dòng tiền tài khoản công ty'],
         ];
 
         foreach ($perms as $code => [$action, $name]) {
