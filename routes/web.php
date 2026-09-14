@@ -34,6 +34,7 @@ use App\Http\Controllers\Reports\InventoryTransactionReportController;
 use App\Http\Controllers\Reports\StockEntryDetailReportController;
 use App\Http\Controllers\Reports\StockExitDetailReportController;
 use App\Http\Controllers\Reports\CashFlowController;
+use App\Http\Controllers\Reports\CompanyCashFlowController;
 use App\Http\Controllers\Reports\CashFlowStatementController;
 use App\Http\Controllers\Reports\IncomeStatementController;
 use App\Http\Controllers\Reports\ProfitReportController;
@@ -97,6 +98,7 @@ use App\Http\Controllers\Purchasing\PurchaseContractPaymentScheduleController;
 use App\Http\Controllers\Purchasing\PurchaseReturnController;
 use App\Http\Controllers\Purchasing\SupplierAdvanceController;
 use App\Http\Controllers\Purchasing\SupplierAdvanceAllocationController;
+use App\Http\Controllers\Purchasing\PurchaseQuoteComparisonController;
 use App\Http\Controllers\Documents\DocumentController;
 use App\Http\Controllers\Documents\DocumentTypeController;
 use App\Http\Controllers\Reports\BalanceSheetController;
@@ -831,6 +833,31 @@ Route::middleware('auth')->group(function () {
         Route::post('purchase-contracts/{purchaseContract}/schedules/{schedule}/mark-paid', [PurchaseContractPaymentScheduleController::class, 'markPaid'])->name('purchase-contracts.schedules.mark-paid');
         Route::post('purchase-contracts/{purchaseContract}/schedules/{schedule}/mark-pending', [PurchaseContractPaymentScheduleController::class, 'markPending'])->name('purchase-contracts.schedules.mark-pending');
 
+        // So sánh báo giá NCC (module local — không hạch toán, không tạo PO/kho)
+        Route::prefix('quote-comparisons')->name('quote-comparisons.')->group(function () {
+            Route::get('/', [PurchaseQuoteComparisonController::class, 'index'])->name('index')->middleware('can:purchases.quote_comparisons.view');
+            Route::get('create', [PurchaseQuoteComparisonController::class, 'create'])->name('create')->middleware('can:purchases.quote_comparisons.create');
+            Route::post('/', [PurchaseQuoteComparisonController::class, 'store'])->name('store')->middleware('can:purchases.quote_comparisons.create');
+            Route::get('items-template', [PurchaseQuoteComparisonController::class, 'itemsTemplate'])->name('items-template')->middleware('can:purchases.quote_comparisons.update');
+
+            Route::get('{quoteComparison}', [PurchaseQuoteComparisonController::class, 'show'])->name('show')->middleware('can:purchases.quote_comparisons.view');
+            Route::put('{quoteComparison}', [PurchaseQuoteComparisonController::class, 'update'])->name('update')->middleware('can:purchases.quote_comparisons.update');
+            Route::delete('{quoteComparison}', [PurchaseQuoteComparisonController::class, 'destroy'])->name('destroy')->middleware('can:purchases.quote_comparisons.update');
+
+            Route::post('{quoteComparison}/items', [PurchaseQuoteComparisonController::class, 'addItem'])->name('items.add')->middleware('can:purchases.quote_comparisons.update');
+            Route::post('{quoteComparison}/items/import', [PurchaseQuoteComparisonController::class, 'importItems'])->name('items.import')->middleware('can:purchases.quote_comparisons.update');
+            Route::delete('{quoteComparison}/items/{item}', [PurchaseQuoteComparisonController::class, 'removeItem'])->name('items.remove')->middleware('can:purchases.quote_comparisons.update');
+            Route::post('{quoteComparison}/items/{item}/selection', [PurchaseQuoteComparisonController::class, 'setSelection'])->name('items.selection')->middleware('can:purchases.quote_comparisons.select_supplier');
+
+            Route::get('{quoteComparison}/quote-template', [PurchaseQuoteComparisonController::class, 'quoteTemplate'])->name('quote-template')->middleware('can:purchases.quote_comparisons.view');
+            Route::post('{quoteComparison}/quotes/preview', [PurchaseQuoteComparisonController::class, 'previewQuote'])->name('quotes.preview')->middleware('can:purchases.quote_comparisons.import');
+            Route::post('{quoteComparison}/quotes/confirm', [PurchaseQuoteComparisonController::class, 'confirmQuote'])->name('quotes.confirm')->middleware('can:purchases.quote_comparisons.import');
+            Route::get('{quoteComparison}/quotes/{quote}/file', [PurchaseQuoteComparisonController::class, 'downloadQuoteFile'])->name('quotes.file')->middleware('can:purchases.quote_comparisons.view');
+            Route::delete('{quoteComparison}/quotes/{quote}', [PurchaseQuoteComparisonController::class, 'deleteQuote'])->name('quotes.delete')->middleware('can:purchases.quote_comparisons.import');
+
+            Route::get('{quoteComparison}/export', [PurchaseQuoteComparisonController::class, 'exportResult'])->name('export')->middleware('can:purchases.quote_comparisons.export');
+        });
+
         Route::get('purchase-returns/po/{purchaseOrder}/items', [PurchaseReturnController::class, 'poItems'])->name('purchase-returns.po-items');
         Route::resource('purchase-returns', PurchaseReturnController::class)->only(['index', 'create', 'store', 'show', 'edit', 'update', 'destroy']);
         Route::post('purchase-returns/{purchaseReturn}/confirm', [PurchaseReturnController::class, 'confirm'])->name('purchase-returns.confirm');
@@ -902,6 +929,16 @@ Route::middleware('auth')->group(function () {
         Route::get('document-checklist-detail',        [DocumentChecklistDetailController::class,'index'])->name('document_checklist_detail');
         Route::get('document-checklist-detail/export', [DocumentChecklistDetailController::class,'export'])->name('document_checklist_detail.export');
         Route::get('document-checklist-detail/pdf',    [DocumentChecklistDetailController::class,'exportPdf'])->name('document_checklist_detail.pdf');
+
+        // Dòng tiền tài khoản công ty (spec riêng, không thuộc B03-DNN/Sổ thu-chi)
+        Route::prefix('company-cashflow')->name('company-cashflow.')->group(function () {
+            Route::get('/', [CompanyCashFlowController::class, 'index'])->name('index')->middleware('can:reports.bank_cashflow.view');
+            Route::get('transactions', [CompanyCashFlowController::class, 'transactions'])->name('transactions')->middleware('can:reports.bank_cashflow.transactions.view');
+            Route::post('{bankTransaction}/classify', [CompanyCashFlowController::class, 'classify'])->name('classify')->middleware('can:reports.bank_cashflow.reconcile');
+            Route::post('pair-suggestions', [CompanyCashFlowController::class, 'pairSuggestions'])->name('pair-suggestions')->middleware('can:reports.bank_cashflow.reconcile');
+            Route::post('confirm-pair', [CompanyCashFlowController::class, 'confirmPair'])->name('confirm-pair')->middleware('can:reports.bank_cashflow.reconcile');
+            Route::post('{bankTransaction}/unpair', [CompanyCashFlowController::class, 'unpair'])->name('unpair')->middleware('can:reports.bank_cashflow.reconcile');
+        });
     });
 
     // Documents - quản lý hồ sơ chứng từ
@@ -942,6 +979,8 @@ Route::middleware('auth')->group(function () {
         Route::get('orders',                  [SearchController::class, 'orders'])->name('orders');
         Route::get('purchase-contracts',      [SearchController::class, 'purchaseContracts'])->name('purchase-contracts');
         Route::get('purchase-orders',         [SearchController::class, 'purchaseOrders'])->name('purchase-orders');
+        Route::get('contracts',               [SearchController::class, 'contracts'])->name('contracts');
+        Route::get('users',                   [SearchController::class, 'users'])->name('users');
     });
 
     // JSON API for current user permissions

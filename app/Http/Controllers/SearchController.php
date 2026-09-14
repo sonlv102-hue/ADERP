@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AccountCode;
+use App\Models\Contract;
 use App\Models\Customer;
 use App\Models\Employee;
 use App\Models\InventoryBalance;
@@ -14,6 +15,7 @@ use App\Models\PurchaseOrder;
 use App\Models\Service;
 use App\Models\StockEntryItem;
 use App\Models\Supplier;
+use App\Models\User;
 use App\Models\Warehouse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -494,8 +496,77 @@ class SearchController extends Controller
         return response()->json(['data' => $items]);
     }
 
+    /**
+     * Hợp đồng bán (HD-) — dùng cho liên kết contract_type=contract trên Báo cáo dòng tiền công ty.
+     * Endpoint mới, chỉ 1 caller (ClassifyModal.vue) — gate đúng permission modal đó đã yêu cầu,
+     * không mở rộng ra auth-only chung như các search endpoint cũ (phát hiện qua pre-deploy audit:
+     * lộ tên khách hàng/hợp đồng cho mọi user đã login).
+     */
+    public function contracts(Request $request): JsonResponse
+    {
+        $this->authorize('reports.bank_cashflow.reconcile');
+
+        $q = $this->q($request);
+        $items = Contract::query()
+            ->with('customer')
+            ->when($q, fn ($query) => $query->where(fn ($b) =>
+                $b->whereRaw('LOWER(code) LIKE ?', ["%{$q}%"])
+                    ->orWhereRaw('LOWER(COALESCE(title, \'\')) LIKE ?', ["%{$q}%"])
+                    ->orWhereHas('customer', fn ($c) => $c->whereRaw('LOWER(name) LIKE ?', ["%{$q}%"]))
+            ))
+            ->orderByDesc('id')
+            ->limit(30)
+            ->get()
+            ->map(fn (Contract $c) => [
+                'value' => $c->id,
+                'label' => trim("{$c->code} — {$c->title}"),
+                'code'  => $c->code,
+                'meta'  => $c->customer?->name,
+            ]);
+        return response()->json(['data' => $items]);
+    }
+
+    /**
+     * Người dùng hệ thống — dùng cho responsible_user_id (Báo cáo dòng tiền công ty).
+     * Trả tên + email nhân viên -> chỉ user có quyền reconcile (đúng quyền modal classify
+     * đã yêu cầu) mới enumerate được, không phải mọi user đã login (PII, phát hiện qua
+     * pre-deploy audit).
+     */
+    public function users(Request $request): JsonResponse
+    {
+        $this->authorize('reports.bank_cashflow.reconcile');
+
+        $q = $this->q($request);
+        $items = User::query()
+            ->where('is_active', true)
+            ->when($q, fn ($query) => $query->where(fn ($b) =>
+                $b->whereRaw('LOWER(name) LIKE ?', ["%{$q}%"])
+                    ->orWhereRaw('LOWER(email) LIKE ?', ["%{$q}%"])
+            ))
+            ->orderBy('name')
+            ->limit(30)
+            ->get(['id', 'name', 'email'])
+            ->map(fn (User $u) => [
+                'value' => $u->id,
+                'label' => $u->name,
+                'meta'  => $u->email,
+            ]);
+        return response()->json(['data' => $items]);
+    }
+
+    /**
+     * Hợp đồng mua (HD-MH-) — dùng chung bởi 2 module độc lập: Purchasing/SupplierAdvances/Form.vue
+     * (tạo tạm ứng NCC, cần `purchasing.view`) và ClassifyModal.vue của Báo cáo dòng tiền công ty
+     * (cần `reports.bank_cashflow.reconcile`). Gate rộng hơn 2 endpoint trên vì route dùng chung —
+     * chỉ `purchasing.view` sẽ phá luồng tạm ứng NCC hiện có (phát hiện qua pre-deploy audit).
+     */
     public function purchaseContracts(Request $request): JsonResponse
     {
+        abort_unless(
+            $request->user()?->canAny(['purchasing.view', 'reports.bank_cashflow.reconcile']),
+            403
+        );
+
         $q          = $this->q($request);
         $supplierId = $request->input('supplier_id');
 

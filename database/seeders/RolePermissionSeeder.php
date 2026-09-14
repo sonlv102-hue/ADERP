@@ -128,6 +128,13 @@ class RolePermissionSeeder extends Seeder
             ['module' => 'reports', 'menu_key' => 'reports.cashflow', 'action' => 'view', 'code' => 'reports.cashflow.view', 'name' => 'Xem Báo cáo dòng tiền', 'description' => 'Xem lưu chuyển tiền tệ, thu chi thực tế'],
             ['module' => 'reports', 'menu_key' => 'reports.cashflow', 'action' => 'export', 'code' => 'reports.cashflow.export', 'name' => 'Xuất Báo cáo dòng tiền', 'description' => 'Xuất excel báo cáo dòng tiền'],
 
+            // Dòng tiền tài khoản công ty
+            ['module' => 'reports', 'menu_key' => 'reports.bank_cashflow', 'action' => 'view', 'code' => 'reports.bank_cashflow.view', 'name' => 'Xem Dòng tiền tài khoản công ty', 'description' => 'Xem báo cáo dòng tiền tài khoản ngân hàng công ty'],
+            ['module' => 'reports', 'menu_key' => 'reports.bank_cashflow', 'action' => 'transactions_view', 'code' => 'reports.bank_cashflow.transactions.view', 'name' => 'Xem chi tiết giao dịch ngân hàng', 'description' => 'Xem bảng chi tiết giao dịch trong Báo cáo dòng tiền'],
+            ['module' => 'reports', 'menu_key' => 'reports.bank_cashflow', 'action' => 'reconcile', 'code' => 'reports.bank_cashflow.reconcile', 'name' => 'Đối soát dòng tiền', 'description' => 'Phân loại/gán đối tượng, cặp đôi chuyển khoản nội bộ'],
+            ['module' => 'reports', 'menu_key' => 'reports.bank_cashflow', 'action' => 'edit', 'code' => 'reports.bank_cashflow.edit', 'name' => 'Sửa thông tin bổ sung dòng tiền', 'description' => 'Sửa ghi chú/liên kết chứng từ của giao dịch dòng tiền'],
+            ['module' => 'reports', 'menu_key' => 'reports.bank_cashflow', 'action' => 'balance_view', 'code' => 'reports.bank_cashflow.balance.view', 'name' => 'Xem số dư tài khoản ngân hàng', 'description' => 'Xem số dư đầu kỳ/cuối kỳ các tài khoản ngân hàng'],
+
             // Báo cáo doanh thu
             ['module' => 'reports', 'menu_key' => 'reports.revenue', 'action' => 'view', 'code' => 'report.revenue.view', 'name' => 'Xem Báo cáo doanh thu', 'description' => 'Xem báo cáo doanh thu chi tiết'],
             ['module' => 'reports', 'menu_key' => 'reports.revenue', 'action' => 'export', 'code' => 'report.revenue.export', 'name' => 'Xuất Excel Báo cáo doanh thu', 'description' => 'Xuất Excel dữ liệu báo cáo doanh thu'],
@@ -243,6 +250,8 @@ class RolePermissionSeeder extends Seeder
             'sales.orders.view', 'purchases.orders.view', 'warehouse.stock_entries.view',
             'warehouse.stock_exits.view', 'reports.financial.view', 'reports.financial.export',
             'reports.cashflow.view', 'reports.cashflow.export',
+            'reports.bank_cashflow.view', 'reports.bank_cashflow.transactions.view',
+            'reports.bank_cashflow.reconcile', 'reports.bank_cashflow.edit', 'reports.bank_cashflow.balance.view',
             'report.revenue.view', 'report.revenue.export', 'report.revenue.print',
             'reports.profit.view', 'reports.profit.export',
             'sales.invoices.view', 'sales.invoices.create', 'sales.invoices.update', 'sales.invoices.approve',
@@ -519,6 +528,7 @@ class RolePermissionSeeder extends Seeder
         MenuItem::create(['parent_id' => $reportsSub->id, 'key' => 'accounting.reports.trial', 'label' => 'Cân đối phát sinh', 'route_name' => 'reports.trial_balance', 'icon' => 'document-text', 'required_permission' => 'reports.financial.view', 'order' => 5]);
         MenuItem::create(['parent_id' => $reportsSub->id, 'key' => 'accounting.reports.revenue', 'label' => 'Báo cáo doanh thu', 'route_name' => 'reports.revenue', 'icon' => 'currency-dollar', 'required_permission' => 'report.revenue.view', 'order' => 6]);
         MenuItem::create(['parent_id' => $reportsSub->id, 'key' => 'accounting.reports.profit', 'label' => 'Báo cáo lợi nhuận', 'route_name' => 'reports.profit', 'icon' => 'chart-bar', 'required_permission' => 'reports.profit.view', 'order' => 7]);
+        MenuItem::create(['parent_id' => $reportsSub->id, 'key' => 'accounting.reports.bank_cashflow', 'label' => 'Dòng tiền tài khoản công ty', 'route_name' => 'reports.company-cashflow.index', 'icon' => 'banknotes', 'required_permission' => 'reports.bank_cashflow.view', 'order' => 8]);
 
         // Admin Children
         MenuItem::create(['parent_id' => $adminGroup->id, 'key' => 'admin.shareholders', 'label' => 'Cổ đông / Thành viên', 'route_name' => 'admin.shareholders.index', 'icon' => 'library', 'required_permission' => 'admin.users', 'order' => 1]);

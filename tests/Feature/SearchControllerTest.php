@@ -3,10 +3,14 @@
 namespace Tests\Feature;
 
 use App\Enums\OrderStatus;
+use App\Models\Contract;
 use App\Models\Customer;
 use App\Models\Order;
+use App\Models\Permission;
 use App\Models\Product;
 use App\Models\ProductCategory;
+use App\Models\PurchaseContract;
+use App\Models\Role;
 use App\Models\Supplier;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -298,5 +302,122 @@ class SearchControllerTest extends TestCase
     public static function asciiCaseVariants(): array
     {
         return [['ABC'], ['abc'], ['Abc']];
+    }
+
+    // ── Authorization: search.contracts / search.users / search.purchase-contracts ──
+    // Phát hiện qua pre-deploy audit Cash Flow: 3 endpoint này chỉ nằm trong middleware
+    // 'auth' chung (giống các search endpoint cũ ở trên), không có permission gate riêng —
+    // lộ tên khách hàng/hợp đồng và PII nhân viên (tên+email) cho MỌI user đã login.
+
+    private function roleWithPermissions(string $code, array $permissionCodes): Role
+    {
+        $role = Role::create(['code' => $code, 'name' => $code, 'is_system' => false]);
+        foreach ($permissionCodes as $permCode) {
+            $permission = Permission::firstOrCreate(['code' => $permCode], ['name' => $permCode, 'module' => 'test']);
+            $role->permissions()->attach($permission->id);
+        }
+        return $role;
+    }
+
+    public function test_search_contracts_rejects_unauthenticated(): void
+    {
+        auth()->logout();
+        $this->getJson('/api/search/contracts')->assertUnauthorized();
+    }
+
+    public function test_search_contracts_rejects_user_without_reconcile_permission(): void
+    {
+        $lowRole = $this->roleWithPermissions('search_contracts_low', ['reports.bank_cashflow.view']);
+        $this->user->roles()->sync([$lowRole->id]);
+
+        $this->getJson('/api/search/contracts?q=HD')->assertForbidden();
+    }
+
+    public function test_search_contracts_allows_user_with_reconcile_permission(): void
+    {
+        $customer = Customer::create(['code' => 'KH-SC1', 'name' => 'KH Search Contract', 'is_active' => true]);
+        Contract::create(['code' => 'HD-SC1', 'customer_id' => $customer->id, 'title' => 'HĐ search test', 'status' => 'draft', 'created_by' => $this->user->id]);
+        $role = $this->roleWithPermissions('search_contracts_ok', ['reports.bank_cashflow.reconcile']);
+        $this->user->roles()->sync([$role->id]);
+
+        $res = $this->getJson('/api/search/contracts?q=HD-SC1');
+        $res->assertOk();
+        $this->assertGreaterThanOrEqual(1, count($res->json('data')));
+    }
+
+    public function test_search_users_rejects_unauthenticated(): void
+    {
+        auth()->logout();
+        $this->getJson('/api/search/users')->assertUnauthorized();
+    }
+
+    /** Endpoint mới lộ PII (tên+email) — user chỉ có quyền view (không reconcile) không được enumerate. */
+    public function test_search_users_rejects_user_without_reconcile_permission(): void
+    {
+        $lowRole = $this->roleWithPermissions('search_users_low', ['reports.bank_cashflow.view']);
+        $this->user->roles()->sync([$lowRole->id]);
+
+        $this->getJson('/api/search/users?q=a')->assertForbidden();
+    }
+
+    public function test_search_users_allows_user_with_reconcile_permission(): void
+    {
+        $role = $this->roleWithPermissions('search_users_ok', ['reports.bank_cashflow.reconcile']);
+        $this->user->roles()->sync([$role->id]);
+
+        $res = $this->getJson('/api/search/users?q=' . urlencode($this->user->name));
+        $res->assertOk();
+        $this->assertGreaterThanOrEqual(1, count($res->json('data')));
+    }
+
+    /**
+     * Route dùng chung 2 module: Purchasing/SupplierAdvances/Form.vue (cần purchasing.view)
+     * và ClassifyModal.vue của Cash Flow (cần reports.bank_cashflow.reconcile). Cả 2 phía
+     * phải tiếp tục hoạt động — không được siết chỉ còn 1 quyền (sẽ phá luồng tạm ứng NCC).
+     */
+    public function test_search_purchase_contracts_allows_purchasing_view_caller_no_regression(): void
+    {
+        $supplier = Supplier::create(['code' => 'NCC-SPC1', 'name' => 'NCC Search PC', 'is_active' => true]);
+        PurchaseContract::create([
+            'code' => 'HD-MH-SPC1', 'supplier_id' => $supplier->id, 'title' => 'HĐ mua search test',
+            'value' => 1_000_000, 'start_date' => '2026-01-01', 'end_date' => '2026-12-31',
+            'status' => \App\Enums\PurchaseContractStatus::Draft, 'created_by' => $this->user->id,
+        ]);
+        $role = $this->roleWithPermissions('search_pc_purchasing', ['purchasing.view']);
+        $this->user->roles()->sync([$role->id]);
+
+        $res = $this->getJson('/api/search/purchase-contracts?q=HD-MH-SPC1');
+        $res->assertOk();
+        $this->assertGreaterThanOrEqual(1, count($res->json('data')));
+    }
+
+    public function test_search_purchase_contracts_allows_cashflow_reconcile_caller(): void
+    {
+        $supplier = Supplier::create(['code' => 'NCC-SPC2', 'name' => 'NCC Search PC 2', 'is_active' => true]);
+        PurchaseContract::create([
+            'code' => 'HD-MH-SPC2', 'supplier_id' => $supplier->id, 'title' => 'HĐ mua search test 2',
+            'value' => 1_000_000, 'start_date' => '2026-01-01', 'end_date' => '2026-12-31',
+            'status' => \App\Enums\PurchaseContractStatus::Draft, 'created_by' => $this->user->id,
+        ]);
+        $role = $this->roleWithPermissions('search_pc_cashflow', ['reports.bank_cashflow.reconcile']);
+        $this->user->roles()->sync([$role->id]);
+
+        $res = $this->getJson('/api/search/purchase-contracts?q=HD-MH-SPC2');
+        $res->assertOk();
+        $this->assertGreaterThanOrEqual(1, count($res->json('data')));
+    }
+
+    public function test_search_purchase_contracts_rejects_user_with_neither_permission(): void
+    {
+        $role = $this->roleWithPermissions('search_pc_none', ['reports.bank_cashflow.view']);
+        $this->user->roles()->sync([$role->id]);
+
+        $this->getJson('/api/search/purchase-contracts?q=HD')->assertForbidden();
+    }
+
+    public function test_search_purchase_contracts_rejects_unauthenticated(): void
+    {
+        auth()->logout();
+        $this->getJson('/api/search/purchase-contracts')->assertUnauthorized();
     }
 }
