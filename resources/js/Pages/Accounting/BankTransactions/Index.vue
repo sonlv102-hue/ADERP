@@ -73,12 +73,12 @@
       <!-- Filters -->
       <div class="bg-white rounded-xl shadow-sm p-4 mb-4 flex flex-wrap gap-3 items-end">
         <div class="flex-1 min-w-[200px]">
-          <label class="form-label text-xs">TK đối tác</label>
+          <label class="form-label text-xs">Đối ứng ngân hàng</label>
           <input v-model="filters.counterpart" @keydown.enter="applyFilters"
-            class="form-input text-sm" placeholder="Số TK, tên người chuyển/nhận..." />
+            class="form-input text-sm" placeholder="Tên người chuyển/nhận, số TK, ngân hàng..." />
         </div>
         <div>
-          <label class="form-label text-xs">Loại GD</label>
+          <label class="form-label text-xs">Loại GD (đối soát tự động)</label>
           <select v-model="filters.tx_type" class="form-input text-sm">
             <option value="">Tất cả</option>
             <option value="supplier_payment">Thanh toán NCC</option>
@@ -127,7 +127,8 @@
             <tr>
               <th class="px-4 py-3 text-left w-24">Ngày</th>
               <th class="px-4 py-3 text-left">Diễn giải / Đối tác</th>
-              <th class="px-4 py-3 text-left w-28">Loại GD</th>
+              <th class="px-4 py-3 text-left w-40">Đối ứng ngân hàng</th>
+              <th class="px-4 py-3 text-left w-56">Loại GD</th>
               <th class="px-4 py-3 text-right w-32">Tiền vào (+)</th>
               <th class="px-4 py-3 text-right w-32">Tiền ra (−)</th>
               <th class="px-4 py-3 text-left w-44">Đối soát tự động</th>
@@ -149,22 +150,45 @@
                   <span class="text-xs text-amber-700">{{ tx.alert_note }}</span>
                 </div>
                 <div class="text-sm text-gray-800">{{ tx.description }}</div>
-                <div v-if="tx.counterpart_account" class="text-xs text-gray-400 mt-0.5">
-                  <span class="font-mono">{{ tx.counterpart_account }}</span>
-                  <span v-if="tx.counterpart_name"> · {{ tx.counterpart_name }}</span>
-                  <span v-if="tx.counterpart_bank"> ({{ tx.counterpart_bank.trim() }})</span>
-                </div>
               </td>
-              <td class="px-4 py-3">
-                <span class="inline-flex px-2 py-0.5 rounded text-xs font-medium border"
-                  :class="{
-                    'bg-orange-50 text-orange-700 border-orange-200': tx.tx_type === 'supplier_payment',
-                    'bg-purple-50 text-purple-700 border-purple-200': tx.tx_type === 'internal_transfer',
-                    'bg-green-50 text-green-700 border-green-200':   tx.tx_type === 'customer_receipt',
-                    'bg-slate-100 text-slate-500 border-slate-200':  tx.tx_type === 'unknown' || !tx.tx_type,
-                  }">
-                  {{ tx.tx_type_label }}
-                </span>
+              <!-- Đối ứng ngân hàng (bank counterparty — dữ liệu sao kê thô, KHÔNG phải TK kế toán đối ứng) -->
+              <td class="px-4 py-3 cursor-pointer hover:bg-gray-100/70" @click="openCounterpartyDetail(tx)">
+                <template v-if="tx.counterpart_account || tx.counterpart_name">
+                  <div class="text-xs text-gray-400">{{ tx.credit > 0 ? 'Người chuyển' : 'Người nhận' }}</div>
+                  <div class="text-sm text-gray-800 truncate max-w-[160px]" :title="tx.counterpart_name">{{ tx.counterpart_name || '—' }}</div>
+                  <div class="text-xs text-gray-500 truncate max-w-[160px]">{{ tx.counterpart_bank ? tx.counterpart_bank.trim() : '' }}</div>
+                  <div class="text-xs text-gray-400 font-mono">{{ tx.counterpart_account }}</div>
+                </template>
+                <span v-else class="text-xs text-gray-300">—</span>
+              </td>
+              <!-- Loại GD = phân loại dòng tiền quản trị (KHÔNG phải tx_type đối soát cũ) -->
+              <td class="px-4 py-3 text-xs">
+                <!-- Đã Admin xác nhận -->
+                <div v-if="tx.cash_flow_classification.status === 'confirmed'" class="text-teal-700">
+                  <span class="text-teal-500">✓</span>
+                  {{ tx.cash_flow_classification.category || tx.cash_flow_classification.party }}
+                  <div v-if="tx.cash_flow_classification.category && tx.cash_flow_classification.party" class="text-gray-500 mt-0.5">{{ tx.cash_flow_classification.party }}</div>
+                </div>
+                <!-- Có gợi ý, chưa xác nhận -->
+                <div v-else-if="tx.cash_flow_classification.status === 'suggested' && can('accounting.manage')">
+                  <div>
+                    <span :class="tx.cash_flow_classification.confidence >= 90 ? 'text-green-700 font-medium' : 'text-amber-600'">
+                      {{ tx.cash_flow_classification.confidence >= 90 ? 'Đề xuất chắc chắn:' : 'Có thể là:' }}
+                    </span>
+                    {{ tx.cash_flow_classification.category }}
+                    <span v-if="tx.cash_flow_classification.party" class="text-gray-500">— {{ tx.cash_flow_classification.party }}</span>
+                    <span class="text-gray-400">({{ tx.cash_flow_classification.confidence }}%)</span>
+                  </div>
+                  <div class="mt-0.5">
+                    <button @click="confirmSuggestion(tx)" class="text-primary-600 hover:underline font-medium">Xác nhận</button>
+                    <button v-if="tx.cash_flow_classification.confidence < 90" @click="openClassify(tx)" class="ml-2 text-gray-500 hover:underline">Sửa</button>
+                  </div>
+                  <div v-if="tx.classification_suggestion?.reasons?.length" class="text-gray-400 mt-0.5">
+                    <div v-for="(reason, idx) in tx.classification_suggestion.reasons" :key="idx">✓ {{ reason }}</div>
+                  </div>
+                </div>
+                <!-- Chưa phân loại, không đủ dữ liệu gợi ý -->
+                <span v-else class="text-gray-300">Chưa phân loại</span>
               </td>
               <td class="px-4 py-3 text-right text-green-600 font-medium text-sm">
                 {{ tx.credit > 0 ? formatVnd(tx.credit) : '' }}
@@ -199,9 +223,9 @@
                   <button @click="createJe(tx)" class="text-xs text-green-600 hover:underline font-medium mr-2">Tạo BT</button>
                   <button @click="ignore(tx)" class="text-xs text-gray-400 hover:underline">Hủy</button>
                 </template>
-                <!-- Manual allocation flow -->
+                <!-- Xác nhận dòng tiền (phân loại quản trị, độc lập kế toán/JE) -->
                 <template v-else-if="['unmatched','ignored','cancelled'].includes(tx.match_status)">
-                  <button @click="openReconcile(tx)" class="text-xs text-primary-600 hover:underline">Đối chiếu</button>
+                  <button @click="openClassify(tx)" class="text-xs text-teal-600 hover:underline">Xác nhận dòng tiền</button>
                 </template>
                 <template v-else-if="tx.match_status === 'partially_matched'">
                   <button @click="openReconcile(tx)" class="text-xs text-primary-600 hover:underline mr-2">Xem phân bổ</button>
@@ -216,7 +240,7 @@
               </td>
             </tr>
             <tr v-if="transactions.data.length === 0">
-              <td :colspan="can('accounting.manage') ? 9 : 8" class="px-4 py-10 text-center text-gray-400">
+              <td :colspan="can('accounting.manage') ? 10 : 9" class="px-4 py-10 text-center text-gray-400">
                 Chưa có giao dịch
               </td>
             </tr>
@@ -295,6 +319,24 @@
         :bank-account-id="bankAccount.id"
         @close="reconcileTarget = null"
       />
+
+      <!-- Xác nhận dòng tiền (phân loại quản trị) -->
+      <ClassifyModal
+        v-if="classifyTarget"
+        :transaction="classifyTarget"
+        :categories="cashFlowCategories"
+        submit-route="accounting.bank-accounts.transactions.classify"
+        :submit-route-params="[bankAccount.id, classifyTarget.id]"
+        @close="classifyTarget = null"
+        @saved="classifyTarget = null"
+      />
+
+      <!-- Chi tiết đối ứng ngân hàng -->
+      <CounterpartyDetailModal
+        v-if="counterpartyTarget"
+        :transaction="counterpartyTarget"
+        @close="counterpartyTarget = null"
+      />
     </div>
   </AppLayout>
 </template>
@@ -308,6 +350,8 @@ import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import ExportExcelButton from '@/Components/Shared/ExportExcelButton.vue';
 import ReconciliationModal from './ReconciliationModal.vue';
 import MultiFileImportModal from './MultiFileImportModal.vue';
+import ClassifyModal from '../../Reports/CompanyCashFlow/ClassifyModal.vue';
+import CounterpartyDetailModal from './CounterpartyDetailModal.vue';
 import { usePermission } from '@/composables/usePermission';
 
 const { hasPermission: can } = usePermission();
@@ -319,6 +363,7 @@ const props = defineProps({
   statuses:     Array,
   matchStatuses: Array,
   alertCount:   { type: Number, default: 0 },
+  cashFlowCategories: { type: Array, default: () => [] },
 });
 
 const filters = ref({
@@ -395,8 +440,23 @@ function txTypeLabel(type) {
 
 const reconcileTarget  = ref(null);
 const showRecategorize = ref(false);
+const classifyTarget   = ref(null);
+const counterpartyTarget = ref(null);
 
 function openReconcile(tx) { reconcileTarget.value = tx; }
+function openClassify(tx) { classifyTarget.value = tx; }
+function openCounterpartyDetail(tx) { counterpartyTarget.value = tx; }
+
+function confirmSuggestion(tx) {
+  const s = tx.classification_suggestion;
+  router.post(route('accounting.bank-accounts.transactions.classify', [props.bankAccount.id, tx.id]), {
+    cash_flow_category_id: s.category_id,
+    party_type: s.party_type,
+    party_id: s.party_id,
+    party_name: s.party_name,
+    expected_updated_at: tx.updated_at,
+  }, { preserveScroll: true });
+}
 
 function cancelAlloc(tx) {
   if (!confirm('Hủy đối chiếu và tạo bút toán đảo?')) return;

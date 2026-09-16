@@ -628,6 +628,9 @@ Route::middleware('auth')->group(function () {
         Route::get( 'bank-accounts/{bankAccount}/transactions/{bankTransaction}/reconcile-data',   [BankTransactionController::class, 'reconcileData'])->name('bank-accounts.transactions.reconcile-data')->middleware('can:accounting.manage');
         Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/allocate',         [BankTransactionController::class, 'allocate'])->name('bank-accounts.transactions.allocate')->middleware('can:accounting.manage');
         Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/cancel-allocation',[BankTransactionController::class, 'cancelAllocation'])->name('bank-accounts.transactions.cancel-allocation')->middleware('can:accounting.manage');
+        // Xác nhận dòng tiền (phân loại quản trị, độc lập với kế toán/JE)
+        Route::post('bank-accounts/{bankAccount}/transactions/{bankTransaction}/classify', [BankTransactionController::class, 'classify'])->name('bank-accounts.transactions.classify')->middleware('can:accounting.manage');
+        Route::get('bank-accounts/{bankAccount}/transactions/{bankTransaction}/classification-suggestion', [BankTransactionController::class, 'classificationSuggestion'])->name('bank-accounts.transactions.classification-suggestion')->middleware('can:accounting.manage');
         // Tài khoản nội bộ
         Route::resource('internal-bank-accounts', InternalBankAccountController::class)->only(['index', 'store', 'update', 'destroy'])->middleware('can:accounting.manage');
         // Báo cáo chuyển khoản nội bộ

@@ -4,12 +4,16 @@ namespace App\Http\Controllers\Accounting;
 
 use App\Enums\BankTransactionMatchStatus;
 use App\Enums\BankTransactionStatus;
+use App\Helpers\PartyTypeLabels;
 use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use App\Models\BankTransaction;
+use App\Models\CashFlowCategory;
 use App\Services\BankReconciliationService;
 use App\Services\BankTransactionAllocationService;
+use App\Services\BankTransactionClassificationSuggestionService;
 use App\Services\BankTransactionMatchingService;
+use App\Services\CashFlowClassificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -23,6 +27,7 @@ class BankTransactionController extends Controller
         private BankReconciliationService $service,
         private BankTransactionMatchingService $matching,
         private BankTransactionAllocationService $allocationService,
+        private BankTransactionClassificationSuggestionService $suggestionService,
     ) {}
 
     public function index(Request $request, BankAccount $bankAccount): Response
@@ -35,7 +40,7 @@ class BankTransactionController extends Controller
         $counterpart = $request->input('counterpart');
 
         $query = $bankAccount->transactions()
-            ->with('journalEntry:id,code')
+            ->with(['journalEntry:id,code', 'cashFlowCategory', 'project', 'responsibleUser'])
             ->orderByDesc('transaction_date')
             ->orderByDesc('id');
 
@@ -48,7 +53,8 @@ class BankTransactionController extends Controller
             $kw = '%' . $counterpart . '%';
             $query->where(function ($q) use ($kw) {
                 $q->where('counterpart_account', 'ilike', $kw)
-                  ->orWhere('counterpart_name', 'ilike', $kw);
+                  ->orWhere('counterpart_name', 'ilike', $kw)
+                  ->orWhere('counterpart_bank', 'ilike', $kw);
             });
         }
 
@@ -57,7 +63,10 @@ class BankTransactionController extends Controller
             ->whereNotNull('alert_note')
             ->count();
 
-        $transactions = $query->paginate(30)->through(fn ($t) => [
+        $paginated   = $query->paginate(30);
+        $suggestions = $this->suggestionService->suggestBatch($paginated->getCollection());
+
+        $transactions = $paginated->through(fn ($t) => [
             'id'                  => $t->id,
             'transaction_date'    => $t->transaction_date?->toDateString(),
             'description'         => $t->description,
@@ -87,6 +96,28 @@ class BankTransactionController extends Controller
             'confidence_score'    => $t->confidence_score,
             'suggested_tx_type'   => $t->suggested_tx_type,
             'match_note'          => $t->match_note,
+            // Phân loại dòng tiền quản trị — độc lập với matching/JE kế toán ở trên
+            'category_id'         => $t->cash_flow_category_id,
+            'category_name'       => $t->cashFlowCategory?->name,
+            'party_type'          => $t->party_type,
+            'party_id'            => $t->party_id,
+            'party_name'          => $t->party_name,
+            'party_type_label'    => PartyTypeLabels::label($t->party_type),
+            'project_id'          => $t->project_id,
+            'project_name'        => $t->project?->name,
+            'contract_type'       => $t->contract_type,
+            'contract_id'         => $t->contract_id,
+            'contract_label'      => $t->contractLabel(),
+            'responsible_user_id' => $t->responsible_user_id,
+            'responsible_user_name' => $t->responsibleUser?->name,
+            'cash_flow_note'      => $t->cash_flow_note,
+            'is_paired'           => $t->paired_transaction_id !== null,
+            'reconcile_status'    => $t->reconcileStatus()->value,
+            'updated_at'          => $t->updated_at?->toJSON(),
+            // Gợi ý phân loại dòng tiền (chỉ có ý nghĩa khi chưa phân loại — category_id/party_type null)
+            'classification_suggestion' => $suggestions[$t->id] ?? null,
+            // Trạng thái phân loại dòng tiền quản trị dùng cho cột "Loại GD" — gộp confirmed/suggested/unclassified
+            'cash_flow_classification' => $this->cashFlowClassificationDto($t, $suggestions[$t->id] ?? null),
         ]);
 
         return Inertia::render('Accounting/BankTransactions/Index', [
@@ -103,7 +134,34 @@ class BankTransactionController extends Controller
             'filters'      => $request->only(['counterpart', 'tx_type', 'status', 'match_status', 'date_from', 'date_to']),
             'statuses'     => collect(BankTransactionStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
             'matchStatuses' => collect(BankTransactionMatchStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()]),
+            'cashFlowCategories' => CashFlowCategory::query()->active()->orderBy('sort_order')->get(['id', 'code', 'name', 'direction']),
         ]);
+    }
+
+    /**
+     * DTO gộp cho cột "Loại GD" (= phân loại dòng tiền quản trị, KHÔNG phải tx_type kế toán cũ).
+     * status: confirmed (Admin đã xác nhận) | suggested (có gợi ý, chờ xác nhận) | unclassified.
+     */
+    private function cashFlowClassificationDto(BankTransaction $t, ?array $suggestion): array
+    {
+        if ($t->cash_flow_category_id || $t->party_type) {
+            return [
+                'status'   => 'confirmed',
+                'category' => $t->cashFlowCategory?->name,
+                'party'    => $t->party_name,
+            ];
+        }
+
+        if ($suggestion && $suggestion['suggestion']) {
+            return [
+                'status'     => 'suggested',
+                'category'   => $suggestion['category_name'],
+                'party'      => $suggestion['party_name'],
+                'confidence' => $suggestion['confidence'],
+            ];
+        }
+
+        return ['status' => 'unclassified', 'category' => null, 'party' => null];
     }
 
     public function store(Request $request, BankAccount $bankAccount): RedirectResponse
@@ -311,5 +369,46 @@ class BankTransactionController extends Controller
         if ($type === 'customer') return \App\Models\Customer::find($id)?->name ?? '';
         if ($type === 'supplier') return \App\Models\Supplier::find($id)?->name ?? '';
         return '';
+    }
+
+    /**
+     * POST: Xác nhận dòng tiền — phân loại quản trị (nguồn tiền đến/đi đâu),
+     * lưu độc lập qua CashFlowClassificationService. KHÔNG tạo/tác động Journal Entry.
+     */
+    public function classify(Request $request, BankAccount $bankAccount, BankTransaction $bankTransaction, CashFlowClassificationService $service): RedirectResponse
+    {
+        $this->authorize('accounting.manage');
+
+        $data = $request->validate([
+            'cash_flow_category_id' => 'nullable|exists:cash_flow_categories,id',
+            'project_id'             => 'nullable|exists:projects,id',
+            'contract_type'          => 'nullable|in:contract,purchase_contract',
+            'contract_id'            => 'nullable|integer|min:1',
+            'party_type'             => 'nullable|in:customer,supplier,employee,shareholder,bank,other_individual,other_entity',
+            'party_id'               => 'nullable|integer|min:1',
+            'party_name'             => 'nullable|string|max:255',
+            'responsible_user_id'    => 'nullable|exists:users,id',
+            'cash_flow_note'         => 'nullable|string|max:2000',
+            'expected_updated_at'    => 'nullable|date',
+        ]);
+
+        try {
+            $updated = $service->update($bankTransaction, $data);
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage())->withInput();
+        }
+
+        // Học từ lựa chọn cuối cùng của Admin — lần sau gợi ý đúng cho cùng số TK đối ứng.
+        $this->suggestionService->learn($updated, auth()->id());
+
+        return back()->with('success', 'Đã xác nhận dòng tiền.');
+    }
+
+    /** GET: Gợi ý phân loại dòng tiền cho 1 giao dịch, dựa trên dữ liệu đối ứng ngân hàng. */
+    public function classificationSuggestion(BankAccount $bankAccount, BankTransaction $bankTransaction): JsonResponse
+    {
+        $this->authorize('accounting.manage');
+
+        return response()->json($this->suggestionService->suggest($bankTransaction));
     }
 }

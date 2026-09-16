@@ -117,6 +117,8 @@ import { formatVnd } from '@/composables/useCurrency';
 const props = defineProps({
   transaction: { type: Object, required: true },
   categories: { type: Array, default: () => [] },
+  submitRoute: { type: String, default: 'reports.company-cashflow.classify' },
+  submitRouteParams: { type: [Array, Object, Number, String], default: null },
 });
 const emit = defineEmits(['close', 'saved']);
 
@@ -144,7 +146,8 @@ const partySearchEntity = computed(() => (form.party_type === 'customer' ? 'cust
 const partyTypeLabel = computed(() => PARTY_TYPE_LABELS[form.party_type] ?? '');
 
 function submit() {
-  form.post(route('reports.company-cashflow.classify', props.transaction.id), {
+  const params = props.submitRouteParams ?? props.transaction.id;
+  form.post(route(props.submitRoute, params), {
     preserveScroll: true,
     onSuccess: () => emit('saved'),
   });
