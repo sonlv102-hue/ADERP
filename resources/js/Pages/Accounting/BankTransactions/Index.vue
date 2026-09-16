@@ -1,6 +1,6 @@
 <template>
   <AppLayout :title="`Giao dịch — ${bankAccount.name}`">
-    <div class="max-w-6xl mx-auto">
+    <div class="w-full">
 
       <!-- Header -->
       <div class="flex items-center gap-4 mb-6">
@@ -125,16 +125,16 @@
         <table class="min-w-full text-sm [table-layout:fixed]">
           <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
             <tr>
-              <th class="px-4 py-3 text-left w-24">Ngày</th>
-              <th class="px-4 py-3 text-left w-72">Diễn giải / Đối tác</th>
-              <th class="px-4 py-3 text-left w-40">Đối ứng ngân hàng</th>
-              <th class="px-4 py-3 text-left w-56">Loại GD</th>
-              <th class="px-4 py-3 text-right w-32">Tiền vào (+)</th>
-              <th class="px-4 py-3 text-right w-32">Tiền ra (−)</th>
-              <th class="px-4 py-3 text-left w-44">Đối soát tự động</th>
-              <th class="px-4 py-3 text-center w-24">ĐC kế toán</th>
-              <th class="px-4 py-3 text-left w-24">Phiếu KT</th>
-              <th v-if="can('accounting.manage')" class="px-4 py-3 w-52">&nbsp;</th>
+              <th class="px-4 py-3 text-left w-[90px]">Ngày</th>
+              <th class="px-4 py-3 text-left min-w-[280px]">Diễn giải / Đối tác</th>
+              <th class="px-4 py-3 text-left w-[250px]">Đối ứng ngân hàng</th>
+              <th class="px-4 py-3 text-left w-[220px]">Loại GD</th>
+              <th class="px-4 py-3 text-right w-[130px]">Tiền vào (+)</th>
+              <th class="px-4 py-3 text-right w-[130px]">Tiền ra (−)</th>
+              <th class="px-4 py-3 text-left w-[130px]">Đối soát tự động</th>
+              <th class="px-4 py-3 text-center w-[130px]">ĐC kế toán</th>
+              <th class="px-4 py-3 text-left w-[120px]">Phiếu KT</th>
+              <th v-if="can('accounting.manage')" class="px-4 py-3 w-[200px]">&nbsp;</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
