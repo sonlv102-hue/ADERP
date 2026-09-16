@@ -122,11 +122,11 @@
 
       <!-- Transactions table -->
       <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
-        <table class="min-w-full text-sm">
+        <table class="min-w-full text-sm [table-layout:fixed]">
           <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
             <tr>
               <th class="px-4 py-3 text-left w-24">Ngày</th>
-              <th class="px-4 py-3 text-left">Diễn giải / Đối tác</th>
+              <th class="px-4 py-3 text-left w-72">Diễn giải / Đối tác</th>
               <th class="px-4 py-3 text-left w-40">Đối ứng ngân hàng</th>
               <th class="px-4 py-3 text-left w-56">Loại GD</th>
               <th class="px-4 py-3 text-right w-32">Tiền vào (+)</th>
@@ -134,7 +134,7 @@
               <th class="px-4 py-3 text-left w-44">Đối soát tự động</th>
               <th class="px-4 py-3 text-center w-24">ĐC kế toán</th>
               <th class="px-4 py-3 text-left w-24">Phiếu KT</th>
-              <th v-if="can('accounting.manage')" class="px-4 py-3 w-40"></th>
+              <th v-if="can('accounting.manage')" class="px-4 py-3 w-52">&nbsp;</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
@@ -149,14 +149,14 @@
                   </svg>
                   <span class="text-xs text-amber-700">{{ tx.alert_note }}</span>
                 </div>
-                <div class="text-sm text-gray-800">{{ tx.description }}</div>
+                <div class="text-sm text-gray-800 break-words">{{ tx.description }}</div>
               </td>
               <!-- Đối ứng ngân hàng (bank counterparty — dữ liệu sao kê thô, KHÔNG phải TK kế toán đối ứng) -->
               <td class="px-4 py-3 cursor-pointer hover:bg-gray-100/70" @click="openCounterpartyDetail(tx)">
                 <template v-if="tx.counterpart_account || tx.counterpart_name">
                   <div class="text-xs text-gray-400">{{ tx.credit > 0 ? 'Người chuyển' : 'Người nhận' }}</div>
-                  <div class="text-sm text-gray-800 truncate max-w-[160px]" :title="tx.counterpart_name">{{ tx.counterpart_name || '—' }}</div>
-                  <div class="text-xs text-gray-500 truncate max-w-[160px]">{{ tx.counterpart_bank ? tx.counterpart_bank.trim() : '' }}</div>
+                  <div class="text-sm text-gray-800 truncate max-w-full" :title="tx.counterpart_name">{{ tx.counterpart_name || '—' }}</div>
+                  <div class="text-xs text-gray-500 truncate max-w-full">{{ tx.counterpart_bank ? tx.counterpart_bank.trim() : '' }}</div>
                   <div class="text-xs text-gray-400 font-mono">{{ tx.counterpart_account }}</div>
                 </template>
                 <span v-else class="text-xs text-gray-300">—</span>
@@ -199,7 +199,7 @@
               <!-- Matching column -->
               <td class="px-4 py-3">
                 <StatusBadge :color="tx.match_status_color" class="text-xs">{{ tx.match_status_label }}</StatusBadge>
-                <div v-if="tx.matched_party_name" class="text-xs text-gray-600 mt-0.5 truncate max-w-[160px]">
+                <div v-if="tx.matched_party_name" class="text-xs text-gray-600 mt-0.5 truncate max-w-full">
                   {{ tx.matched_party_name }}
                   <span v-if="tx.confidence_score" class="text-gray-400">({{ tx.confidence_score }}%)</span>
                 </div>
