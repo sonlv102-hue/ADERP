@@ -234,10 +234,12 @@ Tất cả đã có `min-h-[40px] touch-manipulation` (mobile-friendly).
 
 ### Wrapper
 
+Dùng `DataTableWrapper` (`Components/Shared/DataTableWrapper.vue`) thay cho div `overflow-x-auto` viết tay — nó là class `erp-table-wrap` (`app.css`) đóng gói sẵn, nhận `class` như card wrapper bình thường và có prop `max-height` tùy chọn (bảng dữ liệu lớn cần scroll dọc riêng, giữ header cố định).
+
 ```vue
-<div class="bg-white rounded-xl border border-gray-200 overflow-x-auto">
+<DataTableWrapper class="bg-white rounded-xl border border-gray-200">
   <table class="min-w-full text-sm">
-    <thead class="bg-gray-50 border-b border-gray-200">
+    <thead class="bg-gray-50 border-b border-gray-200 erp-table-sticky-head">
       <tr>
         <th class="text-left px-5 py-3 font-semibold text-gray-600">...</th>
         <th class="px-5 py-3"></th> <!-- action column: no text -->
@@ -287,12 +289,15 @@ Tất cả đã có `min-h-[40px] touch-manipulation` (mobile-friendly).
 
 ### Rules
 
-1. **`overflow-x-auto`** trên wrapper — không dùng `overflow-hidden`.
+1. **`DataTableWrapper`** (hoặc tối thiểu `overflow-x-auto`) trên wrapper — không dùng `overflow-hidden`.
 2. **`min-w-full`** trên `<table>` — không dùng `w-full`.
 3. Empty state: luôn có `<tr v-if="!items.data?.length">` với colspan đúng.
 4. Action column luôn là cột cuối cùng, `text-right`.
 5. Không để actions dàn thành nhiều dòng — dùng `whitespace-nowrap`.
 6. Header không có data: `<th class="px-5 py-3"></th>` (trống).
+7. Không dùng `table-layout: fixed`. Cột cần đảm bảo độ rộng thì dùng `min-w-[Npx]` trên `<th>` (không phải `w-[Npx]`) để layout co giãn tự nhiên theo nội dung, tràn thì để wrapper tự scroll ngang thay vì bóp cột.
+8. Bảng cần giữ header khi cuộn dọc (dữ liệu nhiều dòng): thêm class `erp-table-sticky-head` vào `<thead>`.
+9. Page container bao ngoài (nơi đặt `<AppLayout><div>`) dùng `w-full` — không dùng `max-w-*` cố định trừ khi nội dung thực sự cần giới hạn đọc (form 1 cột hẹp).
 
 ---
 

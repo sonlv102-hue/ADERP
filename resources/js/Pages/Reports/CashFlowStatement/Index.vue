@@ -1,6 +1,6 @@
 <template>
   <AppLayout>
-    <div class="space-y-5 max-w-7xl mx-auto">
+    <div class="space-y-5 w-full">
 
       <!-- Page header -->
       <div class="flex justify-between items-start flex-wrap gap-3">

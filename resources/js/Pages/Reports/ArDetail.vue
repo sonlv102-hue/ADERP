@@ -1,6 +1,6 @@
 ﻿<template>
   <AppLayout title="Sổ chi tiết công nợ phải thu">
-    <div class="max-w-5xl mx-auto">
+    <div class="w-full">
       <h1 class="text-2xl font-bold text-gray-900 mb-6">Sổ chi tiết công nợ phải thu (TK 131)</h1>
 
       <!-- Filters -->
@@ -68,9 +68,9 @@
         </div>
 
         <!-- Detail table -->
-        <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
+        <DataTableWrapper class="bg-white rounded-xl shadow-sm">
           <table class="min-w-full text-sm">
-            <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
+            <thead class="bg-gray-50 text-gray-600 uppercase text-xs erp-table-sticky-head">
               <tr>
                 <th class="px-4 py-3 text-left w-28">Ngày</th>
                 <th class="px-4 py-3 text-left w-28">Số CT</th>
@@ -112,7 +112,7 @@
               </tr>
             </tbody>
           </table>
-        </div>
+        </DataTableWrapper>
       </template>
     </div>
   </AppLayout>
@@ -122,6 +122,7 @@
 import { ref, computed } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
+import DataTableWrapper from '@/Components/Shared/DataTableWrapper.vue';
 
 const props = defineProps({
   customers:    Array,

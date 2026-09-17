@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 @layer base {
+    html,
+    body {
+        overflow-x: hidden;
+    }
     body {
         @apply bg-slate-100 text-slate-800 antialiased;
         font-family: 'Segoe UI', ui-sans-serif, system-ui, sans-serif;
@@ -85,6 +89,16 @@
     /* Usage: replace overflow-hidden on table wrapper divs with overflow-x-auto */
     .erp-table-wrap {
         @apply overflow-x-auto;
+    }
+
+    /* ─── Sticky table header (vertical scroll) ───
+       Apply to <thead>. background-color:inherit picks up the thead's own bg class
+       (e.g. bg-gray-50) since th does not inherit background-color by default. */
+    .erp-table-sticky-head th {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background-color: inherit;
     }
 
     /* ─── Badges ─── */

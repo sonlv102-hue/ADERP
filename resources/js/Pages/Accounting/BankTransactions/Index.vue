@@ -121,20 +121,20 @@
       </div>
 
       <!-- Transactions table -->
-      <div class="bg-white rounded-xl shadow-sm overflow-x-auto">
-        <table class="min-w-full text-sm [table-layout:fixed]">
-          <thead class="bg-gray-50 text-gray-600 uppercase text-xs">
+      <DataTableWrapper class="bg-white rounded-xl shadow-sm">
+        <table class="min-w-full text-sm">
+          <thead class="bg-gray-50 text-gray-600 uppercase text-xs erp-table-sticky-head">
             <tr>
-              <th class="px-4 py-3 text-left w-[90px]">Ngày</th>
+              <th class="px-4 py-3 text-left min-w-[90px]">Ngày</th>
               <th class="px-4 py-3 text-left min-w-[280px]">Diễn giải / Đối tác</th>
-              <th class="px-4 py-3 text-left w-[250px]">Đối ứng ngân hàng</th>
-              <th class="px-4 py-3 text-left w-[220px]">Loại GD</th>
-              <th class="px-4 py-3 text-right w-[130px]">Tiền vào (+)</th>
-              <th class="px-4 py-3 text-right w-[130px]">Tiền ra (−)</th>
-              <th class="px-4 py-3 text-left w-[130px]">Đối soát tự động</th>
-              <th class="px-4 py-3 text-center w-[130px]">ĐC kế toán</th>
-              <th class="px-4 py-3 text-left w-[120px]">Phiếu KT</th>
-              <th v-if="can('accounting.manage')" class="px-4 py-3 w-[200px]">&nbsp;</th>
+              <th class="px-4 py-3 text-left min-w-[250px]">Đối ứng ngân hàng</th>
+              <th class="px-4 py-3 text-left min-w-[220px]">Loại GD</th>
+              <th class="px-4 py-3 text-right min-w-[130px]">Tiền vào (+)</th>
+              <th class="px-4 py-3 text-right min-w-[130px]">Tiền ra (−)</th>
+              <th class="px-4 py-3 text-left min-w-[130px]">Đối soát tự động</th>
+              <th class="px-4 py-3 text-center min-w-[130px]">ĐC kế toán</th>
+              <th class="px-4 py-3 text-left min-w-[120px]">Phiếu KT</th>
+              <th v-if="can('accounting.manage')" class="px-4 py-3 min-w-[200px]">&nbsp;</th>
             </tr>
           </thead>
           <tbody class="divide-y divide-gray-100">
@@ -247,7 +247,7 @@
           </tbody>
         </table>
         <Pagination :links="transactions.links" class="px-4 py-3" />
-      </div>
+      </DataTableWrapper>
 
       <!-- Import Excel modal (multi-file) -->
       <MultiFileImportModal
@@ -346,6 +346,7 @@ import { ref } from 'vue';
 import { router, useForm, Link } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
+import DataTableWrapper from '@/Components/Shared/DataTableWrapper.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import ExportExcelButton from '@/Components/Shared/ExportExcelButton.vue';
 import ReconciliationModal from './ReconciliationModal.vue';

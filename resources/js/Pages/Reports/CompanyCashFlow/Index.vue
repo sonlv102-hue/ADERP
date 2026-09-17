@@ -67,9 +67,9 @@
       <!-- Tổng hợp nguồn vào/ra -->
       <div class="rounded-xl border border-gray-200 bg-white p-4">
         <h2 class="mb-3 text-sm font-semibold text-gray-700">Tổng hợp theo nguồn tiền / mục đích chi</h2>
-        <div class="overflow-x-auto">
+        <DataTableWrapper>
           <table class="min-w-full text-sm">
-            <thead class="border-b border-gray-200 bg-gray-50">
+            <thead class="border-b border-gray-200 bg-gray-50 erp-table-sticky-head">
               <tr>
                 <th class="px-4 py-2 text-left font-semibold text-gray-600">Nguồn tiền / Mục đích</th>
                 <th class="px-4 py-2 text-right font-semibold text-gray-600">Số GD</th>
@@ -89,13 +89,13 @@
               </tr>
             </tbody>
           </table>
-        </div>
+        </DataTableWrapper>
       </div>
 
       <!-- Bảng giao dịch -->
-      <div class="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+      <DataTableWrapper class="rounded-xl border border-gray-200 bg-white">
         <table class="min-w-full text-sm">
-          <thead class="border-b border-gray-200 bg-gray-50">
+          <thead class="border-b border-gray-200 bg-gray-50 erp-table-sticky-head">
             <tr>
               <th class="px-4 py-2 text-left font-semibold text-gray-600">Ngày</th>
               <th class="px-4 py-2 text-left font-semibold text-gray-600">Tài khoản</th>
@@ -139,7 +139,7 @@
           </tbody>
         </table>
         <div class="p-4"><Pagination :links="transactions.links" :meta="transactions.meta" /></div>
-      </div>
+      </DataTableWrapper>
     </div>
 
     <ClassifyModal v-if="activeTx" :transaction="activeTx" :categories="categories" @close="activeTx = null" @saved="activeTx = null" />
@@ -151,6 +151,7 @@
 import { computed, reactive, ref, h } from 'vue';
 import { router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
+import DataTableWrapper from '@/Components/Shared/DataTableWrapper.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
 import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';

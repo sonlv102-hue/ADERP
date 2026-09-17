@@ -1,6 +1,6 @@
 <template>
   <AppLayout title="Sổ chi tiết công nợ phải trả">
-    <div class="max-w-5xl mx-auto">
+    <div class="w-full">
       <h1 class="text-2xl font-bold text-gray-900 mb-6">Sổ chi tiết công nợ phải trả (TK 331)</h1>
 
       <!-- Filters -->
