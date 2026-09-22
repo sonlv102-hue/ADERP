@@ -91,6 +91,12 @@
         @apply overflow-x-auto;
     }
 
+    /* ─── Table cell text wrapping (wrap by word, never by letter) ─── */
+    .erp-cell-wrap {
+        word-break: normal;
+        overflow-wrap: break-word;
+    }
+
     /* ─── Sticky table header (vertical scroll) ───
        Apply to <thead>. background-color:inherit picks up the thead's own bg class
        (e.g. bg-gray-50) since th does not inherit background-color by default. */

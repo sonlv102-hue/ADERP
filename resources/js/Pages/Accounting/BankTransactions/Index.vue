@@ -142,36 +142,40 @@
               class="hover:bg-gray-50"
               :class="tx.alert_note ? 'bg-amber-50/40' : ''">
               <td class="px-4 py-3 text-xs text-gray-500 whitespace-nowrap">{{ tx.transaction_date }}</td>
-              <td class="px-4 py-3">
+              <td class="px-4 py-3 min-w-[280px]">
                 <div v-if="tx.alert_note" class="flex items-start gap-1.5 mb-1">
                   <svg class="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
                     <path fill-rule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 6a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 6zm0 9a1 1 0 100-2 1 1 0 000 2z" clip-rule="evenodd" />
                   </svg>
                   <span class="text-xs text-amber-700">{{ tx.alert_note }}</span>
                 </div>
-                <div class="text-sm text-gray-800 break-words">{{ tx.description }}</div>
+                <div class="text-sm text-gray-800 erp-cell-wrap line-clamp-3" :title="tx.description">{{ tx.description }}</div>
               </td>
               <!-- Đối ứng ngân hàng (bank counterparty — dữ liệu sao kê thô, KHÔNG phải TK kế toán đối ứng) -->
-              <td class="px-4 py-3 cursor-pointer hover:bg-gray-100/70" @click="openCounterpartyDetail(tx)">
+              <td class="px-4 py-3 min-w-[220px] cursor-pointer hover:bg-gray-100/70" @click="openCounterpartyDetail(tx)">
                 <template v-if="tx.counterpart_account || tx.counterpart_name">
                   <div class="text-xs text-gray-400">{{ tx.credit > 0 ? 'Người chuyển' : 'Người nhận' }}</div>
-                  <div class="text-sm text-gray-800 truncate max-w-full" :title="tx.counterpart_name">{{ tx.counterpart_name || '—' }}</div>
-                  <div class="text-xs text-gray-500 truncate max-w-full">{{ tx.counterpart_bank ? tx.counterpart_bank.trim() : '' }}</div>
-                  <div class="text-xs text-gray-400 font-mono">{{ tx.counterpart_account }}</div>
+                  <div class="text-sm text-gray-800 erp-cell-wrap line-clamp-2" :title="tx.counterpart_name">{{ tx.counterpart_name || '—' }}</div>
+                  <div class="text-xs text-gray-500 erp-cell-wrap line-clamp-2" :title="tx.counterpart_bank ? tx.counterpart_bank.trim() : ''">{{ tx.counterpart_bank ? tx.counterpart_bank.trim() : '' }}</div>
+                  <div class="text-xs text-gray-400 font-mono erp-cell-wrap">{{ tx.counterpart_account }}</div>
                 </template>
                 <span v-else class="text-xs text-gray-300">—</span>
               </td>
               <!-- Loại GD = phân loại dòng tiền quản trị (KHÔNG phải tx_type đối soát cũ) -->
-              <td class="px-4 py-3 text-xs">
+              <td class="px-4 py-3 min-w-[220px] text-xs">
                 <!-- Đã Admin xác nhận -->
                 <div v-if="tx.cash_flow_classification.status === 'confirmed'" class="text-teal-700">
                   <span class="text-teal-500">✓</span>
-                  {{ tx.cash_flow_classification.category || tx.cash_flow_classification.party }}
-                  <div v-if="tx.cash_flow_classification.category && tx.cash_flow_classification.party" class="text-gray-500 mt-0.5">{{ tx.cash_flow_classification.party }}</div>
+                  <span class="erp-cell-wrap line-clamp-2 align-bottom"
+                    :title="[tx.cash_flow_classification.category, tx.cash_flow_classification.party].filter(Boolean).join(' — ')">
+                    {{ tx.cash_flow_classification.category || tx.cash_flow_classification.party }}
+                  </span>
+                  <div v-if="tx.cash_flow_classification.category && tx.cash_flow_classification.party" class="text-gray-500 mt-0.5 erp-cell-wrap line-clamp-2" :title="tx.cash_flow_classification.party">{{ tx.cash_flow_classification.party }}</div>
                 </div>
                 <!-- Có gợi ý, chưa xác nhận -->
                 <div v-else-if="tx.cash_flow_classification.status === 'suggested' && can('accounting.manage')">
-                  <div>
+                  <div class="erp-cell-wrap line-clamp-2"
+                    :title="[tx.cash_flow_classification.category, tx.cash_flow_classification.party].filter(Boolean).join(' — ')">
                     <span :class="tx.cash_flow_classification.confidence >= 90 ? 'text-green-700 font-medium' : 'text-amber-600'">
                       {{ tx.cash_flow_classification.confidence >= 90 ? 'Đề xuất chắc chắn:' : 'Có thể là:' }}
                     </span>
