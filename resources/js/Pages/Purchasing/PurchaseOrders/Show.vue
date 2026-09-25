@@ -84,16 +84,19 @@
               {{ order.invoice_type_label }}
             </span>
           </div>
-          <div v-if="order.linked_order">
+          <div v-if="order.linked_orders?.length" class="sm:col-span-2">
             <p class="text-gray-500 mb-1">Đơn hàng bán liên kết</p>
-            <Link :href="route('sales.orders.show', order.linked_order.id)"
-              class="inline-flex items-center gap-1.5 text-blue-700 font-medium hover:underline">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                  d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-              {{ order.linked_order.code }} — {{ order.linked_order.customer_name }}
-            </Link>
+            <div class="flex flex-wrap gap-2">
+              <Link v-for="lo in order.linked_orders" :key="lo.id"
+                :href="route('sales.orders.show', lo.id)"
+                class="inline-flex items-center gap-1.5 text-blue-700 font-medium hover:underline">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                    d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                </svg>
+                {{ lo.code }} — {{ lo.customer_name }}
+              </Link>
+            </div>
           </div>
           <div v-if="order.project">
             <p class="text-gray-500 mb-1">Dự án liên kết</p>
@@ -193,6 +196,47 @@
               </template>
             </tfoot>
           </table>
+        </div>
+
+        <!-- Tab: Phân bổ đơn bán -->
+        <div v-if="activeTab === 'allocations'" class="p-5 space-y-4">
+          <div v-for="item in order.items" :key="item.id" class="border border-gray-100 rounded-lg p-4">
+            <div class="mb-2">
+              <p class="font-medium text-gray-800">{{ item.product_name }}</p>
+              <p class="text-xs text-gray-500">
+                SL đơn mua: {{ item.quantity }} {{ item.unit }} —
+                Đã phân bổ: {{ item.allocated_qty }} —
+                Còn lại: {{ item.quantity - item.allocated_qty }}
+              </p>
+            </div>
+            <div v-if="item.allocations?.length" class="flex flex-wrap gap-2 mb-3">
+              <span v-for="a in item.allocations" :key="a.id"
+                class="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
+                {{ a.order_code }}: {{ a.allocated_qty }}
+                <button type="button" @click="voidAllocation(a)" class="text-blue-400 hover:text-red-600">
+                  <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </span>
+            </div>
+            <div v-if="availableOrderItemsFor(item).length" class="flex items-center gap-2">
+              <select v-model="formFor(item.id).order_item_id" class="flex-1 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs outline-none">
+                <option :value="null">— Chọn dòng đơn bán —</option>
+                <option v-for="oi in availableOrderItemsFor(item)" :key="oi.id" :value="oi.id">
+                  {{ oi.order_code }} — còn {{ oi.quantity - oi.allocated_qty }} {{ oi.unit }}
+                </option>
+              </select>
+              <input v-model.number="formFor(item.id).quantity" type="number" min="0.001" step="any"
+                placeholder="SL" class="w-24 rounded-lg border border-gray-200 px-2.5 py-1.5 text-xs outline-none" />
+              <button type="button" @click="submitAllocation(item)"
+                class="bg-primary-600 hover:bg-primary-700 text-white px-3 py-1.5 rounded-lg text-xs font-medium">
+                Phân bổ
+              </button>
+            </div>
+            <p v-if="formFor(item.id).error" class="mt-1.5 text-xs text-red-600">{{ formFor(item.id).error }}</p>
+            <p v-else-if="!availableOrderItemsFor(item).length" class="text-xs text-gray-400">Không còn dòng đơn bán nào cùng sản phẩm để phân bổ.</p>
+          </div>
         </div>
 
         <!-- Tab: Phiếu nhập kho -->
@@ -408,11 +452,55 @@ const tabs = computed(() => {
     { key: 'stock',    label: 'Phiếu nhập kho',     count: props.order.stock_entries?.length },
     { key: 'invoices', label: 'Hóa đơn đầu vào',   count: props.order.purchase_invoices?.length },
   ];
+  if (props.order.linked_orders?.length) {
+    list.push({ key: 'allocations', label: 'Phân bổ đơn bán' });
+  }
   if (props.prepayments && props.prepayments.length > 0) {
     list.push({ key: 'prepayments', label: 'Tiền trả trước NCC', count: props.prepayments.length });
   }
   return list;
 });
+
+// ─── Phân bổ PO item ↔ SO item ───
+const allocationForms = ref({});
+function formFor(itemId) {
+  if (!allocationForms.value[itemId]) {
+    allocationForms.value[itemId] = { order_item_id: null, quantity: null, error: '' };
+  }
+  return allocationForms.value[itemId];
+}
+
+function availableOrderItemsFor(item) {
+  return (props.order.linked_order_items ?? []).filter(oi =>
+    oi.product_id === item.product_id && (oi.quantity - oi.allocated_qty) > 0
+  );
+}
+
+function submitAllocation(item) {
+  const form = formFor(item.id);
+  form.error = '';
+  if (!form.order_item_id || !form.quantity || form.quantity < 0.001) {
+    form.error = 'Chọn dòng đơn bán và nhập số lượng hợp lệ (≥ 0.001).';
+    return;
+  }
+  router.post(
+    route('purchasing.purchase-orders.items.allocations.store', [props.order.id, item.id]),
+    { order_item_id: form.order_item_id, quantity: form.quantity },
+    {
+      preserveScroll: true,
+      onSuccess: () => { allocationForms.value[item.id] = { order_item_id: null, quantity: null, error: '' }; },
+      onError: (errors) => { form.error = Object.values(errors)[0] ?? 'Có lỗi xảy ra.'; },
+    }
+  );
+}
+
+function voidAllocation(allocation) {
+  if (!confirm(`Hủy phân bổ ${allocation.allocated_qty} cho ${allocation.order_code}?`)) return;
+  router.delete(
+    route('purchasing.purchase-orders.allocations.destroy', [props.order.id, allocation.id]),
+    { preserveScroll: true }
+  );
+}
 
 function statusColor(s) {
   const map = { open: 'green', partially_applied: 'yellow', fully_applied: 'gray', cancelled: 'red' }

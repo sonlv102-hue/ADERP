@@ -47,4 +47,14 @@ class PurchaseOrderItem extends Model
     {
         return $this->hasMany(ProjectInventoryLot::class);
     }
+
+    public function orderAllocations(): HasMany
+    {
+        return $this->hasMany(PurchaseOrderItemOrderItemAllocation::class);
+    }
+
+    public function allocatedQuantity(): float
+    {
+        return (float) $this->orderAllocations()->active()->sum('allocated_qty');
+    }
 }

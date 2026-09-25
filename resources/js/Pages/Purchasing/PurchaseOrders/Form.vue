@@ -109,14 +109,29 @@
               </FormField>
 
               <!-- Đơn hàng bán liên kết -->
-              <FormField label="Đơn hàng bán liên kết" optional>
+              <FormField label="Đơn hàng bán liên kết" optional class="sm:col-span-2">
                 <select
-                  v-model="form.order_id"
+                  :value="null"
+                  @change="addLinkedOrder($event.target.value); $event.target.value = ''"
                   class="w-full rounded-xl border border-gray-200 bg-white px-3.5 py-2.5 text-sm outline-none transition-[border-color,box-shadow] focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
                 >
-                  <option :value="null">— Không liên kết —</option>
-                  <option v-for="o in orders" :key="o.id" :value="o.id">{{ o.label }}</option>
+                  <option :value="null">+ Thêm đơn hàng bán liên kết —</option>
+                  <option v-for="o in availableOrdersToAdd" :key="o.id" :value="o.id">{{ o.label }}</option>
                 </select>
+                <div v-if="linkedOrders.length" class="mt-2 flex flex-wrap gap-1.5">
+                  <span
+                    v-for="o in linkedOrders"
+                    :key="o.id"
+                    class="inline-flex items-center gap-1.5 rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-700"
+                  >
+                    {{ o.label }}
+                    <button type="button" @click="removeLinkedOrder(o.id)" class="text-primary-400 hover:text-primary-700">
+                      <svg class="h-3 w-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </span>
+                </div>
               </FormField>
 
               <!-- Dự án liên kết -->
@@ -367,13 +382,31 @@ const form = useForm({
   supplier_id:   props.purchaseOrder?.supplier_id   ?? '',
   warehouse_id:  props.purchaseOrder?.warehouse_id  ?? '',
   project_id:    props.purchaseOrder?.project_id    ?? null,
-  order_id:      props.purchaseOrder?.order_id      ?? props.prefillOrderId ?? null,
+  order_ids:     props.purchaseOrder?.order_ids ?? (props.prefillOrderId ? [props.prefillOrderId] : []),
   order_date:    props.purchaseOrder?.order_date     ?? today,
   expected_date: props.purchaseOrder?.expected_date  ?? '',
   notes:         props.purchaseOrder?.notes          ?? '',
   invoice_type:  props.purchaseOrder?.invoice_type   ?? 'vat',
   items:         initItems(),
 });
+
+const linkedOrders = computed(() =>
+  form.order_ids.map(id => props.orders.find(o => o.id === id)).filter(Boolean)
+);
+const availableOrdersToAdd = computed(() =>
+  props.orders.filter(o => !form.order_ids.includes(o.id))
+);
+
+const addLinkedOrder = (id) => {
+  const orderId = Number(id);
+  if (orderId && !form.order_ids.includes(orderId)) {
+    form.order_ids.push(orderId);
+  }
+};
+
+const removeLinkedOrder = (id) => {
+  form.order_ids = form.order_ids.filter(existingId => existingId !== id);
+};
 
 const addRow = () => {
   form.items.push({ product_id: null, quantity: 1, unit_price: 0, vat_rate: 10, _productDisplay: '', _unit: '' });

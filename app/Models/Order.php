@@ -8,6 +8,7 @@ use App\Models\Concerns\GeneratesCode;
 use App\Models\Invoice;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Spatie\Activitylog\LogOptions;
@@ -104,9 +105,9 @@ class Order extends Model
         return $this->hasMany(StockExit::class);
     }
 
-    public function purchaseOrders(): HasMany
+    public function purchaseOrders(): BelongsToMany
     {
-        return $this->hasMany(PurchaseOrder::class);
+        return $this->belongsToMany(PurchaseOrder::class, 'purchase_order_orders')->withTimestamps();
     }
 
     public function attachments(): MorphMany

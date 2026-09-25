@@ -797,6 +797,8 @@ Route::middleware('auth')->group(function () {
         Route::post('purchase-orders/{purchaseOrder}/receive', [PurchaseOrderController::class, 'receive'])->name('purchase-orders.receive')->middleware('can:purchases.orders.approve');
         Route::post('purchase-orders/{purchaseOrder}/cancel',  [PurchaseOrderController::class, 'cancel'])->name('purchase-orders.cancel')->middleware('can:purchases.orders.approve');
         Route::post('purchase-orders/{purchaseOrder}/items/{purchaseOrderItem}/fix-product', [PurchaseOrderController::class, 'fixLineItemProduct'])->name('purchase-orders.items.fix-product')->middleware('role:admin');
+        Route::post('purchase-orders/{purchaseOrder}/items/{purchaseOrderItem}/allocations', [PurchaseOrderController::class, 'storeAllocation'])->name('purchase-orders.items.allocations.store')->middleware('can:purchases.orders.update');
+        Route::delete('purchase-orders/{purchaseOrder}/allocations/{allocation}', [PurchaseOrderController::class, 'destroyAllocation'])->name('purchase-orders.allocations.destroy')->middleware('can:purchases.orders.update');
 
         Route::get('purchase-invoices/export-excel', [PurchaseInvoiceController::class, 'exportExcel'])->name('purchase-invoices.export-excel')->middleware('can:purchases.invoices.view');
         Route::get('purchase-invoices', [PurchaseInvoiceController::class, 'index'])->name('purchase-invoices.index')->middleware('can:purchases.invoices.view');

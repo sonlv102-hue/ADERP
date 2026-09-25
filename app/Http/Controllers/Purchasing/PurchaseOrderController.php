@@ -8,11 +8,14 @@ use App\Exports\TemplateExport;
 use App\Http\Controllers\Controller;
 use App\Imports\PurchaseOrderImport;
 use App\Models\Order;
+use App\Models\OrderItem;
 use App\Models\Product;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
+use App\Models\PurchaseOrderItemOrderItemAllocation;
 use App\Models\Supplier;
 use App\Models\Warehouse;
+use App\Services\PurchaseOrderAllocationService;
 use App\Services\PurchaseOrderItemProductFixService;
 use App\Services\PurchaseOrderService;
 use Illuminate\Http\RedirectResponse;
@@ -25,7 +28,10 @@ use Maatwebsite\Excel\Facades\Excel;
 
 class PurchaseOrderController extends Controller
 {
-    public function __construct(private PurchaseOrderService $service) {}
+    public function __construct(
+        private PurchaseOrderService $service,
+        private PurchaseOrderAllocationService $allocationService,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -205,7 +211,8 @@ class PurchaseOrderController extends Controller
             'supplier_id'   => ['required', 'exists:suppliers,id'],
             'warehouse_id'  => ['required', 'exists:warehouses,id'],
             'project_id'    => ['nullable', 'exists:projects,id'],
-            'order_id'      => ['nullable', 'exists:orders,id'],
+            'order_ids'     => ['nullable', 'array'],
+            'order_ids.*'   => ['distinct', 'integer', 'exists:orders,id'],
             'order_date'    => ['required', 'date'],
             'expected_date' => ['nullable', 'date', 'after_or_equal:order_date'],
             'notes'         => ['nullable', 'string'],
@@ -222,13 +229,16 @@ class PurchaseOrderController extends Controller
             'supplier_id'   => $data['supplier_id'],
             'warehouse_id'  => $data['warehouse_id'],
             'project_id'    => $data['project_id'] ?? null,
-            'order_id'      => $data['order_id'] ?? null,
             'created_by'    => auth()->id(),
             'order_date'    => $data['order_date'],
             'expected_date' => $data['expected_date'] ?? null,
             'notes'         => $data['notes'] ?? null,
             'invoice_type'  => $data['invoice_type'] ?? PurchaseOrderInvoiceType::Vat->value,
         ]);
+
+        if (!empty($data['order_ids'])) {
+            $po->orders()->attach($data['order_ids']);
+        }
 
         foreach ($data['items'] as $item) {
             $po->items()->create($item);
@@ -241,8 +251,11 @@ class PurchaseOrderController extends Controller
     public function show(PurchaseOrder $purchaseOrder): Response
     {
         $purchaseOrder->load([
-            'supplier', 'warehouse', 'creator', 'project', 'order.customer',
+            'supplier', 'warehouse', 'creator', 'project', 'orders.customer', 'orders.items.product',
+            'orders.items.purchaseAllocations' => fn ($q) => $q->active(),
             'items.product' => fn ($q) => $q->withTrashed(),
+            'items.orderAllocations' => fn ($q) => $q->active(),
+            'items.orderAllocations.orderItem.order',
             'stockEntries', 'purchaseInvoices',
         ]);
 
@@ -283,11 +296,11 @@ class PurchaseOrderController extends Controller
                     'code' => $purchaseOrder->project->code,
                     'name' => $purchaseOrder->project->name,
                 ] : null,
-                'linked_order'       => $purchaseOrder->order ? [
-                    'id'            => $purchaseOrder->order->id,
-                    'code'          => $purchaseOrder->order->code,
-                    'customer_name' => $purchaseOrder->order->customer->name,
-                ] : null,
+                'linked_orders'      => $purchaseOrder->orders->map(fn ($o) => [
+                    'id'            => $o->id,
+                    'code'          => $o->code,
+                    'customer_name' => $o->customer->name,
+                ]),
                 'items'         => $purchaseOrder->items->map(fn ($item) => [
                     'id'           => $item->id,
                     'product_id'   => $item->product_id,
@@ -299,7 +312,26 @@ class PurchaseOrderController extends Controller
                     'vat_rate'     => $item->vat_rate,
                     'total'        => $item->quantity * $item->unit_price,
                     'vat_amount'   => $item->quantity * $item->unit_price * (float)($item->vat_rate ?? 0) / 100,
+                    'allocated_qty'=> $item->orderAllocations->sum('allocated_qty'),
+                    'allocations'  => $item->orderAllocations->map(fn ($a) => [
+                        'id'            => $a->id,
+                        'order_item_id' => $a->order_item_id,
+                        'order_code'    => $a->orderItem->order->code,
+                        'allocated_qty' => (float) $a->allocated_qty,
+                    ]),
                 ]),
+                'linked_order_items' => $purchaseOrder->orders
+                    ->reject(fn ($o) => $o->status === \App\Enums\OrderStatus::Cancelled)
+                    ->flatMap(fn ($o) => $o->items->map(fn ($oi) => [
+                    'id'                => $oi->id,
+                    'order_id'          => $o->id,
+                    'order_code'        => $o->code,
+                    'product_id'        => $oi->product_id,
+                    'product_name'      => $oi->product?->name ?? '(đã xóa)',
+                    'unit'              => $oi->unit,
+                    'quantity'          => (float) $oi->quantity,
+                    'allocated_qty'     => (float) $oi->purchaseAllocations->sum('allocated_qty'),
+                ]))->values(),
                 'stock_entries' => $purchaseOrder->stockEntries->map(fn ($e) => [
                     'id'   => $e->id,
                     'code' => $e->code,
@@ -330,7 +362,7 @@ class PurchaseOrderController extends Controller
 
         $purchaseOrder->load('items');
 
-        $purchaseOrder->load(['supplier', 'warehouse', 'project', 'items.product']);
+        $purchaseOrder->load(['supplier', 'warehouse', 'project', 'orders', 'items.product']);
 
         return Inertia::render('Purchasing/PurchaseOrders/Form', [
             'purchaseOrder' => [
@@ -344,7 +376,7 @@ class PurchaseOrderController extends Controller
                 'project_id'          => $purchaseOrder->project_id,
                 'project_name'        => $purchaseOrder->project?->name,
                 'project_code'        => $purchaseOrder->project?->code,
-                'order_id'            => $purchaseOrder->order_id,
+                'order_ids'           => $purchaseOrder->orders->pluck('id'),
                 'order_date'          => $purchaseOrder->order_date->format('Y-m-d'),
                 'expected_date'       => $purchaseOrder->expected_date?->format('Y-m-d'),
                 'notes'               => $purchaseOrder->notes,
@@ -382,7 +414,8 @@ class PurchaseOrderController extends Controller
             'supplier_id'   => ['required', 'exists:suppliers,id'],
             'warehouse_id'  => ['required', 'exists:warehouses,id'],
             'project_id'    => ['nullable', 'exists:projects,id'],
-            'order_id'      => ['nullable', 'exists:orders,id'],
+            'order_ids'     => ['nullable', 'array'],
+            'order_ids.*'   => ['distinct', 'integer', 'exists:orders,id'],
             'order_date'    => ['required', 'date'],
             'expected_date' => ['nullable', 'date', 'after_or_equal:order_date'],
             'notes'         => ['nullable', 'string'],
@@ -394,16 +427,21 @@ class PurchaseOrderController extends Controller
             'items.*.vat_rate'    => ['nullable', 'numeric', 'min:0', 'max:100'],
         ]);
 
+        if (PurchaseOrderItemOrderItemAllocation::where('purchase_order_id', $purchaseOrder->id)->active()->exists()) {
+            return back()->with('error', 'Đơn mua đang có phân bổ số lượng cho đơn hàng bán. Vui lòng hủy các phân bổ trước khi sửa hàng hóa.');
+        }
+
         $purchaseOrder->update([
             'supplier_id'   => $data['supplier_id'],
             'warehouse_id'  => $data['warehouse_id'],
             'project_id'    => $data['project_id'] ?? null,
-            'order_id'      => $data['order_id'] ?? null,
             'order_date'    => $data['order_date'],
             'expected_date' => $data['expected_date'] ?? null,
             'notes'         => $data['notes'] ?? null,
             'invoice_type'  => $data['invoice_type'] ?? $purchaseOrder->invoice_type->value,
         ]);
+
+        $purchaseOrder->orders()->sync($data['order_ids'] ?? []);
 
         $purchaseOrder->items()->delete();
         foreach ($data['items'] as $item) {
@@ -430,6 +468,35 @@ class PurchaseOrderController extends Controller
         }
 
         return back()->with('success', 'Đã sửa sản phẩm dòng hàng.');
+    }
+
+    public function storeAllocation(Request $request, PurchaseOrder $purchaseOrder, PurchaseOrderItem $purchaseOrderItem): RedirectResponse
+    {
+        abort_if($purchaseOrderItem->purchase_order_id !== $purchaseOrder->id, 404);
+
+        $data = $request->validate([
+            'order_item_id' => ['required', 'exists:order_items,id'],
+            'quantity'      => ['required', 'numeric', 'min:0.001'],
+        ]);
+
+        $orderItem = OrderItem::findOrFail($data['order_item_id']);
+
+        try {
+            $this->allocationService->allocate($purchaseOrderItem, $orderItem, (float) $data['quantity']);
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', 'Đã phân bổ số lượng cho đơn hàng bán.');
+    }
+
+    public function destroyAllocation(PurchaseOrder $purchaseOrder, PurchaseOrderItemOrderItemAllocation $allocation): RedirectResponse
+    {
+        abort_if($allocation->purchase_order_id !== $purchaseOrder->id, 404);
+
+        $this->allocationService->void($allocation);
+
+        return back()->with('success', 'Đã hủy phân bổ.');
     }
 
     public function send(PurchaseOrder $purchaseOrder): RedirectResponse

@@ -6,12 +6,13 @@ use App\Enums\PurchaseOrderInvoiceType;
 use App\Enums\PurchaseOrderStatus;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class PurchaseOrder extends Model
 {
     protected $fillable = [
-        'code', 'supplier_id', 'warehouse_id', 'project_id', 'order_id', 'created_by',
+        'code', 'supplier_id', 'warehouse_id', 'project_id', 'created_by',
         'order_date', 'expected_date', 'status', 'notes', 'invoice_type',
     ];
 
@@ -46,9 +47,9 @@ class PurchaseOrder extends Model
         return 'MH-' . str_pad($num, 4, '0', STR_PAD_LEFT);
     }
 
-    public function order(): BelongsTo
+    public function orders(): BelongsToMany
     {
-        return $this->belongsTo(Order::class);
+        return $this->belongsToMany(Order::class, 'purchase_order_orders')->withTimestamps();
     }
 
     public function project(): BelongsTo
