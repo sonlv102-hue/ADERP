@@ -117,7 +117,7 @@ class ProjectController extends Controller
         ]);
 
         // Phiếu xuất kho thực tế cho dự án (confirmed + cancelled để truy vết)
-        $stockExits = StockExit::with(['warehouse', 'items.product'])
+        $stockExits = StockExit::with(['warehouse', 'items.product' => fn ($q) => $q->withTrashed()])
             ->where('project_id', $project->id)
             ->where('issue_purpose', 'project_cost')
             ->orderByDesc('exit_date')
@@ -155,10 +155,10 @@ class ProjectController extends Controller
                 'exit_code'    => $exit->code,
                 'exit_date'    => $exit->exit_date?->format('d/m/Y'),
                 'warehouse'    => $exit->warehouse->name,
-                'product_code' => $item->product->code,
-                'product_name' => $item->product->name,
+                'product_code' => $item->product?->code ?? '—',
+                'product_name' => $item->product?->name ?? '(đã xóa)',
                 'quantity'     => (float) $item->quantity,
-                'unit'         => $item->product->unit,
+                'unit'         => $item->product?->unit ?? '',
                 'unit_cost'    => (float) ($item->source_cost ?? $item->unit_price ?? 0),
                 'total_cost'   => (float) ($item->total_cost ?? ($item->quantity * ($item->source_cost ?? $item->unit_price ?? 0))),
                 'journal_code' => $wipByExitId->get($exit->id)?->journalEntry?->code ?? '—',
