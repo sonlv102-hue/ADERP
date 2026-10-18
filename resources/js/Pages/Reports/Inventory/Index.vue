@@ -50,25 +50,27 @@
         <button v-if="hasFilters" @click="clearFilters" class="text-gray-500 hover:text-gray-700 text-sm px-2">Xóa lọc</button>
       </div>
 
-      <!-- Summary cards -->
+      <!-- Summary cards — click để xem chi tiết (Drill-down) -->
       <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 transition-opacity" :class="{ 'opacity-60': isLoading }">
-        <div class="bg-white rounded-xl border border-gray-200 p-4">
+        <button type="button" @click="openDrilldown('begin')" class="text-left bg-white rounded-xl border border-gray-200 p-4 hover:ring-2 hover:ring-gray-300 cursor-pointer">
           <p class="text-xs text-gray-500 mb-1">Giá trị tồn đầu kỳ</p>
           <p class="text-base font-bold text-gray-800">{{ fmt(summary.total_begin_value) }}</p>
-        </div>
-        <div class="bg-white rounded-xl border border-blue-200 bg-blue-50 p-4">
+        </button>
+        <button type="button" @click="openDrilldown('in')" class="text-left bg-white rounded-xl border border-blue-200 bg-blue-50 p-4 hover:ring-2 hover:ring-blue-300 cursor-pointer">
           <p class="text-xs text-blue-600 mb-1">Giá trị nhập trong kỳ</p>
           <p class="text-base font-bold text-blue-700">{{ fmt(summary.total_in_value) }}</p>
-        </div>
-        <div class="bg-white rounded-xl border border-orange-200 bg-orange-50 p-4">
+        </button>
+        <button type="button" @click="openDrilldown('out')" class="text-left bg-white rounded-xl border border-orange-200 bg-orange-50 p-4 hover:ring-2 hover:ring-orange-300 cursor-pointer">
           <p class="text-xs text-orange-600 mb-1">Giá trị xuất trong kỳ</p>
           <p class="text-base font-bold text-orange-700">{{ fmt(summary.total_out_value) }}</p>
-        </div>
-        <div class="bg-white rounded-xl border border-green-200 bg-green-50 p-4">
+        </button>
+        <button type="button" @click="openDrilldown('end')" class="text-left bg-white rounded-xl border border-green-200 bg-green-50 p-4 hover:ring-2 hover:ring-green-300 cursor-pointer">
           <p class="text-xs text-green-600 mb-1">Giá trị tồn cuối kỳ</p>
           <p class="text-base font-bold text-green-700">{{ fmt(summary.total_end_value) }}</p>
-        </div>
+        </button>
       </div>
+
+      <InventoryKpiDrilldown v-if="drilldownKpi" :kpi="drilldownKpi" :filters="activeFilters" @close="drilldownKpi = null" />
 
       <!-- Table -->
       <div class="bg-white rounded-xl border border-gray-200 overflow-x-auto transition-opacity" :class="{ 'opacity-60': isLoading }">
@@ -155,6 +157,7 @@ import Pagination from '@/Components/Shared/Pagination.vue';
 import { useCurrency } from '@/composables/useCurrency';
 import { useInertiaLoading } from '@/composables/useInertiaLoading';
 import { useStickyColumns } from '@/composables/useStickyColumns';
+import InventoryKpiDrilldown from './Drilldown/InventoryKpiDrilldown.vue';
 
 // Sticky columns: Mã SP/Tên sản phẩm/ĐVT frozen so người dùng luôn biết đang xem mặt hàng nào
 // khi cuộn sang các nhóm số liệu Tồn đầu/Nhập/Xuất/Tồn cuối. Danh mục scroll cùng số liệu.
@@ -182,6 +185,20 @@ const warehouseId = ref(props.filters?.warehouse_id ?? '');
 const categoryId  = ref(props.filters?.category_id  ?? '');
 
 const hasFilters = computed(() => search.value || warehouseId.value || categoryId.value);
+
+// Drill-down dùng đúng filter đang áp dụng trên báo cáo (props.filters, đã resolve default ở server)
+// để số liệu trong modal luôn khớp với 4 KPI đang hiển thị, không phải giá trị input chưa "Lọc".
+const drilldownKpi = ref(null);
+const activeFilters = computed(() => ({
+  search:       props.filters?.search       ?? '',
+  date_from:    props.filters?.date_from,
+  date_to:      props.filters?.date_to,
+  warehouse_id: props.filters?.warehouse_id ?? '',
+  category_id:  props.filters?.category_id  ?? '',
+}));
+function openDrilldown(kpi) {
+  drilldownKpi.value = kpi;
+}
 
 const exportUrl = computed(() => {
   const params = new URLSearchParams();

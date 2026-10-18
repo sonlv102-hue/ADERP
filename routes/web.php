@@ -29,6 +29,7 @@ use App\Http\Controllers\Reports\ProfitController;
 use App\Http\Controllers\Reports\ARAgingController;
 use App\Http\Controllers\Reports\APAgingController;
 use App\Http\Controllers\Reports\VatReportController;
+use App\Http\Controllers\Reports\InventoryKpiDrilldownController;
 use App\Http\Controllers\Reports\InventoryReportController;
 use App\Http\Controllers\Reports\InventoryTransactionReportController;
 use App\Http\Controllers\Reports\StockEntryDetailReportController;
@@ -888,6 +889,8 @@ Route::middleware('auth')->group(function () {
         Route::get('profit/export',           [ProfitReportController::class,    'exportExcel'])->name('profit.export')->middleware('can:reports.profit.export');
         Route::get('inventory',               [InventoryReportController::class, 'index'])->name('inventory');
         Route::get('inventory/export',        [InventoryReportController::class, 'export'])->name('inventory.export');
+        Route::get('inventory/drilldown',        [InventoryKpiDrilldownController::class, 'index'])->name('inventory.drilldown');
+        Route::get('inventory/drilldown/export', [InventoryKpiDrilldownController::class, 'export'])->name('inventory.drilldown.export');
         Route::get('stock-card',              [InventoryReportController::class, 'stockCard'])->name('stock_card');
         Route::get('inventory-transactions',        [InventoryTransactionReportController::class, 'index'])->name('inventory_transactions');
         Route::get('inventory-transactions/export', [InventoryTransactionReportController::class, 'export'])->name('inventory_transactions.export');
