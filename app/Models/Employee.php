@@ -24,7 +24,7 @@ class Employee extends Model
         'termination_decision_no', 'termination_decision_date', 'terminated_by', 'terminated_at',
         'base_salary', 'allowance',
         'allowance_responsibility', 'allowance_lunch', 'allowance_phone', 'allowance_transport',
-        'insurance_subject', 'standard_days',
+        'insurance_subject', 'standard_days', 'is_attendance_exempt',
         'dependents_count', 'pit_tax_code',
         'social_insurance_no', 'bank_account_no', 'bank_name',
         'address', 'notes', 'created_by',
@@ -49,6 +49,7 @@ class Employee extends Model
         'allowance_transport'      => 'decimal:0',
         'insurance_subject'        => 'boolean',
         'standard_days'            => 'integer',
+        'is_attendance_exempt'     => 'boolean',
         'dependents_count'         => 'integer',
     ];
 

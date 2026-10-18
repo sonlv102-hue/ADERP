@@ -65,11 +65,35 @@ class AttendanceController extends Controller
                 ->orderBy('name')
                 ->get();
 
+            [$year, $month] = explode('-', $data['period']);
+            $periodStart = \Carbon\Carbon::createFromDate((int) $year, (int) $month, 1)->startOfMonth();
+            $periodEnd   = $periodStart->copy()->endOfMonth();
+            $daysInMonth = $periodStart->daysInMonth;
+
             foreach ($employees as $employee) {
+                $days = [];
+
+                // NV miễn chấm công: hệ thống tự điền đủ công trong phần kỳ NV thực sự làm việc
+                // (chỉ từ ngày vào làm / đến ngày nghỉ nếu rơi trong kỳ), không cần HR chấm tay
+                if ($employee->is_attendance_exempt) {
+                    $from = ($employee->hire_date && $employee->hire_date->between($periodStart, $periodEnd))
+                        ? $employee->hire_date->day : 1;
+                    $to = ($employee->termination_date && $employee->termination_date->between($periodStart, $periodEnd))
+                        ? $employee->termination_date->day : $daysInMonth;
+
+                    foreach (range($from, $to) as $d) {
+                        $days[(string) $d] = 'X';
+                    }
+                }
+
+                $filledCount = count($days);
+
                 AttendanceRecord::create([
                     'attendance_sheet_id' => $sheet->id,
                     'employee_id'         => $employee->id,
-                    'days'                => [],
+                    'days'                => $days,
+                    'cong'                => $filledCount,
+                    'tong'                => $filledCount,
                 ]);
             }
         });

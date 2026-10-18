@@ -270,6 +270,23 @@
                 placeholder="26" />
               <p class="mt-1 text-xs text-gray-400">Dùng để tính lương theo ngày công thực tế</p>
             </div>
+
+            <!-- Miễn chấm công switch -->
+            <div class="flex items-center gap-3 bg-gray-50 rounded-lg px-4 py-3">
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" v-model="form.is_attendance_exempt" class="sr-only peer" />
+                <div class="w-10 h-5 bg-gray-300 peer-focus:outline-none rounded-full peer peer-checked:bg-green-500 transition-colors"></div>
+                <div class="absolute left-0.5 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform peer-checked:translate-x-5"></div>
+              </label>
+              <div>
+                <p class="text-sm font-medium text-gray-800">Miễn chấm công</p>
+                <p class="text-xs text-gray-500">
+                  {{ form.is_attendance_exempt
+                    ? 'Hệ thống tự điền đủ công khi lập bảng chấm công mới — không cần chấm công tay'
+                    : 'Chấm công bình thường theo bảng chấm công hàng tháng' }}
+                </p>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -533,6 +550,7 @@ const form = useForm({
   allowance_transport:      props.employee?.allowance_transport      ?? 0,
   insurance_subject:        props.employee?.insurance_subject        ?? true,
   standard_days:            props.employee?.standard_days            ?? 26,
+  is_attendance_exempt:     props.employee?.is_attendance_exempt     ?? false,
   dependents_count:         props.employee?.dependents_count         ?? 0,
   pit_tax_code:             props.employee?.pit_tax_code             ?? '',
   address:                  props.employee?.address                  ?? '',
