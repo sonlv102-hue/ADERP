@@ -377,6 +377,7 @@ Route::middleware('auth')->group(function () {
         Route::put('projects/{project}', [ProjectController::class, 'update'])->name('projects.update')->middleware('can:projects.update');
         Route::delete('projects/{project}', [ProjectController::class, 'destroy'])->name('projects.destroy')->middleware('can:projects.delete');
         Route::post('projects/{project}/transition', [ProjectController::class, 'transition'])->name('projects.transition')->middleware('can:projects.complete');
+        Route::patch('projects/{project}/status', [ProjectController::class, 'updateStatus'])->name('projects.status')->middleware('can:projects.complete');
 
         Route::post('projects/{project}/members', [ProjectController::class, 'addMember'])->name('projects.members.store')->middleware('can:projects.update');
         Route::delete('projects/{project}/members/{member}', [ProjectController::class, 'removeMember'])->name('projects.members.destroy')->middleware('can:projects.update');

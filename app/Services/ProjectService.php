@@ -37,6 +37,39 @@ class ProjectService
         $project->update($data);
     }
 
+    /**
+     * Sửa trạng thái thủ công (bỏ qua luồng ALLOWED_TRANSITIONS) — dùng khi cần điều chỉnh,
+     * vd mở lại dự án đã Hoàn thành/Đã hủy. Không sinh bút toán; bắt buộc lý do + ghi activity log.
+     */
+    public function overrideStatus(Project $project, ProjectStatus $newStatus, string $reason): void
+    {
+        $oldStatus = $project->status;
+
+        if ($oldStatus === $newStatus) {
+            throw new RuntimeException("Dự án đang ở trạng thái \"{$newStatus->label()}\".");
+        }
+
+        $data = ['status' => $newStatus];
+
+        if ($newStatus === ProjectStatus::Completed && ! $project->actual_end_date) {
+            $data['actual_end_date'] = now()->toDateString();
+        } elseif ($oldStatus === ProjectStatus::Completed) {
+            $data['actual_end_date'] = null;
+        }
+
+        $project->update($data);
+
+        activity()
+            ->performedOn($project)
+            ->causedBy(auth()->user())
+            ->withProperties([
+                'old_status' => $oldStatus->value,
+                'new_status' => $newStatus->value,
+                'reason'     => $reason,
+            ])
+            ->log("Sửa trạng thái dự án: {$oldStatus->label()} → {$newStatus->label()}");
+    }
+
     public function updateTaskStatus(ProjectTask $task, TaskStatus $newStatus): void
     {
         $data = ['status' => $newStatus];

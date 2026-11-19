@@ -22,6 +22,9 @@
             class="border border-gray-300 text-gray-700 hover:bg-gray-50 px-4 py-2 rounded-lg text-sm font-medium">
             Sửa thông tin
           </Link>
+          <button v-if="can('projects.complete')" @click="openStatusModal" class="erp-btn-secondary">
+            Sửa trạng thái
+          </button>
           <template v-for="t in project.allowed_transitions" :key="t.value">
             <button @click="doTransition(t.value)"
               :class="['px-4 py-2 rounded-lg text-sm font-medium', t.value === 'cancelled' ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-primary-600 hover:bg-primary-700 text-white']">
@@ -35,6 +38,35 @@
           </button>
         </div>
       </div>
+
+      <!-- Modal sửa trạng thái -->
+      <Modal :show="statusModal.open" max-width="md" @close="statusModal.open = false">
+        <template #title>Sửa trạng thái dự án</template>
+        <div class="space-y-4">
+          <p class="text-sm text-gray-600">
+            Trạng thái hiện tại:
+            <StatusBadge :color="project.status_color">{{ project.status_label }}</StatusBadge>
+          </p>
+          <FormField label="Trạng thái mới" required :error="statusModal.errors.status">
+            <select v-model="statusModal.status" class="erp-input">
+              <option v-for="s in project.all_statuses" :key="s.value" :value="s.value"
+                :disabled="s.value === project.status">{{ s.label }}</option>
+            </select>
+          </FormField>
+          <FormField label="Lý do điều chỉnh" required :error="statusModal.errors.reason">
+            <textarea v-model="statusModal.reason" rows="3" class="erp-input"
+              placeholder="VD: Mở lại dự án để bổ sung chi phí phát sinh" />
+          </FormField>
+          <p class="text-xs text-gray-500">
+            Không tạo bút toán. Dự án "Hoàn thành"/"Đã hủy" sẽ không hiện khi chọn dự án lúc xuất kho.
+          </p>
+        </div>
+        <template #footer>
+          <button @click="statusModal.open = false" class="erp-btn-secondary">Hủy</button>
+          <button @click="submitStatus" :disabled="statusModal.processing || !statusModal.status || !statusModal.reason.trim()"
+            class="erp-btn-primary">Lưu</button>
+        </template>
+      </Modal>
 
       <!-- Info cards -->
       <div class="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -1396,6 +1428,8 @@ import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import RemoteSearchSelect from '@/Components/Shared/RemoteSearchSelect.vue';
+import Modal from '@/Components/Shared/Modal.vue';
+import FormField from '@/Components/Shared/FormField.vue';
 import { usePermission } from '@/composables/usePermission';
 import { useCurrency } from '@/composables/useCurrency';
 
@@ -1983,6 +2017,23 @@ const cancelDirectMaterial = (m) => {
 // Project transition
 const doTransition = (status) => {
   router.post(route('projects.projects.transition', props.project.id), { status }, { preserveScroll: true });
+};
+
+// Sửa trạng thái thủ công
+const statusModal = reactive({ open: false, status: '', reason: '', processing: false, errors: {} });
+const openStatusModal = () => {
+  Object.assign(statusModal, { open: true, status: '', reason: '', processing: false, errors: {} });
+};
+const submitStatus = () => {
+  statusModal.processing = true;
+  router.patch(route('projects.projects.status', props.project.id),
+    { status: statusModal.status, reason: statusModal.reason },
+    {
+      preserveScroll: true,
+      onSuccess: () => { statusModal.open = false; },
+      onError: (errors) => { statusModal.errors = errors; },
+      onFinish: () => { statusModal.processing = false; },
+    });
 };
 
 // WIP — kết chuyển giá thành

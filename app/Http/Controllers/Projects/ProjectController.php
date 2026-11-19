@@ -383,6 +383,7 @@ class ProjectController extends Controller
                     ];
                 }),
                 'allowed_transitions' => $this->allowedTransitions($project),
+                'all_statuses'        => collect(ProjectStatus::cases())->map(fn ($s) => ['value' => $s->value, 'label' => $s->label()])->values(),
             ],
             'allActiveProjects' => Project::whereNotIn('status', ['cancelled', 'completed'])
                 ->where('id', '!=', $project->id)
@@ -509,6 +510,23 @@ class ProjectController extends Controller
         }
 
         return back()->with('success', "Dự án chuyển sang: {$newStatus->label()}");
+    }
+
+    public function updateStatus(Request $request, Project $project): RedirectResponse
+    {
+        $data = $request->validate([
+            'status' => ['required', \Illuminate\Validation\Rule::enum(ProjectStatus::class)],
+            'reason' => ['required', 'string', 'max:500'],
+        ]);
+        $newStatus = ProjectStatus::from($data['status']);
+
+        try {
+            $this->service->overrideStatus($project, $newStatus, trim($data['reason']));
+        } catch (\RuntimeException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('success', "Đã sửa trạng thái dự án thành: {$newStatus->label()}");
     }
 
     // Members
