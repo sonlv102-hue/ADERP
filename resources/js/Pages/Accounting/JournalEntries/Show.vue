@@ -23,6 +23,16 @@
             Đã điều chỉnh
           </span>
 
+          <!-- In / xuất phiếu -->
+          <a :href="route('accounting.journal-entries.print-pdf', { ids: [entry.id] })" target="_blank" rel="noopener"
+            class="text-sm px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50">
+            In PDF
+          </a>
+          <a :href="route('accounting.journal-entries.print-excel', { ids: [entry.id] })"
+            class="text-sm px-3 py-1.5 border border-gray-300 text-gray-600 rounded-lg hover:bg-gray-50">
+            Xuất Excel
+          </a>
+
           <!-- Sửa dòng bút toán: draft only -->
           <Link v-if="entry.status === 'draft' && can('accounting.manage')"
             :href="route('accounting.journal-entries.edit', entry.id)"

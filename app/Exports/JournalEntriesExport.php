@@ -85,7 +85,7 @@ class JournalEntriesExport extends BaseListExport
                 'credit_tk'    => $creditTk ?: '—',
                 'total_debit'  => $totalDebit,
                 'total_credit' => $totalDebit,
-                'status'       => $je->status->label(),
+                'status'       => $je->statusLabel(),
                 'creator'      => $je->creator->name,
             ];
         })->toArray();

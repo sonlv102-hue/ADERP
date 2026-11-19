@@ -62,7 +62,7 @@
     .report-signature-name {
         min-height: 16px;
         font-size: 11px;
-        font-weight: 600;
+        font-weight: bold; /* DejaVu chỉ có normal/bold — 600 làm dompdf rơi về font không dấu */
     }
     .report-signature-position {
         margin-top: 2px;

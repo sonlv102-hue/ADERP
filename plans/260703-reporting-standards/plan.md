@@ -27,6 +27,8 @@ Test hạ tầng: `tests/Feature/ReportSignatureSectionTest.php` (7 TC), `tests/
 | `resources/views/pdf/voucher-listing.blade.php` | PDF | `tests/Feature/VoucherListingReportTest.php` (test mới: export pdf) | Xóa CSS `.sign-*` cũ, thêm `signingPlace`/`signingDate` từ controller |
 | `app/Exports/Reports/VoucherListingExport.php` | Excel | `tests/Feature/HasSignatureBlockTest.php` (gián tiếp qua trait) | Dùng `HasSignatureBlock::writeSignatureBlock()` thay vòng lặp merge cell cũ |
 | `resources/js/Pages/Admin/Attendance/Show.vue` | Vue print | `tests/Feature/AttendanceExportTest.php` (không đổi), kiểm tra build | **Cải thiện thật:** trước đây không có dòng ngày ký; nay có `signingPlace`/`signingDate` từ `company` shared prop |
+| `resources/views/pdf/journal-voucher.blade.php` (mới, 2026-11-19) | PDF | `tests/Feature/Accounting/JournalEntryPrintTest.php` | Phiếu kế toán 1/nhiều phiếu, mỗi phiếu 1 trang; ký: Người lập phiếu · KTT · Giám đốc; ngày ký = ngày chứng từ |
+| `app/Exports/JournalVoucherSheet.php` (mới, 2026-11-19) | Excel | `tests/Feature/Accounting/JournalEntryPrintTest.php` | Mỗi phiếu 1 sheet, dùng `HasSignatureBlock` |
 
 ## Backlog — 22 điểm còn lại (chưa migrate, giữ nguyên HTML/CSS cũ)
 

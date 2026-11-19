@@ -579,6 +579,8 @@ Route::middleware('auth')->group(function () {
 
         // Phiếu kế toán / Bút toán (Journal Entries)
         Route::get('journal-entries/export-excel', [JournalEntryController::class, 'exportExcel'])->name('journal-entries.export-excel')->middleware('can:accounting.journals.view');
+        Route::get('journal-entries/print/pdf', [\App\Http\Controllers\Accounting\JournalEntryPrintController::class, 'pdf'])->name('journal-entries.print-pdf')->middleware('can:accounting.journals.view');
+        Route::get('journal-entries/print/excel', [\App\Http\Controllers\Accounting\JournalEntryPrintController::class, 'excel'])->name('journal-entries.print-excel')->middleware('can:accounting.journals.view');
         Route::get('journal-entries', [JournalEntryController::class, 'index'])->name('journal-entries.index')->middleware('can:accounting.journals.view');
         Route::get('journal-entries/create', [JournalEntryController::class, 'create'])->name('journal-entries.create')->middleware('can:accounting.journals.create');
         Route::post('journal-entries', [JournalEntryController::class, 'store'])->name('journal-entries.store')->middleware('can:accounting.journals.create');

@@ -4,7 +4,7 @@
       <div class="flex items-center justify-between flex-wrap gap-y-3">
         <h1 class="text-2xl font-bold text-slate-900">Phiếu kế toán / Bút toán</h1>
         <div class="flex items-center gap-2 flex-wrap">
-          <ExportExcelButton :endpoint="route('accounting.journal-entries.export-excel')" :filters="{ search, status, from, to }" />
+          <ExportExcelButton :endpoint="route('accounting.journal-entries.export-excel')" :filters="{ search, status, from, to }" label="Xuất danh sách" />
           <button v-if="can('accounting.manage') && draftCount > 0" @click="showBulkApprove = true"
             class="erp-btn-secondary text-green-700 border-green-300 hover:bg-green-50 hover:border-green-400">
             <svg class="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -38,10 +38,32 @@
         <input v-model="to" @change="applyFilters" type="date" class="erp-input w-40" />
       </div>
 
+      <!-- Thanh xuất phiếu đã chọn -->
+      <div v-if="selected.length" class="flex items-center gap-3 flex-wrap bg-primary-50 border border-primary-200 rounded-xl px-4 py-2.5">
+        <span class="text-sm text-primary-800">Đã chọn <strong>{{ selected.length }}</strong> phiếu</span>
+        <a :href="printUrl('pdf')" target="_blank" rel="noopener" class="erp-btn-secondary">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M6.72 13.829c-.24.03-.48.062-.72.096m.72-.096a42.415 42.415 0 0110.56 0m-10.56 0L6.34 18m10.94-4.171c.24.03.48.062.72.096m-.72-.096L17.66 18m0 0l.229 2.523a1.125 1.125 0 01-1.12 1.227H7.231c-.662 0-1.18-.568-1.12-1.227L6.34 18m11.318 0h1.091A2.25 2.25 0 0021 15.75V9.456c0-1.081-.768-2.015-1.837-2.175a48.055 48.055 0 00-1.913-.247M6.34 18H5.25A2.25 2.25 0 013 15.75V9.456c0-1.081.768-2.015 1.837-2.175a48.041 48.041 0 011.913-.247m10.5 0a48.536 48.536 0 00-10.5 0m10.5 0V3.375c0-.621-.504-1.125-1.125-1.125h-8.25c-.621 0-1.125.504-1.125 1.125v3.659M18 10.5h.008v.008H18V10.5zm-3 0h.008v.008H15V10.5z" />
+          </svg>
+          Xuất PDF
+        </a>
+        <a :href="printUrl('excel')" class="erp-btn-secondary">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3" />
+          </svg>
+          Xuất Excel
+        </a>
+        <button @click="selected = []" class="text-xs text-slate-500 hover:text-slate-700">Bỏ chọn</button>
+      </div>
+
       <div class="bg-white rounded-xl border border-slate-200 overflow-x-auto">
         <table class="min-w-full text-sm">
           <thead class="bg-slate-50 border-b border-slate-200">
             <tr>
+              <th class="pl-5 py-3 w-8">
+                <input type="checkbox" :checked="allChecked" :disabled="!entries.data?.length" @change="toggleAll"
+                  class="rounded border-slate-300" aria-label="Chọn tất cả phiếu trong trang" />
+              </th>
               <th class="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wide">Mã BT</th>
               <th class="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wide">Ngày</th>
               <th class="text-left px-5 py-3 font-semibold text-slate-500 text-xs uppercase tracking-wide">Diễn giải</th>
@@ -55,6 +77,10 @@
             <tr v-for="e in entries.data" :key="e.id"
               class="hover:bg-slate-50/70 transition-colors"
               :class="e.status === 'voided' ? 'opacity-60' : ''">
+              <td class="pl-5 py-3">
+                <input type="checkbox" :value="e.id" v-model="selected" class="rounded border-slate-300"
+                  :aria-label="`Chọn phiếu ${e.code}`" />
+              </td>
               <td class="px-5 py-3 font-mono text-xs font-semibold text-slate-700">{{ e.code }}</td>
               <td class="px-5 py-3 text-slate-600 whitespace-nowrap">{{ e.entry_date }}</td>
               <td class="px-5 py-3 text-slate-800">{{ e.description }}</td>
@@ -82,7 +108,7 @@
               </td>
             </tr>
             <tr v-if="!entries.data?.length">
-              <td colspan="7" class="px-5 py-14 text-center text-slate-400">
+              <td colspan="8" class="px-5 py-14 text-center text-slate-400">
                 <svg class="w-8 h-8 mx-auto mb-2 text-slate-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
                 </svg>
@@ -172,7 +198,7 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
@@ -192,10 +218,22 @@ const from   = ref(props.filters?.from ?? '');
 const to     = ref(props.filters?.to ?? '');
 
 function applyFilters() {
+  selected.value = [];
   router.get(route('accounting.journal-entries.index'),
     { search: search.value, status: status.value, from: from.value, to: to.value },
     { preserveState: true }
   );
+}
+
+// Chọn phiếu để xuất PDF / Excel (trong trang hiện tại)
+const selected = ref([]);
+const allChecked = computed(() =>
+  !!props.entries.data?.length && props.entries.data.every(e => selected.value.includes(e.id)));
+function toggleAll() {
+  selected.value = allChecked.value ? [] : props.entries.data.map(e => e.id);
+}
+function printUrl(type) {
+  return route(`accounting.journal-entries.print-${type}`, { ids: selected.value });
 }
 
 // Bulk approve

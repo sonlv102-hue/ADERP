@@ -139,6 +139,7 @@ Chỉ hiển thị `ReportSignatureSection`/partial khi báo cáo có yêu cầu
 | Phiếu chi | Người lập phiếu · Người nhận tiền · Thủ quỹ · Kế toán trưởng · Giám đốc |
 | Phiếu nhập kho | Người lập phiếu · Người giao hàng · Thủ kho · Kế toán trưởng/phụ trách |
 | Phiếu xuất kho | Người lập phiếu · Người nhận hàng · Thủ kho · Kế toán trưởng/phê duyệt |
+| Phiếu kế toán | Người lập phiếu · Kế toán trưởng · Giám đốc |
 | Nhật ký chung, sổ cái, BCTC | Người lập biểu · Kế toán trưởng · Người đại diện theo pháp luật |
 | Khấu hao TSCĐ | Người lập biểu · Kế toán trưởng · Giám đốc |
 | Phân bổ CCDC/CPTT | Người lập biểu · Kế toán trưởng · Giám đốc |
