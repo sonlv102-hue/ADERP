@@ -325,6 +325,34 @@ class AccountingService
     }
 
     /** Thu hồi hạch toán: posted → draft (chỉ khi kỳ chưa khóa). */
+    /**
+     * Đổi ngày hạch toán (chỉ khi draft). Chặn nếu kỳ cũ hoặc kỳ mới không còn mở.
+     * Đồng bộ fiscal_period + entry_date của WIP thủ công còn active (phiếu đã thu hồi hạch toán).
+     */
+    public function updateEntryDate(JournalEntry $entry, CarbonInterface $newDate): void
+    {
+        if ($entry->status !== 'draft') {
+            throw new \RuntimeException('Chỉ có thể sửa ngày hạch toán khi bút toán ở trạng thái Nháp.');
+        }
+        if ($entry->entry_date->isSameDay($newDate)) {
+            return;
+        }
+        $this->checkPeriodOpen(Carbon::parse($entry->entry_date));
+        $this->checkPeriodOpen($newDate);
+
+        DB::transaction(function () use ($entry, $newDate) {
+            $entry->update([
+                'entry_date'    => $newDate,
+                'fiscal_period' => $newDate->format('Y-m'),
+            ]);
+
+            ProjectWipEntry::where('source_type', 'manual_journal_entry')
+                ->where('journal_entry_id', $entry->id)
+                ->where('status', 'active')
+                ->update(['entry_date' => $newDate]);
+        });
+    }
+
     public function unpost(JournalEntry $entry): void
     {
         if ($entry->status !== 'posted') {

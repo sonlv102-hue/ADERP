@@ -206,6 +206,7 @@ class JournalEntryController extends Controller
     public function update(Request $request, JournalEntry $journalEntry): RedirectResponse
     {
         $data = $request->validate([
+            'entry_date'                => ['nullable', 'date'],
             'description'               => ['required', 'string', 'max:500'],
             'notes'                     => ['nullable', 'string', 'max:1000'],
             'edit_reason'               => ['nullable', 'string', 'max:500'],
@@ -218,6 +219,14 @@ class JournalEntryController extends Controller
             'lines.*.cost_group'        => ['nullable', 'string', 'in:material,labor,subcontractor,equipment,transport,overhead,other'],
             'lines.*.project_cost_note' => ['nullable', 'string', 'max:255'],
         ]);
+
+        if (! empty($data['entry_date'])) {
+            try {
+                $this->accounting->updateEntryDate($journalEntry, Carbon::parse($data['entry_date']));
+            } catch (\RuntimeException $e) {
+                return back()->with('error', $e->getMessage());
+            }
+        }
 
         $journalEntry->update([
             'description' => $data['description'],
