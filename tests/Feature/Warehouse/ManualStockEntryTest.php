@@ -5,6 +5,9 @@ namespace Tests\Feature\Warehouse;
 use App\Enums\PurchaseInvoiceStatus;
 use App\Enums\StockEntryStatus;
 use App\Models\AccountCode;
+use App\Models\Customer;
+use App\Models\Project;
+use App\Models\ProjectWipEntry;
 use App\Models\InventoryBalance;
 use App\Models\JournalEntry;
 use App\Models\Product;
@@ -49,6 +52,7 @@ class ManualStockEntryTest extends TestCase
             ['1561', 'Hàng hóa', 'asset', 'debit', true],
             ['3311', 'Phải trả NCC', 'liability', 'credit', true],
             ['711', 'Thu nhập khác', 'revenue', 'credit', true],
+            ['154', 'CP SXKD dở dang', 'asset', 'debit', true],
             ['338', 'Phải trả khác', 'liability', 'credit', false],
         ] as [$code, $name, $type, $nb, $detail]) {
             AccountCode::firstOrCreate(['code' => $code], [
@@ -206,5 +210,71 @@ class ManualStockEntryTest extends TestCase
     {
         $this->get(route('warehouse.stock-entries.manual.create'))->assertOk()
             ->assertInertia(fn ($p) => $p->component('Warehouse/StockEntries/ManualForm')->has('warehouses', 1));
+    }
+
+    private function projectWithWip(int $wip): Project
+    {
+        $customer = Customer::create(['code' => 'KH-M', 'name' => 'KH M']);
+        $p = Project::create(['code' => 'DA-M', 'name' => 'DA M', 'status' => 'in_progress',
+            'customer_id' => $customer->id, 'created_by' => $this->user->id]);
+        ProjectWipEntry::create(['project_id' => $p->id, 'source_type' => 'manual', 'source_id' => 0,
+            'cost_type' => 'material', 'amount' => $wip, 'description' => 'Xuất vật tư', 'entry_date' => '2026-11-01',
+            'status' => 'active', 'created_by' => $this->user->id]);
+        return $p;
+    }
+
+    private function returnPayload(Project $p, int $qty = 2): array
+    {
+        return $this->payload(['kind' => 'project_return', 'supplier_id' => $this->supplier->id, 'project_id' => $p->id,
+            'items' => [['product_id' => $this->product->id, 'quantity' => $qty, 'unit_price' => 1_000_000,
+                         'tax_rate' => 10, 'serials' => []]]]);
+    }
+
+    public function test_project_return_credits_154_and_reduces_wip(): void
+    {
+        $p = $this->projectWithWip(5_000_000);
+        $this->post(route('warehouse.stock-entries.manual.store'), $this->returnPayload($p))->assertSessionHasNoErrors();
+
+        $e = StockEntry::firstOrFail();
+        $this->assertSame('project_return', $e->manualKind());
+        $this->assertSame($p->id, $e->project_id);
+        $this->assertNull($e->supplier_id);                          // dự án trả về: không gắn NCC
+        $this->assertEquals(0, $e->items()->value('tax_rate'));     // không VAT
+
+        app(StockService::class)->confirmEntry($e->fresh());
+
+        $je = JournalEntry::where('reference_type', 'stock_entry')->where('reference_id', $e->id)->firstOrFail();
+        $lines = $je->lines()->get();
+        $this->assertEqualsCanonicalizing([['1561', 2_000_000, 0], ['154', 0, 2_000_000]],
+            $lines->map(fn ($l) => [$l->account_code, (int) $l->debit, (int) $l->credit])->all());
+        $this->assertSame($p->id, (int) $lines->firstWhere('account_code', '154')->project_id);
+
+        $this->assertSame(3_000_000, (int) ProjectWipEntry::where('project_id', $p->id)->sum('amount'));
+        // Hàng trả về là tồn kho chung (AVCO), không phải lô dự án
+        $this->assertEquals(2, InventoryBalance::where('product_id', $this->product->id)->value('qty_on_hand'));
+        $this->assertNull($e->items()->value('project_id'));
+
+        app(StockService::class)->cancelEntry($e->fresh());
+        $this->assertSame(5_000_000, (int) ProjectWipEntry::where('project_id', $p->id)->sum('amount'));
+    }
+
+    public function test_project_return_cannot_exceed_project_wip(): void
+    {
+        $p = $this->projectWithWip(1_500_000);
+        $this->post(route('warehouse.stock-entries.manual.store'), $this->returnPayload($p))->assertSessionHasErrors('project_id');
+        $this->post(route('warehouse.stock-entries.manual.store'), $this->payload(['kind' => 'project_return']))
+            ->assertSessionHasErrors('project_id');
+        $this->post(route('warehouse.stock-entries.manual.store'), $this->payload([
+            'kind' => 'other', 'supplier_id' => null, 'credit_account_code' => '154',
+        ]))->assertSessionHasErrors('credit_account_code');
+        $this->assertSame(0, StockEntry::count());
+    }
+
+    public function test_other_kind_supplier_is_optional(): void
+    {
+        $this->post(route('warehouse.stock-entries.manual.store'), $this->payload([
+            'kind' => 'other', 'supplier_id' => null, 'credit_account_code' => '711',
+        ]))->assertSessionHasNoErrors();
+        $this->assertNull(StockEntry::firstOrFail()->supplier_id);
     }
 }

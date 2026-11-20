@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Warehouse;
 use App\Enums\StockEntryStatus;
 use App\Http\Controllers\Controller;
 use App\Models\AccountCode;
+use App\Models\Project;
+use App\Models\ProjectWipEntry;
+use App\Services\AccountingSettings;
 use App\Models\ProductSerial;
 use App\Models\StockEntry;
 use App\Models\Supplier;
@@ -20,6 +23,7 @@ use Inertia\Response;
 /**
  * Phiếu nhập kho thủ công — KHÔNG liên kết đơn mua hàng.
  *  - kind=purchase: mua của NCC, Có TK phải trả của NCC (331x), có VAT.
+ *  - kind=project_return: nhập lại vật tư thừa từ dự án, Nợ 156 / Có 154 (project_id), không VAT, ghi giảm WIP.
  *  - kind=other   : nhập khác (hàng tặng, thừa, góp vốn...), Có TK người dùng chọn, không VAT.
  * Xác nhận / hủy / thu hồi / xóa dùng chung StockEntryController.
  */
@@ -82,7 +86,7 @@ class ManualStockEntryController extends Controller
 
     private function form(?StockEntry $entry): Response
     {
-        $entry?->load(['supplier', 'items.product', 'items.serials']);
+        $entry?->load(['supplier', 'project', 'items.product', 'items.serials']);
         $account = $entry ? AccountCode::where('code', $entry->credit_account_code)->value('name') : null;
 
         return Inertia::render('Warehouse/StockEntries/ManualForm', [
@@ -90,7 +94,9 @@ class ManualStockEntryController extends Controller
             'warehouses' => Warehouse::orderBy('name')->get(['id', 'name']),
             'entry'      => $entry ? [
                 'id'                  => $entry->id,
-                'kind'                => $entry->isManualPurchase() ? 'purchase' : 'other',
+                'kind'                => $entry->manualKind(),
+                'project_id'          => $entry->project_id,
+                'project_name'        => $entry->project ? "{$entry->project->code} - {$entry->project->name}" : null,
                 'warehouse_id'        => $entry->warehouse_id,
                 'supplier_id'         => $entry->supplier_id,
                 'supplier_name'       => $entry->supplier?->name,
@@ -114,7 +120,8 @@ class ManualStockEntryController extends Controller
     private function validated(Request $request, ?StockEntry $entry): array
     {
         $data = $request->validate([
-            'kind'                => ['required', 'in:purchase,other'],
+            'kind'                => ['required', 'in:purchase,project_return,other'],
+            'project_id'          => ['nullable', 'required_if:kind,project_return', 'exists:projects,id'],
             'code'                => ['required', 'string', 'max:50', Rule::unique('stock_entries', 'code')->ignore($entry?->id)],
             'entry_date'          => ['required', 'date'],
             'warehouse_id'        => ['required', 'exists:warehouses,id'],
@@ -130,6 +137,7 @@ class ManualStockEntryController extends Controller
             'items.*.serials.*'   => ['nullable', 'string', 'max:100'],
         ], [
             'supplier_id.required_if'         => 'Phiếu mua hàng phải chọn nhà cung cấp.',
+            'project_id.required_if'          => 'Phiếu nhập lại từ dự án phải chọn dự án.',
             'credit_account_code.required_if' => 'Phiếu nhập khác phải chọn TK đối ứng (bên Có).',
             'items.required'                  => 'Phiếu nhập phải có ít nhất 1 dòng hàng.',
         ]);
@@ -144,8 +152,15 @@ class ManualStockEntryController extends Controller
                 throw ValidationException::withMessages(['supplier_id' =>
                     "TK phải trả của NCC ({$data['credit_account_code']}) không thuộc nhóm 331."]);
             }
+        } elseif ($data['kind'] === 'project_return') {
+            $data['credit_account_code'] = AccountingSettings::get('project_wip_account', '154');
+            $data['supplier_id'] = null;
+            $this->assertProjectWipCovers((int) $data['project_id'], $data['items']);
         } else {
             $this->assertOtherCreditAccount($data['credit_account_code']);
+        }
+        if ($data['kind'] !== 'project_return') {
+            $data['project_id'] = null;
         }
 
         $this->assertSerials($data['items'], $entry);
@@ -161,10 +176,24 @@ class ManualStockEntryController extends Controller
             !$acc->is_detail                => 'TK đối ứng phải là TK chi tiết (không dùng TK tổng hợp).',
             $acc->is_active === false       => 'TK đối ứng đang ngừng sử dụng.',
             str_starts_with($code, '331')   => 'Nhập hàng của NCC (TK 331) hãy chọn loại "Mua hàng của NCC".',
+            str_starts_with($code, '154')   => 'Nhập lại vật tư từ công trình (TK 154) hãy chọn loại "Nhập lại từ dự án".',
             str_starts_with($code, '15')    => 'TK đối ứng không được là TK hàng tồn kho (15x).',
             default                         => null,
         };
         if ($msg) throw ValidationException::withMessages(['credit_account_code' => $msg]);
+    }
+
+    /** Giá trị nhập lại không được vượt chi phí dở dang (WIP) còn lại của dự án — tránh 154 âm. */
+    private function assertProjectWipCovers(int $projectId, array $items): void
+    {
+        $value = (int) round(array_sum(array_map(fn ($i) => (float) $i['quantity'] * (float) $i['unit_price'], $items)));
+        $wip   = (int) ProjectWipEntry::where('project_id', $projectId)->where('status', 'active')->sum('amount');
+        if ($value > $wip) {
+            $code = Project::whereKey($projectId)->value('code');
+            throw ValidationException::withMessages(['project_id' =>
+                "Giá trị nhập lại (" . number_format($value, 0, ',', '.') . "đ) vượt chi phí dở dang còn lại của dự án {$code} ("
+                . number_format($wip, 0, ',', '.') . 'đ).']);
+        }
     }
 
     private function assertSerials(array $items, ?StockEntry $entry): void
@@ -195,6 +224,7 @@ class ManualStockEntryController extends Controller
         return [
             'warehouse_id'        => $data['warehouse_id'],
             'supplier_id'         => $data['supplier_id'] ?? null,
+            'project_id'          => $data['project_id'] ?? null,
             'purchase_order_id'   => null,
             'credit_account_code' => $data['credit_account_code'],
             'entry_date'          => $data['entry_date'],

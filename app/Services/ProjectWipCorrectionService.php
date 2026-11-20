@@ -285,6 +285,10 @@ class ProjectWipCorrectionService
         if (($entry->status ?? 'active') !== 'active') {
             throw new \RuntimeException("Dòng chi phí này đã {$entry->statusLabel()} — không thể thực hiện thêm.");
         }
+        // Nhập lại vật tư từ dự án (WIP âm) — phải hủy/thu hồi phiếu nhập kho
+        if ($entry->source_type === \App\Models\StockEntry::class) {
+            throw new \RuntimeException('Dòng giảm chi phí từ phiếu nhập kho phải được xử lý bằng cách hủy/thu hồi Phiếu nhập kho. Không hủy/chuyển/đổi TK trực tiếp ở đây.');
+        }
     }
 
     private function assertCancellable(ProjectWipEntry $entry): void
@@ -295,6 +299,7 @@ class ProjectWipCorrectionService
         if ($entry->source_type === StockExit::class || $entry->source_type === 'App\\Models\\StockExit') {
             throw new \RuntimeException('Dòng chi phí từ phiếu xuất kho phải được hủy thông qua màn hình Phiếu xuất kho. Không hủy trực tiếp ở đây.');
         }
+
     }
 
     private function entryPreviewData(ProjectWipEntry $entry): array

@@ -152,6 +152,7 @@
             <p class="font-medium text-gray-900 mt-0.5">
               <span class="font-mono">{{ entry.credit_account_code }}</span>
               <span v-if="entry.credit_account_name"> - {{ entry.credit_account_name }}</span>
+              <span v-if="entry.project_code" class="text-gray-500"> · Dự án {{ entry.project_code }}</span>
             </p>
           </div>
           <div class="sm:col-span-2">

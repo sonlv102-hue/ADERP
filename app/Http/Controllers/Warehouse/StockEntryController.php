@@ -460,6 +460,7 @@ class StockEntryController extends Controller
                 'purchase_order_id' => $stockEntry->purchase_order_id,
                 'purchase_order_code' => $stockEntry->purchaseOrder?->code,
                 'is_manual' => $stockEntry->isManual(),
+                'project_code' => $stockEntry->project_id ? \App\Models\Project::whereKey($stockEntry->project_id)->value('code') : null,
                 'credit_account_code' => $stockEntry->credit_account_code,
                 'credit_account_name' => $stockEntry->credit_account_code
                     ? \App\Models\AccountCode::where('code', $stockEntry->credit_account_code)->value('name')

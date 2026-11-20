@@ -12,7 +12,7 @@
 
       <div class="flex items-start gap-3 bg-amber-50 border border-amber-300 rounded-xl px-5 py-3 text-xs text-amber-800">
         Phiếu này không liên kết đơn mua hàng. Khi xác nhận, hệ thống ghi tăng tồn kho và tự hạch toán:
-        <b class="ml-1">{{ form.kind === 'purchase' ? 'Nợ 156/152/153 + 1331 / Có 331 (NCC)' : 'Nợ 156/152/153 / Có TK đối ứng đã chọn' }}</b>.
+        <b class="ml-1">{{ journalHint }}</b>.
         <span v-if="form.kind === 'purchase'" class="ml-1">Khi nhập hóa đơn đầu vào của lô hàng này, chọn loại hóa đơn
           "Hàng hóa / NVL / CCDC" để không ghi công nợ lần 2.</span>
       </div>
@@ -22,6 +22,7 @@
           <FormField label="Loại nhập" required :error="form.errors.kind">
             <div class="flex flex-wrap gap-4 text-sm">
               <label class="flex items-center gap-2"><input type="radio" value="purchase" v-model="form.kind" /> Mua hàng của NCC (công nợ 331, có VAT)</label>
+              <label class="flex items-center gap-2"><input type="radio" value="project_return" v-model="form.kind" /> Nhập lại vật tư từ dự án (Có 154)</label>
               <label class="flex items-center gap-2"><input type="radio" value="other" v-model="form.kind" /> Nhập khác (hàng tặng, thừa, góp vốn... — không VAT)</label>
             </div>
           </FormField>
@@ -39,7 +40,13 @@
                 <option v-for="w in warehouses" :key="w.id" :value="w.id">{{ w.name }}</option>
               </select>
             </FormField>
-            <FormField label="Nhà cung cấp" :required="form.kind === 'purchase'" :optional="form.kind === 'other'" :error="form.errors.supplier_id">
+            <FormField v-if="form.kind === 'project_return'" label="Dự án trả vật tư về" required :error="form.errors.project_id"
+              hint="Giá trị nhập lại sẽ ghi giảm chi phí dở dang (TK 154) của dự án này">
+              <RemoteSearchSelect v-model="form.project_id" :display-text="projectName" :search-url="route('search.projects')"
+                placeholder="Tìm dự án..." :has-error="!!form.errors.project_id"
+                @change="opt => projectName = opt ? `${opt.code} - ${opt.label}` : ''" />
+            </FormField>
+            <FormField v-else label="Nhà cung cấp" :required="form.kind === 'purchase'" :optional="form.kind === 'other'" :error="form.errors.supplier_id">
               <RemoteSearchSelect v-model="form.supplier_id" :display-text="supplierName" :search-url="route('search.suppliers')"
                 placeholder="Tìm nhà cung cấp..." :has-error="!!form.errors.supplier_id"
                 @change="opt => supplierName = opt?.label ?? ''" />
@@ -92,7 +99,7 @@
                     :class="{ 'erp-input-error': form.errors[`items.${i}.unit_price`] }" />
                 </td>
                 <td class="px-3 py-3 text-center">
-                  <select v-model.number="item.tax_rate" :disabled="form.kind === 'other'" class="erp-input w-20">
+                  <select v-model.number="item.tax_rate" :disabled="form.kind !== 'purchase'" class="erp-input w-20">
                     <option v-for="r in [0, 5, 8, 10]" :key="r" :value="r">{{ r }}%</option>
                   </select>
                 </td>
@@ -159,6 +166,7 @@ const newLine = (src = {}) => ({
 const e = props.entry;
 const supplierName = ref(e?.supplier_name ?? '');
 const accountName = ref(e?.credit_account_name ?? '');
+const projectName = ref(e?.project_name ?? '');
 const backUrl = computed(() => e ? route('warehouse.stock-entries.show', e.id) : route('warehouse.stock-entries.index'));
 
 const form = useForm({
@@ -167,15 +175,22 @@ const form = useForm({
   entry_date: e?.entry_date ?? new Date().toISOString().slice(0, 10),
   warehouse_id: e?.warehouse_id ?? (props.warehouses.length === 1 ? props.warehouses[0].id : null),
   supplier_id: e?.supplier_id ?? null,
+  project_id: e?.project_id ?? null,
   credit_account_code: e?.kind === 'other' ? e.credit_account_code : null,
   notes: e?.notes ?? '',
   items: e?.items?.length ? e.items.map(newLine) : [newLine()],
 });
 
-// Nhập khác không có hóa đơn GTGT → VAT 0
-watch(() => form.kind, k => { if (k === 'other') form.items.forEach(it => { it.tax_rate = 0; }); });
+const journalHint = computed(() => ({
+  purchase: 'Nợ 156/152/153 + 1331 / Có 331 (NCC)',
+  project_return: 'Nợ 156/152/153 / Có 154 (dự án đã chọn) — giảm chi phí dở dang dự án',
+  other: 'Nợ 156/152/153 / Có TK đối ứng đã chọn',
+}[form.kind]));
 
-const addLine = () => form.items.push(newLine({ tax_rate: form.kind === 'other' ? 0 : 10 }));
+// Chỉ mua hàng của NCC mới có hóa đơn GTGT → các loại khác VAT 0
+watch(() => form.kind, k => { if (k !== 'purchase') form.items.forEach(it => { it.tax_rate = 0; }); });
+
+const addLine = () => form.items.push(newLine({ tax_rate: form.kind === 'purchase' ? 10 : 0 }));
 
 function onProduct(item, opt) {
   item.product_name = opt ? `${opt.code} - ${opt.label}` : '';
@@ -190,6 +205,8 @@ function submit() {
   form.transform(d => ({
     ...d,
     credit_account_code: d.kind === 'other' ? d.credit_account_code : null,
+    supplier_id: d.kind === 'project_return' ? null : d.supplier_id,
+    project_id: d.kind === 'project_return' ? d.project_id : null,
     items: d.items.map(({ product_id, quantity, unit_price, tax_rate, serial_text }) => ({
       product_id, quantity, unit_price, tax_rate,
       serials: serial_text.split(/[\r\n,;]+/).map(s => s.trim()).filter(Boolean),

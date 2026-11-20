@@ -10,7 +10,9 @@ use App\Enums\StockExitStatus;
 use App\Jobs\NotifyLowStockJob;
 use App\Models\Product;
 use App\Models\ProductSerial;
+use App\Models\Project;
 use App\Models\ProjectInventoryLot;
+use App\Models\ProjectWipEntry;
 use App\Models\PurchaseOrder;
 use App\Models\PurchaseOrderItem;
 use App\Models\StockEntry;
@@ -257,6 +259,7 @@ class StockService
             // Đánh dấu project inventory lots là cancelled
             ProjectInventoryLot::where('stock_entry_id', $entry->id)->update(['status' => 'cancelled']);
 
+            $this->removeProjectReturnWip($entry); // trước reverseOrDelete: WIP tham chiếu FK tới JE
             $this->accounting->reverseOrDelete('stock_entry', $entry->id, "Hủy phiếu nhập kho {$entry->code}");
             $entry->update(['status' => StockEntryStatus::Cancelled]);
         });
@@ -284,6 +287,7 @@ class StockService
         }
 
         DB::transaction(function () use ($entry) {
+            $this->removeProjectReturnWip($entry); // trước reverseOrDelete: WIP tham chiếu FK tới JE
             $this->accounting->reverseOrDelete('stock_entry', $entry->id, "Thu hồi phiếu nhập kho {$entry->code} để chỉnh sửa");
 
             // Tạo movement âm để đảo ngược tồn kho tạm thời (sẽ được tạo lại khi confirm)
@@ -782,6 +786,11 @@ class StockService
         $totalCredit = array_sum(array_column($lines, 'debit'));
         if ($totalCredit <= 0) return;
 
+        if ($entry->isManualProjectReturn()) {
+            $this->postProjectReturnJournal($entry, $lines, $totalCredit);
+            return;
+        }
+
         // Phiếu nhập thủ công dạng "nhập khác" (Có 711/3381/411...) — không qua công nợ NCC
         if ($entry->isManual() && !$entry->isManualPurchase()) {
             $lines[] = ['account' => $entry->credit_account_code, 'debit' => 0, 'credit' => $totalCredit,
@@ -803,6 +812,44 @@ class StockService
             Carbon::parse($entry->entry_date),
             $lines, 'stock_entry', $entry->id, 'inbound'
         );
+    }
+
+    /**
+     * Nhập lại vật tư từ dự án: Nợ 156 / Có 154 (project_id) + WIP âm để giảm chi phí dở dang của dự án.
+     * Dùng post() fail-fast (giống xuất kho dự án) — không để phiếu confirmed mà thiếu bút toán/WIP.
+     */
+    private function postProjectReturnJournal(StockEntry $entry, array $lines, int $total): void
+    {
+        $project = Project::find($entry->project_id)
+            ?? throw new RuntimeException("Phiếu nhập {$entry->code} chưa chọn dự án nguồn.");
+
+        $lines[] = ['account' => $entry->credit_account_code, 'debit' => 0, 'credit' => $total,
+                    'description' => "Nhập lại vật tư từ dự án {$project->code} - phiếu {$entry->code}",
+                    'project_id'  => $project->id];
+
+        $je = $this->accounting->post(
+            "Nhập lại vật tư từ dự án {$project->code} - {$entry->code}",
+            Carbon::parse($entry->entry_date), $lines, 'stock_entry', $entry->id, true
+        );
+
+        ProjectWipEntry::create([
+            'project_id'       => $project->id,
+            'source_type'      => StockEntry::class,
+            'source_id'        => $entry->id,
+            'cost_type'        => 'material',
+            'amount'           => -$total,
+            'description'      => "Nhập lại vật tư về kho - phiếu {$entry->code}",
+            'entry_date'       => $entry->entry_date,
+            'journal_entry_id' => $je->id,
+            'created_by'       => auth()->id(),
+            'status'           => 'active',
+        ]);
+    }
+
+    /** Hủy/thu hồi phiếu nhập lại từ dự án → bỏ WIP âm (bút toán đã được reverseOrDelete riêng). */
+    private function removeProjectReturnWip(StockEntry $entry): void
+    {
+        ProjectWipEntry::where('source_type', StockEntry::class)->where('source_id', $entry->id)->delete();
     }
 
     private function postEntryInventoryAccount(StockEntryItem $item): string

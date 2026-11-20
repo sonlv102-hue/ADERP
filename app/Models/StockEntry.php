@@ -26,7 +26,7 @@ class StockEntry extends Model
     protected static int    $codePad    = 4;
 
     protected $fillable = [
-        'code', 'warehouse_id', 'supplier_id', 'purchase_order_id', 'credit_account_code', 'created_by', 'entry_date', 'status', 'notes',
+        'code', 'warehouse_id', 'supplier_id', 'purchase_order_id', 'credit_account_code', 'project_id', 'created_by', 'entry_date', 'status', 'notes',
     ];
 
     protected function casts(): array
@@ -53,6 +53,28 @@ class StockEntry extends Model
     public function isManualPurchase(): bool
     {
         return $this->isManual() && str_starts_with((string) $this->credit_account_code, '331');
+    }
+
+    /** Phiếu thủ công nhập lại vật tư từ dự án (Có 154) — ghi giảm WIP của project_id. */
+    public function isManualProjectReturn(): bool
+    {
+        return $this->isManual() && str_starts_with((string) $this->credit_account_code, '154');
+    }
+
+    /** purchase | project_return | other — null nếu không phải phiếu thủ công. */
+    public function manualKind(): ?string
+    {
+        return match (true) {
+            !$this->isManual()             => null,
+            $this->isManualPurchase()      => 'purchase',
+            $this->isManualProjectReturn() => 'project_return',
+            default                        => 'other',
+        };
+    }
+
+    public function project(): BelongsTo
+    {
+        return $this->belongsTo(Project::class);
     }
 
     public function warehouse(): BelongsTo
