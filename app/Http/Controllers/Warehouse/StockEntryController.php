@@ -70,6 +70,7 @@ class StockEntryController extends Controller
                     'creator' => $e->creator->name,
                     'purchase_order_id' => $e->purchaseOrder?->id,
                     'purchase_order_code' => $e->purchaseOrder?->code,
+                    'is_manual' => $e->isManual(),
                     'items_count' => $e->items_count,
                 ]),
             'filters'  => ['q' => $q, 'status' => $status],
@@ -254,6 +255,10 @@ class StockEntryController extends Controller
         if ($stockEntry->status !== StockEntryStatus::Draft) {
             return redirect()->route('warehouse.stock-entries.show', $stockEntry)
                 ->with('error', 'Chỉ có thể sửa phiếu ở trạng thái nháp.');
+        }
+
+        if ($stockEntry->isManual()) {
+            return redirect()->route('warehouse.stock-entries.manual.edit', $stockEntry);
         }
 
         $po = PurchaseOrder::with(['items.product', 'items.project', 'supplier', 'warehouse'])
@@ -454,6 +459,11 @@ class StockEntryController extends Controller
                 'creator' => $stockEntry->creator->name,
                 'purchase_order_id' => $stockEntry->purchase_order_id,
                 'purchase_order_code' => $stockEntry->purchaseOrder?->code,
+                'is_manual' => $stockEntry->isManual(),
+                'credit_account_code' => $stockEntry->credit_account_code,
+                'credit_account_name' => $stockEntry->credit_account_code
+                    ? \App\Models\AccountCode::where('code', $stockEntry->credit_account_code)->value('name')
+                    : null,
                 'notes' => $stockEntry->notes,
                 'posting_job' => $pj ? [
                     'status'        => $pj->status->value,

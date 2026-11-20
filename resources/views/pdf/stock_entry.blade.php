@@ -115,7 +115,7 @@ $grandTotal = $stockEntry->items->sum(fn($i) => $i->quantity * $i->unit_price);
     </div>
     <div class="meta-box">
       <h3>Đơn mua hàng</h3>
-      <div class="meta-row"><strong>Mã PO:</strong> {{ $stockEntry->purchaseOrder?->code ?? '—' }}</div>
+      <div class="meta-row"><strong>Mã PO:</strong> {{ $stockEntry->purchaseOrder?->code ?? ($stockEntry->isManual() ? 'Nhập thủ công' : '—') }}</div>
     </div>
   </div>
 

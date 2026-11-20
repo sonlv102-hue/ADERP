@@ -26,7 +26,7 @@ class StockEntry extends Model
     protected static int    $codePad    = 4;
 
     protected $fillable = [
-        'code', 'warehouse_id', 'supplier_id', 'purchase_order_id', 'created_by', 'entry_date', 'status', 'notes',
+        'code', 'warehouse_id', 'supplier_id', 'purchase_order_id', 'credit_account_code', 'created_by', 'entry_date', 'status', 'notes',
     ];
 
     protected function casts(): array
@@ -41,6 +41,18 @@ class StockEntry extends Model
     public static function generateCode(): string
     {
         return static::nextCode();
+    }
+
+    /** Phiếu nhập thủ công: không có đơn mua, TK Có do người dùng chọn. */
+    public function isManual(): bool
+    {
+        return $this->purchase_order_id === null && $this->credit_account_code !== null;
+    }
+
+    /** Phiếu thủ công dạng mua hàng của NCC (Có 331) — được tính VAT, ghi công nợ NCC. */
+    public function isManualPurchase(): bool
+    {
+        return $this->isManual() && str_starts_with((string) $this->credit_account_code, '331');
     }
 
     public function warehouse(): BelongsTo

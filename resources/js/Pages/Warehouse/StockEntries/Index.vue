@@ -12,6 +12,13 @@
             </svg>
             Xuất danh sách
           </a>
+          <Link v-if="can('warehouse.stock_entries.create_manual')" :href="route('warehouse.stock-entries.manual.create')"
+            class="erp-btn-secondary" title="Tạo phiếu nhập không liên kết đơn mua hàng">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+            </svg>
+            Nhập thủ công
+          </Link>
           <Link :href="route('purchasing.purchase-orders.index')"
             class="bg-primary-600 hover:bg-primary-700 text-white px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2"
             title="Nhập kho từ đơn mua hàng">
@@ -63,6 +70,7 @@
                   <Link :href="route('purchasing.purchase-orders.show', entry.purchase_order_id)"
                     class="font-mono text-primary-600 hover:underline">{{ entry.purchase_order_code }}</Link>
                 </span>
+                <span v-else-if="entry.is_manual" class="text-xs text-amber-700">Nhập thủ công</span>
                 <span v-else>—</span>
               </td>
               <td class="px-5 py-3 text-gray-600">{{ entry.creator ?? '—' }}</td>
@@ -76,7 +84,7 @@
               </td>
             </tr>
             <tr v-if="!entries.data?.length">
-              <td colspan="8" class="px-5 py-10 text-center text-gray-400">Chưa có phiếu nhập nào</td>
+              <td colspan="9" class="px-5 py-10 text-center text-gray-400">Chưa có phiếu nhập nào</td>
             </tr>
           </tbody>
         </table>
@@ -93,6 +101,9 @@ import { Link, router } from '@inertiajs/vue3';
 import AppLayout from '@/Components/Layout/AppLayout.vue';
 import StatusBadge from '@/Components/Shared/StatusBadge.vue';
 import Pagination from '@/Components/Shared/Pagination.vue';
+import { usePermission } from '@/composables/usePermission';
+
+const { can } = usePermission();
 
 const props = defineProps({ entries: Object, filters: Object, statuses: Array });
 

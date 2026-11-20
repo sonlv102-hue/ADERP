@@ -20,7 +20,7 @@
             </svg>
             In / Xuất PDF
           </a>
-          <Link v-if="entry.status === 'draft'" :href="route('warehouse.stock-entries.edit', entry.id)"
+          <Link v-if="entry.status === 'draft'" :href="entry.is_manual ? route('warehouse.stock-entries.manual.edit', entry.id) : route('warehouse.stock-entries.edit', entry.id)"
             class="flex items-center gap-1.5 px-4 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50">
             <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -143,7 +143,15 @@
               <Link v-if="entry.purchase_order_id" :href="route('purchasing.purchase-orders.show', entry.purchase_order_id)" class="font-mono text-primary-600 hover:underline">
                 {{ entry.purchase_order_code }}
               </Link>
+              <span v-else-if="entry.is_manual" class="text-amber-700">Nhập thủ công (không qua đơn mua)</span>
               <span v-else>—</span>
+            </p>
+          </div>
+          <div v-if="entry.is_manual">
+            <span class="text-gray-500">TK đối ứng (Có)</span>
+            <p class="font-medium text-gray-900 mt-0.5">
+              <span class="font-mono">{{ entry.credit_account_code }}</span>
+              <span v-if="entry.credit_account_name"> - {{ entry.credit_account_name }}</span>
             </p>
           </div>
           <div class="sm:col-span-2">

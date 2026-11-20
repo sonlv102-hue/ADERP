@@ -247,6 +247,10 @@ Route::middleware('auth')->group(function () {
 
         Route::get('stock-entries/export-pdf', [StockEntryController::class, 'exportPdf'])->name('stock-entries.export-pdf')->middleware('can:warehouse.stock_entries.view');
         Route::get('stock-entries', [StockEntryController::class, 'index'])->name('stock-entries.index')->middleware('can:warehouse.stock_entries.view');
+        Route::get('stock-entries/manual/create', [\App\Http\Controllers\Warehouse\ManualStockEntryController::class, 'create'])->name('stock-entries.manual.create')->middleware('can:warehouse.stock_entries.create_manual');
+        Route::post('stock-entries/manual', [\App\Http\Controllers\Warehouse\ManualStockEntryController::class, 'store'])->name('stock-entries.manual.store')->middleware('can:warehouse.stock_entries.create_manual');
+        Route::get('stock-entries/{stockEntry}/manual/edit', [\App\Http\Controllers\Warehouse\ManualStockEntryController::class, 'edit'])->name('stock-entries.manual.edit')->middleware('can:warehouse.stock_entries.create_manual');
+        Route::put('stock-entries/{stockEntry}/manual', [\App\Http\Controllers\Warehouse\ManualStockEntryController::class, 'update'])->name('stock-entries.manual.update')->middleware('can:warehouse.stock_entries.create_manual');
         Route::get('stock-entries/create', [StockEntryController::class, 'create'])->name('stock-entries.create')->middleware('can:warehouse.stock_entries.create');
         Route::post('stock-entries', [StockEntryController::class, 'store'])->name('stock-entries.store')->middleware('can:warehouse.stock_entries.create');
         Route::get('stock-entries/{stockEntry}', [StockEntryController::class, 'show'])->name('stock-entries.show')->middleware('can:warehouse.stock_entries.view');

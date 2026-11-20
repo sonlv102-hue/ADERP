@@ -748,9 +748,10 @@ class StockService
     private function postEntryJournal(StockEntry $entry): void
     {
         $entry->load('items.product');
+        // Phiếu từ PO: NCC lấy theo PO. Phiếu thủ công: NCC lưu trên phiếu (có thể null với "nhập khác").
         $supplierId = $entry->purchase_order_id
             ? DB::table('purchase_orders')->where('id', $entry->purchase_order_id)->value('supplier_id')
-            : null;
+            : $entry->supplier_id;
         $supplier = $supplierId ? \App\Models\Supplier::find($supplierId) : null;
         $lines = [];
 
@@ -781,14 +782,21 @@ class StockService
         $totalCredit = array_sum(array_column($lines, 'debit'));
         if ($totalCredit <= 0) return;
 
-        if (!$supplier) {
-            throw new \RuntimeException(
-                "Phiếu nhập kho {$entry->code} không xác định được nhà cung cấp. Không thể tạo bút toán."
-            );
+        // Phiếu nhập thủ công dạng "nhập khác" (Có 711/3381/411...) — không qua công nợ NCC
+        if ($entry->isManual() && !$entry->isManualPurchase()) {
+            $lines[] = ['account' => $entry->credit_account_code, 'debit' => 0, 'credit' => $totalCredit,
+                        'description' => "Nhập kho khác - phiếu {$entry->code}"];
+        } else {
+            if (!$supplier) {
+                throw new \RuntimeException(
+                    "Phiếu nhập kho {$entry->code} không xác định được nhà cung cấp. Không thể tạo bút toán."
+                );
+            }
+            $lines[] = ['account' => $entry->isManualPurchase() ? $entry->credit_account_code : $supplier->getPayableAccount(),
+                        'debit' => 0, 'credit' => $totalCredit,
+                        'description'  => "Phải trả NCC - phiếu {$entry->code}",
+                        'partner_type' => 'supplier', 'partner_id' => $supplierId];
         }
-        $lines[] = ['account' => $supplier->getPayableAccount(), 'debit' => 0, 'credit' => $totalCredit,
-                    'description'  => "Phải trả NCC - phiếu {$entry->code}",
-                    'partner_type' => 'supplier', 'partner_id' => $supplierId];
 
         $this->accounting->tryPost(
             "Nhập kho hàng hóa {$entry->code}",

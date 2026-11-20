@@ -64,6 +64,7 @@ class RolePermissionSeeder extends Seeder
             ['module' => 'warehouse', 'menu_key' => 'warehouse.stock_entries', 'action' => 'update', 'code' => 'warehouse.stock_entries.update', 'name' => 'Sửa Phiếu nhập kho', 'description' => 'Chỉnh sửa phiếu nhập kho'],
             ['module' => 'warehouse', 'menu_key' => 'warehouse.stock_entries', 'action' => 'delete', 'code' => 'warehouse.stock_entries.delete', 'name' => 'Xóa Phiếu nhập kho', 'description' => 'Xóa phiếu nhập kho nháp'],
             ['module' => 'warehouse', 'menu_key' => 'warehouse.stock_entries', 'action' => 'confirm', 'code' => 'warehouse.stock_entries.confirm', 'name' => 'Xác nhận Nhập kho', 'description' => 'Xác nhận hoàn thành nhập kho'],
+            ['module' => 'warehouse', 'menu_key' => 'warehouse.stock_entries', 'action' => 'create_manual', 'code' => 'warehouse.stock_entries.create_manual', 'name' => 'Tạo Phiếu nhập kho thủ công', 'description' => 'Tạo/sửa phiếu nhập kho không liên kết đơn mua hàng'],
 
             // Xuất kho (warehouse.stock_exits)
             ['module' => 'warehouse', 'menu_key' => 'warehouse.stock_exits', 'action' => 'view', 'code' => 'warehouse.stock_exits.view', 'name' => 'Xem Phiếu xuất kho', 'description' => 'Xem danh sách và chi tiết phiếu xuất'],
@@ -248,7 +249,7 @@ class RolePermissionSeeder extends Seeder
             'accounting.journals.update', 'accounting.journals.delete', 'accounting.journals.post', 'accounting.journals.reverse',
             'purchases.invoices.view', 'purchases.invoices.create', 'purchases.invoices.update',
             'purchases.invoices.post', 'purchases.invoices.cancel',
-            'sales.orders.view', 'purchases.orders.view', 'warehouse.stock_entries.view',
+            'sales.orders.view', 'purchases.orders.view', 'warehouse.stock_entries.view', 'warehouse.stock_entries.create_manual',
             'warehouse.stock_exits.view', 'reports.financial.view', 'reports.financial.export',
             'reports.cashflow.view', 'reports.cashflow.export',
             'reports.bank_cashflow.view', 'reports.bank_cashflow.transactions.view',
