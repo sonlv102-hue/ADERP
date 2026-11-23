@@ -80,7 +80,7 @@ Các rule chi tiết nằm trong `.claude/rules/`. Không import toàn bộ rule
 - `unit_price` trong đơn mua là giá đã gồm VAT; khi tạo hóa đơn phải back-calculate để tách subtotal/tax.
 - Tồn kho tính từ `SUM(stock_movements.quantity)`; không lưu tồn kho trực tiếp trên sản phẩm.
 - Soft delete chỉ áp dụng cho master data: products, customers, suppliers, users, services.
-- Stock entry mặc định đi qua PO. Ngoại lệ duy nhất: phiếu nhập thủ công (`ManualStockEntryController`, quyền `warehouse.stock_entries.create_manual`, `stock_entries.credit_account_code` NOT NULL) — loại mua NCC (Có 331) hoặc nhập khác (Có TK chọn, VAT=0). Không tạo phiếu nhập tự do theo đường khác.
+- Stock entry mặc định đi qua PO. Ngoại lệ duy nhất: phiếu nhập thủ công (`ManualStockEntryController`, quyền `warehouse.stock_entries.create_manual`, `stock_entries.credit_account_code` NOT NULL) — loại mua NCC (Có 331), nhập lại từ dự án (Có 154, VAT=0) hoặc nhập khác (Có TK chọn, VAT tùy chọn; `stock_entry_items.tax_amount` = tiền VAT tự nhập, NULL = tính theo %). Không tạo phiếu nhập tự do theo đường khác.
 - Serial tracking phải nhất quán qua: nhập kho, xuất kho, chuyển kho, trả hàng, hủy phiếu.
 - Khi hủy phiếu đã confirmed, phải tạo reversal movement thay vì âm thầm sửa/xóa dữ liệu lịch sử.
 - Invoice chỉ tự động Paid khi payment >= total qua service xử lý payment; không thêm action mark-paid thủ công nếu không có yêu cầu rõ.

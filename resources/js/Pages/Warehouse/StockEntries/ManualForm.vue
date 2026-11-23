@@ -23,7 +23,7 @@
             <div class="flex flex-wrap gap-4 text-sm">
               <label class="flex items-center gap-2"><input type="radio" value="purchase" v-model="form.kind" /> Mua hàng của NCC (công nợ 331, có VAT)</label>
               <label class="flex items-center gap-2"><input type="radio" value="project_return" v-model="form.kind" /> Nhập lại vật tư từ dự án (Có 154)</label>
-              <label class="flex items-center gap-2"><input type="radio" value="other" v-model="form.kind" /> Nhập khác (hàng tặng, thừa, góp vốn... — không VAT)</label>
+              <label class="flex items-center gap-2"><input type="radio" value="other" v-model="form.kind" /> Nhập khác (mua lẻ trả tiền ngay, hàng tặng, thừa... — VAT tùy chọn)</label>
             </div>
           </FormField>
 
@@ -76,6 +76,7 @@
                 <th class="text-right px-3 py-3 font-semibold text-gray-600">Số lượng</th>
                 <th class="text-right px-3 py-3 font-semibold text-gray-600">Đơn giá (chưa VAT)</th>
                 <th class="text-center px-3 py-3 font-semibold text-gray-600">% VAT</th>
+                <th class="text-right px-3 py-3 font-semibold text-gray-600">Tiền VAT</th>
                 <th class="text-left px-3 py-3 font-semibold text-gray-600 min-w-[200px]">Serial (mỗi dòng 1 số)</th>
                 <th class="text-right px-3 py-3 font-semibold text-gray-600">Thành tiền</th>
                 <th class="px-3 py-3"></th>
@@ -99,9 +100,17 @@
                     :class="{ 'erp-input-error': form.errors[`items.${i}.unit_price`] }" />
                 </td>
                 <td class="px-3 py-3 text-center">
-                  <select v-model.number="item.tax_rate" :disabled="form.kind !== 'purchase'" class="erp-input w-20">
+                  <select v-model.number="item.tax_rate" :disabled="noVat" class="erp-input w-20" @change="item.tax_manual = false">
                     <option v-for="r in [0, 5, 8, 10]" :key="r" :value="r">{{ r }}%</option>
                   </select>
+                </td>
+                <td class="px-3 py-3 text-right">
+                  <input :value="item.tax_manual ? item.tax_amount : autoTax(item)" @input="onTaxInput(item, $event.target.value)"
+                    type="number" min="0" step="any" :disabled="noVat" class="erp-input w-32 text-right"
+                    :class="{ 'erp-input-error': form.errors[`items.${i}.tax_amount`] }" title="Để trống để tự tính theo % VAT" />
+                  <button v-if="item.tax_manual && !noVat" type="button" @click="item.tax_manual = false; item.tax_amount = null"
+                    class="block ml-auto mt-1 text-xs text-blue-600 hover:text-blue-800">Tự tính lại</button>
+                  <p v-if="form.errors[`items.${i}.tax_amount`]" class="mt-1 text-xs text-red-600">{{ form.errors[`items.${i}.tax_amount`] }}</p>
                 </td>
                 <td class="px-3 py-3">
                   <textarea v-model="item.serial_text" rows="2" class="erp-input font-mono text-xs" placeholder="Không bắt buộc" />
@@ -116,7 +125,7 @@
             </tbody>
             <tfoot class="bg-gray-50 border-t border-gray-200">
               <tr>
-                <td colspan="5" class="px-4 py-3 text-right font-semibold text-gray-700">Tổng cộng:</td>
+                <td colspan="6" class="px-4 py-3 text-right font-semibold text-gray-700">Tổng cộng<span v-if="totalTax" class="font-normal text-gray-500"> (VAT {{ formatVnd(totalTax) }})</span>:</td>
                 <td class="px-3 py-3 text-right font-bold text-gray-900 whitespace-nowrap">{{ formatVnd(grandTotal) }}</td>
                 <td></td>
               </tr>
@@ -160,6 +169,8 @@ const newLine = (src = {}) => ({
   quantity: src.quantity ?? 1,
   unit_price: src.unit_price ?? 0,
   tax_rate: src.tax_rate ?? 10,
+  tax_amount: src.tax_amount ?? null,
+  tax_manual: src.tax_amount != null,
   serial_text: (src.serials ?? []).join('\n'),
 });
 
@@ -184,11 +195,14 @@ const form = useForm({
 const journalHint = computed(() => ({
   purchase: 'Nợ 156/152/153 + 1331 / Có 331 (NCC)',
   project_return: 'Nợ 156/152/153 / Có 154 (dự án đã chọn) — giảm chi phí dở dang dự án',
-  other: 'Nợ 156/152/153 / Có TK đối ứng đã chọn',
+  other: 'Nợ 156/152/153 (+ 1331 nếu có VAT) / Có TK đối ứng đã chọn',
 }[form.kind]));
 
-// Chỉ mua hàng của NCC mới có hóa đơn GTGT → các loại khác VAT 0
-watch(() => form.kind, k => { if (k !== 'purchase') form.items.forEach(it => { it.tax_rate = 0; }); });
+// Nhập lại vật tư từ dự án không có VAT; mua NCC / nhập khác: kế toán tự chọn % hoặc tự nhập tiền VAT
+const noVat = computed(() => form.kind === 'project_return');
+watch(() => form.kind, k => {
+  if (k === 'project_return') form.items.forEach(it => { it.tax_rate = 0; it.tax_manual = false; it.tax_amount = null; });
+});
 
 const addLine = () => form.items.push(newLine({ tax_rate: form.kind === 'purchase' ? 10 : 0 }));
 
@@ -198,8 +212,16 @@ function onProduct(item, opt) {
   if (opt && form.kind === 'purchase') item.tax_rate = [0, 5, 8, 10].includes(opt.vat_percent) ? opt.vat_percent : 10;
 }
 
-const lineTotal = it => Math.round((it.quantity || 0) * (it.unit_price || 0) * (1 + (it.tax_rate || 0) / 100));
+const autoTax = it => Math.round((it.quantity || 0) * (it.unit_price || 0) * (it.tax_rate || 0) / 100);
+const lineTax = it => (it.tax_manual ? Math.round(it.tax_amount || 0) : autoTax(it));
+const lineTotal = it => Math.round((it.quantity || 0) * (it.unit_price || 0)) + lineTax(it);
 const grandTotal = computed(() => form.items.reduce((s, it) => s + lineTotal(it), 0));
+const totalTax = computed(() => form.items.reduce((s, it) => s + lineTax(it), 0));
+
+function onTaxInput(item, v) {
+  item.tax_manual = v !== '';
+  item.tax_amount = v === '' ? null : Number(v);
+}
 
 function submit() {
   form.transform(d => ({
@@ -207,8 +229,9 @@ function submit() {
     credit_account_code: d.kind === 'other' ? d.credit_account_code : null,
     supplier_id: d.kind === 'project_return' ? null : d.supplier_id,
     project_id: d.kind === 'project_return' ? d.project_id : null,
-    items: d.items.map(({ product_id, quantity, unit_price, tax_rate, serial_text }) => ({
+    items: d.items.map(({ product_id, quantity, unit_price, tax_rate, tax_amount, tax_manual, serial_text }) => ({
       product_id, quantity, unit_price, tax_rate,
+      tax_amount: tax_manual && d.kind !== 'project_return' ? tax_amount : null,
       serials: serial_text.split(/[\r\n,;]+/).map(s => s.trim()).filter(Boolean),
     })),
   }));

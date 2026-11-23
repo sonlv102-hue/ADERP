@@ -110,12 +110,12 @@ class ManualStockEntryTest extends TestCase
 
     public function test_other_kind_credits_chosen_account_without_vat(): void
     {
-        $this->post(route('warehouse.stock-entries.manual.store'), $this->payload([
-            'kind' => 'other', 'supplier_id' => null, 'credit_account_code' => '711',
-        ]))->assertSessionHasNoErrors();
+        $p = $this->payload(['kind' => 'other', 'supplier_id' => null, 'credit_account_code' => '711']);
+        $p['items'][0]['tax_rate'] = 0;
+        $this->post(route('warehouse.stock-entries.manual.store'), $p)->assertSessionHasNoErrors();
 
         $e = StockEntry::where('code', 'NK-M001')->firstOrFail();
-        $this->assertEquals(0, $e->items()->first()->tax_rate);   // VAT bị ép về 0
+        $this->assertEquals(0, $e->items()->first()->tax_rate);
 
         app(StockService::class)->confirmEntry($e->fresh());
 
@@ -276,5 +276,55 @@ class ManualStockEntryTest extends TestCase
             'kind' => 'other', 'supplier_id' => null, 'credit_account_code' => '711',
         ]))->assertSessionHasNoErrors();
         $this->assertNull(StockEntry::firstOrFail()->supplier_id);
+    }
+
+    public function test_other_kind_with_vat_rate_posts_1331(): void
+    {
+        $this->post(route('warehouse.stock-entries.manual.store'), $this->payload([
+            'kind' => 'other', 'supplier_id' => null, 'credit_account_code' => '711',
+        ]))->assertSessionHasNoErrors();
+
+        $e = StockEntry::where('code', 'NK-M001')->firstOrFail();
+        $this->assertEquals(10, $e->items()->first()->tax_rate);
+        app(StockService::class)->confirmEntry($e->fresh());
+
+        $this->assertEqualsCanonicalizing(
+            [['1561', 2_000_000, 0], ['1331', 200_000, 0], ['711', 0, 2_200_000]], $this->journalLines($e));
+    }
+
+    public function test_manual_tax_amount_overrides_rate(): void
+    {
+        $p = $this->payload(['kind' => 'other', 'supplier_id' => null, 'credit_account_code' => '711']);
+        $p['items'][0]['tax_amount'] = 199_999;
+        $this->post(route('warehouse.stock-entries.manual.store'), $p)->assertSessionHasNoErrors();
+
+        $e = StockEntry::where('code', 'NK-M001')->firstOrFail();
+        app(StockService::class)->confirmEntry($e->fresh());
+
+        $this->assertEqualsCanonicalizing(
+            [['1561', 2_000_000, 0], ['1331', 199_999, 0], ['711', 0, 2_199_999]], $this->journalLines($e));
+        $show = $this->get(route('warehouse.stock-entries.show', $e))->viewData('page')['props']['entry']['items'][0];
+        $this->assertSame(199_999, $show['tax_amount']);
+    }
+
+    public function test_tax_amount_cannot_exceed_line_value(): void
+    {
+        $p = $this->payload();
+        $p['items'][0]['tax_amount'] = 2_000_001;
+        $this->post(route('warehouse.stock-entries.manual.store'), $p)->assertSessionHasErrors('items.0.tax_amount');
+        $this->assertSame(0, StockEntry::count());
+    }
+
+    public function test_project_return_ignores_vat_input(): void
+    {
+        $proj = $this->projectWithWip(5_000_000);
+        $p = $this->returnPayload($proj);
+        $p['items'][0]['tax_rate'] = 10;
+        $p['items'][0]['tax_amount'] = 50_000;
+        $this->post(route('warehouse.stock-entries.manual.store'), $p)->assertSessionHasNoErrors();
+
+        $item = StockEntry::firstOrFail()->items()->first();
+        $this->assertEquals(0, $item->tax_rate);
+        $this->assertNull($item->tax_amount);
     }
 }

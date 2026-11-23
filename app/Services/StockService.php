@@ -764,7 +764,7 @@ class StockService
             $taxRate     = (float) ($item->tax_rate ?? 10);
 
             $lineExclTax = $unitExclTax * $item->quantity;
-            $lineTax     = $lineExclTax * $taxRate / 100;
+            $lineTax     = $item->tax_amount !== null ? (float) $item->tax_amount : $lineExclTax * $taxRate / 100;
             $lineInclTax = $lineExclTax + $lineTax;
 
             $exclRounded = (int) round($lineExclTax);
