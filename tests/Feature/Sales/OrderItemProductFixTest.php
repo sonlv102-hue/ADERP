@@ -73,7 +73,7 @@ class OrderItemProductFixTest extends TestCase
     private function makeOrder(OrderStatus $status, float $delivered = 0): Order
     {
         $order = Order::create([
-            'code' => 'DH-OIFIX-' . uniqid(),
+            'code' => 'DH-OIFIX-' . substr(uniqid(), -8), // varchar(20) trên PostgreSQL
             'customer_id' => $this->customer->id,
             'order_date' => '2026-07-01',
             'status' => $status,
@@ -175,7 +175,7 @@ class OrderItemProductFixTest extends TestCase
 
         $warehouse = Warehouse::create(['code' => 'KHO-OIFIX', 'name' => 'Kho OIFIX Test', 'address' => 'Test']);
         $exit = StockExit::create([
-            'code' => 'XK-OIFIX-' . uniqid(),
+            'code' => 'XK-OIFIX-' . substr(uniqid(), -8), // varchar(20) trên PostgreSQL
             'warehouse_id' => $warehouse->id,
             'order_id' => $order->id,
             'status' => 'confirmed',

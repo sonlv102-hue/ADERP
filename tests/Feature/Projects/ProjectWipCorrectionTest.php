@@ -323,7 +323,7 @@ class ProjectWipCorrectionTest extends TestCase
     private function makePurchaseInvoiceWithItem(?int $projectId = null): array
     {
         $supplier  = Supplier::firstOrCreate(['code' => 'NCC-WIP-T1'], ['name' => 'NCC WIP Test', 'phone' => '0900000099']);
-        $warehouse = Warehouse::firstOrCreate(['code' => 'KHO-WIP'], ['name' => 'Kho WIP', 'is_active' => true]);
+        $warehouse = Warehouse::firstOrCreate(['name' => 'Kho WIP'], ['is_active' => true]) /* warehouses không có cột code */;
         $po = PurchaseOrder::create([
             'code'         => 'MH-WIP-' . uniqid(),
             'supplier_id'  => $supplier->id,

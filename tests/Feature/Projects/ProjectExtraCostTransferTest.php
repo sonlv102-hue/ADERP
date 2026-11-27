@@ -41,7 +41,7 @@ class ProjectExtraCostTransferTest extends TestCase
             ['name' => 'KH Transfer Test', 'phone' => '0900000099']
         );
         $this->project = Project::create([
-            'code'        => 'DA-TR-' . uniqid(),
+            'code'        => 'DA-TR-' . substr(uniqid(), -8), // varchar(20) trên PostgreSQL
             'name'        => 'Dự án Transfer Test',
             'customer_id' => $customer->id,
             'status'      => 'planning',
@@ -541,7 +541,7 @@ class ProjectExtraCostTransferTest extends TestCase
 
         // Dự án khác
         $otherProject = Project::create([
-            'code'        => 'DA-OTHER-' . uniqid(),
+            'code'        => 'DA-OTHER-' . substr(uniqid(), -8), // varchar(20) trên PostgreSQL
             'name'        => 'Dự án khác',
             'customer_id' => $this->project->customer_id,
             'status'      => 'planning',

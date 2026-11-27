@@ -106,7 +106,7 @@ class PurchaseInvoicePayableAccountTest extends TestCase
 
     private function makeWarehouse(): Warehouse
     {
-        return Warehouse::firstOrCreate(['code' => 'WH-P'], ['name' => 'Kho test', 'is_active' => true]);
+        return Warehouse::firstOrCreate(['name' => 'Kho test'], ['is_active' => true]) /* warehouses không có cột code */;
     }
 
     private function makePo(): PurchaseOrder

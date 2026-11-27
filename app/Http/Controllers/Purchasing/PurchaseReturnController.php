@@ -333,7 +333,8 @@ class PurchaseReturnController extends Controller
             return back()->with('error', $e->getMessage());
         }
 
-        return back()->with('success', 'Đã xác nhận phiếu trả hàng mua. Tồn kho đã được cập nhật.');
+        return back()->with('success', 'Đã xác nhận phiếu trả hàng mua. Tồn kho đã được cập nhật.')
+            ->with('warning', 'Chưa sinh bút toán tự động cho phiếu trả hàng (chính sách hạch toán A4 chờ kế toán trưởng quyết định). Kế toán cần hạch toán theo chứng từ; phiếu sẽ hiển thị trong báo cáo Kiểm soát sai lệch tồn kho và kế toán (RETURN_WITHOUT_JE) cho tới khi có bút toán.'); // A4: không âm thầm bỏ qua kế toán
     }
 
     public function cancel(PurchaseReturn $purchaseReturn): RedirectResponse

@@ -59,9 +59,9 @@ class PurchaseOrderItemProductFixTest extends TestCase
             ['name' => 'NCC PoItemFix Test', 'phone' => '0900000097']
         );
 
-        $this->warehouse = Warehouse::firstOrCreate(
-            ['code' => 'KHO-POIFIX'],
-            ['name' => 'Kho PoItemFix Test', 'address' => 'Test']
+        $this->warehouse = Warehouse::firstOrCreate( // warehouses không có cột code
+            ['name' => 'Kho PoItemFix Test'],
+            ['address' => 'Test']
         );
 
         $this->productA = Product::create([

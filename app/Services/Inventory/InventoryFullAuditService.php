@@ -32,9 +32,9 @@ class InventoryFullAuditService
      * @param array{product?:int[]|null, warehouse?:int|null, project?:int|null, document?:string|null} $f
      * @param array<string, array{status?:string, note?:string}> $notes  key "pid-wid" → ghi chú/khảo sát thủ công
      */
-    public function run(array $f = [], array $notes = []): Collection
+    public function run(array $f = [], array $notes = [], bool $withDocIssues = true): Collection
     {
-        $docIssues = $this->docs->issuesByRow();
+        $docIssues = $withDocIssues ? $this->docs->issuesByRow() : [];
         $docCodes  = $this->docs->documentCodesByRow();
         $legacyExits = $this->docs->legacyExitRows();
 
@@ -53,6 +53,10 @@ class InventoryFullAuditService
             $r->value_diff = $r->avco_value === null ? null : round($r->avco_value - $r->expected_avco_value, 2);
             $r->documents  = implode(' ', $docCodes[$key] ?? []);
 
+            // row_findings: chỉ các quy tắc theo số liệu sản phẩm×kho (báo cáo kiểm soát sai lệch dùng riêng,
+            // vì lỗi theo chứng từ được lập thành vấn đề riêng ở cấp chứng từ — tránh cộng trùng).
+            [$rowS, $rowC] = $this->classify($r, [], isset($legacyExits[$key]));
+            $r->row_findings = array_map(fn ($s, $c) => [$s, $c], $rowS, $rowC);
             [$statuses, $causes] = $this->classify($r, $docIssues[$key] ?? [], isset($legacyExits[$key]));
             if (isset($notes[$key])) {
                 if (! empty($notes[$key]['status'])) {

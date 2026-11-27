@@ -47,6 +47,7 @@ const URL_TITLES = {
   '/reports/ap/detail':              'SoCT công nợ trả',
   '/reports/vat':                    'Báo cáo VAT',
   '/reports/inventory':              'Tồn kho',
+  '/reports/inventory-integrity':    'Kiểm soát sai lệch kho',
   '/reports/cash_flow':              'Thu chi',
   '/reports/income_statement':       'Kết quả KD',
   '/reports/balance_sheet':          'Cân đối KT',

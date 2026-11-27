@@ -25,9 +25,22 @@ class InventoryDocumentAuditService
     public function issuesByRow(): array
     {
         $out = [];
-        $add = function (string $key, string $status, string $msg) use (&$out) {
-            $out[$key][] = [$status, $msg];
-        };
+        foreach ($this->findings() as $f) {
+            foreach ($f['keys'] as $key) {
+                $out[$key][] = [$f['legacy'], $f['msg']];
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Phát hiện theo chứng từ, có cấu trúc (dùng cho báo cáo kiểm soát sai lệch).
+     * 'rule' = mã quy tắc báo cáo; 'legacy' = trạng thái cũ của `inventory:audit --scope=full` (giữ nguyên CLI).
+     * @return list<array<string, mixed>>
+     */
+    public function findings(): array
+    {
+        $out = [];
 
         // 1. Số lượng movement net theo (chứng từ, sản phẩm, kho) so với dòng hàng của chứng từ
         foreach ($this->movementNetByDoc() as $m) {
@@ -40,8 +53,11 @@ class InventoryDocumentAuditService
             }
             $net = round((float) $m->net, 3);
             if (abs($net - $expected) > 0.0005) {
-                $status = abs($net) > abs($expected) && $expected != 0 ? 'DUPLICATE_TRANSACTION' : 'QUANTITY_MISMATCH';
-                $add($key, $status, "{$label} [" . ($doc['status'] ?? 'deleted') . "]: movement net {$net} ≠ chứng từ {$expected}");
+                $legacy = abs($net) > abs($expected) && $expected != 0 ? 'DUPLICATE_TRANSACTION' : 'QUANTITY_MISMATCH';
+                $status = $doc['status'] ?? 'deleted';
+                $out[] = $this->finding($status !== 'confirmed' ? 'DOCUMENT_STATUS_MISMATCH' : $legacy, $legacy, [$key], $m->source_type, (int) $m->source_id, $label, $status,
+                    "{$label} [{$status}]: movement net {$net} ≠ chứng từ {$expected}",
+                    ['product_id' => (int) $m->product_id, 'warehouse_id' => (int) $m->warehouse_id, 'qty_book' => $net, 'qty_expected' => $expected]);
             }
         }
 
@@ -53,28 +69,45 @@ class InventoryDocumentAuditService
                 $msg = $manual
                     ? "{$j->code}: không có JE tự động liên kết; đã hạch toán bằng JE thủ công {$manual->code} (Nợ 156 {$manual->debit_156}) — số tiền TK156 có, thiếu liên kết chứng từ"
                     : "{$j->code}: movement {$j->mv_amount} ≠ JE TK156 {$j->gl_amount} (lệch {$diff})";
-                foreach ($this->productRowsOf($j->source_type, (int) $j->source_id) as $key) {
-                    $add($key, 'ACCOUNTING_MISMATCH', $msg);
-                }
+                $rule = $manual ? 'MANUAL_JE_REVIEW' : (abs((float) $j->gl_amount) < 0.005 ? 'MISSING_ACCOUNTING_ENTRY' : 'INVENTORY_GL_MISMATCH');
+                $doc = $this->doc($j->source_type, (int) $j->source_id);
+                $out[] = $this->finding($rule, 'ACCOUNTING_MISMATCH', $this->productRowsOf($j->source_type, (int) $j->source_id),
+                    $j->source_type, (int) $j->source_id, $j->code, $doc['status'] ?? null, $msg,
+                    ['value_book' => round((float) $j->mv_amount, 2), 'value_compare' => round((float) $j->gl_amount, 2), 'value_diff' => $diff,
+                     'manual_je' => $manual?->code, 'manual_je_amount' => $manual ? round((float) $manual->debit_156, 2) : null]);
             }
         }
 
         // 3. Lô dự án trùng cho cùng một dòng phiếu nhập
-        $dupLots = DB::select("SELECT stock_entry_item_id, product_id, warehouse_id, COUNT(*) n FROM project_inventory_lots
-            WHERE status <> 'cancelled' AND stock_entry_item_id IS NOT NULL GROUP BY stock_entry_item_id, product_id, warehouse_id HAVING COUNT(*) > 1");
+        $dupLots = DB::select("SELECT l.stock_entry_item_id, l.product_id, l.warehouse_id, COUNT(*) n, MAX(i.stock_entry_id) entry_id FROM project_inventory_lots l
+            LEFT JOIN stock_entry_items i ON i.id = l.stock_entry_item_id
+            WHERE l.status <> 'cancelled' AND l.stock_entry_item_id IS NOT NULL GROUP BY l.stock_entry_item_id, l.product_id, l.warehouse_id HAVING COUNT(*) > 1");
         foreach ($dupLots as $l) {
-            $add($l->product_id . '-' . $l->warehouse_id, 'DUPLICATE_TRANSACTION', "Dòng phiếu nhập #{$l->stock_entry_item_id} có {$l->n} lô dự án hiệu lực");
+            $doc = $l->entry_id ? $this->doc('App\Models\StockEntry', (int) $l->entry_id) : null;
+            $out[] = $this->finding('DUPLICATE_TRANSACTION', 'DUPLICATE_TRANSACTION', [$l->product_id . '-' . $l->warehouse_id],
+                'App\Models\StockEntry', (int) $l->entry_id, $doc['code'] ?? null, $doc['status'] ?? null,
+                "Dòng phiếu nhập #{$l->stock_entry_item_id} có {$l->n} lô dự án hiệu lực",
+                ['product_id' => (int) $l->product_id, 'warehouse_id' => (int) $l->warehouse_id, 'ref' => 'item' . $l->stock_entry_item_id]);
         }
 
         // 4. Allocation hiệu lực thuộc phiếu xuất không còn ở trạng thái confirmed
         $badAlloc = DB::select("SELECT a.product_id, a.warehouse_id, a.stock_exit_id, x.code, x.status FROM stock_exit_item_lot_allocations a
             LEFT JOIN stock_exits x ON x.id = a.stock_exit_id WHERE a.voided_at IS NULL AND (x.id IS NULL OR x.status <> 'confirmed')");
         foreach ($badAlloc as $a) {
-            $add($a->product_id . '-' . $a->warehouse_id, 'ALLOCATION_MISMATCH',
-                'Allocation hiệu lực của ' . ($a->code ?? "XK#{$a->stock_exit_id} (đã xóa)") . ' [' . ($a->status ?? 'deleted') . ']');
+            $label = $a->code ?? "XK#{$a->stock_exit_id} (đã xóa)";
+            $out[] = $this->finding('ALLOCATION_MISMATCH', 'ALLOCATION_MISMATCH', [$a->product_id . '-' . $a->warehouse_id],
+                'App\Models\StockExit', (int) $a->stock_exit_id, $label, $a->status ?? 'deleted',
+                "Allocation hiệu lực của {$label} [" . ($a->status ?? 'deleted') . ']',
+                ['product_id' => (int) $a->product_id, 'warehouse_id' => (int) $a->warehouse_id]);
         }
 
         return $out;
+    }
+
+    private function finding(string $rule, string $legacy, array $keys, string $type, int $id, ?string $code, ?string $status, string $msg, array $extra = []): array
+    {
+        return $extra + ['rule' => $rule, 'legacy' => $legacy, 'keys' => array_values(array_unique($keys)), 'doc_type' => $type,
+            'doc_id' => $id, 'doc_code' => $code, 'doc_status' => $status, 'msg' => $msg];
     }
 
     /** @return array<string, list<string>> mã chứng từ liên quan theo dòng */
@@ -120,7 +153,7 @@ class InventoryDocumentAuditService
         return collect($rows)->mapWithKeys(fn ($r) => [$r->product_id . '-' . $r->warehouse_id => true])->all();
     }
 
-    private function productRowsOf(string $type, int $id): array
+    public function productRowsOf(string $type, int $id): array
     {
         return collect(DB::select('SELECT DISTINCT product_id, warehouse_id FROM stock_movements WHERE source_type = ? AND source_id = ?', [$type, $id]))
             ->map(fn ($r) => $r->product_id . '-' . $r->warehouse_id)->all();
@@ -174,7 +207,7 @@ class InventoryDocumentAuditService
             ->groupBy('j.id', 'j.code')->selectRaw('j.code, SUM(l.debit - l.credit) debit_156')->first();
     }
 
-    private function doc(string $type, int $id): ?array
+    public function doc(string $type, int $id): ?array
     {
         if ($this->docRowsCache === null) {
             $this->docRowsCache = [];

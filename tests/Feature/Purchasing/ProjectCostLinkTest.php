@@ -420,7 +420,7 @@ class ProjectCostLinkTest extends TestCase
 
     private function makePo(): PurchaseOrder
     {
-        $warehouse = Warehouse::firstOrCreate(['code' => 'KHO-01'], ['name' => 'Kho chính', 'is_active' => true]);
+        $warehouse = Warehouse::firstOrCreate(['name' => 'Kho chính'], ['is_active' => true]) /* warehouses không có cột code */;
 
         return PurchaseOrder::create([
             'code'         => 'MH-TEST-' . uniqid(),

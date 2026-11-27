@@ -38,13 +38,16 @@ class WarehouseProductSearch
             ->offset(($page - 1) * self::PER_PAGE)->limit(self::PER_PAGE)->get();
 
         $data = $products->map(function (Product $p) use ($general, $lots) {
-            [$gQty, $gCost] = $general[$p->id] ?? [0.0, 0.0];
+            [$gQty, $gCost, $gFallback] = $general[$p->id] ?? [0.0, 0.0, false];
             [$lQty, $lValue] = $lots[$p->id] ?? [0.0, 0.0];
             $qty = round($gQty + $lQty, 3);
             $avg = $qty > 0 ? round(($lValue + $gQty * $gCost) / $qty, 2) : 0.0;
             $meta = "Tồn: {$qty}" . ($p->unit ? " {$p->unit}" : '');
             if ($lQty > 0 && $gQty > 0) {
                 $meta .= " (lô DA: {$lQty}, kho chung: {$gQty})";
+            }
+            if ($gFallback) {
+                $meta .= ' · chưa có AVCO'; // backend tự khởi tạo AVCO từ phiếu nhập khi xác nhận, không đủ căn cứ sẽ chặn
             }
             return [
                 'value' => $p->id, 'label' => $p->name, 'code' => $p->code, 'meta' => $meta,
@@ -59,12 +62,12 @@ class WarehouseProductSearch
         ]];
     }
 
-    /** product_id => [qty, avg_cost] tồn kho chung > 0. */
+    /** product_id => [qty, avg_cost, is_fallback] tồn kho chung > 0. */
     private function generalStock(int $warehouseId)
     {
         $avco = InventoryBalance::where('warehouse_id', $warehouseId)->get(['product_id', 'qty_on_hand', 'avg_cost'])->keyBy('product_id');
         $out = $avco->filter(fn ($b) => (float) $b->qty_on_hand > 0)
-            ->map(fn ($b) => [(float) $b->qty_on_hand, (float) $b->avg_cost]);
+            ->map(fn ($b) => [(float) $b->qty_on_hand, (float) $b->avg_cost, false]);
 
         $fallback = DB::table('stock_movements')->where('warehouse_id', $warehouseId)->whereNull('project_id')
             ->where(fn ($q) => $q->whereNull('status')->orWhere('status', 'active'))
@@ -78,7 +81,7 @@ class WarehouseProductSearch
                 ->selectRaw('i.product_id, SUM(i.quantity * i.unit_price) / NULLIF(SUM(i.quantity), 0) AS c')
                 ->pluck('c', 'product_id');
             foreach ($fallback as $pid => $qty) {
-                $out[$pid] = [(float) $qty, (float) ($cost[$pid] ?? 0)];
+                $out[$pid] = [(float) $qty, (float) ($cost[$pid] ?? 0), true];
             }
         }
         return $out;

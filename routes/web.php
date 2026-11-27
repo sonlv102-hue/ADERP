@@ -30,6 +30,8 @@ use App\Http\Controllers\Reports\ARAgingController;
 use App\Http\Controllers\Reports\APAgingController;
 use App\Http\Controllers\Reports\VatReportController;
 use App\Http\Controllers\Reports\InventoryKpiDrilldownController;
+use App\Http\Controllers\Reports\InventoryIntegrityController;
+use App\Http\Controllers\Reports\InventoryIntegrityIssueController;
 use App\Http\Controllers\Reports\InventoryReportController;
 use App\Http\Controllers\Reports\InventoryTransactionReportController;
 use App\Http\Controllers\Reports\StockEntryDetailReportController;
@@ -876,6 +878,19 @@ Route::middleware('auth')->group(function () {
         Route::post('purchase-returns/{purchaseReturn}/confirm', [PurchaseReturnController::class, 'confirm'])->name('purchase-returns.confirm');
         Route::post('purchase-returns/{purchaseReturn}/cancel',  [PurchaseReturnController::class, 'cancel'])->name('purchase-returns.cancel');
 
+    });
+
+    // Báo cáo → Kho → Kiểm soát sai lệch tồn kho và kế toán (quyền riêng, không phụ thuộc reports.view)
+    Route::prefix('reports/inventory-integrity')->name('reports.inventory_integrity.')->middleware('can:reports.inventory_integrity.view')->group(function () {
+        Route::get('/',                 [InventoryIntegrityController::class, 'index'])->name('index');
+        Route::get('export',            [InventoryIntegrityController::class, 'export'])->name('export')->middleware('can:reports.inventory_integrity.export');
+        Route::post('run',              [InventoryIntegrityController::class, 'run'])->name('run')->middleware('can:reports.inventory_integrity.audit');
+        Route::post('assign',           [InventoryIntegrityIssueController::class, 'assign'])->name('assign')->middleware('can:reports.inventory_integrity.assign');
+        Route::get('{issue}',           [InventoryIntegrityController::class, 'show'])->name('show')->whereNumber('issue');
+        Route::patch('{issue}/status',  [InventoryIntegrityIssueController::class, 'status'])->name('status')->middleware('can:reports.inventory_integrity.assign');
+        Route::post('{issue}/note',     [InventoryIntegrityIssueController::class, 'note'])->name('note')->middleware('can:reports.inventory_integrity.note');
+        Route::post('{issue}/resolution', [InventoryIntegrityIssueController::class, 'resolution'])->name('resolution')->middleware('can:reports.inventory_integrity.note');
+        Route::post('{issue}/accept',   [InventoryIntegrityIssueController::class, 'accept'])->name('accept')->middleware('can:reports.inventory_integrity.accept');
     });
 
     // Reports - báo cáo

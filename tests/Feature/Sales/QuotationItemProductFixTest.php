@@ -66,7 +66,7 @@ class QuotationItemProductFixTest extends TestCase
     private function makeQuotation(QuotationStatus $status): Quotation
     {
         $quotation = Quotation::create([
-            'code' => 'BG-QIFIX-' . uniqid(),
+            'code' => 'BG-QIFIX-' . substr(uniqid(), -8), // varchar(20) trên PostgreSQL
             'customer_id' => $this->customer->id,
             'status' => $status,
             'discount_type' => 'percent',
@@ -163,7 +163,7 @@ class QuotationItemProductFixTest extends TestCase
         $item = $quotation->items->first();
 
         $order = \App\Models\Order::create([
-            'code' => 'DH-QIFIX-' . uniqid(),
+            'code' => 'DH-QIFIX-' . substr(uniqid(), -8), // varchar(20) trên PostgreSQL
             'customer_id' => $this->customer->id,
             'order_date' => '2026-07-01',
             'status' => 'pending',

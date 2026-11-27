@@ -74,6 +74,14 @@
             <span class="truncate flex-1">{{ opt.label }}</span>
             <span v-if="opt.meta" class="ml-auto text-xs text-slate-400 flex-shrink-0">{{ opt.meta }}</span>
           </button>
+          <!-- Phân trang server-side: endpoint trả meta.has_more (vd search.warehouse-products) -->
+          <button
+            v-if="pageMeta?.has_more"
+            type="button"
+            class="w-full px-3 py-2 text-xs text-primary-600 hover:bg-primary-50 border-t border-slate-100"
+            :disabled="loading"
+            @mousedown.prevent="loadMore"
+          >Tải thêm (đang hiện {{ results.length }}/{{ pageMeta.total }})</button>
         </div>
 
         <!-- Empty state -->
@@ -121,6 +129,8 @@ const searched         = ref(false)
 const highlightedIndex = ref(0)
 const dropdownStyle    = ref({})
 const selectedLabel    = ref(props.displayText || '')
+const pageMeta         = ref(null)   // { page, total, has_more } nếu endpoint hỗ trợ phân trang
+let lastQuery          = ''
 
 watch(() => props.displayText, (val) => { selectedLabel.value = val || '' })
 let debounceTimer      = null
@@ -141,8 +151,8 @@ function positionDropdown() {
   }
 }
 
-async function fetchResults(q) {
-  if (q.length < props.minChars && props.minChars > 0) { results.value = []; return }
+async function fetchResults(q, page = 1) {
+  if (q.length < props.minChars && props.minChars > 0) { results.value = []; pageMeta.value = null; return }
 
   abortController?.abort()
   abortController = new AbortController()
@@ -150,20 +160,27 @@ async function fetchResults(q) {
   searched.value = false
 
   try {
-    const params = new URLSearchParams({ q, ...props.extraParams })
+    const params = new URLSearchParams({ q, ...props.extraParams, ...(page > 1 ? { page } : {}) })
     const res = await fetch(`${props.searchUrl}?${params}`, {
       signal: abortController.signal,
       headers: { 'X-Requested-With': 'XMLHttpRequest' },
     })
     const json = await res.json()
-    results.value = json.data ?? []
+    const rows = json.data ?? []
+    results.value = page > 1 ? [...results.value, ...rows] : rows
+    pageMeta.value = json.meta ?? null
+    lastQuery = q
     searched.value = true
-    highlightedIndex.value = 0
+    if (page === 1) highlightedIndex.value = 0
   } catch (err) {
     if (err.name !== 'AbortError') { results.value = []; searched.value = true }
   } finally {
     loading.value = false
   }
+}
+
+function loadMore() {
+  if (pageMeta.value?.has_more) fetchResults(lastQuery, (pageMeta.value.page ?? 1) + 1)
 }
 
 function onFocus() {
@@ -195,6 +212,7 @@ function clear() {
   selectedLabel.value = ''
   query.value = ''
   results.value = []
+  pageMeta.value = null
   searched.value = false
   isOpen.value = false
   inputRef.value?.focus()
