@@ -23,6 +23,7 @@ use App\Models\StockExitItemLotAllocation;
 use App\Models\InventoryBalance;
 use App\Models\StockMovement;
 use App\Services\AvcoService;
+use App\Services\Concerns\LocksDocumentStatus;
 use App\Services\ProjectWipService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -31,6 +32,8 @@ use RuntimeException;
 
 class StockService
 {
+    use LocksDocumentStatus;
+
     public function __construct(
         private AccountingService $accounting,
         private ProjectWipService $wip,
@@ -74,6 +77,7 @@ class StockService
         }
 
         DB::transaction(function () use ($entry) {
+            $this->lockAndAssertStatus($entry, [StockEntryStatus::Draft], 'Phiếu nhập đã được xử lý bởi thao tác khác, không thể xác nhận lại.');
             $entry->load('items.product');
             $po = $entry->purchase_order_id
                 ? PurchaseOrder::find($entry->purchase_order_id)
@@ -183,6 +187,7 @@ class StockService
             }
 
             DB::transaction(function () use ($entry, $itemIds) {
+                $this->lockAndAssertStatus($entry, [StockEntryStatus::Draft], 'Phiếu nhập đã được xử lý bởi thao tác khác.');
                 ProductSerial::whereIn('stock_entry_item_id', $itemIds)->delete();
                 $entry->update(['status' => StockEntryStatus::Cancelled]);
             });
@@ -212,6 +217,10 @@ class StockService
         }
 
         DB::transaction(function () use ($entry) {
+            $this->lockAndAssertStatus($entry, [StockEntryStatus::Confirmed], 'Phiếu nhập đã được xử lý bởi thao tác khác, không thể hủy.');
+            $entry->load('items.serials'); // đọc lại dòng hàng sau khi khóa (tránh dùng dữ liệu cũ)
+            $this->assertEntryReversible($entry, 'hủy');
+
             // Tạo movement âm để đảo ngược tồn kho (giữ audit trail)
             foreach ($entry->items as $item) {
                 // Hoàn lại số lượng đã nhận trên đơn mua
@@ -287,6 +296,21 @@ class StockService
         }
 
         DB::transaction(function () use ($entry) {
+            $this->lockAndAssertStatus($entry, [StockEntryStatus::Confirmed], 'Phiếu nhập đã được xử lý bởi thao tác khác, không thể thu hồi.');
+            $entry->load('items.serials'); // đọc lại dòng hàng sau khi khóa
+            $this->assertEntryReversible($entry, 'thu hồi');
+
+            // A6: lot dự án sẽ được tạo lại khi xác nhận lại → lot cũ (đã kiểm tra chưa xuất) phải ra khỏi tồn:
+            // - lot chưa từng phân bổ: xóa (không mất lịch sử; không chặn sửa dòng hàng do FK RESTRICT);
+            // - lot từng có phân bổ (của phiếu xuất đã hủy): giữ lại, đánh dấu cancelled để bảo toàn lịch sử FIFO.
+            $lotIds = ProjectInventoryLot::where('stock_entry_id', $entry->id)->pluck('id');
+            if ($lotIds->isNotEmpty()) {
+                $withHistory = StockExitItemLotAllocation::whereIn('project_inventory_lot_id', $lotIds)
+                    ->distinct()->pluck('project_inventory_lot_id');
+                ProjectInventoryLot::whereIn('id', $withHistory)->update(['status' => 'cancelled']);
+                ProjectInventoryLot::whereIn('id', $lotIds->diff($withHistory))->delete();
+            }
+
             $this->removeProjectReturnWip($entry); // trước reverseOrDelete: WIP tham chiếu FK tới JE
             $this->accounting->reverseOrDelete('stock_entry', $entry->id, "Thu hồi phiếu nhập kho {$entry->code} để chỉnh sửa");
 
@@ -335,6 +359,46 @@ class StockService
         Cache::forget('dashboard.stats');
     }
 
+    /**
+     * Chặn thu hồi/hủy phiếu nhập khi hàng của phiếu đã được xuất (A2/A6):
+     * - lot dự án đã có issued_qty > 0;
+     * - tồn AVCO kho chung không đủ để đảo phần không thuộc dự án.
+     * Gọi trong transaction (khóa dòng inventory_balances).
+     */
+    private function assertEntryReversible(StockEntry $entry, string $verb): void
+    {
+        $issuedLot = ProjectInventoryLot::where('stock_entry_id', $entry->id)
+            ->where('issued_qty', '>', 0)
+            ->lockForUpdate()
+            ->exists();
+        if ($issuedLot) {
+            throw new RuntimeException(
+                "Không thể {$verb}: hàng hóa từ phiếu nhập này đã được phân bổ cho phiếu xuất dự án. Vui lòng hủy phiếu xuất trước."
+            );
+        }
+
+        $needByProduct = [];
+        foreach ($entry->items as $item) {
+            if (! $item->project_id) {
+                $needByProduct[$item->product_id] = ($needByProduct[$item->product_id] ?? 0) + (float) $item->quantity;
+            }
+        }
+
+        foreach ($needByProduct as $productId => $need) {
+            $balance = InventoryBalance::where('product_id', $productId)
+                ->where('warehouse_id', $entry->warehouse_id)
+                ->lockForUpdate()
+                ->first();
+            if ($balance !== null && (float) $balance->qty_on_hand + 0.0005 < $need) {
+                $code = Product::where('id', $productId)->value('code');
+                throw new RuntimeException(
+                    "Không thể {$verb}: sản phẩm [{$code}] của phiếu nhập đã được xuất một phần/toàn bộ. " .
+                    "Tồn kho chung hiện có {$balance->qty_on_hand}, cần đảo {$need}. Vui lòng hủy các phiếu xuất liên quan trước."
+                );
+            }
+        }
+    }
+
     public function confirmExit(StockExit $exit): array
     {
         if ($exit->status !== StockExitStatus::Draft) {
@@ -344,6 +408,7 @@ class StockService
         $warnings = [];
 
         DB::transaction(function () use ($exit, &$warnings) {
+            $this->lockAndAssertStatus($exit, [StockExitStatus::Draft], 'Phiếu xuất đã được xử lý bởi thao tác khác, không thể xác nhận lại.');
             $exit->load('items.product', 'items.serials');
 
             foreach ($exit->items as $item) {
@@ -372,6 +437,8 @@ class StockService
                         'source_cost' => $avgCost,
                         'total_cost'  => $totalCost,
                         'cost_source' => 'avco',
+                        'avco_qty'    => $qty,
+                        'avco_amount' => $totalCost,
                     ]);
 
                     // OUT từ kho nguồn
@@ -406,16 +473,15 @@ class StockService
                         'amount'         => $totalCost,
                     ]);
 
-                    // Cập nhật AVCO kho đích
-                    $this->avco->recordEntry($item->product_id, $toWarehouseId, (float) $qty, $avgCost);
-
-                    // Tạo project_inventory_lot ở kho đích để dùng FIFO khi xuất sau này
+                    // Kho đích: hàng thuộc dự án → chỉ ghi project lot (FIFO), KHÔNG cộng AVCO kho chung.
+                    // Trước đây vừa cộng AVCO vừa tạo lot → cùng một số lượng bị tính 2 lần (A5).
                     ProjectInventoryLot::create([
                         'project_id'          => $exit->project_id,
                         'product_id'          => $item->product_id,
                         'warehouse_id'        => $toWarehouseId,
                         'stock_entry_id'      => null,
                         'stock_entry_item_id' => null,
+                        'source_stock_exit_id' => $exit->id,
                         'purchase_order_id'   => null,
                         'received_qty'        => $qty,
                         'issued_qty'          => 0,
@@ -453,6 +519,8 @@ class StockService
                             'source_cost' => $avgCost,
                             'total_cost'  => $totalCost,
                             'cost_source' => 'avco',
+                            'avco_qty'    => $qty,
+                            'avco_amount' => $totalCost,
                         ]);
 
                         StockMovement::create([
@@ -503,6 +571,8 @@ class StockService
                         }
 
                         // Phần còn lại (sau khi hết FIFO lots) dùng AVCO kho chung
+                        $avcoPartQty = 0.0;
+                        $avcoPartAmt = 0.0;
                         if ($remaining > 0) {
                             $avcoQty = $this->getAvcoAvailableQty($item->product_id, $exit->warehouse_id);
                             if ($avcoQty < $remaining) {
@@ -510,8 +580,10 @@ class StockService
                                     "Sản phẩm [{$item->product->name}] không đủ tồn AVCO cho phần còn lại. AVCO: {$avcoQty}, cần: {$remaining}."
                                 );
                             }
-                            $avgCost    = $this->avco->recordExit($item->product_id, $exit->warehouse_id, (float) $remaining);
-                            $totalCost += $avgCost * (float) $remaining;
+                            $avgCost     = $this->avco->recordExit($item->product_id, $exit->warehouse_id, (float) $remaining);
+                            $avcoPartQty = (float) $remaining;
+                            $avcoPartAmt = $avgCost * (float) $remaining;
+                            $totalCost  += $avcoPartAmt;
                         }
 
                         $sourceCost = $qty > 0 ? $totalCost / $qty : 0;
@@ -520,6 +592,8 @@ class StockService
                             'source_cost' => $sourceCost,
                             'total_cost'  => $totalCost,
                             'cost_source' => 'fifo',
+                            'avco_qty'    => $avcoPartQty,
+                            'avco_amount' => $avcoPartAmt,
                         ]);
 
                         StockMovement::create([
@@ -538,15 +612,10 @@ class StockService
                         ]);
                     }
                 } else {
-                    // ── Non-project: kiểm tra tổng kho warehouse ───────────────────────
-                    StockMovement::where('product_id', $item->product_id)
-                        ->where('warehouse_id', $exit->warehouse_id)
-                        ->lockForUpdate()
-                        ->get();
-
-                    $currentStock = StockMovement::where('product_id', $item->product_id)
-                        ->where('warehouse_id', $exit->warehouse_id)
-                        ->sum('quantity');
+                    // ── Non-project: kiểm tra tồn kho chung theo AVCO (A8) ─────────────
+                    // Trước đây dùng SUM(movements) thô (gồm cả voided + hàng dự án) → lệch nguồn với
+                    // AVCO. recordExit() bên dưới khóa dòng balance và chặn thêm lần nữa.
+                    $currentStock = $this->getAvcoAvailableQty($item->product_id, $exit->warehouse_id);
 
                     if ($currentStock < $qty) {
                         throw new RuntimeException(
@@ -566,6 +635,8 @@ class StockService
                         'source_cost' => $avgCost,
                         'total_cost'  => $totalCost,
                         'cost_source' => 'avco',
+                        'avco_qty'    => $qty,
+                        'avco_amount' => $totalCost,
                     ]);
 
                     StockMovement::create([
@@ -624,6 +695,7 @@ class StockService
 
         if ($exit->status === StockExitStatus::Draft) {
             DB::transaction(function () use ($exit) {
+                $this->lockAndAssertStatus($exit, [StockExitStatus::Draft], 'Phiếu xuất đã được xử lý bởi thao tác khác.');
                 $exit->load('items');
                 foreach ($exit->items as $item) {
                     ProductSerial::where('stock_exit_item_id', $item->id)
@@ -664,6 +736,17 @@ class StockService
         } // end !$adminForce guard
 
         DB::transaction(function () use ($exit) {
+            $this->lockAndAssertStatus($exit, [StockExitStatus::Confirmed], 'Phiếu xuất đã được xử lý bởi thao tác khác, không thể hủy lại.');
+            $exit->load('items.serials'); // đọc lại dòng hàng sau khi khóa
+
+            // A1: xác định phần AVCO cần hoàn TRƯỚC khi void allocations (dùng cho dữ liệu legacy)
+            $avcoRestore = $this->resolveAvcoRestore($exit);
+
+            // A5: điều chuyển kho dự án → đảo phía kho đích (lot + movement)
+            if ($this->isProjectTransfer($exit)) {
+                $this->reverseProjectTransferDestination($exit);
+            }
+
             // Null out WIP journal_entry_id references before reversing JE (FK constraint)
             \App\Models\ProjectWipEntry::where('source_type', StockExit::class)
                 ->where('source_id', $exit->id)
@@ -705,13 +788,15 @@ class StockService
                     'amount'         => $item->total_cost,
                 ]);
 
-                // Khôi phục AVCO balance cho phiếu non-project đã dùng AVCO
-                if ($item->cost_source === 'avco' && !$item->project_id) {
+                // Hoàn AVCO đúng phần đã trừ khi xác nhận (kể cả phiếu dự án dùng AVCO / FIFO+AVCO).
+                // Trước đây chỉ hoàn khi cost_source='avco' && !project_id → phiếu dự án mất tồn (A1).
+                [$restoreQty, $restoreAmt] = $avcoRestore[$item->id] ?? [0.0, 0.0];
+                if ($restoreQty > 0) {
                     $this->avco->recordEntry(
                         $item->product_id,
                         $exit->warehouse_id,
-                        (float) $item->quantity,
-                        (float) ($item->source_cost ?? 0),
+                        $restoreQty,
+                        $restoreAmt / $restoreQty,
                     );
                 }
             }
@@ -738,6 +823,81 @@ class StockService
 
         Cache::forget('dashboard.stock_overview');
         Cache::forget('dashboard.stats');
+    }
+
+    /**
+     * Phần số lượng/giá trị AVCO kho chung mà phiếu xuất đã trừ khi xác nhận.
+     * - Phiếu mới: lưu sẵn trên stock_exit_items.avco_qty/avco_amount.
+     * - Phiếu legacy (NULL): = quantity/total_cost − phần FIFO lot allocations còn hiệu lực.
+     *
+     * @return array<int, array{0: float, 1: float}> [stock_exit_item_id => [qty, amount]]
+     */
+    private function resolveAvcoRestore(StockExit $exit): array
+    {
+        $alloc = StockExitItemLotAllocation::where('stock_exit_id', $exit->id)
+            ->whereNull('voided_at')
+            ->selectRaw('stock_exit_item_id, SUM(allocated_qty) AS q, SUM(amount) AS a')
+            ->groupBy('stock_exit_item_id')
+            ->get()
+            ->keyBy('stock_exit_item_id');
+
+        $result = [];
+        foreach ($exit->items as $item) {
+            if ($item->avco_qty !== null) {
+                $result[$item->id] = [(float) $item->avco_qty, (float) $item->avco_amount];
+                continue;
+            }
+            if (! in_array($item->cost_source, ['avco', 'fifo'], true)) {
+                continue; // legacy: không trừ AVCO khi xác nhận → không hoàn
+            }
+
+            $allocQty = (float) ($alloc[$item->id]->q ?? 0);
+            $allocAmt = (float) ($alloc[$item->id]->a ?? 0);
+
+            if ($item->cost_source === 'fifo' && $allocQty <= 0) {
+                // FIFO luôn có ít nhất 1 allocation; thiếu = lịch sử phân bổ không còn → không đủ căn cứ hoàn AVCO
+                throw new RuntimeException(
+                    "Không thể hủy phiếu {$exit->code}: dòng FIFO sản phẩm ID {$item->product_id} không còn dữ liệu phân bổ lô. " .
+                    'Cần kiểm tra số liệu tồn kho trước khi hủy.'
+                );
+            }
+
+            $qty = max(0.0, (float) $item->quantity - $allocQty);
+            $amt = max(0.0, (float) $item->total_cost - $allocAmt);
+            $result[$item->id] = [$qty, $amt];
+        }
+
+        return $result;
+    }
+
+    /** Đảo phía kho đích của phiếu điều chuyển dự án: chặn nếu lot đích đã xuất, hủy lot, ghi movement OUT. */
+    private function reverseProjectTransferDestination(StockExit $exit): void
+    {
+        $lots = ProjectInventoryLot::where('source_stock_exit_id', $exit->id)->lockForUpdate()->get();
+        if ($lots->contains(fn ($l) => (float) $l->issued_qty > 0)) {
+            throw new RuntimeException(
+                "Không thể hủy phiếu {$exit->code}: hàng điều chuyển tại kho dự án đã được xuất dùng. Vui lòng hủy phiếu xuất dự án trước."
+            );
+        }
+
+        foreach ($exit->items as $item) {
+            StockMovement::create([
+                'product_id'     => $item->product_id,
+                'warehouse_id'   => $exit->to_warehouse_id,
+                'type'           => 'out',
+                'quantity'       => -(int) $item->quantity,
+                'source_type'    => StockExit::class,
+                'source_id'      => $exit->id,
+                'source_item_id' => $item->id,
+                'created_by'     => auth()->id(),
+                'notes'          => "Hủy điều chuyển kho dự án {$exit->code}",
+                'project_id'     => $item->project_id,
+                'unit_cost'      => $item->source_cost,
+                'amount'         => -(float) $item->total_cost,
+            ]);
+        }
+
+        ProjectInventoryLot::whereIn('id', $lots->pluck('id'))->update(['status' => 'cancelled']);
     }
 
     public function getStockQuantity(int $productId, int $warehouseId): int
@@ -924,8 +1084,8 @@ class StockService
             return (float) $balance;
         }
 
-        // Chưa có AVCO balance → tính từ non-project stock movements
-        return (float) StockMovement::where('product_id', $productId)
+        // Chưa có AVCO balance → tính từ non-project stock movements còn hiệu lực
+        return (float) StockMovement::active()->where('product_id', $productId)
             ->where('warehouse_id', $warehouseId)
             ->whereNull('project_id')
             ->sum('quantity');

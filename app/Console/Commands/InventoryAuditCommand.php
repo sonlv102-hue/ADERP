@@ -6,13 +6,14 @@ use App\Enums\StockEntryStatus;
 use App\Enums\StockExitStatus;
 use App\Models\StockEntry;
 use App\Models\StockExit;
+use App\Services\Inventory\AvcoIntegrityChecker;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 
 class InventoryAuditCommand extends Command
 {
     protected $signature = 'inventory:audit
-                            {--scope=all : Phạm vi: all|entries|exits|lots|po|gl}
+                            {--scope=all : Phạm vi: all|entries|exits|lots|po|gl|avco}
                             {--warehouse= : Lọc theo warehouse_id}';
 
     protected $description = 'Rà soát tính nhất quán tồn kho: movement, lot, PO received_qty, và GL.';
@@ -30,10 +31,13 @@ class InventoryAuditCommand extends Command
         if (in_array($scope, ['all', 'lots']))    $this->auditLots();
         if (in_array($scope, ['all', 'po']))      $this->auditPo();
         if (in_array($scope, ['all', 'gl']))      $this->auditGl();
+        if (in_array($scope, ['all', 'avco']))    $this->auditAvco();
 
         $this->printFindings();
 
-        return empty($this->findings) ? self::SUCCESS : self::FAILURE;
+        $blocking = array_filter($this->findings, fn ($f) => $f['severity'] !== 'info');
+
+        return empty($blocking) ? self::SUCCESS : self::FAILURE;
     }
 
     // ─── Entry checks ──────────────────────────────────────────────────────────
@@ -319,6 +323,33 @@ class InventoryAuditCommand extends Command
 
     // ─── Output ────────────────────────────────────────────────────────────────
 
+    // ─── AVCO integrity (A-series, read-only) ─────────────────────────────────
+
+    private function auditAvco(): void
+    {
+        $this->line('');
+        $this->line('[A] Kiểm tra AVCO = Σ movement active − Σ lot dự án còn lại...');
+
+        $wh = $this->option('warehouse') ? (int) $this->option('warehouse') : null;
+        $severity = [
+            AvcoIntegrityChecker::PHANTOM        => ['A1', 'critical', 'Tồn ẢO (AVCO lớn hơn thực tế)'],
+            AvcoIntegrityChecker::MISSING        => ['A2', 'critical', 'Thiếu AVCO (có hàng nhưng không xuất được)'],
+            AvcoIntegrityChecker::NEGATIVE       => ['A3', 'warning',  'Tổng movement âm (xuất trước nhập) — cần Owner quyết định'],
+            AvcoIntegrityChecker::VALUE_MISMATCH => ['A4', 'warning',  'Giá trị AVCO lệch qty × avg'],
+            AvcoIntegrityChecker::NO_BALANCE     => ['A5', 'info',     'Chưa có dòng AVCO — dùng fallback movement (hợp lệ)'],
+        ];
+
+        foreach (app(AvcoIntegrityChecker::class)->check($wh) as $r) {
+            [$code, $sev, $label] = $severity[$r->category];
+            $this->addFinding($code, $sev, sprintf(
+                '%s: SP #%d [%s] kho #%d — AVCO %s / %s đ | movement %s | lot %s | kỳ vọng AVCO %s | chênh %s',
+                $label, $r->product_id, $r->product_code, $r->warehouse_id,
+                $r->avco_qty ?? 'null', number_format((float) $r->avco_value), $r->mv_qty, $r->lot_qty,
+                $r->expected, $r->diff ?? 'n/a'
+            ));
+        }
+    }
+
     private function addFinding(string $code, string $severity, string $message): void
     {
         $this->findings[] = ['code' => $code, 'severity' => $severity, 'message' => $message];
@@ -335,10 +366,12 @@ class InventoryAuditCommand extends Command
             return;
         }
 
-        $this->error('=== Kết quả (' . count($critical) . ' critical, ' . count($warnings) . ' warning) ===');
+        if (empty($critical) && empty($warnings)) {
+            $this->info('✓ Không có vấn đề cần xử lý (' . count($this->findings) . ' thông tin).');
+        } else $this->error('=== Kết quả (' . count($critical) . ' critical, ' . count($warnings) . ' warning) ===');
 
         foreach ($this->findings as $f) {
-            $label = $f['severity'] === 'critical' ? '<fg=red>[CRITICAL]</>' : '<fg=yellow>[WARNING]</>';
+            $label = match ($f['severity']) { 'critical' => '<fg=red>[CRITICAL]</>', 'info' => '<fg=cyan>[INFO]</>', default => '<fg=yellow>[WARNING]</>' };
             $this->line("  {$label} [{$f['code']}] {$f['message']}");
         }
     }

@@ -581,38 +581,52 @@ class StockEntryController extends Controller
             }
         }
 
-        // Đảo journal chưa reversed (e.g. sau recall nhưng reversal thất bại)
-        $postedJournal = JournalEntry::where('reference_type', 'stock_entry')
-            ->where('reference_id', $stockEntry->id)
-            ->where('status', 'posted')
-            ->whereRaw("description NOT LIKE 'Đảo:%'")
-            ->first();
-        if ($postedJournal) {
-            try {
-                $this->accounting->reverse($postedJournal, "Dọn dẹp: xóa phiếu nhập kho {$stockEntry->code}");
-            } catch (\Exception $e) {
-                \Log::warning("Cannot reverse journal on entry destroy [{$stockEntry->code}]: " . $e->getMessage());
-            }
+        // A9: đảo JE + xóa trong MỘT transaction; movement được VOID (không xóa cứng) để giữ audit trail.
+        try {
+            DB::transaction(function () use ($stockEntry) {
+                $locked = StockEntry::whereKey($stockEntry->id)->lockForUpdate()->first();
+                if (! $locked || ! in_array($locked->status, [StockEntryStatus::Draft, StockEntryStatus::Cancelled], true)) {
+                    throw new \RuntimeException('Phiếu nhập đã thay đổi trạng thái, vui lòng tải lại trang.');
+                }
+
+                // Đảo journal chưa reversed (e.g. sau recall nhưng reversal thất bại) — lỗi thì hủy thao tác xóa
+                $postedJournal = JournalEntry::where('reference_type', 'stock_entry')
+                    ->where('reference_id', $stockEntry->id)
+                    ->where('status', 'posted')
+                    ->whereRaw("description NOT LIKE 'Đảo:%'")
+                    ->first();
+                if ($postedJournal) {
+                    $this->accounting->reverse($postedJournal, "Dọn dẹp: xóa phiếu nhập kho {$stockEntry->code}");
+                }
+
+                $itemIds = $stockEntry->items()->pluck('id');
+                ProductSerial::whereIn('stock_entry_item_id', $itemIds)->delete();
+
+                // Phiếu Nháp/Hủy: movements đã net = 0 (nhập + đảo) → void để giữ lịch sử thay vì xóa cứng
+                StockMovement::where('source_type', StockEntry::class)
+                    ->where('source_id', $stockEntry->id)
+                    ->where('status', 'active')
+                    ->update([
+                        'status' => 'voided',
+                        'notes'  => DB::raw("COALESCE(notes, '') || ' [voided: parent entry deleted]'"),
+                    ]);
+
+                // Xóa project inventory lots (và allocations voided đi kèm) — FK RESTRICT trên stock_entries
+                $lotIds = ProjectInventoryLot::where('stock_entry_id', $stockEntry->id)->pluck('id');
+                if ($lotIds->isNotEmpty()) {
+                    StockExitItemLotAllocation::whereIn('project_inventory_lot_id', $lotIds)->delete();
+                    ProjectInventoryLot::whereIn('id', $lotIds)->delete();
+                }
+
+                // Xóa entry — stock_entry_items cascade tự xóa theo
+                $stockEntry->delete();
+            });
+        } catch (\RuntimeException $e) {
+            return back()->with('error', 'Không thể xóa phiếu nhập kho: ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            \Log::error("Destroy phiếu nhập kho thất bại: " . $e->getMessage(), ['exception' => $e]);
+            return back()->with('error', 'Không thể xóa phiếu nhập kho do lỗi hệ thống. Vui lòng liên hệ quản trị.');
         }
-
-        DB::transaction(function () use ($stockEntry) {
-            $itemIds = $stockEntry->items()->pluck('id');
-            ProductSerial::whereIn('stock_entry_item_id', $itemIds)->delete();
-
-            StockMovement::where('source_type', StockEntry::class)
-                ->where('source_id', $stockEntry->id)
-                ->delete();
-
-            // Xóa project inventory lots (và allocations voided đi kèm) — FK RESTRICT trên stock_entries
-            $lotIds = ProjectInventoryLot::where('stock_entry_id', $stockEntry->id)->pluck('id');
-            if ($lotIds->isNotEmpty()) {
-                StockExitItemLotAllocation::whereIn('project_inventory_lot_id', $lotIds)->delete();
-                ProjectInventoryLot::whereIn('id', $lotIds)->delete();
-            }
-
-            // Xóa entry — stock_entry_items cascade tự xóa theo
-            $stockEntry->delete();
-        });
 
         if ($purchaseOrderId) {
             $po = PurchaseOrder::find($purchaseOrderId);

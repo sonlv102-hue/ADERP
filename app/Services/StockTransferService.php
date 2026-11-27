@@ -6,11 +6,14 @@ use App\Enums\StockTransferStatus;
 use App\Models\ProductSerial;
 use App\Models\StockMovement;
 use App\Models\StockTransfer;
+use App\Services\Concerns\LocksDocumentStatus;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class StockTransferService
 {
+    use LocksDocumentStatus;
+
     public function __construct(private AvcoService $avco) {}
 
     public function confirmTransfer(StockTransfer $transfer): void
@@ -26,6 +29,8 @@ class StockTransferService
         $transfer->load('items.product', 'items.serials', 'toWarehouse');
 
         DB::transaction(function () use ($transfer) {
+            $this->lockAndAssertStatus($transfer, [StockTransferStatus::Draft], 'Phiếu chuyển kho đã được xử lý bởi thao tác khác.');
+            $transfer->load('items.product', 'items.serials', 'toWarehouse'); // đọc lại sau khi khóa
             foreach ($transfer->items as $item) {
                 $currentStock = StockMovement::where('product_id', $item->product_id)
                     ->where('warehouse_id', $transfer->from_warehouse_id)
@@ -128,14 +133,15 @@ class StockTransferService
         $transfer->load('items.product', 'items.serials', 'fromWarehouse');
 
         DB::transaction(function () use ($transfer) {
+            $this->lockAndAssertStatus($transfer, [StockTransferStatus::Confirmed], 'Phiếu chuyển kho đã được xử lý bởi thao tác khác, không thể hủy lại.');
+            $transfer->load('items.product', 'items.serials', 'fromWarehouse'); // đọc lại sau khi khóa
             $fromWarehouseName = $transfer->fromWarehouse->name;
 
             foreach ($transfer->items as $item) {
                 $destStock = StockMovement::where('product_id', $item->product_id)
                     ->where('warehouse_id', $transfer->to_warehouse_id)
                     ->where(function ($q) { $q->whereNull('status')->orWhere('status', 'active'); })
-                    ->lockForUpdate()
-                    ->sum('quantity');
+                    ->sum('quantity'); // header đã khóa ở trên; PG không cho FOR UPDATE cùng aggregate
 
                 if ($destStock < $item->quantity) {
                     throw new RuntimeException(

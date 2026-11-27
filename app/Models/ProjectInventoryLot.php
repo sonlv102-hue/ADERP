@@ -14,6 +14,7 @@ class ProjectInventoryLot extends Model
         'warehouse_id',
         'stock_entry_id',
         'stock_entry_item_id',
+        'source_stock_exit_id',
         'purchase_order_id',
         'purchase_order_item_id',
         'received_qty',

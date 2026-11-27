@@ -12,6 +12,7 @@ class StockExitItem extends Model
         'stock_exit_id', 'project_id',
         'product_id', 'order_item_id',
         'quantity', 'unit_price', 'source_cost', 'total_cost', 'cost_source',
+        'avco_qty', 'avco_amount',
     ];
 
     protected function casts(): array

@@ -870,69 +870,76 @@ class StockExitController extends Controller
             return back()->with('error', 'Chỉ có thể xóa phiếu ở trạng thái nháp hoặc đã hủy.');
         }
 
-        // Admin force-delete phiếu Confirmed: log snapshot đầy đủ, sau đó cancel trước
-        if ($stockExit->status === StockExitStatus::Confirmed) {
-            $stockExit->load('items');
-            activity('admin_force_delete')
-                ->performedOn($stockExit)
-                ->causedBy(auth()->user())
-                ->withProperties([
-                    'code'        => $stockExit->code,
-                    'status'      => $stockExit->status->value,
-                    'exit_date'   => (string) $stockExit->exit_date,
-                    'warehouse_id' => $stockExit->warehouse_id,
-                    'project_id'  => $stockExit->project_id,
-                    'order_id'    => $stockExit->order_id,
-                    'items'       => $stockExit->items->map(fn ($i) => [
-                        'product_id' => $i->product_id,
-                        'quantity'   => $i->quantity,
-                    ])->toArray(),
-                ])
-                ->log("Admin xóa cưỡng chế phiếu xuất kho {$stockExit->code}");
+        // A9: toàn bộ (cancel cưỡng chế → đảo JE → xóa) chạy trong MỘT transaction.
+        // Trước đây đảo JE nằm ngoài transaction và lỗi bị nuốt → có thể còn JE posted mồ côi.
+        try {
+            DB::transaction(function () use ($stockExit) {
+                // Admin force-delete phiếu Confirmed: log snapshot đầy đủ, sau đó cancel trước
+                if ($stockExit->status === StockExitStatus::Confirmed) {
+                    $stockExit->load('items');
+                    activity('admin_force_delete')
+                        ->performedOn($stockExit)
+                        ->causedBy(auth()->user())
+                        ->withProperties([
+                            'code'         => $stockExit->code,
+                            'status'       => $stockExit->status->value,
+                            'exit_date'    => (string) $stockExit->exit_date,
+                            'warehouse_id' => $stockExit->warehouse_id,
+                            'project_id'   => $stockExit->project_id,
+                            'order_id'     => $stockExit->order_id,
+                            'items'        => $stockExit->items->map(fn ($i) => [
+                                'product_id' => $i->product_id,
+                                'quantity'   => $i->quantity,
+                            ])->toArray(),
+                        ])
+                        ->log("Admin xóa cưỡng chế phiếu xuất kho {$stockExit->code}");
 
-            try {
-                $this->stockService->cancelExit($stockExit, adminForce: true);
-            } catch (\Exception $e) {
-                return back()->with('error', 'Không thể hủy phiếu trước khi xóa: ' . $e->getMessage());
-            }
+                    $this->stockService->cancelExit($stockExit, adminForce: true);
+                }
+
+                // Khóa header, chặn xóa song song / xóa phiếu vừa đổi trạng thái
+                $locked = StockExit::whereKey($stockExit->id)->lockForUpdate()->first();
+                if (! $locked || ! in_array($locked->status, [StockExitStatus::Draft, StockExitStatus::Cancelled], true)) {
+                    throw new \RuntimeException('Phiếu xuất đã thay đổi trạng thái, vui lòng tải lại trang.');
+                }
+
+                // Đảo journal chưa reversed (e.g. sau cancel nhưng reversal thất bại) — lỗi thì hủy toàn bộ thao tác xóa
+                $postedJournal = JournalEntry::where('reference_type', 'stock_exit')
+                    ->where('reference_id', $stockExit->id)
+                    ->where('status', 'posted')
+                    ->whereRaw("description NOT LIKE 'Đảo:%'")
+                    ->first();
+                if ($postedJournal) {
+                    $this->accounting->reverse($postedJournal, "Dọn dẹp: xóa phiếu xuất kho {$stockExit->code}");
+                }
+
+                $itemIds = $stockExit->items()->pluck('id');
+                ProductSerial::whereIn('stock_exit_item_id', $itemIds)
+                    ->update(['stock_exit_item_id' => null]);
+                ProjectWipEntry::where('source_type', StockExit::class)
+                    ->where('source_id', $stockExit->id)
+                    ->delete();
+                StockExitItemLotAllocation::whereIn('stock_exit_item_id', $itemIds)->delete();
+                $stockExit->items()->delete();
+
+                // Void tất cả movements còn active trước khi xóa exit để tránh orphan movements
+                // (cancelExit tạo reversal movements mới chứ không void originals, nên cả hai nhóm phải được void ở đây)
+                StockMovement::where('source_type', StockExit::class)
+                    ->where('source_id', $stockExit->id)
+                    ->where('status', 'active')
+                    ->update([
+                        'status' => 'voided',
+                        'notes'  => DB::raw("COALESCE(notes, '') || ' [voided: parent exit deleted]'"),
+                    ]);
+
+                $stockExit->delete();
+            });
+        } catch (\RuntimeException $e) {
+            return back()->with('error', 'Không thể xóa phiếu xuất kho: ' . $e->getMessage());
+        } catch (\Throwable $e) {
+            \Log::error("Destroy phiếu xuất kho thất bại: " . $e->getMessage(), ['exception' => $e]);
+            return back()->with('error', 'Không thể xóa phiếu xuất kho do lỗi hệ thống. Vui lòng liên hệ quản trị.');
         }
-
-        // Đảo journal chưa reversed (e.g. sau cancel nhưng reversal thất bại)
-        $postedJournal = JournalEntry::where('reference_type', 'stock_exit')
-            ->where('reference_id', $stockExit->id)
-            ->where('status', 'posted')
-            ->whereRaw("description NOT LIKE 'Đảo:%'")
-            ->first();
-        if ($postedJournal) {
-            try {
-                $this->accounting->reverse($postedJournal, "Dọn dẹp: xóa phiếu xuất kho {$stockExit->code}");
-            } catch (\Exception $e) {
-                \Log::warning("Cannot reverse journal on exit destroy [{$stockExit->code}]: " . $e->getMessage());
-            }
-        }
-
-        DB::transaction(function () use ($stockExit) {
-            $itemIds = $stockExit->items->pluck('id');
-            ProductSerial::whereIn('stock_exit_item_id', $itemIds)
-                ->update(['stock_exit_item_id' => null]);
-            ProjectWipEntry::where('source_type', StockExit::class)
-                ->where('source_id', $stockExit->id)
-                ->delete();
-            StockExitItemLotAllocation::whereIn('stock_exit_item_id', $itemIds)->delete();
-            $stockExit->items()->delete();
-
-            // Void tất cả movements còn active trước khi xóa exit để tránh orphan movements
-            // (cancelExit tạo reversal movements mới chứ không void originals, nên cả hai nhóm phải được void ở đây)
-            StockMovement::where('source_type', StockExit::class)
-                ->where('source_id', $stockExit->id)
-                ->where('status', 'active')
-                ->update([
-                    'status' => 'voided',
-                    'notes'  => DB::raw("COALESCE(notes, '') || ' [voided: parent exit deleted]'"),
-                ]);
-
-            $stockExit->delete();
-        });
 
         return redirect()->route('warehouse.stock-exits.index')
             ->with('success', 'Đã xóa phiếu xuất kho.');

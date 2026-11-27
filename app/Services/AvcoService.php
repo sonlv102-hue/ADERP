@@ -93,12 +93,24 @@ class AvcoService
             );
         }
 
+        // Không cho phép trừ quá tồn AVCO: trước đây max(0, …) âm thầm nuốt phần thiếu,
+        // khiến recall/cancel phiếu nhập sau khi hàng đã xuất làm phình tồn ảo (A2).
+        $onHand = (float) $balance->qty_on_hand;
+        if ($qty - $onHand > 0.0005) {
+            $code = Product::where('id', $productId)->value('code') ?? "ID {$productId}";
+            throw new RuntimeException(
+                "Không đủ tồn kho AVCO cho sản phẩm [{$code}] tại kho ID {$warehouseId}. Hiện có: {$onHand}, cần: {$qty}."
+            );
+        }
+
         $avgCost   = (float) $balance->avg_cost;
         $exitValue = $avgCost * $qty;
+        $newQty    = round($onHand - $qty, 3);
 
         $balance->update([
-            'qty_on_hand'   => max(0, (float) $balance->qty_on_hand - $qty),
-            'value_on_hand' => max(0, (float) $balance->value_on_hand - $exitValue),
+            'qty_on_hand'   => $newQty,
+            // Hết hàng → giá trị về 0 (tránh dư số lẻ do làm tròn); còn hàng → chặn âm do làm tròn
+            'value_on_hand' => $newQty <= 0 ? 0 : max(0, (float) $balance->value_on_hand - $exitValue),
             // avg_cost giữ nguyên khi xuất; chỉ thay đổi khi có nhập mới
         ]);
 
