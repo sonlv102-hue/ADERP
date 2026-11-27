@@ -6,25 +6,20 @@ use App\Models\AccountCode;
 use App\Models\Contract;
 use App\Models\Customer;
 use App\Models\Employee;
-use App\Models\InventoryBalance;
 use App\Models\Order;
 use App\Models\Product;
 use App\Models\Project;
-use App\Models\ProjectInventoryLot;
 use App\Models\PurchaseOrder;
 use App\Models\Service;
-use App\Models\StockEntryItem;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Models\Warehouse;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class SearchController extends Controller
 {
     /** Số mã tối đa trả về cho danh sách tồn theo kho (form xuất kho). */
-    private const WAREHOUSE_PRODUCT_LIMIT = 200;
 
     private function q(Request $request): string
     {
@@ -271,8 +266,8 @@ class SearchController extends Controller
 
     /**
      * Trả sản phẩm có tồn kho trong kho cụ thể.
-     * - Non-project: lấy từ inventory_balances (AVCO).
-     * - Project: lấy từ project_inventory_lots (FIFO).
+     * Logic: WarehouseProductSearch — cùng nguồn tồn với backend xuất kho (AVCO/fallback + lô FIFO dự án).
+     * Phân trang ?page=, meta.has_more.
      * GET /api/search/warehouse-products?warehouse_id=X&q=&project_id=
      */
     public function warehouseProducts(Request $request): JsonResponse
@@ -281,194 +276,12 @@ class SearchController extends Controller
             'warehouse_id' => ['required', 'integer', 'exists:warehouses,id'],
         ]);
 
-        $warehouseId = $request->integer('warehouse_id');
-        $projectId   = $request->integer('project_id');
-        $keyword     = $this->q($request);
+        $result = app(\App\Services\Inventory\WarehouseProductSearch::class)->search(
+            $request->integer('warehouse_id'), $request->integer('project_id') ?: null,
+            $this->q($request), $request->integer('page', 1)
+        );
 
-        if ($projectId) {
-            // Lấy tồn từ project_inventory_lots (FIFO) của dự án
-            $lots = ProjectInventoryLot::with('product')
-                ->where('project_id', $projectId)
-                ->where('warehouse_id', $warehouseId)
-                ->where('status', 'active')
-                ->whereRaw('issued_qty < received_qty')
-                ->get()
-                ->groupBy('product_id');
-
-            // Lấy tồn từ inventory_balances (AVCO) của kho chung
-            $avcoBalances = \App\Models\InventoryBalance::where('warehouse_id', $warehouseId)
-                ->where('qty_on_hand', '>', 0)
-                ->get()
-                ->keyBy('product_id');
-
-            // Gộp tất cả product_id có tồn
-            $allProductIds = collect($lots->keys())->merge($avcoBalances->keys())->unique();
-
-            $items = $allProductIds->map(function ($productId) use ($lots, $avcoBalances, $keyword) {
-                $product = null;
-                if ($lots->has($productId)) {
-                    $product = $lots[$productId]->first()->product;
-                } elseif ($avcoBalances->has($productId)) {
-                    $product = $avcoBalances[$productId]->product;
-                }
-                if (! $product || ! $product->is_active) return null;
-
-                if ($keyword) {
-                    $kw = mb_strtolower($keyword);
-                    if (! str_contains(mb_strtolower($product->name), $kw)
-                        && ! str_contains(mb_strtolower($product->code ?? ''), $kw)) {
-                        return null;
-                    }
-                }
-
-                // Tồn từ project lots (FIFO)
-                $lotQty = 0.0;
-                $lotCostValue = 0.0;
-                if ($lots->has($productId)) {
-                    foreach ($lots[$productId] as $l) {
-                        $avail = (float) $l->received_qty - (float) $l->issued_qty;
-                        $lotQty += $avail;
-                        $lotCostValue += $avail * (float) ($l->unit_cost ?? 0);
-                    }
-                }
-
-                // Tồn từ AVCO (kho chung)
-                $avcoQty  = $avcoBalances->has($productId) ? (float) $avcoBalances[$productId]->qty_on_hand : 0.0;
-                $avcoRate = $avcoBalances->has($productId) ? (float) $avcoBalances[$productId]->avg_cost : 0.0;
-
-                $totalQty = round($lotQty + $avcoQty, 3);
-                if ($totalQty <= 0) return null;
-
-                // Giá bình quân tổng hợp
-                $totalCostValue = $lotCostValue + ($avcoQty * $avcoRate);
-                $avgCost = $totalQty > 0 ? round($totalCostValue / $totalQty, 2) : null;
-
-                // Chú thích nguồn tồn
-                $sourceParts = [];
-                if ($lotQty > 0) $sourceParts[] = "lô DA: {$lotQty}";
-                if ($avcoQty > 0) $sourceParts[] = "kho chung: {$avcoQty}";
-                $meta = "Tồn: {$totalQty}" . ($product->unit ? " {$product->unit}" : '');
-                if (count($sourceParts) > 1) {
-                    $meta .= ' (' . implode(', ', $sourceParts) . ')';
-                }
-
-                return [
-                    'value'      => $product->id,
-                    'label'      => $product->name,
-                    'code'       => $product->code,
-                    'meta'       => $meta,
-                    'unit'       => $product->unit,
-                    'qty'        => $totalQty,
-                    'avg_cost'   => $avgCost,
-                    'sell_price' => (float) ($product->sell_price ?? 0),
-                    'has_serial' => (bool) ($product->has_serial ?? false),
-                ];
-            })->filter()->sortBy('code')->values()->take(self::WAREHOUSE_PRODUCT_LIMIT);
-
-            return response()->json(['data' => $items]);
-        }
-
-        // Non-project: query từ inventory_balances (AVCO)
-        $balanceRows = InventoryBalance::with('product')
-            ->where('warehouse_id', $warehouseId)
-            ->where('qty_on_hand', '>', 0)
-            ->whereHas('product', function ($q) use ($keyword) {
-                $q->where('is_active', true);
-                if ($keyword) {
-                    $q->where(function ($b) use ($keyword) {
-                        $b->whereRaw('LOWER(name) LIKE ?', ["%{$keyword}%"])
-                          ->orWhereRaw('LOWER(code) LIKE ?', ["%{$keyword}%"]);
-                    });
-                }
-            })
-            // Sắp xếp ổn định + giới hạn đủ lớn cho một kho: trước đây limit(30) không ORDER BY
-            // → khi kho có > 30 mã tồn dương và chưa gõ từ khóa, một số mã bị ẩn ngẫu nhiên.
-            ->orderBy(Product::select('code')->whereColumn('products.id', 'inventory_balances.product_id'))
-            ->limit(self::WAREHOUSE_PRODUCT_LIMIT)
-            ->get();
-
-        $balanceItems = collect();
-        if ($balanceRows->isNotEmpty()) {
-            $balanceItems = $balanceRows->map(fn ($ib) => [
-                'value'      => $ib->product_id,
-                'label'      => $ib->product->name,
-                'code'       => $ib->product->code,
-                'meta'       => $ib->product->unit
-                                    ? "Tồn: {$ib->qty_on_hand} {$ib->product->unit}"
-                                    : "Tồn: {$ib->qty_on_hand}",
-                'unit'       => $ib->product->unit,
-                'qty'        => (float) $ib->qty_on_hand,
-                'avg_cost'   => (float) $ib->avg_cost,
-                'sell_price' => (float) ($ib->product->sell_price ?? 0),
-                'has_serial' => (bool) ($ib->product->has_serial ?? false),
-            ]);
-        }
-        // A8: trước đây fallback chỉ chạy khi kho KHÔNG có dòng AVCO nào → sản phẩm chưa có AVCO bị ẩn
-        // trong khi backend (getAvcoAvailableQty) vẫn cho xuất. Nay gộp cả hai nguồn, cùng điều kiện với backend.
-
-        // Fallback: inventory_balances chưa khởi tạo → tính từ stock_movements (active only)
-        // Chỉ áp dụng cho sản phẩm chưa có AVCO record. Sản phẩm đã có record (dù qty=0) không
-        // được fallback — tránh hiển thị tồn sai khi AVCO đã ghi nhận stock = 0.
-        $productsWithAvco = InventoryBalance::where('warehouse_id', $warehouseId)
-            ->pluck('product_id')
-            ->toArray();
-
-        $movQty = DB::table('stock_movements')
-            ->where('warehouse_id', $warehouseId)
-            ->whereNull('project_id')
-            ->where(fn ($q) => $q->whereNull('status')->orWhere('status', 'active'))
-            ->when(! empty($productsWithAvco), fn ($q) => $q->whereNotIn('product_id', $productsWithAvco))
-            ->select('product_id', DB::raw('SUM(quantity) AS qty'))
-            ->groupBy('product_id')
-            ->having(DB::raw('SUM(quantity)'), '>', 0)
-            ->get()
-            ->keyBy('product_id');
-
-        if ($movQty->isEmpty()) {
-            return response()->json(['data' => $balanceItems->values()]);
-        }
-
-        $entryAvg = StockEntryItem::join('stock_entries', 'stock_entries.id', '=', 'stock_entry_items.stock_entry_id')
-            ->where('stock_entries.warehouse_id', $warehouseId)
-            ->whereIn('stock_entry_items.product_id', $movQty->keys()->toArray())
-            ->where('stock_entries.status', 'confirmed')
-            ->select('stock_entry_items.product_id')
-            ->selectRaw(
-                'SUM(stock_entry_items.quantity * stock_entry_items.unit_price) / NULLIF(SUM(stock_entry_items.quantity), 0) AS avg_cost'
-            )
-            ->groupBy('stock_entry_items.product_id')
-            ->get()
-            ->keyBy('product_id');
-
-        $products = Product::whereIn('id', $movQty->keys()->toArray())
-            ->where('is_active', true)
-            ->when($keyword, function ($q, $kw) {
-                $q->where(function ($b) use ($kw) {
-                    $b->whereRaw('LOWER(name) LIKE ?', ["%{$kw}%"])
-                      ->orWhereRaw('LOWER(code) LIKE ?', ["%{$kw}%"]);
-                });
-            })
-            ->orderBy('code')
-            ->limit(self::WAREHOUSE_PRODUCT_LIMIT)
-            ->get();
-
-        $items = $products->map(function ($p) use ($movQty, $entryAvg) {
-            $qty     = (float) ($movQty[$p->id]->qty ?? 0);
-            $avgCost = (float) ($entryAvg[$p->id]->avg_cost ?? 0);
-            return [
-                'value'      => $p->id,
-                'label'      => $p->name,
-                'code'       => $p->code,
-                'meta'       => $p->unit ? "Tồn: {$qty} {$p->unit}" : "Tồn: {$qty}",
-                'unit'       => $p->unit,
-                'qty'        => $qty,
-                'avg_cost'   => round($avgCost, 2),
-                'sell_price' => (float) ($p->sell_price ?? 0),
-                'has_serial' => (bool) ($p->has_serial ?? false),
-            ];
-        });
-
-        return response()->json(['data' => $balanceItems->concat($items)->take(self::WAREHOUSE_PRODUCT_LIMIT)->values()]);
+        return response()->json($result);
     }
 
     public function orders(Request $request): JsonResponse

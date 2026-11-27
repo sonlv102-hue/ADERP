@@ -173,7 +173,7 @@ class ServicePurchaseJournalTest extends TestCase
         $se = StockEntry::create([
             'code'              => 'NK-TEST-' . uniqid(),
             'purchase_order_id' => $po->id,
-            'warehouse_id'      => 1,
+            'warehouse_id'      => $this->warehouse->id, // PG: sequence không reset giữa test → id ≠ 1
             'status'            => StockEntryStatus::Confirmed,
             'entry_date'        => '2026-06-15',
             'created_by'        => $this->user->id,

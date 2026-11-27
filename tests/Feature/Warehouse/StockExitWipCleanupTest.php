@@ -40,7 +40,7 @@ class StockExitWipCleanupTest extends TestCase
         Gate::before(fn ($u, $a) => true);
 
         $this->warehouse = Warehouse::firstOrCreate(
-            ['code' => 'KHO-WIP'],
+            ['name' => 'Kho WIP Test'], // warehouses không có cột code
             ['name' => 'Kho WIP Test', 'address' => 'Test', 'manager_id' => null]
         );
 

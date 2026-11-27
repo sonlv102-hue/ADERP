@@ -43,7 +43,7 @@ class StockExitCancelGuardTest extends TestCase
     private function makeConfirmedExit(?Order $order = null): StockExit
     {
         $warehouse = Warehouse::firstOrCreate(
-            ['code' => 'KHO-TEST'],
+            ['name' => 'Kho Test'], // warehouses không có cột code (SQLite che lỗi, PG báo 42703)
             ['name' => 'Kho Test', 'address' => 'Test', 'manager_id' => null]
         );
 

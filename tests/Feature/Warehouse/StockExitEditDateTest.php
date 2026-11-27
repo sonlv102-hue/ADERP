@@ -58,7 +58,7 @@ class StockExitEditDateTest extends TestCase
         $this->nonAdmin->syncRoles([$warehouseRole]);
 
         $this->warehouse = Warehouse::firstOrCreate(
-            ['code' => 'KHO-EDITDATE'],
+            ['name' => 'Kho EditDate Test'], // warehouses không có cột code
             ['name' => 'Kho EditDate Test', 'address' => 'Test', 'manager_id' => null]
         );
 

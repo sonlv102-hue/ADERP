@@ -8,6 +8,7 @@ use App\Models\AccountCode;
 use App\Models\Project;
 use App\Models\ProjectWipEntry;
 use App\Services\AccountingSettings;
+use App\Services\Inventory\StockEntryItemWriter;
 use App\Models\ProductSerial;
 use App\Models\StockEntry;
 use App\Models\Supplier;
@@ -65,11 +66,10 @@ class ManualStockEntryController extends Controller
 
         $data = $this->validated($request, $stockEntry);
         DB::transaction(function () use ($data, $stockEntry) {
-            $oldItemIds = $stockEntry->items()->pluck('id');
-            ProductSerial::whereIn('stock_entry_item_id', $oldItemIds)->delete();
-            $stockEntry->items()->delete();
+            $writer = new StockEntryItemWriter($stockEntry);
             $stockEntry->update(['code' => $data['code']] + $this->header($data));
-            $this->writeItems($stockEntry, $data);
+            $this->writeItems($stockEntry, $data, $writer);
+            $writer->finish();
         });
 
         return redirect()->route('warehouse.stock-entries.show', $stockEntry)
@@ -255,21 +255,22 @@ class ManualStockEntryController extends Controller
         ];
     }
 
-    private function writeItems(StockEntry $entry, array $data): void
+    private function writeItems(StockEntry $entry, array $data, ?StockEntryItemWriter $writer = null): void
     {
         foreach ($data['items'] as $item) {
             // Nhập lại từ dự án không có VAT; mua NCC / nhập khác: kế toán chọn % VAT, có thể tự nhập tiền VAT
             $hasVat    = $data['kind'] !== 'project_return';
             $taxRate   = $hasVat ? (float) ($item['tax_rate'] ?? 0) : 0;
             $taxAmount = $hasVat && isset($item['tax_amount']) && $item['tax_amount'] !== '' ? (float) $item['tax_amount'] : null;
-            $row = $entry->items()->create([
+            $attrs = [
                 'product_id' => $item['product_id'],
                 'quantity'   => $item['quantity'],
                 'unit_price' => $item['unit_price'],
                 'tax_rate'   => $taxRate,
                 'tax_amount' => $taxAmount,
                 'unit_cost'  => (float) $item['unit_price'],
-            ]);
+            ];
+            $row = $writer ? $writer->put($attrs) : $entry->items()->create($attrs);
             foreach (array_filter($item['serials'] ?? [], fn ($s) => $s !== '' && $s !== null) as $serial) {
                 ProductSerial::create([
                     'product_id' => $item['product_id'], 'warehouse_id' => $entry->warehouse_id,

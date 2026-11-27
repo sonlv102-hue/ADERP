@@ -8,6 +8,7 @@ use App\Models\Product;
 use App\Models\ProductSerial;
 use App\Models\StockEntry;
 use App\Models\StockEntryItem;
+use App\Services\Inventory\StockEntryItemWriter;
 use App\Models\Supplier;
 use App\Models\Warehouse;
 use App\Services\AccountingService;
@@ -402,9 +403,8 @@ class StockEntryController extends Controller
             return back()->withErrors(['items' => StockEntry::LOT_HISTORY_EDIT_BLOCKED])->withInput();
         }
 
-        DB::transaction(function () use ($data, $stockEntry, $po, $oldItemIds, $poProductMap) {
-            ProductSerial::whereIn('stock_entry_item_id', $oldItemIds)->delete();
-            $stockEntry->items()->delete();
+        DB::transaction(function () use ($data, $stockEntry, $po, $poProductMap) {
+            $writer = new StockEntryItemWriter($stockEntry);
 
             $stockEntry->update([
                 'code'       => $data['code'],
@@ -414,7 +414,7 @@ class StockEntryController extends Controller
 
             foreach ($data['items'] as $item) {
                 $poItem    = $poProductMap[$item['product_id']] ?? null;
-                $entryItem = $stockEntry->items()->create([
+                $entryItem = $writer->put([
                     'product_id'             => $item['product_id'],
                     'quantity'               => $item['quantity'],
                     'unit_price'             => $item['unit_price'],
@@ -435,6 +435,7 @@ class StockEntryController extends Controller
                     ]);
                 }
             }
+            $writer->finish();
         });
 
         return redirect()->route('warehouse.stock-entries.show', $stockEntry)
