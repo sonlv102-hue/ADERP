@@ -18,6 +18,7 @@ class IntegrityFindingCollector
         private InventoryFullAuditService $audit,
         private InventoryDocumentAuditService $docs,
         private IntegrityExtraRules $extra,
+        private IntegrityValueReconciliation $reconciliation,
     ) {}
 
     /** @return array<string, array> issue_key => thuộc tính vấn đề */
@@ -51,7 +52,12 @@ class IntegrityFindingCollector
             }
         }
 
-        foreach (array_merge($this->docs->findings(), $this->extra->findings()) as $f) {
+        $docFindings = array_merge($this->docs->findings(), $this->extra->findings());
+        if ($scope->type === 'all') {
+            // Đối chiếu giá trị toàn hệ thống — cùng transaction/cùng số liệu với lần audit
+            $this->stats['reconciliation'] = $this->reconciliation->compute($rows, $docFindings);
+        }
+        foreach ($docFindings as $f) {
             if ($scope->matchesFinding($f)) {
                 $issue = $this->fromDoc($f);
                 $out[$issue['issue_key']] = $issue;
@@ -93,7 +99,10 @@ class IntegrityFindingCollector
             'evidence' => ['level' => 'row', 'keys' => [$key], 'mv_value' => $r->mv_value, 'lot_value' => $r->lot_value,
                 'in_qty' => $r->in_qty, 'out_qty' => $r->out_qty, 'lot_issued' => $r->lot_issued, 'alloc_qty' => $r->alloc_qty,
                 'expected_avco_qty' => $r->expected_avco_qty, 'expected_avco_value' => $r->expected_avco_value,
-                'avg_cost' => $r->avg_cost, 'initialized_from' => $r->initialized_from, 'inactive' => (bool) $r->inactive],
+                'avg_cost' => $r->avg_cost, 'initialized_from' => $r->initialized_from, 'inactive' => (bool) $r->inactive,
+                // Gộp cùng nguyên nhân: giữ lại thông tin các loại sai lệch liên quan đã không lập vấn đề riêng
+                'merged_findings' => $rule === 'NEGATIVE_STOCK' && $this->negativeRoot($r, array_column($r->row_findings, 0))
+                    ? array_values(array_filter($r->row_findings, fn ($f) => in_array($f[0], ['PHANTOM_STOCK', 'VALUE_MISMATCH'], true))) : []],
         ]);
     }
 

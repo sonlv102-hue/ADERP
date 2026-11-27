@@ -19,6 +19,7 @@
       </div>
 
       <KpiPanel :kpis="kpis" :last-run="lastRun" :last-all-run="lastAllRun" :last-failed="lastFailed" @drill="drill" />
+      <ReconciliationPanel v-if="lastAllRun?.reconciliation" :rec="lastAllRun.reconciliation" />
 
       <!-- Bộ lọc -->
       <div class="flex gap-2 flex-wrap items-center">
@@ -79,6 +80,7 @@ import KpiPanel from './Partials/KpiPanel.vue'
 import IssueTable from './Partials/IssueTable.vue'
 import IssueDetailModal from './Partials/IssueDetailModal.vue'
 import RuleCatalog from './Partials/RuleCatalog.vue'
+import ReconciliationPanel from './Partials/ReconciliationPanel.vue'
 import { RULE_LABELS, STATUS_LABELS, CATEGORY_LABELS, SEVERITY, KPI_GROUP_LABELS, BUCKET_LABELS } from './labels'
 
 const props = defineProps({

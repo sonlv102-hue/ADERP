@@ -61,6 +61,24 @@ class InventoryDocumentAuditService
             }
         }
 
+        // 1b. Chiều ngược: dòng chứng từ đã xác nhận nhưng KHÔNG có movement nào tại (sản phẩm, kho) kỳ vọng
+        $seen = [];
+        foreach ($this->movementNetByDoc() as $m) {
+            $seen[$m->source_type . '#' . $m->source_id . '#' . $m->product_id . '#' . $m->warehouse_id] = true;
+        }
+        foreach ($this->expectedPairs() as $e) {
+            if (isset($seen[$e->t . '#' . $e->id . '#' . $e->p . '#' . $e->w])) {
+                continue;
+            }
+            $doc = $this->doc($e->t, (int) $e->id);
+            $expected = $this->expectedQty($e->t, $doc, (int) $e->p, (int) $e->w);
+            if ($expected !== null && abs($expected) > 0.0005) {
+                $out[] = $this->finding('QUANTITY_MISMATCH', 'QUANTITY_MISMATCH', [$e->p . '-' . $e->w], $e->t, (int) $e->id, $doc['code'] ?? null, 'confirmed',
+                    ($doc['code'] ?? '') . " [confirmed]: thiếu movement tại kho #{$e->w} (chứng từ {$expected}, movement 0)",
+                    ['product_id' => (int) $e->p, 'warehouse_id' => (int) $e->w, 'qty_book' => 0.0, 'qty_expected' => $expected]);
+            }
+        }
+
         // 2. JE TK 156x theo chứng từ so với Σ amount movement active
         foreach ($this->jeVsMovement() as $j) {
             $diff = round((float) $j->mv_amount - (float) $j->gl_amount, 2);
@@ -166,30 +184,54 @@ class InventoryDocumentAuditService
             FROM stock_movements GROUP BY source_type, source_id, product_id, warehouse_id");
     }
 
-    /** Số lượng kỳ vọng của movement active theo trạng thái chứng từ; null = không so. */
+    /** Số lượng kỳ vọng của movement active theo trạng thái chứng từ; null = không so (tồn đầu kỳ, nguồn lạ). */
     private function expectedQty(string $type, ?array $doc, int $productId, int $warehouseId): ?float
     {
-        if (! isset(self::TYPES[$type]) || ! in_array($type, ['App\Models\StockEntry', 'App\Models\StockExit'], true)) {
+        if (! isset(self::TYPES[$type])) {
             return null;
         }
         if ($doc === null || $doc['status'] !== 'confirmed') {
             return 0.0; // nháp / đã hủy / đã xóa → không được còn tác động tồn
         }
-        if ($type === 'App\Models\StockEntry') {
-            return (float) DB::table('stock_entry_items')->where('stock_entry_id', $doc['id'])->where('product_id', $productId)->sum('quantity');
-        }
-        // Phiếu xuất: −SL tại kho xuất; project_transfer: +SL tại kho đích
-        $qty = (float) DB::table('stock_exit_items')->where('stock_exit_id', $doc['id'])->where('product_id', $productId)->sum('quantity');
-        if ((int) $doc['warehouse_id'] === $warehouseId) {
-            return -$qty;
-        }
-        return (int) ($doc['to_warehouse_id'] ?? 0) === $warehouseId ? $qty : 0.0;
+        $sum = fn (string $table, string $fk, string $col = 'quantity') => (float) DB::table($table)->where($fk, $doc['id'])
+            ->where('product_id', $productId)->sum($col);
+        $at = fn (?int $wid) => (int) ($wid ?? 0) === $warehouseId;
+        return match ($type) {
+            'App\Models\StockEntry' => $sum('stock_entry_items', 'stock_entry_id'),
+            // Phiếu xuất: −SL tại kho xuất; project_transfer: +SL tại kho đích
+            'App\Models\StockExit' => $at($doc['warehouse_id'] ?? null) ? -$sum('stock_exit_items', 'stock_exit_id')
+                : ($at($doc['to_warehouse_id'] ?? null) ? $sum('stock_exit_items', 'stock_exit_id') : 0.0),
+            'App\Models\StockTransfer' => ($at($doc['to_warehouse_id'] ?? null) ? $sum('stock_transfer_items', 'stock_transfer_id') : 0.0)
+                - ($at($doc['from_warehouse_id'] ?? null) ? $sum('stock_transfer_items', 'stock_transfer_id') : 0.0),
+            'App\Models\SalesReturn' => $at($doc['warehouse_id'] ?? null) ? $sum('sales_return_items', 'sales_return_id') : 0.0,
+            'App\Models\PurchaseReturn' => $at($doc['warehouse_id'] ?? null) ? -$sum('purchase_return_items', 'purchase_return_id') : 0.0,
+            'App\Models\InventoryCount' => $at($doc['warehouse_id'] ?? null)
+                ? $sum('inventory_count_items', 'inventory_count_id', 'counted_quantity') - $sum('inventory_count_items', 'inventory_count_id', 'system_quantity') : 0.0,
+            default => null,
+        };
+    }
+
+    /** (loại, id, sản phẩm, kho) mà chứng từ đã xác nhận phải có movement. */
+    private function expectedPairs(): array
+    {
+        $q = "SELECT 'App\\Models\\StockEntry' t, d.id, i.product_id p, d.warehouse_id w FROM stock_entries d JOIN stock_entry_items i ON i.stock_entry_id = d.id WHERE d.status = 'confirmed'
+            UNION SELECT 'App\\Models\\StockExit', d.id, i.product_id, d.warehouse_id FROM stock_exits d JOIN stock_exit_items i ON i.stock_exit_id = d.id WHERE d.status = 'confirmed'
+            UNION SELECT 'App\\Models\\StockExit', d.id, i.product_id, d.to_warehouse_id FROM stock_exits d JOIN stock_exit_items i ON i.stock_exit_id = d.id
+                WHERE d.status = 'confirmed' AND d.issue_purpose = 'project_transfer' AND d.to_warehouse_id IS NOT NULL
+            UNION SELECT 'App\\Models\\StockTransfer', d.id, i.product_id, d.from_warehouse_id FROM stock_transfers d JOIN stock_transfer_items i ON i.stock_transfer_id = d.id WHERE d.status = 'confirmed'
+            UNION SELECT 'App\\Models\\StockTransfer', d.id, i.product_id, d.to_warehouse_id FROM stock_transfers d JOIN stock_transfer_items i ON i.stock_transfer_id = d.id WHERE d.status = 'confirmed'
+            UNION SELECT 'App\\Models\\SalesReturn', d.id, i.product_id, d.warehouse_id FROM sales_returns d JOIN sales_return_items i ON i.sales_return_id = d.id WHERE d.status = 'confirmed'
+            UNION SELECT 'App\\Models\\PurchaseReturn', d.id, i.product_id, d.warehouse_id FROM purchase_returns d JOIN purchase_return_items i ON i.purchase_return_id = d.id WHERE d.status = 'confirmed'
+            UNION SELECT 'App\\Models\\InventoryCount', d.id, i.product_id, d.warehouse_id FROM inventory_counts d JOIN inventory_count_items i ON i.inventory_count_id = d.id
+                WHERE d.status = 'confirmed' AND i.counted_quantity <> i.system_quantity";
+        return DB::select($q);
     }
 
     private function jeVsMovement(): array
     {
         $sql = [];
-        foreach (['App\Models\StockEntry' => ['stock_entries', 'stock_entry'], 'App\Models\StockExit' => ['stock_exits', 'stock_exit']] as $type => [$table, $ref]) {
+        foreach (['App\Models\StockEntry' => ['stock_entries', 'stock_entry'], 'App\Models\StockExit' => ['stock_exits', 'stock_exit'],
+            'App\Models\InventoryCount' => ['inventory_counts', 'App\Models\InventoryCount']] as $type => [$table, $ref]) {
             $sql[] = "SELECT '{$type}' source_type, d.id source_id, d.code,
                 COALESCE((SELECT SUM(amount) FROM stock_movements m WHERE m.source_type = '{$type}' AND m.source_id = d.id AND m.status = 'active'), 0) mv_amount,
                 COALESCE((SELECT SUM(l.debit - l.credit) FROM journal_entry_lines l JOIN journal_entries j ON j.id = l.journal_entry_id
@@ -212,7 +254,11 @@ class InventoryDocumentAuditService
         if ($this->docRowsCache === null) {
             $this->docRowsCache = [];
             foreach (self::TYPES as $t => [$table]) {
-                $cols = ['id', 'code', 'status'] + ($table === 'stock_exits' ? [3 => 'warehouse_id', 4 => 'to_warehouse_id'] : []);
+                $cols = array_merge(['id', 'code', 'status'], match ($table) {
+                    'stock_exits' => ['warehouse_id', 'to_warehouse_id'],
+                    'stock_transfers' => ['from_warehouse_id', 'to_warehouse_id'],
+                    default => ['warehouse_id'],
+                });
                 foreach (DB::table($table)->get($cols) as $d) {
                     $this->docRowsCache[$t][$d->id] = (array) $d;
                 }

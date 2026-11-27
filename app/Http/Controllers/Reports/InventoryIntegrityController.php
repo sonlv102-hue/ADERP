@@ -121,6 +121,13 @@ class InventoryIntegrityController extends Controller
         return $r ? ['id' => $r->id, 'scope_type' => $r->scope_type, 'scope_value' => $r->scope_value, 'status' => $r->status,
             'rules_version' => $r->rules_version, 'finished_at' => $r->finished_at?->format('d/m/Y H:i:s'), 'products_checked' => $r->products_checked,
             'warehouses_checked' => $r->warehouses_checked, 'rows_checked' => $r->rows_checked, 'issues_found' => $r->issues_found,
-            'legacy_rows' => $r->summary['legacy_rows'] ?? null, 'error' => $r->error] : null;
+            'legacy_rows' => $r->summary['legacy_rows'] ?? null, 'error' => $r->error,
+            'reconciliation' => $r->scope_type === 'all' ? $this->visibleReconciliation($r->summary['reconciliation'] ?? null) : null] : null;
+    }
+
+    /** Đối chiếu giá trị có số dư TK 156/154 → chỉ người có quyền xem kế toán. */
+    private function visibleReconciliation(?array $rec): ?array
+    {
+        return $rec && request()->user()?->can('accounting.view') ? $rec : null;
     }
 }

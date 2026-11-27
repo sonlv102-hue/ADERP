@@ -36,8 +36,10 @@ class InventoryIntegrityAuditor
                 }
                 return $this->persist($scope, $run, $this->collector->collect($scope));
             });
-            $run->update($counts + $this->collector->stats + ['status' => 'success', 'finished_at' => now(),
-                'summary' => ['legacy_rows' => $this->collector->stats['legacy_rows'] ?? 0, 'rules' => count(IntegrityRuleCatalog::RULES)]]);
+            $st = $this->collector->stats;
+            $run->update($counts + array_intersect_key($st, array_flip(['products_checked', 'warehouses_checked', 'rows_checked']))
+                + ['status' => 'success', 'finished_at' => now(), 'summary' => ['legacy_rows' => $st['legacy_rows'] ?? 0,
+                    'rules' => count(IntegrityRuleCatalog::RULES), 'reconciliation' => $st['reconciliation'] ?? null]]);
         } catch (Throwable $e) {
             $run->update(['status' => 'failed', 'finished_at' => now(), 'error' => mb_substr($e->getMessage(), 0, 2000)]);
             report($e);

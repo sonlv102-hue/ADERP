@@ -164,4 +164,48 @@ class InventoryIntegrityWorkflowTest extends TestCase
         $this->assertSame('RESOLVED', $policy->fresh()->status, 'quyết định chính sách không bị audit mở lại');
         $this->assertSame(1, Issue::where('source', 'policy')->where('document_ref', 'A4')->count());
     }
+
+    public function test_accountant_with_individually_granted_permissions_without_admin_or_chief_role(): void
+    {
+        [$tech, $acc] = $this->seedIssues();
+        $kt = $this->userWithRole(null);
+        $codes = ['reports.inventory_integrity.view', 'reports.inventory_integrity.note', 'reports.inventory_integrity.export', 'reports.inventory_integrity.audit', 'accounting.view'];
+        foreach ($codes as $code) {
+            $kt->permissions()->attach(Permission::where('code', $code)->value('id'), ['effect' => 'allow']);
+        }
+        $this->actingAs($kt);
+
+        $this->get(route('reports.inventory_integrity.index'))->assertOk()
+            ->assertInertia(fn ($page) => $page->where('can.accept', false)->where('can.assign', false)->where('can.note', true)
+                ->where('issues.data', fn ($rows) => collect($rows)->pluck('id')->contains($acc->id)));
+        $this->getJson(route('reports.inventory_integrity.show', $acc))->assertOk()->assertJsonPath('trace.accounting_hidden', false);
+        $this->post(route('reports.inventory_integrity.note', $acc), ['note' => 'Kế toán viên ghi chú'])->assertSessionHasNoErrors();
+        $this->post(route('reports.inventory_integrity.run'), ['scope' => 'issue', 'value' => (string) $acc->id])->assertSessionHas('success');
+        Excel::fake();
+        $this->get(route('reports.inventory_integrity.export'))->assertOk();
+
+        $this->post(route('reports.inventory_integrity.accept', $acc), ['justification' => 'Kế toán viên tự chấp nhận'])->assertForbidden();
+        $this->post(route('reports.inventory_integrity.assign'), ['ids' => [$acc->id], 'assignee_id' => $kt->id])->assertForbidden();
+        $this->patch(route('reports.inventory_integrity.status', $acc), ['status' => 'IN_PROGRESS'])->assertForbidden();
+
+        // Thu hồi quyền xem kế toán (deny) → vấn đề kế toán biến mất khỏi UI, drill-down và Excel
+        $kt->permissions()->updateExistingPivot(Permission::where('code', 'accounting.view')->value('id'), ['effect' => 'deny']);
+        $this->getJson(route('reports.inventory_integrity.show', $acc))->assertForbidden();
+        $this->assertFalse(app(IntegrityReportQuery::class)->filtered($kt->fresh(), ['status' => 'all'])->pluck('id')->contains($acc->id));
+    }
+
+    public function test_permission_seeder_is_idempotent_and_only_adds(): void
+    {
+        $other = Permission::firstOrCreate(['code' => 'warehouse.view'], ['module' => 'warehouse', 'action' => 'view', 'name' => 'Xem kho']);
+        $role = Role::where('code', 'warehouse')->first();
+        $role->permissions()->syncWithoutDetaching([$other->id]);
+        $before = ['perm' => Permission::count(), 'pivot' => DB::table('role_permissions')->count()];
+
+        $this->seed(InventoryIntegrityPermissionSeeder::class);
+        $this->seed(InventoryIntegrityPermissionSeeder::class);
+
+        $this->assertSame($before, ['perm' => Permission::count(), 'pivot' => DB::table('role_permissions')->count()], 'chạy lại không thêm/xóa');
+        $this->assertTrue($role->fresh()->permissions()->where('code', 'warehouse.view')->exists(), 'quyền sẵn có được giữ');
+        $this->assertSame(6, Permission::where('code', 'like', 'reports.inventory_integrity.%')->count());
+    }
 }

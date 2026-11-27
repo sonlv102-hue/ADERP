@@ -47,6 +47,31 @@ class IntegritySummarySheet implements FromArray, WithTitle, ShouldAutoSize, Wit
         foreach ($this->kpis['values'] as $v) {
             $out[] = [$v['label'], $v['count'], $v['increase'], $v['decrease'], $v['net']];
         }
+        return array_merge($out, $this->reconciliation());
+    }
+
+    /** Bảng đối chiếu giá trị của lần audit toàn hệ thống (chỉ khi người xuất có quyền xem kế toán). */
+    private function reconciliation(): array
+    {
+        $rec = $this->run?->scope_type === 'all' && auth()->user()?->can('accounting.view') ? ($this->run->summary['reconciliation'] ?? null) : null;
+        if (! $rec) {
+            return [[], ['Đối chiếu giá trị tồn kho – kế toán: không hiển thị (cần lần audit toàn hệ thống và quyền xem kế toán)']];
+        }
+        $t = $rec['totals'];
+        $out = [[], ['ĐỐI CHIẾU GIÁ TRỊ TỒN KHO – KẾ TOÁN', 'Ngưỡng SL: ' . $rec['thresholds']['qty'] . ' · GT: ' . $rec['thresholds']['value'] . 'đ'],
+            ['Tổng AVCO', $t['avco']], ['Tổng lô dự án (FIFO)', $t['lot']], ['Sổ kho (movement hiệu lực)', $t['book']], ['TK 156 (tổng)', $t['gl156_total']]];
+        foreach ($t['gl156'] as $acc => $v) {
+            $out[] = ["  TK {$acc}", $v];
+        }
+        $out[] = ['TK 154 số dư (sau kết chuyển — chỉ tham khảo)', $t['gl154_total']];
+        $out[] = ['WIP hiệu lực (mọi nguồn — chỉ tham khảo)', $t['wip_active_total']];
+        foreach ($rec['comparisons'] as $c) {
+            $out[] = [];
+            $out[] = [$c['label'], 'Bên trái', $c['left'], 'Bên phải', $c['right'], 'Chênh', $c['diff'], 'Chưa giải trình', $c['unexplained'], 'Kết luận', $c['status']];
+            foreach ($c['items'] as $i) {
+                $out[] = ['  ' . $i['label'], $i['kind'], $i['count'], $i['amount']];
+            }
+        }
         return $out;
     }
 }

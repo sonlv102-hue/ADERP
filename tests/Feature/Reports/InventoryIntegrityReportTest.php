@@ -188,4 +188,87 @@ class InventoryIntegrityReportTest extends TestCase
         $this->assertNull(collect($trace)->firstWhere('source_item_id', 90002)['snapshot']);
         $this->assertNotNull(collect($trace)->first()['link'], 'chứng từ còn tồn tại → có link');
     }
+
+    private function doc(string $table, array $attrs): int
+    {
+        return DB::table($table)->insertGetId($attrs + ['created_at' => now(), 'updated_at' => now()]);
+    }
+
+    private function je(string $refType, int $refId, float $amount, string $code): void
+    {
+        \App\Models\AccountCode::firstOrCreate(['code' => '1561'], ['name' => '1561', 'type' => 'asset', 'normal_balance' => 'debit', 'is_detail' => true]);
+        \App\Models\AccountCode::firstOrCreate(['code' => '3311'], ['name' => '3311', 'type' => 'liability', 'normal_balance' => 'credit', 'is_detail' => true]);
+        $id = DB::table('journal_entries')->insertGetId(['code' => $code, 'entry_date' => now()->toDateString(), 'description' => $code, 'status' => 'posted',
+            'reference_type' => $refType, 'reference_id' => $refId, 'is_auto' => true, 'created_by' => $this->admin->id, 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('journal_entry_lines')->insert([
+            ['journal_entry_id' => $id, 'account_code' => '1561', 'debit' => max($amount, 0), 'credit' => max(-$amount, 0), 'created_at' => now(), 'updated_at' => now()],
+            ['journal_entry_id' => $id, 'account_code' => '3311', 'debit' => max(-$amount, 0), 'credit' => max($amount, 0), 'created_at' => now(), 'updated_at' => now()],
+        ]);
+    }
+
+    public function test_transfer_count_return_cancelled_and_deleted_documents_are_checked(): void
+    {
+        $p = $this->stocked('IR-DOC', 20);
+        $u = $this->admin->id;
+        // Chuyển kho đã xác nhận 5 cái nhưng chỉ có movement xuất (thiếu movement nhập kho đích)
+        $t = $this->doc('stock_transfers', ['code' => 'CK-IR1', 'from_warehouse_id' => $this->wh->id, 'to_warehouse_id' => $this->wh2->id,
+            'transfer_date' => now()->toDateString(), 'status' => 'confirmed', 'created_by' => $u]);
+        DB::table('stock_transfer_items')->insert(['stock_transfer_id' => $t, 'product_id' => $p->id, 'quantity' => 5, 'created_at' => now(), 'updated_at' => now()]);
+        $this->movement($p->id, $this->wh->id, -5, 100000, ['source_type' => 'App\Models\StockTransfer', 'source_id' => $t]);
+        // Phiếu chuyển kho đã hủy nhưng còn movement hiệu lực
+        $t2 = $this->doc('stock_transfers', ['code' => 'CK-IR2', 'from_warehouse_id' => $this->wh->id, 'to_warehouse_id' => $this->wh2->id,
+            'transfer_date' => now()->toDateString(), 'status' => 'cancelled', 'created_by' => $u]);
+        $this->movement($p->id, $this->wh2->id, 2, 100000, ['source_type' => 'App\Models\StockTransfer', 'source_id' => $t2]);
+        // Kiểm kê đã xác nhận: movement khớp (−1) nhưng không có JE
+        $c = $this->doc('inventory_counts', ['code' => 'IK-IR1', 'warehouse_id' => $this->wh->id, 'count_date' => now()->toDateString(), 'status' => 'confirmed', 'counted_by' => $u]);
+        DB::table('inventory_count_items')->insert(['inventory_count_id' => $c, 'product_id' => $p->id, 'system_quantity' => 20, 'counted_quantity' => 19, 'created_at' => now(), 'updated_at' => now()]);
+        $this->movement($p->id, $this->wh->id, -1, 100000, ['source_type' => 'App\Models\InventoryCount', 'source_id' => $c]);
+        // Phiếu trả hàng NCC đã bị xóa nhưng còn movement hiệu lực
+        $this->movement($p->id, $this->wh->id, -1, 100000, ['source_type' => 'App\Models\PurchaseReturn', 'source_id' => 987654]);
+
+        $this->audit();
+        $rules = fn (string $doc) => Issue::where('document_ref', 'like', "%{$doc}%")->pluck('rule_code')->all();
+        $this->assertContains('QUANTITY_MISMATCH', $rules('CK-IR1'), 'chuyển kho thiếu movement kho đích');
+        $this->assertContains('DOCUMENT_STATUS_MISMATCH', $rules('CK-IR2'), 'chuyển kho đã hủy còn movement');
+        $this->assertNotContains('QUANTITY_MISMATCH', $rules('IK-IR1'), 'kiểm kê: movement khớp chênh lệch đếm');
+        $this->assertContains('MISSING_ACCOUNTING_ENTRY', $rules('IK-IR1'), 'kiểm kê thiếu JE');
+        $this->assertContains('DOCUMENT_STATUS_MISMATCH', $rules('PurchaseReturn#987654'), 'chứng từ đã xóa còn movement');
+    }
+
+    public function test_voided_movement_still_reflected_in_avco_or_je_is_detected(): void
+    {
+        $p = $this->stocked('IR-VOID', 10);
+        $e = $this->doc('stock_entries', ['code' => 'NK-IRV', 'warehouse_id' => $this->wh->id, 'status' => 'cancelled',
+            'entry_date' => now()->toDateString(), 'created_by' => $this->admin->id]);
+        // Movement của phiếu đã void nhưng AVCO vẫn giữ (12) và JE vẫn posted, không đảo
+        $this->movement($p->id, $this->wh->id, 2, 100000, ['source_type' => 'App\Models\StockEntry', 'source_id' => $e, 'status' => 'voided']);
+        $this->setBalance($p, 12);
+        $this->je('stock_entry', $e, 200000, 'BT-IRV');
+
+        $this->audit();
+        $this->assertNotNull($this->issue('PHANTOM_STOCK', $p), 'AVCO còn tính movement đã void');
+        $this->assertSame(1, Issue::where('rule_code', 'INVENTORY_GL_MISMATCH')->where('document_ref', 'NK-IRV')->count(), 'JE chưa đảo theo movement void');
+    }
+
+    public function test_value_reconciliation_items_sum_to_each_difference(): void
+    {
+        $a = $this->stocked('IR-R1');
+        $this->setBalance($a, 12);                                        // AVCO +200.000 so với sổ kho
+        $this->je('opening_balance', 0, 999000, 'BT-IRR');                 // TK156 không khớp sổ kho
+        $run = $this->audit();
+        $rec = $run->summary['reconciliation'];
+
+        foreach ($rec['comparisons'] as $c) {
+            $this->assertEqualsWithDelta($c['diff'], collect($c['items'])->sum('amount'), 0.011, $c['key'] . ': tổng khoản = chênh');
+        }
+        [$c1, $c2, $c3] = $rec['comparisons'];
+        $this->assertEqualsWithDelta(200000, $c1['diff'], 0.01);
+        $this->assertSame('explained', $c1['status']);
+        $this->assertEqualsWithDelta($c1['diff'] + $c2['diff'], $c3['diff'], 0.01, 'mục 3 = 1 + 2, không cộng trùng');
+        $this->assertSame('unexplained', $c2['status'], 'JE 156 không khớp movement → chưa giải trình, không kết luận khớp');
+        $this->assertEquals(['qty' => 0.0005, 'value' => 10], $rec['thresholds']);
+
+        $this->get(route('reports.inventory_integrity.index'))->assertOk()
+            ->assertInertia(fn ($page) => $page->where('lastAllRun.reconciliation.comparisons.0.key', 'avco_vs_book'));
+    }
 }

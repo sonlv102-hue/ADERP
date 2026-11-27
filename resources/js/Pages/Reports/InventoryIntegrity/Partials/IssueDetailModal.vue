@@ -33,6 +33,8 @@
         <p><b>Điều kiện:</b> {{ i.rule.condition }}. <b>Công thức:</b> <span class="font-mono text-xs">{{ i.rule.formula }}</span></p>
         <p class="text-xs text-gray-500">Nguồn: {{ i.rule.sources }} · Phạm vi: {{ i.rule.scope }}</p>
         <p><b>Nguyên nhân / bằng chứng:</b> {{ i.cause }}</p>
+        <p v-if="i.evidence?.merged_findings?.length"><b>Sai lệch liên quan (gộp cùng nguyên nhân, không lập vấn đề riêng):</b>
+          <span v-for="(m, k) in i.evidence.merged_findings" :key="k" class="block text-gray-700">· {{ RULE_LABELS[m[0]] ?? m[0] }}: {{ m[1] }}</span></p>
         <p><b>Phương án:</b> {{ i.proposal }}</p>
         <p v-if="i.request_note"><b>Yêu cầu:</b> {{ i.request_note }}</p>
       </div>

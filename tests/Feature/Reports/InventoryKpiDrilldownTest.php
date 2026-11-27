@@ -508,6 +508,7 @@ class InventoryKpiDrilldownTest extends TestCase
 
     public function test_tc16_real_purchase_return_flow_has_original_cost_amount(): void
     {
+        config(['inventory_integrity.returns.allow_confirm_without_je' => true]); // A4: chỉ kiểm thử logic giá trị movement
         $entry = $this->makeConfirmedEntry($this->wh1, 10, 60000);
         $po = $entry->purchaseOrder;
         $poItem = $po->items()->first();

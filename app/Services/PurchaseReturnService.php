@@ -25,6 +25,8 @@ class PurchaseReturnService
         if ($return->status !== PurchaseReturnStatus::Draft) {
             throw new RuntimeException('Chỉ có thể xác nhận phiếu ở trạng thái nháp.');
         }
+        // A4: chặn trước mọi ghi dữ liệu — không thay đổi một phần tồn kho/kế toán
+        app(\App\Services\Inventory\ReturnPostingGuard::class)->assertConfirmable('phiếu trả hàng NCC ' . $return->code);
 
         $return->load('items.product');
 

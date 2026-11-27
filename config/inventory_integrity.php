@@ -7,6 +7,11 @@
  * `php artisan inventory:integrity-cases <file.json>` (file nằm ngoài Git).
  */
 return [
+    // A4: chặn xác nhận phiếu trả hàng khi chưa có quy tắc bút toán được duyệt. Chỉ bật true khi kiểm thử kỹ thuật.
+    'returns' => [
+        'allow_confirm_without_je' => (bool) env('INVENTORY_RETURN_CONFIRM_WITHOUT_JE', false),
+    ],
+
     'policy_topics' => [
         'A3' => [
             'title' => 'Thu hồi phiếu nhập khi đã có giao dịch phụ thuộc',
@@ -20,7 +25,7 @@ return [
         ],
         'A4' => [
             'title' => 'Hạch toán trả hàng bán, trả hàng NCC và giá trị kiểm kê',
-            'description' => 'Hiện tại: trả hàng bán nhập lại theo giá vốn phiếu xuất gốc, trả hàng NCC xuất theo giá nhập gốc — CHƯA sinh JE (mỗi phiếu đã xác nhận hiện là vấn đề RETURN_WITHOUT_JE). Kiểm kê thiếu/thừa có JE theo AVCO; thừa khi chưa có giá bình quân bị chặn.',
+            'description' => 'Hiện tại: phiếu trả hàng bán/NCC được lập và lưu nháp nhưng BỊ CHẶN xác nhận vì chưa có quy tắc bút toán (giá trị tồn khi xác nhận: trả bán theo giá vốn phiếu xuất gốc, trả NCC theo giá nhập gốc). Phiếu lịch sử đã xác nhận thiếu JE hiển thị là RETURN_WITHOUT_JE. Kiểm kê thiếu/thừa có JE theo AVCO (TK đối ứng theo cấu hình 811/711); thừa khi chưa có giá bình quân bị chặn.',
             'proposal' => 'Kế toán trưởng xác nhận bút toán: trả hàng bán (Nợ 156/Có 632?), trả hàng NCC (Nợ 331/Có 156, Có 1331?), kiểm kê thiếu (1381/632/811?), kiểm kê thừa (giá AVCO hay nhập tay; 3381/711?).',
             'options' => [
                 ['name' => 'Trả hàng bán', 'impact' => 'Đề xuất Nợ 156 / Có 632 theo giá vốn gốc; doanh thu/thuế qua hóa đơn điều chỉnh'],

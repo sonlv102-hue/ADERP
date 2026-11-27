@@ -1,6 +1,7 @@
 <template>
   <div class="border border-amber-200 bg-amber-50/50 rounded-lg p-3 space-y-2">
     <h3 class="font-semibold text-gray-900">Phương án xử lý {{ caseInfo?.title ? '— ' + caseInfo.title : '' }}</h3>
+    <p v-if="caseInfo?.needs_reverify" class="text-red-700 font-medium">Cần xác minh lại: số liệu hiện tại khác lúc lập phương án ({{ caseInfo.reverify_reason }})</p>
     <p v-if="caseInfo?.summary" class="text-gray-700">{{ caseInfo.summary }}</p>
     <p v-if="caseInfo?.source" class="text-xs text-gray-500">Nguồn: {{ caseInfo.source }}</p>
     <DataTableWrapper v-if="allOptions.length">
