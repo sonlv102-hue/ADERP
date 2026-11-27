@@ -506,7 +506,7 @@ class InventoryKpiDrilldownTest extends TestCase
         $this->assertEquals(0.0, $reconcileEnd['diff']);
     }
 
-    public function test_tc16_real_purchase_return_flow_amount_null(): void
+    public function test_tc16_real_purchase_return_flow_has_original_cost_amount(): void
     {
         $entry = $this->makeConfirmedEntry($this->wh1, 10, 60000);
         $po = $entry->purchaseOrder;
@@ -527,14 +527,16 @@ class InventoryKpiDrilldownTest extends TestCase
         // confirm thực tế) giống hệt công thức gốc — dùng cửa sổ quanh "hôm nay", không hardcode tháng 1.
         $filters = $this->filters(['date_from' => now()->subDay()->toDateString(), 'date_to' => now()->addDay()->toDateString()]);
         $data = $this->fetch('out', 'reconcile', $filters);
-        $this->assertEquals(0.0, $data['diff'], 'PurchaseReturn thật không có amount nhưng vẫn khớp đối soát (COALESCE 0 cả 2 phía)');
+        $this->assertEquals(0.0, $data['diff'], 'PurchaseReturn khớp đối soát');
 
+        // A4: movement trả NCC mang giá nhập gốc → không còn nằm trong bảng cảnh báo thiếu giá trị
         $prStat = collect($data['null_value_stats'])->firstWhere('label', 'Trả hàng mua');
-        $this->assertNotNull($prStat, 'Trả hàng mua thật (không mô phỏng) phải lên đúng bảng cảnh báo thiếu giá trị nguồn');
-        $this->assertEquals(2.0, $prStat['qty']);
+        $this->assertNull($prStat, 'Trả hàng mua đã có giá trị theo giá nhập gốc');
+        $mv = \App\Models\StockMovement::where('source_type', PurchaseReturn::class)->where('source_id', $return->id)->first();
+        $this->assertEquals(-120000.0, (float) $mv->amount, '2 × 60.000 (giá nhập gốc)');
     }
 
-    public function test_tc17_real_inventory_count_flow_amount_null(): void
+    public function test_tc17_real_inventory_count_flow_has_avco_amount(): void
     {
         // InventoryCountService::confirm() post JE thiếu/thừa kho qua tài khoản 811/1561 —
         // cần seed account_codes tối thiểu để pass FK, không liên quan logic Drill-down.
@@ -561,11 +563,13 @@ class InventoryKpiDrilldownTest extends TestCase
         // confirm thực tế) giống hệt công thức gốc — dùng cửa sổ quanh "hôm nay".
         $filters = $this->filters(['date_from' => now()->subDay()->toDateString(), 'date_to' => now()->addDay()->toDateString()]);
         $data = $this->fetch('out', 'reconcile', $filters);
-        $this->assertEquals(0.0, $data['diff'], 'Điều chỉnh kiểm kê thật (thiếu kho) không có amount nhưng vẫn khớp đối soát');
+        $this->assertEquals(0.0, $data['diff'], 'Điều chỉnh kiểm kê khớp đối soát');
 
+        // A4: thiếu kho trừ theo giá bình quân AVCO (70.000), không theo cost_price gồm VAT
         $icStat = collect($data['null_value_stats'])->firstWhere('label', 'Điều chỉnh kiểm kê');
-        $this->assertNotNull($icStat, 'Điều chỉnh kiểm kê thật phải lên đúng bảng cảnh báo thiếu giá trị nguồn');
-        $this->assertEquals(2.0, $icStat['qty']);
+        $this->assertNull($icStat, 'Điều chỉnh kiểm kê đã có giá trị theo AVCO');
+        $mv = \App\Models\StockMovement::where('source_type', InventoryCount::class)->where('source_id', $count->id)->first();
+        $this->assertEquals(-140000.0, (float) $mv->amount);
     }
 
     // ── TC18: quyền truy cập Excel export — cùng gate reports.view như JSON API ─────

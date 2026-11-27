@@ -59,6 +59,10 @@ class ManualStockEntryController extends Controller
     {
         if ($redirect = $this->guardEditable($stockEntry)) return $redirect;
 
+        if ($stockEntry->hasLotHistory()) {
+            return back()->withErrors(['items' => StockEntry::LOT_HISTORY_EDIT_BLOCKED])->withInput();
+        }
+
         $data = $this->validated($request, $stockEntry);
         DB::transaction(function () use ($data, $stockEntry) {
             $oldItemIds = $stockEntry->items()->pluck('id');

@@ -7,12 +7,19 @@ use App\Enums\SerialStatus;
 use App\Models\PurchaseReturn;
 use App\Models\PurchaseReturnItem;
 use App\Models\StockEntryItem;
+use App\Models\InventoryBalance;
 use App\Models\StockMovement;
+use App\Services\Concerns\LocksDocumentStatus;
+use App\Services\Inventory\ReturnCostResolver;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class PurchaseReturnService
 {
+    use LocksDocumentStatus;
+
+    public function __construct(private AvcoService $avco, private ReturnCostResolver $costs) {}
+
     public function confirmReturn(PurchaseReturn $return): void
     {
         if ($return->status !== PurchaseReturnStatus::Draft) {
@@ -22,6 +29,9 @@ class PurchaseReturnService
         $return->load('items.product');
 
         DB::transaction(function () use ($return) {
+            $this->lockAndAssertStatus($return, [PurchaseReturnStatus::Draft], 'Phiếu trả NCC đã được xử lý bởi thao tác khác.');
+            $return->load('items.product', 'items.serials');
+            $unitCosts = [];
             // Validate quantities inside transaction to prevent TOCTOU races
             foreach ($return->items as $item) {
                 // Total received from confirmed stock entries linked to this PO + product
@@ -47,10 +57,10 @@ class PurchaseReturnService
                     );
                 }
 
-                // Check current warehouse stock is sufficient
-                $currentStock = StockMovement::where('product_id', $item->product_id)
-                    ->where('warehouse_id', $return->warehouse_id)
-                    ->sum('quantity');
+                // A8: tồn khả dụng kho chung theo AVCO (khóa dòng), không SUM movement thô (gồm cả voided)
+                $currentStock = (float) (InventoryBalance::where('product_id', $item->product_id)
+                    ->where('warehouse_id', $return->warehouse_id)->lockForUpdate()->value('qty_on_hand') ?? 0);
+                $unitCosts[$item->id] = $this->costs->purchaseReturnUnitCost($item, (int) $return->warehouse_id);
 
                 if ($currentStock < $item->quantity) {
                     throw new RuntimeException(
@@ -60,6 +70,7 @@ class PurchaseReturnService
             }
 
             foreach ($return->items as $item) {
+                $cost = $unitCosts[$item->id];
                 StockMovement::create([
                     'product_id'  => $item->product_id,
                     'warehouse_id' => $return->warehouse_id,
@@ -67,9 +78,14 @@ class PurchaseReturnService
                     'quantity'    => -$item->quantity,
                     'source_type' => PurchaseReturn::class,
                     'source_id'   => $return->id,
+                    'source_item_id' => $item->id,
                     'created_by'  => auth()->id(),
                     'notes'       => "Trả NCC {$return->code}",
+                    'unit_cost'   => $cost,
+                    'amount'      => -round($cost * (float) $item->quantity, 2),
                 ]);
+                // A4: giảm AVCO đúng giá nhập gốc của hàng trả
+                $this->avco->reverseEntry($item->product_id, (int) $return->warehouse_id, (float) $item->quantity, $cost);
 
                 // Update serials linked to this return item → ReturnedToSupplier
                 $item->serials()->each(function ($serial) {
@@ -96,7 +112,15 @@ class PurchaseReturnService
         $return->load('items.serials');
 
         DB::transaction(function () use ($return) {
+            $this->lockAndAssertStatus($return, [PurchaseReturnStatus::Confirmed], 'Phiếu trả NCC đã được xử lý bởi thao tác khác.');
+            $return->load('items.serials');
             foreach ($return->items as $item) {
+                // Hoàn đúng giá trị đã ghi khi xác nhận (movement gốc); phiếu cũ không có giá trị → chỉ hoàn số lượng theo avg
+                $origQ = StockMovement::active()->where('source_type', PurchaseReturn::class)->where('source_id', $return->id)
+                    ->where('product_id', $item->product_id)->where('quantity', '<', 0);
+                $orig = (clone $origQ)->where('source_item_id', $item->id)->value('unit_cost') ?? $origQ->whereNull('source_item_id')->value('unit_cost');
+                $cost = $orig !== null ? (float) $orig
+                    : (float) (InventoryBalance::where('product_id', $item->product_id)->where('warehouse_id', $return->warehouse_id)->value('avg_cost') ?? 0);
                 StockMovement::create([
                     'product_id'  => $item->product_id,
                     'warehouse_id' => $return->warehouse_id,
@@ -104,9 +128,13 @@ class PurchaseReturnService
                     'quantity'    => $item->quantity,
                     'source_type' => PurchaseReturn::class,
                     'source_id'   => $return->id,
+                    'source_item_id' => $item->id,
                     'created_by'  => auth()->id(),
                     'notes'       => "Hủy phiếu trả NCC {$return->code}",
+                    'unit_cost'   => $cost,
+                    'amount'      => round($cost * (float) $item->quantity, 2),
                 ]);
+                $this->avco->recordEntry($item->product_id, (int) $return->warehouse_id, (float) $item->quantity, $cost);
 
                 // Restore serials → InStock and clear FK
                 foreach ($item->serials as $serial) {

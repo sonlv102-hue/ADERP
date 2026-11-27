@@ -23,6 +23,9 @@ use Illuminate\Support\Facades\DB;
 
 class SearchController extends Controller
 {
+    /** Số mã tối đa trả về cho danh sách tồn theo kho (form xuất kho). */
+    private const WAREHOUSE_PRODUCT_LIMIT = 200;
+
     private function q(Request $request): string
     {
         // Lowercase tại đây để mọi endpoint tìm kiếm dùng chung đều so khớp
@@ -360,7 +363,7 @@ class SearchController extends Controller
                     'sell_price' => (float) ($product->sell_price ?? 0),
                     'has_serial' => (bool) ($product->has_serial ?? false),
                 ];
-            })->filter()->values()->take(30);
+            })->filter()->sortBy('code')->values()->take(self::WAREHOUSE_PRODUCT_LIMIT);
 
             return response()->json(['data' => $items]);
         }
@@ -378,11 +381,15 @@ class SearchController extends Controller
                     });
                 }
             })
-            ->limit(30)
+            // Sắp xếp ổn định + giới hạn đủ lớn cho một kho: trước đây limit(30) không ORDER BY
+            // → khi kho có > 30 mã tồn dương và chưa gõ từ khóa, một số mã bị ẩn ngẫu nhiên.
+            ->orderBy(Product::select('code')->whereColumn('products.id', 'inventory_balances.product_id'))
+            ->limit(self::WAREHOUSE_PRODUCT_LIMIT)
             ->get();
 
+        $balanceItems = collect();
         if ($balanceRows->isNotEmpty()) {
-            $items = $balanceRows->map(fn ($ib) => [
+            $balanceItems = $balanceRows->map(fn ($ib) => [
                 'value'      => $ib->product_id,
                 'label'      => $ib->product->name,
                 'code'       => $ib->product->code,
@@ -395,8 +402,9 @@ class SearchController extends Controller
                 'sell_price' => (float) ($ib->product->sell_price ?? 0),
                 'has_serial' => (bool) ($ib->product->has_serial ?? false),
             ]);
-            return response()->json(['data' => $items]);
         }
+        // A8: trước đây fallback chỉ chạy khi kho KHÔNG có dòng AVCO nào → sản phẩm chưa có AVCO bị ẩn
+        // trong khi backend (getAvcoAvailableQty) vẫn cho xuất. Nay gộp cả hai nguồn, cùng điều kiện với backend.
 
         // Fallback: inventory_balances chưa khởi tạo → tính từ stock_movements (active only)
         // Chỉ áp dụng cho sản phẩm chưa có AVCO record. Sản phẩm đã có record (dù qty=0) không
@@ -417,7 +425,7 @@ class SearchController extends Controller
             ->keyBy('product_id');
 
         if ($movQty->isEmpty()) {
-            return response()->json(['data' => []]);
+            return response()->json(['data' => $balanceItems->values()]);
         }
 
         $entryAvg = StockEntryItem::join('stock_entries', 'stock_entries.id', '=', 'stock_entry_items.stock_entry_id')
@@ -440,7 +448,8 @@ class SearchController extends Controller
                       ->orWhereRaw('LOWER(code) LIKE ?', ["%{$kw}%"]);
                 });
             })
-            ->limit(30)
+            ->orderBy('code')
+            ->limit(self::WAREHOUSE_PRODUCT_LIMIT)
             ->get();
 
         $items = $products->map(function ($p) use ($movQty, $entryAvg) {
@@ -457,9 +466,9 @@ class SearchController extends Controller
                 'sell_price' => (float) ($p->sell_price ?? 0),
                 'has_serial' => (bool) ($p->has_serial ?? false),
             ];
-        })->values();
+        });
 
-        return response()->json(['data' => $items]);
+        return response()->json(['data' => $balanceItems->concat($items)->take(self::WAREHOUSE_PRODUCT_LIMIT)->values()]);
     }
 
     public function orders(Request $request): JsonResponse

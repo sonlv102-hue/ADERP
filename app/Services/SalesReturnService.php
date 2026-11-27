@@ -9,12 +9,20 @@ use App\Models\OrderOverDelivery;
 use App\Models\SalesReturn;
 use App\Models\SalesReturnItem;
 use App\Models\StockMovement;
+use App\Services\Concerns\LocksDocumentStatus;
+use App\Services\Inventory\ReturnCostResolver;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 class SalesReturnService
 {
-    public function __construct(private OrderService $orderService) {}
+    use LocksDocumentStatus;
+
+    public function __construct(
+        private OrderService $orderService,
+        private AvcoService $avco,
+        private ReturnCostResolver $costs,
+    ) {}
     public function confirmReturn(SalesReturn $return): void
     {
         if ($return->status !== SalesReturnStatus::Draft) {
@@ -60,18 +68,24 @@ class SalesReturnService
         }
 
         DB::transaction(function () use ($return) {
+            $this->lockAndAssertStatus($return, [SalesReturnStatus::Draft], 'Phiếu trả hàng đã được xử lý bởi thao tác khác.');
             foreach ($return->items as $item) {
-                // Create stock movement IN
-                StockMovement::create([
+                // A4: nhập lại theo giá vốn của giao dịch xuất bán gốc (không dùng avg hiện tại / cost_price)
+                $cost = $this->costs->salesReturnUnitCost($item);
+                $movement = StockMovement::create([
                     'product_id'  => $item->product_id,
                     'warehouse_id' => $return->warehouse_id,
                     'type'        => 'in',
                     'quantity'    => $item->quantity,
                     'source_type' => SalesReturn::class,
                     'source_id'   => $return->id,
+                    'source_item_id' => $item->id,
                     'created_by'  => auth()->id(),
                     'notes'       => "Trả hàng bán {$return->code}",
+                    'unit_cost'   => $cost,
+                    'amount'      => round($cost * (float) $item->quantity, 2),
                 ]);
+                $this->avco->recordEntry($item->product_id, (int) $return->warehouse_id, (float) $item->quantity, $cost, $movement->id);
 
                 // Transition serials back to in_stock and link to this return item
                 foreach ($item->serials as $serial) {
@@ -114,8 +128,18 @@ class SalesReturnService
         $return->load('items.orderItem', 'items.product', 'items.serials');
 
         DB::transaction(function () use ($return) {
+            $this->lockAndAssertStatus($return, [SalesReturnStatus::Confirmed], 'Phiếu trả hàng đã được xử lý bởi thao tác khác.');
             foreach ($return->items as $item) {
-                // Reversal movement OUT
+                // Đảo đúng giá trị đã nhập khi xác nhận; phiếu cũ (không có giá trị) → chỉ trừ số lượng theo avg
+                $origQ = StockMovement::active()->where('source_type', SalesReturn::class)->where('source_id', $return->id)
+                    ->where('product_id', $item->product_id)->where('quantity', '>', 0);
+                $orig = (clone $origQ)->where('source_item_id', $item->id)->value('unit_cost') ?? $origQ->whereNull('source_item_id')->value('unit_cost');
+                if ($orig !== null) {
+                    $this->avco->reverseEntry($item->product_id, (int) $return->warehouse_id, (float) $item->quantity, (float) $orig);
+                    $cost = (float) $orig;
+                } else {
+                    $cost = $this->avco->recordExit($item->product_id, (int) $return->warehouse_id, (float) $item->quantity);
+                }
                 StockMovement::create([
                     'product_id'  => $item->product_id,
                     'warehouse_id' => $return->warehouse_id,
@@ -123,8 +147,11 @@ class SalesReturnService
                     'quantity'    => -$item->quantity,
                     'source_type' => SalesReturn::class,
                     'source_id'   => $return->id,
+                    'source_item_id' => $item->id,
                     'created_by'  => auth()->id(),
                     'notes'       => "Hủy phiếu trả hàng bán {$return->code}",
+                    'unit_cost'   => $cost,
+                    'amount'      => -round($cost * (float) $item->quantity, 2),
                 ]);
 
                 // Transition serials back to sold and unlink return

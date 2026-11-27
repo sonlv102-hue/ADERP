@@ -43,6 +43,16 @@ class StockEntry extends Model
         return static::nextCode();
     }
 
+    /** Thông báo khi dòng hàng không thể thay thế vì lô dự án của phiếu đang giữ lịch sử FIFO (A6). */
+    public const LOT_HISTORY_EDIT_BLOCKED = 'Không thể sửa dòng hàng: phiếu nhập này có lô dự án đã từng được phân bổ cho phiếu xuất (đã hủy). '
+        . 'Lịch sử phân bổ FIFO phải được giữ nguyên. Chỉ có thể xác nhận lại phiếu với dòng hàng như cũ; nếu cần thay đổi, hãy tạo phiếu nhập mới.';
+
+    /** Dòng hàng đang được lô dự án (kể cả lô đã hủy giữ lịch sử) tham chiếu → không xóa/thay được. */
+    public function hasLotHistory(): bool
+    {
+        return ProjectInventoryLot::whereIn('stock_entry_item_id', $this->items()->select('id'))->exists();
+    }
+
     /** Phiếu nhập thủ công: không có đơn mua, TK Có do người dùng chọn. */
     public function isManual(): bool
     {

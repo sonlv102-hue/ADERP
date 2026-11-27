@@ -13,8 +13,15 @@ use Illuminate\Support\Facades\DB;
 class InventoryAuditCommand extends Command
 {
     protected $signature = 'inventory:audit
-                            {--scope=all : Phạm vi: all|entries|exits|lots|po|gl|avco}
-                            {--warehouse= : Lọc theo warehouse_id}';
+                            {--scope=all : Phạm vi: all|entries|exits|lots|po|gl|avco|full (full = audit 100% sản phẩm×kho)}
+                            {--warehouse= : Lọc theo warehouse_id}
+                            {--product= : [full] Product ID hoặc SKU, nhiều giá trị cách nhau dấu phẩy}
+                            {--project= : [full] Project ID hoặc mã dự án}
+                            {--document= : [full] Mã chứng từ (NK-/XK-/CK-/TH-/THM-/IK-)}
+                            {--status= : [full] Chỉ hiện dòng có trạng thái này (VD PHANTOM_STOCK)}
+                            {--export= : [full] Đường dẫn file CSV xuất kết quả chi tiết}
+                            {--notes= : [full] File JSON ghi chú khảo sát {"pid-wid":{status,note,action}} (ngoài Git)}
+                            {--baseline-db= : [full] Database baseline để so sánh trạng thái trước repair}';
 
     protected $description = 'Rà soát tính nhất quán tồn kho: movement, lot, PO received_qty, và GL.';
 
@@ -23,6 +30,9 @@ class InventoryAuditCommand extends Command
     public function handle(): int
     {
         $scope = $this->option('scope');
+        if ($scope === 'full') {
+            return app(\App\Services\Inventory\InventoryFullAuditReporter::class)->run($this);
+        }
 
         $this->info('=== Kiểm tra tồn kho ===');
 

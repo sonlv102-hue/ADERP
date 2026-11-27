@@ -21,6 +21,7 @@ use App\Models\StockExit;
 use App\Models\StockExitItem;
 use App\Models\StockExitItemLotAllocation;
 use App\Models\InventoryBalance;
+use App\Models\JournalEntry;
 use App\Models\StockMovement;
 use App\Services\AvcoService;
 use App\Services\Concerns\LocksDocumentStatus;
@@ -248,13 +249,9 @@ class StockService
                     'amount'         => -($cancelCost * (float) $item->quantity),
                 ]);
 
-                // Đảo ngược AVCO balance cho hàng không thuộc dự án (chỉ nếu balance đã tồn tại)
+                // Đảo AVCO theo đúng giá trị nhập gốc (A3) — assertEntryReversible đã loại trừ giao dịch phụ thuộc
                 if (!$item->project_id && $this->avco->getBalance($item->product_id, $entry->warehouse_id) !== null) {
-                    $this->avco->recordExit(
-                        $item->product_id,
-                        $entry->warehouse_id,
-                        (float) $item->quantity,
-                    );
+                    $this->avco->reverseEntry($item->product_id, $entry->warehouse_id, (float) $item->quantity, $cancelCost);
                 }
             }
 
@@ -341,13 +338,9 @@ class StockService
                     'amount'         => -($recallCost * (float) $item->quantity),
                 ]);
 
-                // Đảo ngược AVCO balance tạm thời (sẽ được cộng lại khi confirm lại)
+                // Đảo AVCO tạm thời theo đúng giá trị nhập gốc (A3); sẽ được cộng lại khi confirm lại
                 if (!$item->project_id && $this->avco->getBalance($item->product_id, $entry->warehouse_id) !== null) {
-                    $this->avco->recordExit(
-                        $item->product_id,
-                        $entry->warehouse_id,
-                        (float) $item->quantity,
-                    );
+                    $this->avco->reverseEntry($item->product_id, $entry->warehouse_id, (float) $item->quantity, $recallCost);
                 }
             }
 
@@ -396,6 +389,74 @@ class StockService
                     "Tồn kho chung hiện có {$balance->qty_on_hand}, cần đảo {$need}. Vui lòng hủy các phiếu xuất liên quan trước."
                 );
             }
+            $this->assertNoDependentOutflows($entry, (int) $productId, $verb);
+        }
+
+        $this->assertNoUnlinkedManualJournal($entry, $verb);
+    }
+
+    /**
+     * A2/A3: tổng tồn hiện tại đủ chưa chắc là đảo được (nhập 5 → xuất 5 → nhập 10 → thu hồi phiếu đầu).
+     * Mọi giao dịch xuất dùng tồn kho chung PHÁT SINH SAU lần nhập của phiếu này đều đã tính giá vốn
+     * có bao gồm hàng/giá của phiếu → chặn, yêu cầu hủy giao dịch phụ thuộc trước.
+     * Không tính: phần xuất lấy hoàn toàn từ lô dự án (FIFO), movement của chính phiếu, đảo phiếu nhập khác.
+     */
+    private function assertNoDependentOutflows(StockEntry $entry, int $productId, string $verb): void
+    {
+        $lastIn = StockMovement::active()->where('source_type', StockEntry::class)->where('source_id', $entry->id)
+            ->where('product_id', $productId)->where('warehouse_id', $entry->warehouse_id)
+            ->where('quantity', '>', 0)->max('id');
+        if (! $lastIn) {
+            return;
+        }
+
+        // Net theo chứng từ: phiếu xuất đã hủy (out + đảo in) net = 0 → không còn phụ thuộc
+        $codes = StockMovement::active()->where('product_id', $productId)->where('warehouse_id', $entry->warehouse_id)
+            ->where('id', '>', $lastIn)->where('source_type', '!=', StockEntry::class)
+            ->get(['source_type', 'source_id', 'source_item_id', 'quantity'])
+            ->groupBy(fn ($m) => $m->source_type . '#' . $m->source_id)
+            ->filter(fn ($g) => $g->sum('quantity') < -0.0005)
+            ->map(fn ($g) => $g->firstWhere('quantity', '<', 0))
+            ->reject(function ($m) {
+                if ($m->source_type !== StockExit::class || ! $m->source_item_id) {
+                    return false;
+                }
+                $item = StockExitItem::find($m->source_item_id);
+                return $item && ($item->avco_qty !== null ? (float) $item->avco_qty <= 0 : $item->cost_source === 'fifo');
+            })
+            ->map(fn ($m) => $m->source_type::query()->whereKey($m->source_id)->value('code') ?? class_basename($m->source_type) . "#{$m->source_id}")
+            ->unique()->values();
+
+        if ($codes->isNotEmpty()) {
+            $code = Product::where('id', $productId)->value('code');
+            throw new RuntimeException(
+                "Không thể {$verb}: sau phiếu nhập này đã phát sinh giao dịch xuất dùng tồn kho chung của sản phẩm [{$code}] ({$codes->implode(', ')}). " .
+                'Đảo phiếu nhập sẽ làm sai số lượng/giá vốn của các giao dịch đó. Vui lòng hủy các giao dịch phụ thuộc trước hoặc xử lý bằng nghiệp vụ điều chỉnh.'
+            );
+        }
+    }
+
+    /**
+     * Phiếu không có JE tự động liên kết nhưng có JE thủ công mang mã phiếu (trường hợp NK-0054/NK-0065):
+     * đảo/xác nhận lại sẽ sinh JE tự động mới trong khi JE thủ công vẫn còn → hạch toán trùng.
+     */
+    private function assertNoUnlinkedManualJournal(StockEntry $entry, string $verb): void
+    {
+        $linked = JournalEntry::where('reference_type', 'stock_entry')->where('reference_id', $entry->id)
+            ->whereIn('status', ['posted', 'draft'])->exists();
+        if ($linked) {
+            return;
+        }
+        // Khớp đúng mã phiếu (NK-0054 không khớp NK-00541)
+        $pattern = '/(?<![\w-])' . preg_quote($entry->code, '/') . '(?![\w])/u';
+        $manual = JournalEntry::where('status', 'posted')->whereNull('reference_type')
+            ->where('description', 'like', "%{$entry->code}%")->get(['code', 'description'])
+            ->first(fn ($j) => preg_match($pattern, $j->description))?->code;
+        if ($manual) {
+            throw new RuntimeException(
+                "Không thể {$verb}: phiếu {$entry->code} được hạch toán bằng bút toán thủ công {$manual} (không liên kết phiếu). " .
+                'Thao tác này sẽ tạo bút toán tự động trùng. Vui lòng liên hệ kế toán xử lý bút toán thủ công trước.'
+            );
         }
     }
 

@@ -398,6 +398,10 @@ class StockEntryController extends Controller
             return back()->withErrors($errors)->withInput();
         }
 
+        if ($stockEntry->hasLotHistory()) {
+            return back()->withErrors(['items' => StockEntry::LOT_HISTORY_EDIT_BLOCKED])->withInput();
+        }
+
         DB::transaction(function () use ($data, $stockEntry, $po, $oldItemIds, $poProductMap) {
             ProductSerial::whereIn('stock_entry_item_id', $oldItemIds)->delete();
             $stockEntry->items()->delete();

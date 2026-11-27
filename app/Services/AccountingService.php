@@ -181,15 +181,32 @@ class AccountingService
             ->whereRaw("description NOT LIKE 'Đảo:%'")
             ->first();
 
-        if (! $entry) return;
-
-        if ($entry->status === 'draft') {
-            $entry->lines()->delete();
-            $entry->delete();
-            return;
+        if ($entry) {
+            if ($entry->status === 'draft') {
+                $entry->lines()->delete();
+                $entry->delete();
+            } else {
+                $this->reverse($entry, $reason);
+            }
         }
 
-        $this->reverse($entry, $reason);
+        $this->releasePostingJobs($refType, $refId);
+    }
+
+    /**
+     * Bút toán của chứng từ đã bị đảo/xóa → bỏ "dấu đã hạch toán" trong accounting_posting_jobs,
+     * nếu không tryPost() sẽ coi là đã post và bỏ qua JE khi chứng từ được xác nhận lại
+     * (lỗi gốc của NK-0054/NK-0065: xác nhận lại sau thu hồi không sinh JE).
+     * Chỉ bỏ job mà JE của nó không còn hiệu lực (posted/draft) — job của JE khác cùng chứng từ vẫn giữ nguyên.
+     */
+    private function releasePostingJobs(string $refType, int $refId): void
+    {
+        AccountingPostingJob::where('source_type', $refType)
+            ->where('source_id', $refId)
+            ->where('status', AccountingPostingStatus::Posted)
+            ->where(fn ($q) => $q->whereNull('journal_entry_id')
+                ->orWhereNotIn('journal_entry_id', JournalEntry::select('id')->whereIn('status', ['posted', 'draft'])))
+            ->delete();
     }
 
     /** Đảo bút toán (tạo bút toán ngược) */
@@ -477,7 +494,10 @@ class AccountingService
         ]);
 
         if ($job->exists && $job->status === AccountingPostingStatus::Posted) {
-            return $job->journalEntry;
+            // Job cũ trỏ tới JE đã bị đảo/xóa (trước khi có releasePostingJobs) → hạch toán lại, không bỏ qua
+            if (in_array($job->journalEntry?->status, ['posted', 'draft'], true)) {
+                return $job->journalEntry;
+            }
         }
 
         $job->fill([

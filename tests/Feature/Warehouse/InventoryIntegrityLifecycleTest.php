@@ -408,9 +408,6 @@ class InventoryIntegrityLifecycleTest extends TestCase
 
     public function test_project_transfer_confirm_and_cancel_are_symmetric(): void
     {
-        if (\Illuminate\Support\Facades\DB::getDriverName() === 'pgsql') {
-            $this->markTestSkipped('PostgreSQL/production chặn issue_purpose=project_transfer bằng CHECK chk_stock_exits_issue_purpose.');
-        }
         $this->entry(6, 100000);
         $x = $this->confirmedExit(4, 'project_transfer', $this->project->id, ['to_warehouse_id' => $this->wh2->id]);
 

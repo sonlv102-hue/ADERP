@@ -118,6 +118,42 @@ class AvcoService
     }
 
     /**
+     * Đảo một giao dịch nhập (hủy/thu hồi phiếu nhập, trả NCC theo giá nhập gốc) đúng giá trị gốc
+     * thay vì giá bình quân hiện tại (A3) — đối xứng với JE đảo (Có 156 theo giá nhập).
+     * Gọi sau khi đã chắc chắn không có giao dịch xuất phụ thuộc. Phải gọi trong transaction.
+     */
+    public function reverseEntry(int $productId, int $warehouseId, float $qty, float $unitCost): void
+    {
+        $balance = InventoryBalance::where('product_id', $productId)
+            ->where('warehouse_id', $warehouseId)
+            ->lockForUpdate()
+            ->first();
+        $code = fn () => Product::where('id', $productId)->value('code') ?? "ID {$productId}";
+
+        $onHand = (float) ($balance?->qty_on_hand ?? 0);
+        if ($balance === null || $qty - $onHand > 0.0005) {
+            throw new RuntimeException(
+                "Không đủ tồn kho AVCO để đảo phiếu nhập cho sản phẩm [{$code()}] tại kho ID {$warehouseId}. Hiện có: {$onHand}, cần: {$qty}."
+            );
+        }
+
+        $newQty   = round($onHand - $qty, 3);
+        $newValue = round((float) $balance->value_on_hand - $qty * $unitCost, 2);
+        if ($newQty > 0 && $newValue < -0.5) {
+            throw new RuntimeException(
+                "Đảo phiếu nhập theo giá gốc làm giá trị tồn AVCO của [{$code()}] âm ({$newValue}). " .
+                'Dữ liệu giá trị tồn cần được rà soát (inventory:audit --scope=full) trước khi đảo.'
+            );
+        }
+
+        $balance->update([
+            'qty_on_hand'   => $newQty,
+            'value_on_hand' => $newQty <= 0 ? 0 : max(0, $newValue),
+            'avg_cost'      => $newQty > 0 ? max(0, $newValue) / $newQty : $balance->avg_cost,
+        ]);
+    }
+
+    /**
      * Rebuild (upsert) inventory_balance from confirmed stock_entry_items.
      * Used by reconcile command to fix AVCO rows that are missing or have wrong qty.
      * avg_cost = weighted average of unit_price across all confirmed entries.

@@ -5,14 +5,20 @@ namespace App\Services;
 use App\Enums\InventoryCountStatus;
 use App\Models\InventoryCount;
 use App\Models\InventoryCountItem;
+use App\Models\InventoryBalance;
 use App\Models\StockMovement;
 use App\Services\AccountingSettings;
+use App\Services\Concerns\LocksDocumentStatus;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use App\Services\AccountingService;
 
 class InventoryCountService
 {
+    use LocksDocumentStatus;
+
+    public function __construct(private AvcoService $avco) {}
+
     /**
      * Load all products that have stock (or have had movements) in the warehouse,
      * creating InventoryCountItems with system_quantity snapshot.
@@ -85,12 +91,27 @@ class InventoryCountService
         }
 
         DB::transaction(function () use ($count) {
+            $this->lockAndAssertStatus($count, [InventoryCountStatus::Draft], 'Phiếu kiểm kê đã được xử lý bởi thao tác khác.');
             $journalLines = [];
 
             foreach ($count->items as $item) {
                 $difference = $item->counted_quantity - $item->system_quantity;
                 if ($difference == 0) {
                     continue;
+                }
+
+                // A4: giá trị chênh lệch theo AVCO (giá vốn chưa VAT), không theo cost_price (đã gồm VAT).
+                // Thiếu: trừ AVCO theo avg. Thừa: cộng theo avg hiện tại (PENDING_DECISION: chính sách giá trị hàng thừa).
+                $qty = abs((float) $difference);
+                if ($difference < 0) {
+                    $unitCost = $this->avco->recordExit($item->product_id, (int) $count->warehouse_id, $qty);
+                } else {
+                    $unitCost = (float) (InventoryBalance::where('product_id', $item->product_id)
+                        ->where('warehouse_id', $count->warehouse_id)->value('avg_cost') ?? 0);
+                    if ($unitCost <= 0) {
+                        throw new RuntimeException("Sản phẩm [{$item->product->code}] chưa có giá bình quân tại kho — chưa xác định được giá trị hàng thừa. Cần kế toán quyết định giá trị trước khi xác nhận.");
+                    }
+                    $this->avco->recordEntry($item->product_id, (int) $count->warehouse_id, $qty, $unitCost);
                 }
 
                 StockMovement::create([
@@ -102,10 +123,12 @@ class InventoryCountService
                     'source_id'    => $count->id,
                     'created_by'   => auth()->id(),
                     'notes'        => "Điều chỉnh kiểm kê {$count->code}",
+                    'source_item_id' => $item->id,
+                    'unit_cost'    => $unitCost,
+                    'amount'       => round(($difference < 0 ? -1 : 1) * $qty * $unitCost, 2),
                 ]);
 
-                // Tính giá trị chênh lệch theo cost_price sản phẩm
-                $costAmount = (int) round(abs($difference) * (float) ($item->product->cost_price ?? 0));
+                $costAmount = (int) round($qty * $unitCost);
                 if ($costAmount <= 0) {
                     continue;
                 }
