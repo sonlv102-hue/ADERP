@@ -52,7 +52,7 @@
                 @change="opt => supplierName = opt?.label ?? ''" />
             </FormField>
             <FormField v-if="form.kind === 'other'" label="TK đối ứng (bên Có)" required :error="form.errors.credit_account_code"
-              hint="VD: 711 hàng tặng/biếu, 3381 hàng thừa chờ xử lý, 4111 góp vốn">
+              hint="VD: 711 hàng tặng/biếu, 3381 hàng thừa chờ xử lý, 4111 góp vốn, 154 (không gắn dự án, không giảm WIP)">
               <RemoteSearchSelect v-model="form.credit_account_code" :display-text="accountName" :search-url="route('search.account-codes')"
                 :extra-params="{ detail_only: 1 }" placeholder="Tìm tài khoản..." :has-error="!!form.errors.credit_account_code"
                 @change="opt => accountName = opt ? `${opt.code} - ${opt.label}` : ''" />

@@ -55,10 +55,14 @@ class StockEntry extends Model
         return $this->isManual() && str_starts_with((string) $this->credit_account_code, '331');
     }
 
-    /** Phiếu thủ công nhập lại vật tư từ dự án (Có 154) — ghi giảm WIP của project_id. */
+    /**
+     * Phiếu thủ công nhập lại vật tư từ dự án (Có 154 + project_id) — ghi giảm WIP của project_id.
+     * Có 154 mà không có dự án = "nhập khác" do kế toán tự chọn TK, không đụng WIP.
+     */
     public function isManualProjectReturn(): bool
     {
-        return $this->isManual() && str_starts_with((string) $this->credit_account_code, '154');
+        return $this->isManual() && $this->project_id !== null
+            && str_starts_with((string) $this->credit_account_code, '154');
     }
 
     /** purchase | project_return | other — null nếu không phải phiếu thủ công. */

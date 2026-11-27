@@ -264,10 +264,43 @@ class ManualStockEntryTest extends TestCase
         $this->post(route('warehouse.stock-entries.manual.store'), $this->returnPayload($p))->assertSessionHasErrors('project_id');
         $this->post(route('warehouse.stock-entries.manual.store'), $this->payload(['kind' => 'project_return']))
             ->assertSessionHasErrors('project_id');
+        $this->assertSame(0, StockEntry::count());
+    }
+
+    public function test_other_kind_allows_154_without_project(): void
+    {
+        $p = $this->projectWithWip(5_000_000);
         $this->post(route('warehouse.stock-entries.manual.store'), $this->payload([
             'kind' => 'other', 'supplier_id' => null, 'credit_account_code' => '154',
+            'items' => [['product_id' => $this->product->id, 'quantity' => 2, 'unit_price' => 1_000_000,
+                         'tax_rate' => 0, 'serials' => []]],
+        ]))->assertSessionHasNoErrors();
+
+        $e = StockEntry::firstOrFail();
+        $this->assertSame('other', $e->manualKind());
+        $this->assertNull($e->project_id);
+        app(StockService::class)->confirmEntry($e->fresh());
+
+        $lines = JournalEntry::where('reference_type', 'stock_entry')->where('reference_id', $e->id)
+            ->firstOrFail()->lines()->get();
+        $this->assertEqualsCanonicalizing([['1561', 2_000_000, 0], ['154', 0, 2_000_000]],
+            $lines->map(fn ($l) => [$l->account_code, (int) $l->debit, (int) $l->credit])->all());
+        $this->assertNull($lines->firstWhere('account_code', '154')->project_id);
+        // Không tự phân bổ/ghi giảm WIP của dự án nào
+        $this->assertSame(5_000_000, (int) ProjectWipEntry::sum('amount'));
+        $this->assertEquals(2, InventoryBalance::where('product_id', $this->product->id)->value('qty_on_hand'));
+        $this->assertEquals(2_000_000, (float) InventoryBalance::where('product_id', $this->product->id)->value('value_on_hand'));
+
+        app(StockService::class)->cancelEntry($e->fresh());
+        $this->assertSame(5_000_000, (int) ProjectWipEntry::sum('amount'));
+        $this->assertEquals(0, InventoryBalance::where('product_id', $this->product->id)->value('qty_on_hand'));
+    }
+
+    public function test_other_kind_still_blocks_inventory_accounts(): void
+    {
+        $this->post(route('warehouse.stock-entries.manual.store'), $this->payload([
+            'kind' => 'other', 'supplier_id' => null, 'credit_account_code' => '1561',
         ]))->assertSessionHasErrors('credit_account_code');
-        $this->assertSame(0, StockEntry::count());
     }
 
     public function test_other_kind_supplier_is_optional(): void

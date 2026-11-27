@@ -185,7 +185,7 @@ class ManualStockEntryController extends Controller
         }
     }
 
-    /** TK Có của "nhập khác": phải là TK chi tiết đang dùng, không phải 331 (dùng loại mua hàng) hay TK kho 15x. */
+    /** TK Có của "nhập khác": phải là TK chi tiết đang dùng, không phải 331 (dùng loại mua hàng) hay TK kho 15x (trừ 154). */
     private function assertOtherCreditAccount(string $code): void
     {
         $acc = AccountCode::where('code', $code)->first();
@@ -194,8 +194,9 @@ class ManualStockEntryController extends Controller
             !$acc->is_detail                => 'TK đối ứng phải là TK chi tiết (không dùng TK tổng hợp).',
             $acc->is_active === false       => 'TK đối ứng đang ngừng sử dụng.',
             str_starts_with($code, '331')   => 'Nhập hàng của NCC (TK 331) hãy chọn loại "Mua hàng của NCC".',
-            str_starts_with($code, '154')   => 'Nhập lại vật tư từ công trình (TK 154) hãy chọn loại "Nhập lại từ dự án".',
-            str_starts_with($code, '15')    => 'TK đối ứng không được là TK hàng tồn kho (15x).',
+            // TK 154 được phép: kế toán tự chịu trách nhiệm, không gắn dự án / không ghi giảm WIP.
+            str_starts_with($code, '15') && !str_starts_with($code, '154')
+                                            => 'TK đối ứng không được là TK hàng tồn kho (15x).',
             default                         => null,
         };
         if ($msg) throw ValidationException::withMessages(['credit_account_code' => $msg]);
